@@ -218,6 +218,23 @@ final class ClientRepository
         Audit::record('force_reapply', 'client', $id, false, true);
     }
 
+    public function setForceReapplyAll(): int
+    {
+        global $DB;
+
+        $where = ['revoked_at' => null];
+        $count = (int) countElementsInTable(self::TABLE, $where);
+        if ($count > 0) {
+            $DB->update(self::TABLE, [
+                'force_reapply' => 1,
+                'updated_at'    => date('Y-m-d H:i:s'),
+            ], $where);
+        }
+        Audit::record('force_reapply_all', 'client', null, null, ['clients' => $count]);
+
+        return $count;
+    }
+
     public function revoke(int $id): void
     {
         global $DB;

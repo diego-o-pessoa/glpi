@@ -65,6 +65,26 @@ try {
             Session::addMessageAfterRedirect('Nova aplicacao marcada para a proxima checagem do cliente.', true, INFO);
             break;
 
+        case 'force_all':
+            Session::checkRight(PluginAtivawallpaperProfile::RIGHT_CLIENTS, UPDATE);
+            if (!ConfigService::getBool('enabled')) {
+                throw new RuntimeException('Ative a distribuicao antes de aplicar o wallpaper.');
+            }
+            if ((new WallpaperManager())->current() === null) {
+                throw new RuntimeException('Publique um wallpaper antes de aplicar em todos os computadores.');
+            }
+            $count = (new ClientRepository())->setForceReapplyAll();
+            ConfigService::rotatePublicationRevision();
+            Session::addMessageAfterRedirect(
+                sprintf(
+                    'Aplicacao solicitada para %d computador(es). Os clientes aplicarao na proxima checagem.',
+                    $count
+                ),
+                true,
+                INFO
+            );
+            break;
+
         case 'revoke':
             Session::checkRight(PluginAtivawallpaperProfile::RIGHT_CLIENTS, UPDATE);
             (new ClientRepository())->revoke((int) ($_POST['id'] ?? 0));

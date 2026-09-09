@@ -1,5 +1,12 @@
 # Changelog
 
+## Em desenvolvimento
+
+- Botao unico **Aplicar em todos** para solicitar a reaplicacao do wallpaper
+  atual em todos os clientes nao revogados.
+- Diagnostico explicito de falta de espaco e permissoes no armazenamento
+  privado durante uploads.
+
 ## 1.0.0 - 2026-09-08
 
 - Plugin GLPI 11 instalavel com menu, direitos de perfil e aba no computador.
