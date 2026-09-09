@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<REQUEST>
+  <CONTENT>
+    <DEVICE>
+      <CARTRIDGES>
+        <DRUMBLACK>90</DRUMBLACK>
+        <TONERBLACK>OK</TONERBLACK>
+      </CARTRIDGES>
+      <FIRMWARES>
+        <DESCRIPTION>device firmware</DESCRIPTION>
+        <MANUFACTURER>Brother</MANUFACTURER>
+        <NAME>MFC-8912DW</NAME>
+        <TYPE>device</TYPE>
+        <VERSION>1.18</VERSION>
+      </FIRMWARES>
+      <INFO>
+        <COMMENTS>Brother NC-8300h, Firmware Ver.1.18  (18.11.21),MID 8C5-F37,FID 2</COMMENTS>
+        <FIRMWARE>1.18</FIRMWARE>
+        <ID>1</ID>
+        <IPS>
+          <IP>192.168.80.34</IP>
+        </IPS>
+        <MAC>30:05:5c:9a:2a:c8</MAC>
+        <MANUFACTURER>Brother</MANUFACTURER>
+        <MEMORY>128</MEMORY>
+        <MODEL>MFC-8912DW</MODEL>
+        <NAME>BRN30055C7D10CA</NAME>
+        <RAM>128</RAM>
+        <SERIAL>U63267J5N279149</SERIAL>
+        <TYPE>PRINTER</TYPE>
+        <UPTIME>2 days, 21:15:23.00</UPTIME>
+      </INFO>
+      <PAGECOUNTERS>
+        <SCANNED>611</SCANNED>
+        <TOTAL>177300</TOTAL>
+      </PAGECOUNTERS>
+      <PORTS>
+        <PORT>
+          <IFDESCR>NC-8300h</IFDESCR>
+          <IFINERRORS>0</IFINERRORS>
+          <IFINOCTETS>524052531</IFINOCTETS>
+          <IFINTERNALSTATUS>1</IFINTERNALSTATUS>
+          <IFLASTCHANGE>5.95 seconds</IFLASTCHANGE>
+          <IFMTU>1500</IFMTU>
+          <IFNAME>NC-8300h</IFNAME>
+          <IFNUMBER>1</IFNUMBER>
+          <IFOUTERRORS>0</IFOUTERRORS>
+          <IFOUTOCTETS>40424361</IFOUTOCTETS>
+          <IFSPEED>100000000</IFSPEED>
+          <IFSTATUS>1</IFSTATUS>
+          <IFTYPE>7</IFTYPE>
+          <IP>192.168.80.34</IP>
+          <IPS>
+            <IP>192.168.80.34</IP>
+          </IPS>
+          <MAC>30:05:5c:9a:2a:c8</MAC>
+        </PORT>
+        <PORT>
+          <IFDESCR>NC-7900w</IFDESCR>
+          <IFINERRORS>0</IFINERRORS>
+          <IFINOCTETS>0</IFINOCTETS>
+          <IFINTERNALSTATUS>2</IFINTERNALSTATUS>
+          <IFLASTCHANGE>0.00 seconds</IFLASTCHANGE>
+          <IFMTU>1500</IFMTU>
+          <IFNAME>NC-7900w</IFNAME>
+          <IFNUMBER>2</IFNUMBER>
+          <IFOUTERRORS>0</IFOUTERRORS>
+          <IFOUTOCTETS>0</IFOUTOCTETS>
+          <IFSPEED>72000000</IFSPEED>
+          <IFSTATUS>2</IFSTATUS>
+          <IFTYPE>71</IFTYPE>
+          <MAC>00:80:92:dc:e3:d6</MAC>
+        </PORT>
+        <PORT>
+          <IFDESCR>NC-7900w</IFDESCR>
+          <IFINERRORS>0</IFINERRORS>
+          <IFINOCTETS>0</IFINOCTETS>
+          <IFINTERNALSTATUS>2</IFINTERNALSTATUS>
+          <IFLASTCHANGE>0.00 seconds</IFLASTCHANGE>
+          <IFMTU>1500</IFMTU>
+          <IFNAME>NC-7900w</IFNAME>
+          <IFNUMBER>3</IFNUMBER>
+          <IFOUTERRORS>0</IFOUTERRORS>
+          <IFOUTOCTETS>0</IFOUTOCTETS>
+          <IFSPEED>72000000</IFSPEED>
+          <IFSTATUS>2</IFSTATUS>
+          <IFTYPE>71</IFTYPE>
+          <MAC>02:80:92:dc:63:d6</MAC>
+        </PORT>
+        <PORT>
+          <IFDESCR>SoftwareLoopBack</IFDESCR>
+          <IFINERRORS>0</IFINERRORS>
+          <IFINOCTETS>733</IFINOCTETS>
+          <IFINTERNALSTATUS>1</IFINTERNALSTATUS>
+          <IFLASTCHANGE>0.00 seconds</IFLASTCHANGE>
+          <IFMTU>1500</IFMTU>
+          <IFNAME>SoftwareLoopBack</IFNAME>
+          <IFNUMBER>4</IFNUMBER>
+          <IFOUTERRORS>0</IFOUTERRORS>
+          <IFOUTOCTETS>733</IFOUTOCTETS>
+          <IFSPEED>0</IFSPEED>
+          <IFSTATUS>1</IFSTATUS>
+          <IFTYPE>24</IFTYPE>
+        </PORT>
+      </PORTS>
+    </DEVICE>
+    <MODULEVERSION>7.3</MODULEVERSION>
+    <PROCESSNUMBER>6</PROCESSNUMBER>
+  </CONTENT>
+  <DEVICEID>DESKTOP-R1C8ICN-2026-08-17-14-54-59</DEVICEID>
+  <QUERY>SNMPQUERY</QUERY>
+</REQUEST>

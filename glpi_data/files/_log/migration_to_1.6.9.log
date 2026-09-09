@@ -1,0 +1,702 @@
+2026-08-17 14:59:18 [2@964c9801a157]
+0 segundo for "GLPI Inventory plugin installation"
+2026-08-17 14:59:18 [2@964c9801a157]
+0 segundo for "Clean data from old installation of the plugin"
+2026-08-17 14:59:18 [2@964c9801a157]
+0 segundo for "Clean rules from old installation of the plugin"
+2026-08-17 14:59:19 [2@964c9801a157]
+1 segundo for "Creation tables in database"
+2026-08-17 14:59:19 [2@964c9801a157]
+0 segundo for "Creation of folders"
+2026-08-17 14:59:19 [2@964c9801a157]
+0 segundo for "Initialize profiles"
+2026-08-17 14:59:20 [2@964c9801a157]
+1 segundo for "Initialize configuration"
+2026-08-17 14:59:20 [2@964c9801a157]
+0 segundo for "Initialize agent TASKS"
+2026-08-21 15:50:57 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_agents
+2026-08-21 15:50:57 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_agents
+2026-08-21 15:50:57 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_agents
+2026-08-21 15:50:57 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_agentmodules
+2026-08-21 15:50:57 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configs
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configs
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_configs
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_entities
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_entities
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_entities
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_locks
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_locks
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_locks
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_locks
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_locks
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ignoredimportdevices
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ignoredimportdevices
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ignoredimportdevices
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_rulematchedlogs
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_rulematchedlogs
+2026-08-21 15:50:58 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_unmanageds
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_unmanageds
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_unmanageds
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_inventorycomputercomputers
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_inventorycomputercomputers
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_inventorycomputercomputers
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerlicenseinfos
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerlicenseinfos
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerlicenseinfos
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerremotemanagements
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerremotemanagements
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerremotemanagements
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_inventorycomputercomputers
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblockinventorynames
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblockinventorynames
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_dblockinventorynames
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblockinventories
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblockinventories
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_dblockinventories
+2026-08-21 15:50:59 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblocksoftwares
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblocksoftwares
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_dblocksoftwares
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblocksoftwareversions
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblocksoftwareversions
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_dblocksoftwareversions
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjobs
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ipranges
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ipranges_configsecurities
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ipranges_configsecurities
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configlogfields
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configlogfields
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportconnectionlogs
+2026-08-21 15:51:00 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportconnectionlogs
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkporttypes
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkporttypes
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkports
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkports
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportlogs
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportlogs
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportlogs
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printers
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printers
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printerlogs
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printerlogs
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printercartridges
+2026-08-21 15:51:01 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printercartridges
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printercartridges
+2026-08-21 15:51:02 [@ba1d75de31b0]
+5 segundos for "Update of plugin GLPI Inventory"
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkequipments
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkequipments
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configsecurities
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configsecurities
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_statediscoveries
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deployfiles
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deployfiles
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages_entities
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages_groups
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages_profiles
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages_users
+2026-08-21 15:51:02 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploymirrors
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploygroups
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploygroups_staticdatas
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploygroups_dynamicdatas
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_credentials
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_credentialips
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_registries
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_registries_contents
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_wmis
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_wmis_contents
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_files
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_files_contents
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_tasks
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjobs
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjoblogs
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjobstates
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjobstates
+2026-08-21 15:51:03 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_timeslots
+2026-08-21 15:51:04 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_timeslotentries
+2026-08-21 15:51:04 [@ba1d75de31b0]
+2 segundos for "Clean printers"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+Valores de configuração adicionados para credentials_encryption_migration_was_executed (glpiinventory).
+2026-08-21 15:51:04 [@ba1d75de31b0]
+A atualização para a versão 1.6.9 foi concluída.
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core capabilities"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core agent"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core SNMP credentials"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core network ports"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core computers"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core network equipments"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core printers"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core printer logs"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core networkports logs"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core network ports types"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core unmanaged equipments"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Drop ignored equipments"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core rules"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core remote management"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core fields locks"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Drop dblock tables"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Use core entities"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Drop network ports and printers logs tables"
+2026-08-21 15:51:04 [@ba1d75de31b0]
+0 segundo for "Drop inventory mapping table"
+2026-08-21 15:51:05 [@ba1d75de31b0]
+A atualização para a versão 1.6.9 foi concluída.
+2026-08-21 15:59:49 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_agents
+2026-08-21 15:59:49 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_agents
+2026-08-21 15:59:49 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_agents
+2026-08-21 15:59:49 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_agentmodules
+2026-08-21 15:59:49 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configs
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configs
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_configs
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_entities
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_entities
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_entities
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_locks
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_locks
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_locks
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_locks
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_locks
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ignoredimportdevices
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ignoredimportdevices
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ignoredimportdevices
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_rulematchedlogs
+2026-08-21 15:59:50 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_rulematchedlogs
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_unmanageds
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_unmanageds
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_unmanageds
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_inventorycomputercomputers
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_inventorycomputercomputers
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_inventorycomputercomputers
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerlicenseinfos
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerlicenseinfos
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerlicenseinfos
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerremotemanagements
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerremotemanagements
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerremotemanagements
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_inventorycomputercomputers
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblockinventorynames
+2026-08-21 15:59:51 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblockinventorynames
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_dblockinventorynames
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblockinventories
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblockinventories
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_dblockinventories
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblocksoftwares
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblocksoftwares
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_dblocksoftwares
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblocksoftwareversions
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblocksoftwareversions
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_dblocksoftwareversions
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjobs
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ipranges
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ipranges_configsecurities
+2026-08-21 15:59:52 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ipranges_configsecurities
+2026-08-21 15:59:53 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configlogfields
+2026-08-21 15:59:53 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configlogfields
+2026-08-21 15:59:53 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportconnectionlogs
+2026-08-21 15:59:53 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportconnectionlogs
+2026-08-21 15:59:53 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkporttypes
+2026-08-21 15:59:53 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkporttypes
+2026-08-21 15:59:53 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkports
+2026-08-21 15:59:53 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkports
+2026-08-21 15:59:53 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportlogs
+2026-08-21 15:59:53 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportlogs
+2026-08-21 15:59:53 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportlogs
+2026-08-21 15:59:54 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printers
+2026-08-21 15:59:54 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printers
+2026-08-21 15:59:54 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printerlogs
+2026-08-21 15:59:54 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printerlogs
+2026-08-21 15:59:54 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printercartridges
+2026-08-21 15:59:54 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printercartridges
+2026-08-21 15:59:54 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printercartridges
+2026-08-21 15:59:54 [@ba1d75de31b0]
+5 segundos for "Update of plugin GLPI Inventory"
+2026-08-21 15:59:54 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkequipments
+2026-08-21 15:59:54 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkequipments
+2026-08-21 15:59:54 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configsecurities
+2026-08-21 15:59:54 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configsecurities
+2026-08-21 15:59:54 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_statediscoveries
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deployfiles
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages_entities
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages_groups
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages_profiles
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages_users
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploymirrors
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploygroups
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploygroups_staticdatas
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploygroups_dynamicdatas
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_credentials
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_credentialips
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_registries
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_registries_contents
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_wmis
+2026-08-21 15:59:55 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_wmis_contents
+2026-08-21 15:59:56 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_files
+2026-08-21 15:59:56 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_files_contents
+2026-08-21 15:59:56 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_tasks
+2026-08-21 15:59:56 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjobs
+2026-08-21 15:59:56 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjoblogs
+2026-08-21 15:59:56 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjobstates
+2026-08-21 15:59:56 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_timeslots
+2026-08-21 15:59:56 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_timeslotentries
+2026-08-21 15:59:56 [@ba1d75de31b0]
+2 segundos for "Clean printers"
+2026-08-21 15:59:56 [@ba1d75de31b0]
+A atualização para a versão 1.6.9 foi concluída.
+2026-08-21 15:59:56 [@ba1d75de31b0]
+0 segundo for "Use core capabilities"
+2026-08-21 15:59:56 [@ba1d75de31b0]
+0 segundo for "Use core agent"
+2026-08-21 15:59:56 [@ba1d75de31b0]
+0 segundo for "Use core SNMP credentials"
+2026-08-21 15:59:56 [@ba1d75de31b0]
+0 segundo for "Use core network ports"
+2026-08-21 15:59:56 [@ba1d75de31b0]
+0 segundo for "Use core computers"
+2026-08-21 15:59:56 [@ba1d75de31b0]
+0 segundo for "Use core network equipments"
+2026-08-21 15:59:56 [@ba1d75de31b0]
+0 segundo for "Use core printers"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+1 segundo for "Use core printer logs"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+0 segundo for "Use core networkports logs"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+0 segundo for "Use core network ports types"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+0 segundo for "Use core unmanaged equipments"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+0 segundo for "Drop ignored equipments"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+0 segundo for "Use core rules"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+0 segundo for "Use core remote management"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+0 segundo for "Use core fields locks"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+0 segundo for "Drop dblock tables"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+0 segundo for "Use core entities"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+0 segundo for "Drop network ports and printers logs tables"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+0 segundo for "Drop inventory mapping table"
+2026-08-21 15:59:57 [@ba1d75de31b0]
+A atualização para a versão 1.6.9 foi concluída.
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_agents
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_agents
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_agents
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_agentmodules
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configs
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configs
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_configs
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_entities
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_entities
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_entities
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_locks
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_locks
+2026-08-21 16:01:12 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_locks
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_locks
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_locks
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ignoredimportdevices
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ignoredimportdevices
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ignoredimportdevices
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_rulematchedlogs
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_rulematchedlogs
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_unmanageds
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_unmanageds
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_unmanageds
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_inventorycomputercomputers
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_inventorycomputercomputers
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_inventorycomputercomputers
+2026-08-21 16:01:13 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerlicenseinfos
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerlicenseinfos
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerlicenseinfos
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerremotemanagements
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerremotemanagements
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_computerremotemanagements
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_inventorycomputercomputers
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblockinventorynames
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblockinventorynames
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_dblockinventorynames
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblockinventories
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblockinventories
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_dblockinventories
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblocksoftwares
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblocksoftwares
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_dblocksoftwares
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblocksoftwareversions
+2026-08-21 16:01:14 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_dblocksoftwareversions
+2026-08-21 16:01:15 [@ba1d75de31b0]
+Adicionando índice único - glpi_plugin_glpiinventory_dblocksoftwareversions
+2026-08-21 16:01:15 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjobs
+2026-08-21 16:01:15 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ipranges
+2026-08-21 16:01:15 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ipranges_configsecurities
+2026-08-21 16:01:15 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_ipranges_configsecurities
+2026-08-21 16:01:15 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configlogfields
+2026-08-21 16:01:15 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configlogfields
+2026-08-21 16:01:15 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportconnectionlogs
+2026-08-21 16:01:15 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportconnectionlogs
+2026-08-21 16:01:15 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkporttypes
+2026-08-21 16:01:15 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkporttypes
+2026-08-21 16:01:15 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkports
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkports
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportlogs
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportlogs
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkportlogs
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printers
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printers
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printerlogs
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printerlogs
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printercartridges
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printercartridges
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_printercartridges
+2026-08-21 16:01:16 [@ba1d75de31b0]
+4 segundos for "Update of plugin GLPI Inventory"
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkequipments
+2026-08-21 16:01:16 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_networkequipments
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configsecurities
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_configsecurities
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_statediscoveries
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deployfiles
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages_entities
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages_groups
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages_profiles
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploypackages_users
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploymirrors
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploygroups
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploygroups_staticdatas
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_deploygroups_dynamicdatas
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_credentials
+2026-08-21 16:01:17 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_credentialips
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_registries
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_registries_contents
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_wmis
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_wmis_contents
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_files
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_collects_files_contents
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_tasks
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjobs
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjoblogs
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_taskjobstates
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_timeslots
+2026-08-21 16:01:18 [@ba1d75de31b0]
+Alteração de layout do banco de dados - glpi_plugin_glpiinventory_timeslotentries
+2026-08-21 16:01:18 [@ba1d75de31b0]
+2 segundos for "Clean printers"
+2026-08-21 16:01:18 [@ba1d75de31b0]
+A atualização para a versão 1.6.9 foi concluída.

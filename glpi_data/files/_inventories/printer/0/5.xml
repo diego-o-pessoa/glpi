@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<REQUEST>
+  <CONTENT>
+    <DEVICE>
+      <CARTRIDGES>
+        <FUSERKIT>98</FUSERKIT>
+        <TONERBLACK>90</TONERBLACK>
+        <TRANSFERKIT>98</TRANSFERKIT>
+      </CARTRIDGES>
+      <INFO>
+        <COMMENTS>Samsung M4080FX; V11.01.03.04_02-27-2017;Engine V1.00.06 01-19-2017_V1.00;NIC ;S/N 088WB07K713A97N</COMMENTS>
+        <CONTACT>Administrator</CONTACT>
+        <ID>5</ID>
+        <IPS>
+          <IP>192.168.80.33</IP>
+        </IPS>
+        <MAC>84:25:19:6a:d0:6b</MAC>
+        <MANUFACTURER>Samsung</MANUFACTURER>
+        <MEMORY>1</MEMORY>
+        <MODEL>X4220RX</MODEL>
+        <NAME>SEC8425196AD06B</NAME>
+        <RAM>1024</RAM>
+        <SERIAL>088WB07K713A97N</SERIAL>
+        <TYPE>PRINTER</TYPE>
+        <UPTIME>423 days, 00:50:14.03</UPTIME>
+      </INFO>
+      <PAGECOUNTERS>
+        <TOTAL>168299</TOTAL>
+      </PAGECOUNTERS>
+      <PORTS>
+        <PORT>
+          <IFDESCR>Embedded Ethernet Controller, 10/100/1000 Mpbs, v1.0, UTP RJ-45, connector A1, 1000 Mbps(Full Duplex)</IFDESCR>
+          <IFINERRORS>2</IFINERRORS>
+          <IFINOCTETS>137890103</IFINOCTETS>
+          <IFINTERNALSTATUS>1</IFINTERNALSTATUS>
+          <IFLASTCHANGE>0.00 seconds</IFLASTCHANGE>
+          <IFMTU>1500</IFMTU>
+          <IFNAME>Embedded Ethernet Controller, 10/100/1000 Mpbs, v1.0, UTP RJ-45, connector A1, 1000 Mbps(Full Duplex)</IFNAME>
+          <IFNUMBER>1</IFNUMBER>
+          <IFOUTERRORS>0</IFOUTERRORS>
+          <IFOUTOCTETS>41016586</IFOUTOCTETS>
+          <IFSPEED>1000000000</IFSPEED>
+          <IFSTATUS>1</IFSTATUS>
+          <IFTYPE>6</IFTYPE>
+          <IP>192.168.80.33</IP>
+          <IPS>
+            <IP>192.168.80.33</IP>
+          </IPS>
+          <MAC>84:25:19:6a:d0:6b</MAC>
+        </PORT>
+        <PORT>
+          <IFDESCR>Loopback Interface</IFDESCR>
+          <IFINERRORS>0</IFINERRORS>
+          <IFINOCTETS>47527126</IFINOCTETS>
+          <IFINTERNALSTATUS>1</IFINTERNALSTATUS>
+          <IFLASTCHANGE>0.00 seconds</IFLASTCHANGE>
+          <IFMTU>16436</IFMTU>
+          <IFNAME>Loopback Interface</IFNAME>
+          <IFNUMBER>2</IFNUMBER>
+          <IFOUTERRORS>0</IFOUTERRORS>
+          <IFOUTOCTETS>47527126</IFOUTOCTETS>
+          <IFSPEED>10000000</IFSPEED>
+          <IFSTATUS>1</IFSTATUS>
+          <IFTYPE>24</IFTYPE>
+        </PORT>
+      </PORTS>
+    </DEVICE>
+    <MODULEVERSION>7.3</MODULEVERSION>
+    <PROCESSNUMBER>11</PROCESSNUMBER>
+  </CONTENT>
+  <DEVICEID>DESKTOP-R1C8ICN-2026-08-17-14-54-59</DEVICEID>
+  <QUERY>SNMPQUERY</QUERY>
+</REQUEST>

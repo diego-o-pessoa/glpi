@@ -1,0 +1,13 @@
+<div class="card m-3">
+  <div class="card-header"><h2 class="card-title mb-0"><i class="ti ti-photo me-2"></i>Ativa Wallpaper</h2></div>
+  <div class="card-body">
+    {% if client %}
+      {% set badge = {'updated':'success','pending':'warning','offline':'secondary','error':'danger'}[computed_status] %}
+      {% set label = {'updated':'Atualizado','pending':'Pendente','offline':'Offline','error':'Erro'}[computed_status] %}
+      <dl class="row mb-0"><dt class="col-md-3">Status</dt><dd class="col-md-9"><span class="badge bg-{{ badge }}">{{ label }}</span></dd><dt class="col-md-3">Wallpaper</dt><dd class="col-md-9"><code>{{ client.wallpaper_version ?: '-' }}</code>{% if current %} <span class="text-muted">(atual: {{ current.version }})</span>{% endif %}</dd><dt class="col-md-3">Client</dt><dd class="col-md-9">{{ client.client_version }}</dd><dt class="col-md-3">Ultima checagem</dt><dd class="col-md-9">{{ client.last_check ? client.last_check|formatted_datetime : '-' }}</dd><dt class="col-md-3">Ultima aplicacao</dt><dd class="col-md-9">{{ client.last_apply ? client.last_apply|formatted_datetime : '-' }}</dd><dt class="col-md-3">Usuario</dt><dd class="col-md-9">{{ client.username ?: '-' }}</dd><dt class="col-md-3">SHA recebido</dt><dd class="col-md-9"><code>{{ client.wallpaper_sha256 ?: '-' }}</code></dd><dt class="col-md-3">Ultimo erro</dt><dd class="col-md-9">{{ client.last_error ?: '-' }}</dd></dl>
+      {% if can_manage %}<form method="post" action="{{ config('root_doc') }}/plugins/ativawallpaper/front/action.php" class="mt-3"><input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="force"><input type="hidden" name="id" value="{{ client.id }}"><button class="btn btn-outline-primary" type="submit"><i class="ti ti-refresh me-1"></i>Forcar nova sincronizacao</button><div class="form-hint mt-1">A solicitacao sera recebida na proxima checagem; nao existe push imediato.</div></form>{% endif %}
+    {% else %}
+      <div class="alert alert-info mb-0">Este computador ainda nao registrou o Ativa Wallpaper Client.</div>
+    {% endif %}
+  </div>
+</div>

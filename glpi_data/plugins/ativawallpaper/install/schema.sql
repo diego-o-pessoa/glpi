@@ -1,0 +1,83 @@
+CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_wallpapers` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `version` varchar(32) NOT NULL,
+  `filename` varchar(255) NOT NULL,
+  `thumbnail_filename` varchar(255) NOT NULL,
+  `original_filename` varchar(255) NOT NULL,
+  `mime_type` varchar(64) NOT NULL,
+  `width` int unsigned NOT NULL,
+  `height` int unsigned NOT NULL,
+  `filesize` bigint unsigned NOT NULL,
+  `sha256` char(64) NOT NULL,
+  `style` varchar(16) NOT NULL DEFAULT 'fill',
+  `lock_change` tinyint NOT NULL DEFAULT '0',
+  `is_current` tinyint NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL,
+  `created_by` int unsigned NOT NULL DEFAULT '0',
+  `published_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `version` (`version`),
+  KEY `is_current` (`is_current`),
+  KEY `published_at` (`published_at`),
+  KEY `created_by` (`created_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
+
+CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_clients` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `computers_id` int unsigned DEFAULT NULL,
+  `hostname` varchar(255) NOT NULL,
+  `machine_guid` varchar(128) NOT NULL,
+  `glpi_agent_device_id` varchar(255) DEFAULT NULL,
+  `client_version` varchar(32) NOT NULL,
+  `wallpaper_version` varchar(32) DEFAULT NULL,
+  `wallpaper_sha256` char(64) DEFAULT NULL,
+  `status` varchar(24) NOT NULL DEFAULT 'registered',
+  `username` varchar(255) DEFAULT NULL,
+  `os_version` varchar(255) DEFAULT NULL,
+  `last_check` datetime DEFAULT NULL,
+  `last_apply` datetime DEFAULT NULL,
+  `last_error_code` varchar(64) DEFAULT NULL,
+  `last_error` varchar(1000) DEFAULT NULL,
+  `registered_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `token_hash` char(64) DEFAULT NULL,
+  `revoked_at` datetime DEFAULT NULL,
+  `force_reapply` tinyint NOT NULL DEFAULT '0',
+  `last_ip` varchar(45) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `machine_guid` (`machine_guid`),
+  UNIQUE KEY `token_hash` (`token_hash`),
+  KEY `computers_id` (`computers_id`),
+  KEY `hostname` (`hostname`),
+  KEY `status` (`status`),
+  KEY `last_check` (`last_check`),
+  KEY `updated_at` (`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
+
+CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_audits` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `users_id` int unsigned NOT NULL DEFAULT '0',
+  `action` varchar(64) NOT NULL,
+  `target_type` varchar(64) DEFAULT NULL,
+  `target_id` int unsigned DEFAULT NULL,
+  `old_value` text,
+  `new_value` text,
+  `ip_address` varchar(45) DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `action` (`action`),
+  KEY `target` (`target_type`,`target_id`),
+  KEY `created_at` (`created_at`),
+  KEY `users_id` (`users_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
+
+CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_rate_limits` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `bucket_hash` char(64) NOT NULL,
+  `window_started_at` datetime NOT NULL,
+  `hits` int unsigned NOT NULL DEFAULT '1',
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `bucket_hash` (`bucket_hash`),
+  KEY `updated_at` (`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;

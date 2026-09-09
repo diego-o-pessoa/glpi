@@ -1,0 +1,72 @@
+2026-08-20 14:34:57 [2@4bc2f96037bb]
+We did not receive the required POST/GET headers, see: https://codeberg.org/QuinQuies/glpisaml/wiki/ACS.php for more information
+2026-08-20 14:34:57 [2@4bc2f96037bb]
+================ BEGIN EXTENDED =================
+
+###############  ServerGlobal  ##################
+
+array (
+  'REDIRECT_STATUS' => '200',
+  'HTTP_HOST' => '10.117.41.6:8091',
+  'HTTP_CONNECTION' => 'keep-alive',
+  'HTTP_CACHE_CONTROL' => 'max-age=0',
+  'HTTP_UPGRADE_INSECURE_REQUESTS' => '1',
+  'HTTP_USER_AGENT' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+  'HTTP_ACCEPT' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+  'HTTP_REFERER' => 'http://10.117.41.6:8091/index.php?redirect=%2Fplugins%2Fglpisaml%2Ffront%2Facs.php%3FidpId%3D1&noAUTO=1',
+  'HTTP_ACCEPT_ENCODING' => 'gzip, deflate',
+  'HTTP_ACCEPT_LANGUAGE' => 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+  'HTTP_COOKIE' => 'xid=eyJ1c2VyaWQiOiJ1c2VyLy9hdGl2YSIsImlwIjoiMTAuMTAwLjIzMC4xMyIsIngiOiJ0QlNuajc1aCIsInQiOjI5Nzg1OTk1fQ==; xid.sig=mzfAwnMnuudX0MZJUukfRUWImfE5atzRPJD2oOk1BT_cebGFO1qBPZtPR0ynBYgo; glpi_5ca40de61f3f49315fcd2f0dcc7beacbe08b886f36aade7de4779e0e0c76353a30f6812f32914f3a965e5acfb488a24ce40de4609d0d9b0eee7a512d6cd42e73=4h449kkbilc481e695a9qbckns; glpi_5ffa7e20750c7e30365f8cad39d5b6e794d0b4ee413dbbbb29a96b9d1f38ccb2868f4770fb30277bca86007c941990f44ef6a892781172d419195bf4d02d8375=mnbe7mchcjdjphc2c5urpji9l4; glpi_5ffa7e20750c7e30365f8cad39d5b6e794d0b4ee413dbbbb29a96b9d1f38ccb2868f4770fb30277bca86007c941990f44ef6a892781172d419195bf4d02d8375_rememberme=%5B2%2C%22Azpi38YADtd29LwwDpkftiFiE5L8QaebjmruwZQh%22%5D',
+  'PATH' => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+  'SERVER_SIGNATURE' => '<address>Apache/2.4.62 (Debian) Server at 10.117.41.6 Port 8091</address>
+',
+  'SERVER_SOFTWARE' => 'Apache/2.4.62 (Debian)',
+  'SERVER_NAME' => '10.117.41.6',
+  'SERVER_ADDR' => '172.23.0.2',
+  'SERVER_PORT' => '8091',
+  'REMOTE_ADDR' => '10.100.230.13',
+  'DOCUMENT_ROOT' => './public',
+  'REQUEST_SCHEME' => 'http',
+  'CONTEXT_PREFIX' => '',
+  'CONTEXT_DOCUMENT_ROOT' => './public',
+  'SERVER_ADMIN' => '[no address given]',
+  'SCRIPT_FILENAME' => './public/index.php',
+  'REMOTE_PORT' => '63116',
+  'REDIRECT_URL' => '/plugins/glpisaml/front/acs.php',
+  'REDIRECT_QUERY_STRING' => 'idpId=1',
+  'GATEWAY_INTERFACE' => 'CGI/1.1',
+  'SERVER_PROTOCOL' => 'HTTP/1.1',
+  'REQUEST_METHOD' => 'GET',
+  'QUERY_STRING' => 'idpId=1',
+  'REQUEST_URI' => '/plugins/glpisaml/front/acs.php?idpId=1',
+  'SCRIPT_NAME' => '/index.php',
+  'PHP_SELF' => '/index.php',
+  'REQUEST_TIME_FLOAT' => 1787247297.882863,
+  'REQUEST_TIME' => 1787247297,
+  'DOCTRINE_DEPRECATIONS' => 'trigger',
+)
+
+================= END EXTENDED ==================
+
+
+
+2026-08-20 15:27:16 [@f072151aa0c9]
+Unable to fetch idp configuration with id:1 from database
+2026-08-20 15:28:00 [@f072151aa0c9]
+Unable to fetch idp configuration with id:1 from database
+2026-08-20 15:30:36 [@f072151aa0c9]
+Unable to fetch idp configuration with id:1 from database
+2026-08-20 15:30:49 [@f072151aa0c9]
+Unable to fetch idp configuration with id:1 from database
+2026-08-20 15:31:01 [@f072151aa0c9]
+Unable to fetch idp configuration with id:1 from database
+2026-08-20 15:31:24 [@f072151aa0c9]
+Unable to fetch idp configuration with id:1 from database
+2026-08-20 15:31:51 [@f072151aa0c9]
+Unable to fetch idp configuration with id:1 from database
+2026-08-20 15:33:27 [@f072151aa0c9]
+Unable to fetch idp configuration with id:1 from database
+2026-08-20 15:35:47 [@f072151aa0c9]
+Unable to fetch idp configuration with id:1 from database
+2026-08-20 15:50:18 [@ba1d75de31b0]
+SAML Response could not be processed

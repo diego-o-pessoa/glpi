@@ -1,0 +1,13 @@
+files/_cache/
+files/_sessions/
+files/_dumps/
+files/_cron/
+vendor/
+files/_tmp/
+files/_uploads/
+files/_pictures/
+files/_inventories/
+files/_graphs/
+files/_rss/
+files/_lock/
+files/_plugins/

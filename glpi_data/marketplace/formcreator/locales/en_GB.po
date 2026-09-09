@@ -1,0 +1,399 @@
+# English translations for PACKAGE package.
+# Copyright (C) 2025 THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# Automatically generated, 2025.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-09-30 15:17+0200\n"
+"PO-Revision-Date: 2025-09-30 15:17+0200\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: en_GB\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=ASCII\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: front/formlist.php:44
+#, php-format
+msgid ""
+"Formcreator v%s is End-of-Life. This page has been disabled. Use GLPI 11 "
+"native forms instead."
+msgstr ""
+"Formcreator v%s is End-of-Life. This page has been disabled. Use GLPI 11 "
+"native forms instead."
+
+#: front/migration_status.php:61 entrée standard:42
+msgid "Formcreator Migration Status"
+msgstr "Formcreator Migration Status"
+
+#: front/eol_info.php:45 src/EOLInfo.php:91
+msgid "Formcreator End of Life Information"
+msgstr "Formcreator End of Life Information"
+
+#: inc/questionparameter/range.class.php:56
+msgid "Question range"
+msgid_plural "Question ranges"
+msgstr[0] "Question range"
+msgstr[1] "Question ranges"
+
+#: inc/questionparameter/range.class.php:66
+msgid "Minimum range"
+msgstr "Minimum range"
+
+#: inc/questionparameter/range.class.php:75
+msgid "maximum range"
+msgstr "maximum range"
+
+#: inc/questionparameter/range.class.php:137
+#, php-format
+msgid "Cannot export an empty object: %s"
+msgstr "Cannot export an empty object: %s"
+
+#: inc/questionparameter/range.class.php:202
+#, php-format
+msgid "Failed to add or update the %1$s %2$s"
+msgstr "Failed to add or update the %1$s %2$s"
+
+#: src/Install.php:153
+#, php-format
+msgid "Upgrade tables to innoDB; run %s"
+msgstr "Upgrade tables to innoDB; run %s"
+
+#: src/Install.php:190
+#, php-format
+msgid ""
+"The database schema is not consistent with the previous version of "
+"Formcreator %s. To see the logs run the command %s"
+msgstr ""
+"The database schema is not consistent with the previous version of "
+"Formcreator %s. To see the logs run the command %s"
+
+#: src/Install.php:199
+#, php-format
+msgid "To ignore the inconsistencies and upgrade anyway run %s"
+msgstr "To ignore the inconsistencies and upgrade anyway run %s"
+
+#: src/Install.php:216
+msgid ""
+"Upgrade from version older than 2.5.0 is no longer supported. Please upgrade "
+"to GLPI 9.5.7, upgrade Formcreator to version 2.12.5, then upgrade again to "
+"GLPI 10 or later and Formcreator 2.13 or later."
+msgstr ""
+"Upgrade from version older than 2.5.0 is no longer supported. Please upgrade "
+"to GLPI 9.5.7, upgrade Formcreator to version 2.12.5, then upgrade again to "
+"GLPI 10 or later and Formcreator 2.13 or later."
+
+#: src/Install.php:256
+#, php-format
+msgid ""
+"The database schema is not consistent with the current version of "
+"Formcreator %s. To see the logs enable the plugin and run the command %s"
+msgstr ""
+"The database schema is not consistent with the current version of "
+"Formcreator %s. To see the logs enable the plugin and run the command %s"
+
+#: src/Install.php:267
+msgid "The tables of the plugin passed the schema integrity check."
+msgstr "The tables of the plugin passed the schema integrity check."
+
+#: src/Install.php:557
+msgid "Failed to check the sanity of the tables!"
+msgstr "Failed to check the sanity of the tables!"
+
+#: src/Install.php:571
+#, php-format
+msgid "Table schema differs for table \"%s\"."
+msgstr "Table schema differs for table \"%s\"."
+
+#: src/Install.php:574
+#, php-format
+msgid "Table \"%s\" is missing."
+msgstr "Table \"%s\" is missing."
+
+#: src/Install.php:577
+#, php-format
+msgid "Unknown table \"%s\" has been found in database."
+msgstr "Unknown table \"%s\" has been found in database."
+
+#: src/EOLInfo.php:54
+msgid "Formcreator EOL Info"
+msgstr "Formcreator EOL Info"
+
+#: src/LegacyStubs.php:47
+msgid "Form (Legacy - Use GLPI 11 Native)"
+msgstr "Form (Legacy - Use GLPI 11 Native)"
+
+#: src/LegacyStubs.php:61
+msgid "Form Answer (Legacy - Use GLPI 11 Native)"
+msgstr "Form Answer (Legacy - Use GLPI 11 Native)"
+
+#: src/LegacyStubs.php:75
+msgid "Issue (Legacy - Use GLPI 11 Native)"
+msgstr "Issue (Legacy - Use GLPI 11 Native)"
+
+#: src/LegacyStubs.php:104
+msgid "Form List (Legacy - Use GLPI 11 Native)"
+msgstr "Form List (Legacy - Use GLPI 11 Native)"
+
+#: src/LegacyStubs.php:118
+msgid "Form Category (Legacy - Use GLPI 11 Native)"
+msgstr "Form Category (Legacy - Use GLPI 11 Native)"
+
+#: src/LegacyStubs.php:132
+msgid "Entity Config (Legacy - Use GLPI 11 Native)"
+msgstr "Entity Config (Legacy - Use GLPI 11 Native)"
+
+#: src/Common.php:50
+#, php-format
+msgid ""
+"Class method %s is deprecated in Formcreator v%s (EOL). Use GLPI 11 native "
+"forms instead."
+msgstr ""
+"Class method %s is deprecated in Formcreator v%s (EOL). Use GLPI 11 native "
+"forms instead."
+
+#: hook.php:94
+msgid "Formcreator End-of-Life"
+msgstr "Formcreator End-of-Life"
+
+#: hook.php:95
+msgid "This plugin is End-of-Life. Please use GLPI 11 native forms."
+msgstr "This plugin is End-of-Life. Please use GLPI 11 native forms."
+
+#: index.php:41
+#, php-format
+msgid ""
+"Formcreator v%s is End-of-Life. All form functionality is now available in "
+"GLPI 11 core. Check migration status or use native forms."
+msgstr ""
+"Formcreator v%s is End-of-Life. All form functionality is now available in "
+"GLPI 11 core. Check migration status or use native forms."
+
+#: setup.php:142
+#, php-format
+msgid ""
+"Formcreator v%s is now End-of-Life (EOL). This version only provides "
+"migration to GLPI 11 native forms. After successful migration, consider "
+"uninstalling this plugin and use GLPI's native form system."
+msgstr ""
+"Formcreator v%s is now End-of-Life (EOL). This version only provides "
+"migration to GLPI 11 native forms. After successful migration, consider "
+"uninstalling this plugin and use GLPI's native form system."
+
+#: entrée standard:43
+msgid "End of Life migration tool for GLPI 11"
+msgstr "End of Life migration tool for GLPI 11"
+
+#: entrée standard:54
+msgid "End of Life Notice"
+msgstr "End of Life Notice"
+
+#: entrée standard:56
+msgid ""
+"Formcreator v3.0.0 is an End-of-Life version. All form creation "
+"functionality has been moved to GLPI 11 native forms."
+msgstr ""
+"Formcreator v3.0.0 is an End-of-Life version. All form creation "
+"functionality has been moved to GLPI 11 native forms."
+
+#: entrée standard:67 standard:62
+msgid "Migration Status"
+msgstr "Migration Status"
+
+#: entrée standard:77
+msgid "Legacy Forms Found"
+msgstr "Legacy Forms Found"
+
+#: entrée standard:88
+msgid "Legacy Form Submissions"
+msgstr "Legacy Form Submissions"
+
+#: entrée standard:99
+msgid "GLPI 11 Native Forms"
+msgstr "GLPI 11 Native Forms"
+
+#: entrée standard:119
+msgid "How to Migrate"
+msgstr "How to Migrate"
+
+#: entrée standard:127
+msgid "Command Line Migration Required"
+msgstr "Command Line Migration Required"
+
+#: entrée standard:129
+msgid ""
+"For optimal performance and reliability, the migration must be performed "
+"using the command line:"
+msgstr ""
+"For optimal performance and reliability, the migration must be performed "
+"using the command line:"
+
+#: entrée standard:134
+msgid "Copy command"
+msgstr "Copy command"
+
+#: entrée standard:136 standard:250
+msgid "Copy"
+msgstr "Copy"
+
+#: entrée standard:141
+msgid "Run this command from your GLPI root directory"
+msgstr "Run this command from your GLPI root directory"
+
+#: entrée standard:151
+msgid "Migration Process"
+msgstr "Migration Process"
+
+#: entrée standard:153
+msgid "Form structure and fields will be converted"
+msgstr "Form structure and fields will be converted"
+
+#: entrée standard:154
+msgid "Form categories will be preserved"
+msgstr "Form categories will be preserved"
+
+#: entrée standard:155
+msgid "Access control rules will be migrated"
+msgstr "Access control rules will be migrated"
+
+#: entrée standard:156
+msgid "Form submissions will be preserved"
+msgstr "Form submissions will be preserved"
+
+#: entrée standard:157
+msgid "Complex validations may need manual recreation"
+msgstr "Complex validations may need manual recreation"
+
+#: entrée standard:162
+msgid ""
+"Note: Migration status detection is based on data presence and may not be "
+"100% accurate. Please verify manually after running the migration command."
+msgstr ""
+"Note: Migration status detection is based on data presence and may not be "
+"100% accurate. Please verify manually after running the migration command."
+
+#: entrée standard:177
+msgid "Next Steps"
+msgstr "Next Steps"
+
+#: entrée standard:185
+msgid "After Migration"
+msgstr "After Migration"
+
+#: entrée standard:189
+msgid "Review converted forms in GLPI 11"
+msgstr "Review converted forms in GLPI 11"
+
+#: entrée standard:193
+msgid "Test form access permissions"
+msgstr "Test form access permissions"
+
+#: entrée standard:201
+msgid "Recommendations"
+msgstr "Recommendations"
+
+#: entrée standard:205
+msgid "Train users on GLPI 11 native forms"
+msgstr "Train users on GLPI 11 native forms"
+
+#: entrée standard:209
+msgid "Update internal documentation"
+msgstr "Update internal documentation"
+
+#: entrée standard:245
+msgid "Copied"
+msgstr "Copied"
+
+#: entrée standard:44
+msgid "Formcreator End of Life Notice"
+msgstr "Formcreator End of Life Notice"
+
+#: entrée standard:47
+msgid "Migration guidance and information"
+msgstr "Migration guidance and information"
+
+#: entrée standard:60
+msgid "Important Notice"
+msgstr "Important Notice"
+
+#: entrée standard:62
+#, php-format
+msgid ""
+"Formcreator v%s has reached End of Life (EOL). This version only provides "
+"migration support to help you transition to GLPI 11 native forms."
+msgstr ""
+"Formcreator v%s has reached End of Life (EOL). This version only provides "
+"migration support to help you transition to GLPI 11 native forms."
+
+#: entrée standard:75
+msgid "What changed?"
+msgstr "What changed?"
+
+#: entrée standard:82
+msgid "GLPI 11 now has native form creation capabilities"
+msgstr "GLPI 11 now has native form creation capabilities"
+
+#: entrée standard:86
+msgid "All Formcreator features are available in GLPI core"
+msgstr "All Formcreator features are available in GLPI core"
+
+#: entrée standard:90
+msgid "Better integration with GLPI workflows"
+msgstr "Better integration with GLPI workflows"
+
+#: entrée standard:94
+msgid "Improved performance and security"
+msgstr "Improved performance and security"
+
+#: entrée standard:106
+msgid "Next steps"
+msgstr "Next steps"
+
+#: entrée standard:113
+msgid "Review your existing forms"
+msgstr "Review your existing forms"
+
+#: entrée standard:117
+msgid "Migrate to GLPI 11 native forms"
+msgstr "Migrate to GLPI 11 native forms"
+
+#: entrée standard:121
+msgid "Test the new form system"
+msgstr "Test the new form system"
+
+#: entrée standard:125
+msgid "Uninstall Formcreator plugin when ready"
+msgstr "Uninstall Formcreator plugin when ready"
+
+#: entrée standard:139
+msgid "View Migration Status"
+msgstr "View Migration Status"
+
+#: entrée standard:44
+msgid "Helpdesk mode"
+msgstr "Helpdesk mode"
+
+#: entrée standard:52
+msgid "Name"
+msgstr "Name"
+
+#: entrée standard:47
+#, php-format
+msgid ""
+"Formcreator v%s has reached End of Life. Please migrate to GLPI 11 native "
+"forms."
+msgstr ""
+"Formcreator v%s has reached End of Life. Please migrate to GLPI 11 native "
+"forms."
+
+#: entrée standard:57
+msgid "Learn More"
+msgstr "Learn More"
+
+#: entrée standard:71
+msgid "Close"
+msgstr "Close"

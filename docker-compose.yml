@@ -1,0 +1,39 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: glpi_db
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=Ativ@Adm2026
+      - MYSQL_DATABASE=glpidb
+      - MYSQL_USER=glpiuser
+      - MYSQL_PASSWORD=Ativ@Adm2026
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+ 
+  glpi:
+    image: diouxx/glpi:latest
+    container_name: glpi_web
+    restart: always
+    ports:
+      - "8443:443"
+    entrypoint: ["/opt/glpi-start-ssl.sh"]
+    environment:
+      - TIMEZONE=America/Sao_Paulo
+    volumes:
+      - ./glpi_data:/var/www/html/glpi
+      - ./default-ssl.conf:/etc/apache2/sites-available/default-ssl.conf:ro
+      - ./start-glpi-ssl.sh:/opt/glpi-start-ssl.sh:ro
+      - /etc/letsencrypt/live/ad.ativalocacao.com.br/fullchain.pem:/etc/ssl/certs/glpi.crt:ro
+      - /etc/letsencrypt/live/ad.ativalocacao.com.br/privkey.pem:/etc/ssl/private/glpi.key:ro
+    depends_on:
+      - mysql
+
+  portal_registro:
+    build: ./portal-ativa
+    container_name: portal_ativa
+    ports:
+      - "5000:5000"
+    restart: always
+    depends_on:
+      - glpi # (Coloque aqui o nome exato do seu container do GLPI)

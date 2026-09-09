@@ -1,0 +1,14 @@
+{
+  "name": "ativalocacao/glpi-ativawallpaper",
+  "description": "Gerenciamento centralizado de wallpapers corporativos para GLPI 11",
+  "type": "glpi-plugin",
+  "license": "GPL-3.0-or-later",
+  "require": {
+    "php": ">=8.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "GlpiPlugin\\Ativawallpaper\\": "src/"
+    }
+  }
+}

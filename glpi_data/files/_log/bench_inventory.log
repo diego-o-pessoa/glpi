@@ -1,0 +1,5229 @@
+2026-08-17 15:07:45 [@964c9801a157]
+Computer:
+	prepare:
+		Execution time:      0.00071 segundo
+		Memory usage:        5.67 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.79 MiB
+
+	handle:
+		Execution time:      1.06752 segundo
+		Memory usage:        10.05 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         13.56 MiB
+
+	full:
+		Execution time:      1.56181 segundo
+		Memory usage:        8.94 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         13.56 MiB
+
+Inventoried assets: Computer #6
+2026-08-17 15:15:18 [@964c9801a157]
+Computer:
+	prepare:
+		Execution time:      0.00097 segundo
+		Memory usage:        5.69 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.82 MiB
+
+	handle:
+		Execution time:      1.11239 segundo
+		Memory usage:        10.19 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.5 MiB
+
+	full:
+		Execution time:      1.6071 segundo
+		Memory usage:        9.11 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.5 MiB
+
+Inventoried assets: Computer #7
+2026-08-17 15:58:27 [@964c9801a157]
+Computer:
+	prepare:
+		Execution time:      0.00038 segundo
+		Memory usage:        5.46 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.58 MiB
+
+	handle:
+		Execution time:      0.58053 segundo
+		Memory usage:        11.74 MiB
+		Memory usage (real): 16 MiB
+		Memory peak:         12.6 MiB
+
+	full:
+		Execution time:      0.82523 segundo
+		Memory usage:        11.73 MiB
+		Memory usage (real): 16 MiB
+		Memory peak:         12.6 MiB
+
+Inventoried assets: Computer #6
+2026-08-17 16:11:02 [@964c9801a157]
+Computer:
+	prepare:
+		Execution time:      0.00085 segundo
+		Memory usage:        5.41 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.53 MiB
+
+	handle:
+		Execution time:      0.92242 segundo
+		Memory usage:        12.86 MiB
+		Memory usage (real): 18 MiB
+		Memory peak:         13.95 MiB
+
+	full:
+		Execution time:      1.27443 segundo
+		Memory usage:        12.3 MiB
+		Memory usage (real): 18 MiB
+		Memory peak:         13.95 MiB
+
+Inventoried assets: Computer #8
+2026-08-17 16:14:33 [@964c9801a157]
+Computer:
+	prepare:
+		Execution time:      0.00038 segundo
+		Memory usage:        4.61 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.74 MiB
+
+	handle:
+		Execution time:      0.18995 segundo
+		Memory usage:        9.77 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.88 MiB
+
+	full:
+		Execution time:      0.21994 segundo
+		Memory usage:        9.76 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.88 MiB
+
+Inventoried assets: Computer #7
+2026-08-18 15:20:28 [@964c9801a157]
+Computer:
+	prepare:
+		Execution time:      0.00037 segundo
+		Memory usage:        4.63 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.75 MiB
+
+	handle:
+		Execution time:      0.2921 segundo
+		Memory usage:        9.76 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.9 MiB
+
+	full:
+		Execution time:      0.36086 segundo
+		Memory usage:        9.75 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.9 MiB
+
+Inventoried assets: Computer #6
+2026-08-18 15:54:08 [@964c9801a157]
+Computer:
+	prepare:
+		Execution time:      0.00042 segundo
+		Memory usage:        5.51 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.63 MiB
+
+	handle:
+		Execution time:      0.73351 segundo
+		Memory usage:        11.63 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         12.52 MiB
+
+	full:
+		Execution time:      1.05549 segundo
+		Memory usage:        11.51 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         12.52 MiB
+
+Inventoried assets: Computer #7
+2026-08-19 15:16:07 [@964c9801a157]
+Computer:
+	prepare:
+		Execution time:      0.00415 segundo
+		Memory usage:        4.6 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.37 MiB
+
+	handle:
+		Execution time:      1.64303 segundo
+		Memory usage:        10.15 MiB
+		Memory usage (real): 16 MiB
+		Memory peak:         12.27 MiB
+
+	full:
+		Execution time:      2.15903 segundos
+		Memory usage:        10.13 MiB
+		Memory usage (real): 16 MiB
+		Memory peak:         12.27 MiB
+
+Inventoried assets: Computer #6
+2026-08-19 15:45:14 [@964c9801a157]
+Computer:
+	prepare:
+		Execution time:      0.00042 segundo
+		Memory usage:        4.16 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.41 MiB
+
+	handle:
+		Execution time:      0.79795 segundo
+		Memory usage:        5.92 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         6.64 MiB
+
+	full:
+		Execution time:      1.27142 segundo
+		Memory usage:        5.81 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         6.64 MiB
+
+Inventoried assets: Computer #7
+2026-08-20 15:20:43 [@f072151aa0c9]
+Computer:
+	prepare:
+		Execution time:      0.00048 segundo
+		Memory usage:        3.54 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.76 MiB
+
+	handle:
+		Execution time:      0.50717 segundo
+		Memory usage:        5.42 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         8.01 MiB
+
+	full:
+		Execution time:      0.60542 segundo
+		Memory usage:        5.42 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         8.01 MiB
+
+Inventoried assets: Computer #6
+2026-08-20 16:07:55 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00068 segundo
+		Memory usage:        4.38 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.68 MiB
+
+	handle:
+		Execution time:      1.10006 segundo
+		Memory usage:        7.08 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         7.89 MiB
+
+	full:
+		Execution time:      1.49244 segundo
+		Memory usage:        7.06 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         7.89 MiB
+
+Inventoried assets: Computer #7
+2026-08-21 15:14:00 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00041 segundo
+		Memory usage:        4.22 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.6 MiB
+
+	handle:
+		Execution time:      0.73602 segundo
+		Memory usage:        6.26 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         11.48 MiB
+
+	full:
+		Execution time:      1.12274 segundo
+		Memory usage:        6.2 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         11.48 MiB
+
+Inventoried assets: Computer #6
+2026-08-21 15:56:22 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.0005 segundo
+		Memory usage:        4.45 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.82 MiB
+
+	handle:
+		Execution time:      0.71565 segundo
+		Memory usage:        6.18 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         6.95 MiB
+
+	full:
+		Execution time:      1.00362 segundo
+		Memory usage:        6.1 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         6.95 MiB
+
+Inventoried assets: Computer #7
+2026-08-24 12:11:22 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00106 segundo
+		Memory usage:        4.62 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.74 MiB
+
+	handle:
+		Execution time:      1.06599 segundo
+		Memory usage:        8.1 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         12.76 MiB
+
+	full:
+		Execution time:      1.68738 segundo
+		Memory usage:        8.06 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         12.76 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 13:07:22 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00054 segundo
+		Memory usage:        3.54 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.67 MiB
+
+	handle:
+		Execution time:      0.13205 segundo
+		Memory usage:        4.4 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.77 MiB
+
+	full:
+		Execution time:      0.19928 segundo
+		Memory usage:        4.4 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.77 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 13:41:12 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00059 segundo
+		Memory usage:        3.54 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.67 MiB
+
+	handle:
+		Execution time:      0.14613 segundo
+		Memory usage:        4.25 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.63 MiB
+
+	full:
+		Execution time:      0.18567 segundo
+		Memory usage:        4.25 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.63 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 13:41:52 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00046 segundo
+		Memory usage:        3.54 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.67 MiB
+
+	handle:
+		Execution time:      0.11569 segundo
+		Memory usage:        4.25 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.63 MiB
+
+	full:
+		Execution time:      0.14386 segundo
+		Memory usage:        4.25 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.63 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 13:43:41 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00049 segundo
+		Memory usage:        3.54 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.67 MiB
+
+	handle:
+		Execution time:      0.11482 segundo
+		Memory usage:        4.25 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.63 MiB
+
+	full:
+		Execution time:      0.14501 segundo
+		Memory usage:        4.25 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.63 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 13:51:07 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00043 segundo
+		Memory usage:        3.54 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.67 MiB
+
+	handle:
+		Execution time:      0.10905 segundo
+		Memory usage:        4.25 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.63 MiB
+
+	full:
+		Execution time:      0.14264 segundo
+		Memory usage:        4.25 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.63 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 14:19:15 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00101 segundo
+		Memory usage:        4.58 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.82 MiB
+
+	handle:
+		Execution time:      0.7769 segundo
+		Memory usage:        7.76 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.6 MiB
+
+	full:
+		Execution time:      1.25792 segundo
+		Memory usage:        7.75 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.6 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 14:21:03 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00037 segundo
+		Memory usage:        3.53 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.76 MiB
+
+	handle:
+		Execution time:      0.16686 segundo
+		Memory usage:        4.51 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.88 MiB
+
+	full:
+		Execution time:      0.20935 segundo
+		Memory usage:        4.51 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.88 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 14:27:21 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00045 segundo
+		Memory usage:        3.53 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.76 MiB
+
+	handle:
+		Execution time:      0.11197 segundo
+		Memory usage:        4.23 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.61 MiB
+
+	full:
+		Execution time:      0.15052 segundo
+		Memory usage:        4.23 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.61 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 14:29:47 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00045 segundo
+		Memory usage:        3.53 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.76 MiB
+
+	handle:
+		Execution time:      0.08451 segundo
+		Memory usage:        4.23 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.61 MiB
+
+	full:
+		Execution time:      0.11891 segundo
+		Memory usage:        4.23 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.61 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 14:35:01 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      5.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.1643 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.20198 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #1
+2026-08-24 14:35:01 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10532 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.31243 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #2
+2026-08-24 14:35:01 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.13616 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.41336 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #3
+2026-08-24 14:35:01 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10825 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.44429 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #4
+2026-08-24 14:35:01 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      5.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10376 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.29058 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #5
+2026-08-24 14:35:01 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.11179 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.31655 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #6
+2026-08-24 14:35:01 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.10355 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.13396 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #8
+2026-08-24 14:35:01 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.14339 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.16353 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #7
+2026-08-24 14:35:02 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.11751 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.136 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #9
+2026-08-24 14:35:02 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10468 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.12176 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #10
+2026-08-24 14:35:02 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.09955 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.12312 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #11
+2026-08-24 14:35:02 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.08864 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.10469 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #12
+2026-08-24 14:35:02 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.0901 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.10593 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #13
+2026-08-24 14:35:02 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.10708 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.1259 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #14
+2026-08-24 14:35:02 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.09526 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.11661 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #15
+2026-08-24 14:35:03 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09738 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.11399 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #16
+2026-08-24 14:35:03 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.08645 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.16783 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #17
+2026-08-24 14:35:04 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.12282 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.15109 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #18
+2026-08-24 14:35:04 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10198 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.1289 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:04 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.11655 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.13718 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #20
+2026-08-24 14:35:04 [@ba1d75de31b0]
+Printer:
+	prepare:
+		Execution time:      0.00122 segundo
+		Memory usage:        3.77 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.82 MiB
+
+	handle:
+		Execution time:      0.18764 segundo
+		Memory usage:        4.47 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.8 MiB
+
+	full:
+		Execution time:      0.20643 segundo
+		Memory usage:        4.46 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.8 MiB
+
+Inventoried assets: Printer #1
+2026-08-24 14:35:05 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.1386 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.16 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #21
+2026-08-24 14:35:06 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.06591 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.08441 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #1
+2026-08-24 14:35:06 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.11018 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.2006 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #22
+2026-08-24 14:35:06 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.12775 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.14981 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #23
+2026-08-24 14:35:06 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.05469 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07086 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #2
+2026-08-24 14:35:06 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.0657 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.08633 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #3
+2026-08-24 14:35:07 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.04714 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.06188 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #4
+2026-08-24 14:35:07 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.15059 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.16738 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #24
+2026-08-24 14:35:07 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.14332 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.17212 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #25
+2026-08-24 14:35:07 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.1314 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.15727 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #26
+2026-08-24 14:35:08 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.04498 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.06578 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #5
+2026-08-24 14:35:09 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.11406 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.1313 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #27
+2026-08-24 14:35:09 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10629 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.21693 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #28
+2026-08-24 14:35:09 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.06661 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.0902 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #6
+2026-08-24 14:35:09 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.12953 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.15005 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:10 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      5.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.15308 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.17717 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #29
+2026-08-24 14:35:10 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.06079 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.22169 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #7
+2026-08-24 14:35:11 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.08382 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.10999 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #30
+2026-08-24 14:35:11 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.05232 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.06968 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #8
+2026-08-24 14:35:11 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.089 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.10882 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:11 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.05475 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.06919 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #9
+2026-08-24 14:35:12 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09038 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.10664 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:12 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.13219 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.24725 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #31
+2026-08-24 14:35:12 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.12023 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.14492 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #32
+2026-08-24 14:35:13 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.0509 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07214 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #10
+2026-08-24 14:35:13 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.10735 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.12677 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #33
+2026-08-24 14:35:13 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.07349 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.09893 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #11
+2026-08-24 14:35:14 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.10902 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.1309 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #34
+2026-08-24 14:35:14 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10835 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.13746 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:14 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09471 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.12376 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:14 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10551 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.19457 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #35
+2026-08-24 14:35:14 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10652 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+	full:
+		Execution time:      0.28962 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:15 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      5.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.11053 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+	full:
+		Execution time:      0.1504 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:15 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.06749 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.08451 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #12
+2026-08-24 14:35:15 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.12465 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.1556 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #13
+2026-08-24 14:35:15 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      6.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.0577 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07474 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #14
+2026-08-24 14:35:15 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.08986 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.11133 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:16 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.11404 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.1308 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #36
+2026-08-24 14:35:16 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.07611 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.09716 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #15
+2026-08-24 14:35:16 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      0.00027 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.1149 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.15225 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:16 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.14173 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.16391 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #37
+2026-08-24 14:35:17 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.10087 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.13321 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #16
+2026-08-24 14:35:17 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.14456 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.17387 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #38
+2026-08-24 14:35:17 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.07503 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.09393 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #17
+2026-08-24 14:35:17 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.15544 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.19653 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #39
+2026-08-24 14:35:17 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.06974 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.09048 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #18
+2026-08-24 14:35:18 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10031 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.12246 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #40
+2026-08-24 14:35:18 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09963 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.20425 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:18 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.10371 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.11983 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #41
+2026-08-24 14:35:19 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      5.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.06111 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.08227 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #19
+2026-08-24 14:35:20 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.05773 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.12393 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #20
+2026-08-24 14:35:20 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.13209 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.1522 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #42
+2026-08-24 14:35:20 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09753 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.20095 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:20 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.0845 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.10336 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #21
+2026-08-24 14:35:21 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.12148 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.1363 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #43
+2026-08-24 14:35:21 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.07763 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.10349 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #22
+2026-08-24 14:35:21 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.05499 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07992 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #23
+2026-08-24 14:35:21 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.06608 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.08437 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #24
+2026-08-24 14:35:21 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.11457 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.13277 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #44
+2026-08-24 14:35:22 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.05678 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07522 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #25
+2026-08-24 14:35:22 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.08801 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.11835 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:23 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.05878 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07726 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #26
+2026-08-24 14:35:23 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.06894 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.10073 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #27
+2026-08-24 14:35:23 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.08059 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.09887 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #45
+2026-08-24 14:35:24 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      5.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09732 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.12675 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:24 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.1533 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+	full:
+		Execution time:      0.17801 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:24 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09025 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+	full:
+		Execution time:      0.10987 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:24 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.07126 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.10193 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #28
+2026-08-24 14:35:25 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.07737 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.0956 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #29
+2026-08-24 14:35:25 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.1206 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.13574 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #46
+2026-08-24 14:35:26 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.06785 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.08909 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #30
+2026-08-24 14:35:26 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.12109 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.16614 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #47
+2026-08-24 14:35:26 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      6.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.08557 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.10194 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #31
+2026-08-24 14:35:27 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.13003 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.14972 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #48
+2026-08-24 14:35:27 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.11218 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.13021 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #49
+2026-08-24 14:35:27 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.0672 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.10015 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #32
+2026-08-24 14:35:27 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.1548 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.18997 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #50
+2026-08-24 14:35:28 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.14686 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.17826 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #51
+2026-08-24 14:35:28 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.07638 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.10023 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #33
+2026-08-24 14:35:28 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10301 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.12196 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:29 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.1499 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.19059 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:29 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.0558 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.10358 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #34
+2026-08-24 14:35:29 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.11834 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+	full:
+		Execution time:      0.14024 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:29 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.18547 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.26977 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #52
+2026-08-24 14:35:29 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.1169 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.13219 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #53
+2026-08-24 14:35:30 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09706 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.12963 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:30 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.05506 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.08808 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #35
+2026-08-24 14:35:30 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      6.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09828 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+	full:
+		Execution time:      0.12218 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:31 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      5.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.11569 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.1417 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #54
+2026-08-24 14:35:31 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09745 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.18944 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #55
+2026-08-24 14:35:31 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.04891 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.06848 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #36
+2026-08-24 14:35:31 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.04353 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.05926 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #37
+2026-08-24 14:35:32 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.10218 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.12372 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #56
+2026-08-24 14:35:32 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.08985 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.11322 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #57
+2026-08-24 14:35:32 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.05423 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07117 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #38
+2026-08-24 14:35:33 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09423 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.12052 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:33 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.06528 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.09143 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #39
+2026-08-24 14:35:33 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09138 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+	full:
+		Execution time:      0.11058 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:33 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09967 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+	full:
+		Execution time:      0.13283 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:34 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.12316 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.14519 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #58
+2026-08-24 14:35:34 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10433 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.12136 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #59
+2026-08-24 14:35:35 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.0595 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.14889 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #40
+2026-08-24 14:35:35 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.0434 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.05865 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #41
+2026-08-24 14:35:35 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.09533 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.11059 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #60
+2026-08-24 14:35:35 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.08291 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.09836 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:36 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.09911 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.11469 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #61
+2026-08-24 14:35:36 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.1146 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.14203 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:36 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.05984 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07591 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #42
+2026-08-24 14:35:37 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.08987 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.10852 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:37 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.06516 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.08451 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #43
+2026-08-24 14:35:37 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.11481 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.13178 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #62
+2026-08-24 14:35:38 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09128 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+	full:
+		Execution time:      0.10912 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.22 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:38 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09006 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.10726 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #63
+2026-08-24 14:35:38 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.06024 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07775 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #44
+2026-08-24 14:35:39 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.0492 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.06963 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #45
+2026-08-24 14:35:40 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.11233 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.13191 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #64
+2026-08-24 14:35:40 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.06372 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07894 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #46
+2026-08-24 14:35:40 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10259 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.1307 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #65
+2026-08-24 14:35:40 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.09351 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.13061 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:40 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.06264 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.08311 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #47
+2026-08-24 14:35:40 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      5.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.08697 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.10618 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #48
+2026-08-24 14:35:40 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      7.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.11836 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.13349 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #66
+2026-08-24 14:35:40 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.05888 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07973 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #49
+2026-08-24 14:35:41 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.0657 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.10181 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #50
+2026-08-24 14:35:41 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.09326 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.11572 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #51
+2026-08-24 14:35:41 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.10888 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.12731 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #67
+2026-08-24 14:35:42 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.05424 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07135 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #52
+2026-08-24 14:35:42 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.08761 segundo
+		Memory usage:        3.9 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+	full:
+		Execution time:      0.10535 segundo
+		Memory usage:        3.89 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.25 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:42 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.13278 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.16456 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #68
+2026-08-24 14:35:42 [@ba1d75de31b0]
+Printer:
+	prepare:
+		Execution time:      0.00157 segundo
+		Memory usage:        3.77 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.82 MiB
+
+	handle:
+		Execution time:      0.13113 segundo
+		Memory usage:        4.34 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.73 MiB
+
+	full:
+		Execution time:      0.14928 segundo
+		Memory usage:        4.33 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.73 MiB
+
+Inventoried assets: Printer #2
+2026-08-24 14:35:43 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.195 segundo
+		Memory usage:        4.07 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.05 MiB
+
+	full:
+		Execution time:      0.22657 segundo
+		Memory usage:        4.07 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.05 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:43 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10451 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.27085 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #69
+2026-08-24 14:35:43 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.07444 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.1073 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #53
+2026-08-24 14:35:43 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.10574 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.31883 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #70
+2026-08-24 14:35:43 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.10991 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.12847 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #71
+2026-08-24 14:35:43 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.22377 segundo
+		Memory usage:        4.05 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         5.02 MiB
+
+	full:
+		Execution time:      0.50595 segundo
+		Memory usage:        4.05 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         5.02 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:43 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.06235 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.09292 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #54
+2026-08-24 14:35:44 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.11385 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.13875 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #72
+2026-08-24 14:35:44 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.05876 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.09945 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #55
+2026-08-24 14:35:44 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.20542 segundo
+		Memory usage:        4.05 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         5.02 MiB
+
+	full:
+		Execution time:      0.22433 segundo
+		Memory usage:        4.05 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         5.02 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:44 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.06002 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07834 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #56
+2026-08-24 14:35:44 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.17564 segundo
+		Memory usage:        4.07 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.05 MiB
+
+	full:
+		Execution time:      0.23181 segundo
+		Memory usage:        4.07 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.05 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:44 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.10922 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.23 MiB
+
+	full:
+		Execution time:      0.12991 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.23 MiB
+
+Inventoried assets: Unmanaged #73
+2026-08-24 14:35:45 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.0663 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.09399 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #57
+2026-08-24 14:35:45 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.16905 segundo
+		Memory usage:        4.07 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.05 MiB
+
+	full:
+		Execution time:      0.18531 segundo
+		Memory usage:        4.07 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.05 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:46 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.06254 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.08794 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #58
+2026-08-24 14:35:46 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.06022 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.08011 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #59
+2026-08-24 14:35:46 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.11577 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.14774 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #74
+2026-08-24 14:35:46 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      4.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.198 segundo
+		Memory usage:        4.07 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.05 MiB
+
+	full:
+		Execution time:      0.22231 segundo
+		Memory usage:        4.07 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.05 MiB
+
+Inventoried assets: Unmanaged #19
+2026-08-24 14:35:46 [@ba1d75de31b0]
+Printer:
+	prepare:
+		Execution time:      0.00256 segundo
+		Memory usage:        3.77 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.82 MiB
+
+	handle:
+		Execution time:      0.16925 segundo
+		Memory usage:        4.36 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.75 MiB
+
+	full:
+		Execution time:      0.20149 segundo
+		Memory usage:        4.42 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.75 MiB
+
+Inventoried assets: Printer #3
+2026-08-24 14:35:46 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.13313 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.15449 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #75
+2026-08-24 14:35:47 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.15288 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.17652 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #76
+2026-08-24 14:35:47 [@ba1d75de31b0]
+Printer:
+	prepare:
+		Execution time:      0.00125 segundo
+		Memory usage:        3.77 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.82 MiB
+
+	handle:
+		Execution time:      0.095 segundo
+		Memory usage:        4.35 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.74 MiB
+
+	full:
+		Execution time:      0.11328 segundo
+		Memory usage:        4.41 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.74 MiB
+
+Inventoried assets: Printer #4
+2026-08-24 14:35:47 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.12731 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.15849 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #77
+2026-08-24 14:35:47 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.14904 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.19349 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #78
+2026-08-24 14:35:47 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.06673 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.08711 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #60
+2026-08-24 14:35:47 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.10076 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.12193 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #79
+2026-08-24 14:35:48 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.11815 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.13787 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #80
+2026-08-24 14:35:48 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.14845 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.17657 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #81
+2026-08-24 14:35:48 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.0637 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.21794 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #61
+2026-08-24 14:35:48 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.05474 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07131 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #62
+2026-08-24 14:35:48 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.11792 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.14389 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #82
+2026-08-24 14:35:48 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.0949 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+	full:
+		Execution time:      0.11103 segundo
+		Memory usage:        3.87 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.26 MiB
+
+Inventoried assets: Unmanaged #83
+2026-08-24 14:35:49 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.05595 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07082 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #63
+2026-08-24 14:35:49 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      3.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.05614 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.072 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #64
+2026-08-24 14:35:49 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.69 MiB
+
+	handle:
+		Execution time:      0.05715 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07243 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #65
+2026-08-24 14:35:51 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.0513 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.06715 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #66
+2026-08-24 14:35:51 [@ba1d75de31b0]
+Unmanaged:
+	prepare:
+		Execution time:      2.0E-5 segundo
+		Memory usage:        3.6 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.7 MiB
+
+	handle:
+		Execution time:      0.05233 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+	full:
+		Execution time:      0.07023 segundo
+		Memory usage:        3.72 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.05 MiB
+
+Inventoried assets: RefusedEquipment #67
+2026-08-24 14:36:39 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00112 segundo
+		Memory usage:        5.24 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.43 MiB
+
+	handle:
+		Execution time:      1.84704 segundo
+		Memory usage:        9.12 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.31 MiB
+
+	full:
+		Execution time:      2.3874 segundos
+		Memory usage:        8.74 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.31 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 15:06:51 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00109 segundo
+		Memory usage:        5.21 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.42 MiB
+
+	handle:
+		Execution time:      1.40925 segundo
+		Memory usage:        8.59 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.29 MiB
+
+	full:
+		Execution time:      1.86668 segundo
+		Memory usage:        8.47 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.29 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 15:07:08 [@ba1d75de31b0]
+Printer:
+	prepare:
+		Execution time:      0.00139 segundo
+		Memory usage:        3.78 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         3.83 MiB
+
+	handle:
+		Execution time:      0.20012 segundo
+		Memory usage:        4.8 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.56 MiB
+
+	full:
+		Execution time:      0.2437 segundo
+		Memory usage:        4.79 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.56 MiB
+
+Inventoried assets: Printer #1
+2026-08-24 15:07:08 [@ba1d75de31b0]
+Printer:
+	prepare:
+		Execution time:      0.00156 segundo
+		Memory usage:        3.77 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.82 MiB
+
+	handle:
+		Execution time:      0.25679 segundo
+		Memory usage:        4.78 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.55 MiB
+
+	full:
+		Execution time:      0.40777 segundo
+		Memory usage:        4.77 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.55 MiB
+
+Inventoried assets: Printer #3
+2026-08-24 15:07:08 [@ba1d75de31b0]
+Printer:
+	prepare:
+		Execution time:      0.00307 segundo
+		Memory usage:        3.78 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.83 MiB
+
+	handle:
+		Execution time:      0.21971 segundo
+		Memory usage:        4.56 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.93 MiB
+
+	full:
+		Execution time:      0.32226 segundo
+		Memory usage:        4.55 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.93 MiB
+
+Inventoried assets: Printer #2
+2026-08-24 15:07:09 [@ba1d75de31b0]
+Printer:
+	prepare:
+		Execution time:      0.00118 segundo
+		Memory usage:        3.78 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.83 MiB
+
+	handle:
+		Execution time:      0.18655 segundo
+		Memory usage:        4.8 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.55 MiB
+
+	full:
+		Execution time:      0.22404 segundo
+		Memory usage:        4.78 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.55 MiB
+
+Inventoried assets: Printer #4
+2026-08-24 15:12:27 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00096 segundo
+		Memory usage:        5.22 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.43 MiB
+
+	handle:
+		Execution time:      1.28969 segundo
+		Memory usage:        8.58 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.3 MiB
+
+	full:
+		Execution time:      1.72252 segundo
+		Memory usage:        8.48 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.3 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 15:18:39 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00089 segundo
+		Memory usage:        5.22 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.43 MiB
+
+	handle:
+		Execution time:      1.29984 segundo
+		Memory usage:        8.57 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.3 MiB
+
+	full:
+		Execution time:      1.73886 segundo
+		Memory usage:        8.48 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.3 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 15:20:46 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00226 segundo
+		Memory usage:        5.22 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.42 MiB
+
+	handle:
+		Execution time:      1.28623 segundo
+		Memory usage:        8.54 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.29 MiB
+
+	full:
+		Execution time:      1.71948 segundo
+		Memory usage:        8.47 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.29 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 15:22:54 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00119 segundo
+		Memory usage:        5.24 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.45 MiB
+
+	handle:
+		Execution time:      1.31932 segundo
+		Memory usage:        8.59 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.32 MiB
+
+	full:
+		Execution time:      1.79388 segundo
+		Memory usage:        8.5 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.32 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 15:25:27 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.0011 segundo
+		Memory usage:        5.22 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.43 MiB
+
+	handle:
+		Execution time:      1.23337 segundo
+		Memory usage:        8.57 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.3 MiB
+
+	full:
+		Execution time:      1.76756 segundo
+		Memory usage:        8.48 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.3 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 15:25:32 [@ba1d75de31b0]
+Printer:
+	prepare:
+		Execution time:      0.00133 segundo
+		Memory usage:        3.77 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.82 MiB
+
+	handle:
+		Execution time:      0.21017 segundo
+		Memory usage:        4.59 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.52 MiB
+
+	full:
+		Execution time:      0.22626 segundo
+		Memory usage:        4.58 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.52 MiB
+
+Inventoried assets: Printer #5
+2026-08-24 15:26:11 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00107 segundo
+		Memory usage:        5.23 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.44 MiB
+
+	handle:
+		Execution time:      1.37163 segundo
+		Memory usage:        8.55 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.3 MiB
+
+	full:
+		Execution time:      1.83502 segundo
+		Memory usage:        8.49 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.3 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 15:27:02 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00429 segundo
+		Memory usage:        5.24 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.45 MiB
+
+	handle:
+		Execution time:      1.24411 segundo
+		Memory usage:        8.58 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.32 MiB
+
+	full:
+		Execution time:      2.03323 segundos
+		Memory usage:        8.5 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.32 MiB
+
+Inventoried assets: Computer #6
+2026-08-24 15:27:18 [@ba1d75de31b0]
+Printer:
+	prepare:
+		Execution time:      0.00142 segundo
+		Memory usage:        3.77 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         3.82 MiB
+
+	handle:
+		Execution time:      0.12648 segundo
+		Memory usage:        4.55 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.89 MiB
+
+	full:
+		Execution time:      0.15625 segundo
+		Memory usage:        4.54 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.89 MiB
+
+Inventoried assets: Printer #5
+2026-08-24 15:34:20 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.0009 segundo
+		Memory usage:        5.22 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.43 MiB
+
+	handle:
+		Execution time:      1.43761 segundo
+		Memory usage:        8.61 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.3 MiB
+
+	full:
+		Execution time:      1.8542 segundo
+		Memory usage:        8.48 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.3 MiB
+
+Inventoried assets: Computer #6
+2026-08-25 15:01:16 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00127 segundo
+		Memory usage:        5.27 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.48 MiB
+
+	handle:
+		Execution time:      1.58523 segundo
+		Memory usage:        8.71 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.36 MiB
+
+	full:
+		Execution time:      2.13433 segundos
+		Memory usage:        8.51 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.36 MiB
+
+Inventoried assets: Computer #6
+2026-08-26 14:42:21 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00018 segundo
+		Memory usage:        5.14 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.37 MiB
+
+	handle:
+		Execution time:      1.41355 segundo
+		Memory usage:        7.91 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.99 MiB
+
+	full:
+		Execution time:      2.03651 segundos
+		Memory usage:        7.71 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.99 MiB
+
+Inventoried assets: Computer #6
+2026-08-27 15:52:20 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00057 segundo
+		Memory usage:        4.52 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.68 MiB
+
+	handle:
+		Execution time:      1.30889 segundo
+		Memory usage:        6.32 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         9.44 MiB
+
+	full:
+		Execution time:      1.5394 segundo
+		Memory usage:        6.05 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         9.44 MiB
+
+Inventoried assets: Computer #6
+2026-08-28 15:40:01 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.002 segundo
+		Memory usage:        5.28 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.7 MiB
+
+	handle:
+		Execution time:      2.6856 segundos
+		Memory usage:        10.9 MiB
+		Memory usage (real): 16 MiB
+		Memory peak:         12.8 MiB
+
+	full:
+		Execution time:      3.40284 segundos
+		Memory usage:        10.5 MiB
+		Memory usage (real): 16 MiB
+		Memory peak:         12.8 MiB
+
+Inventoried assets: Computer #6
+2026-08-31 10:02:49 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00067 segundo
+		Memory usage:        4.87 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.34 MiB
+
+	handle:
+		Execution time:      1.53217 segundo
+		Memory usage:        7.08 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10 MiB
+
+	full:
+		Execution time:      1.96321 segundo
+		Memory usage:        6.77 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10 MiB
+
+Inventoried assets: Computer #6
+2026-09-01 10:13:16 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00379 segundo
+		Memory usage:        5.44 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.86 MiB
+
+	handle:
+		Execution time:      2.11075 segundos
+		Memory usage:        10.73 MiB
+		Memory usage (real): 16 MiB
+		Memory peak:         12.99 MiB
+
+	full:
+		Execution time:      2.65839 segundos
+		Memory usage:        10.46 MiB
+		Memory usage (real): 16 MiB
+		Memory peak:         12.99 MiB
+
+Inventoried assets: Computer #6
+2026-09-02 09:36:03 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.00034 segundo
+		Memory usage:        4.89 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.36 MiB
+
+	handle:
+		Execution time:      1.37077 segundo
+		Memory usage:        7.09 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.07 MiB
+
+	full:
+		Execution time:      1.77513 segundo
+		Memory usage:        6.92 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.07 MiB
+
+Inventoried assets: Computer #6
+2026-09-03 09:53:47 [@ba1d75de31b0]
+Computer:
+	prepare:
+		Execution time:      0.001 segundo
+		Memory usage:        4.03 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         4.39 MiB
+
+	handle:
+		Execution time:      1.04008 segundo
+		Memory usage:        5.45 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         8.6 MiB
+
+	full:
+		Execution time:      1.23709 segundo
+		Memory usage:        5.29 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         8.6 MiB
+
+Inventoried assets: Computer #6
+2026-09-04 09:45:38 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.00019 segundo
+		Memory usage:        5.15 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.57 MiB
+
+	handle:
+		Execution time:      1.88203 segundo
+		Memory usage:        8.16 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         12.6 MiB
+
+	full:
+		Execution time:      2.43919 segundos
+		Memory usage:        7.69 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         12.6 MiB
+
+Inventoried assets: Computer #6
+2026-09-08 09:09:41 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.00066 segundo
+		Memory usage:        4.69 MiB
+		Memory usage (real): 6 MiB
+		Memory peak:         5.14 MiB
+
+	handle:
+		Execution time:      1.30221 segundo
+		Memory usage:        6.88 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         9.83 MiB
+
+	full:
+		Execution time:      1.69693 segundo
+		Memory usage:        6.61 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         9.83 MiB
+
+Inventoried assets: Computer #6
+2026-09-08 11:32:59 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.00097 segundo
+		Memory usage:        4.99 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.48 MiB
+
+	handle:
+		Execution time:      12.85417 segundos
+		Memory usage:        7.98 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.5 MiB
+
+	full:
+		Execution time:      13.70506 segundos
+		Memory usage:        6.86 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         11.5 MiB
+
+Inventoried assets: Computer #6
+2026-09-08 11:33:40 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.00131 segundo
+		Memory usage:        5 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.49 MiB
+
+	handle:
+		Execution time:      1.25535 segundo
+		Memory usage:        7.33 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.29 MiB
+
+	full:
+		Execution time:      1.77976 segundo
+		Memory usage:        7.25 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.29 MiB
+
+Inventoried assets: Computer #6
+2026-09-08 11:34:19 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.00103 segundo
+		Memory usage:        5 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.49 MiB
+
+	handle:
+		Execution time:      1.29356 segundo
+		Memory usage:        7.31 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.29 MiB
+
+	full:
+		Execution time:      1.77552 segundo
+		Memory usage:        7.26 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.29 MiB
+
+Inventoried assets: Computer #6
+2026-09-08 11:35:32 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.00151 segundo
+		Memory usage:        5 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.49 MiB
+
+	handle:
+		Execution time:      1.50485 segundo
+		Memory usage:        7.32 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.29 MiB
+
+	full:
+		Execution time:      2.02357 segundos
+		Memory usage:        7.25 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.29 MiB
+
+Inventoried assets: Computer #6
+2026-09-08 11:36:14 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.00129 segundo
+		Memory usage:        5 MiB
+		Memory usage (real): 10 MiB
+		Memory peak:         5.49 MiB
+
+	handle:
+		Execution time:      1.50456 segundo
+		Memory usage:        7.34 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.29 MiB
+
+	full:
+		Execution time:      1.9654 segundo
+		Memory usage:        7.25 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.29 MiB
+
+Inventoried assets: Computer #6
+2026-09-08 11:39:32 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.00112 segundo
+		Memory usage:        5 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.49 MiB
+
+	handle:
+		Execution time:      1.49902 segundo
+		Memory usage:        7.38 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.28 MiB
+
+	full:
+		Execution time:      2.17258 segundos
+		Memory usage:        7.25 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.28 MiB
+
+Inventoried assets: Computer #6
+2026-09-08 11:40:45 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.00111 segundo
+		Memory usage:        5 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.49 MiB
+
+	handle:
+		Execution time:      1.58595 segundo
+		Memory usage:        7.34 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.29 MiB
+
+	full:
+		Execution time:      2.17643 segundos
+		Memory usage:        7.25 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.29 MiB
+
+Inventoried assets: Computer #6
+2026-09-08 11:46:33 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.00118 segundo
+		Memory usage:        5.02 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.51 MiB
+
+	handle:
+		Execution time:      1.38314 segundo
+		Memory usage:        7.39 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.3 MiB
+
+	full:
+		Execution time:      1.87458 segundo
+		Memory usage:        7.27 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.3 MiB
+
+Inventoried assets: Computer #6
+2026-09-08 11:53:21 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.00086 segundo
+		Memory usage:        5.02 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.51 MiB
+
+	handle:
+		Execution time:      1.68665 segundo
+		Memory usage:        7.39 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.3 MiB
+
+	full:
+		Execution time:      2.20347 segundos
+		Memory usage:        7.27 MiB
+		Memory usage (real): 14 MiB
+		Memory peak:         10.3 MiB
+
+Inventoried assets: Computer #6
+2026-09-08 11:54:04 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.00105 segundo
+		Memory usage:        5.02 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.52 MiB
+
+	handle:
+		Execution time:      1.18567 segundo
+		Memory usage:        7.34 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.31 MiB
+
+	full:
+		Execution time:      1.76965 segundo
+		Memory usage:        7.27 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.31 MiB
+
+Inventoried assets: Computer #6
+2026-09-09 11:39:20 [@7b4f71344535]
+Computer:
+	prepare:
+		Execution time:      0.0013 segundo
+		Memory usage:        4.91 MiB
+		Memory usage (real): 8 MiB
+		Memory peak:         5.38 MiB
+
+	handle:
+		Execution time:      1.34235 segundo
+		Memory usage:        7.04 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.08 MiB
+
+	full:
+		Execution time:      1.74957 segundo
+		Memory usage:        6.85 MiB
+		Memory usage (real): 12 MiB
+		Memory peak:         10.08 MiB
+
+Inventoried assets: Computer #6

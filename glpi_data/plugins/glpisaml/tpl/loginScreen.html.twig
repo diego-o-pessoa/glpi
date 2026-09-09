@@ -1,0 +1,19 @@
+<!-- implemented in Loginflow->showLoginScreen(void): string -->
+<div class="glpisaml-login-buttons">
+    <div class="card-header">
+        <h2>{{ header }}</h2>
+    </div>
+    <div class="glpisaml-provider-list">
+        {% for button in buttons %}
+        <div class="glpisaml-provider-item">
+            <button type="submit" name="phpsaml" value="{{ button.id|abs }}" class="glpisaml-provider-button">
+                <span class="glpisaml-microsoft-icon" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+                <span>Entrar com Microsoft</span>
+            </button>
+        </div>
+        {% else %}
+            <div><p>{{ noconfig }}</p>
+        {% endfor %}
+        </div>
+    </div>
+</div>

@@ -1,0 +1,14 @@
+.ativa-wallpaper { max-width: 1800px; margin: 0 auto; padding-bottom: 2rem; }
+.ativa-current-preview { width: 100%; max-height: 390px; object-fit: contain; background: #111827; }
+.ativa-history-preview { height: 210px; object-fit: cover; background: #111827; }
+.ativa-details dt { color: var(--tblr-secondary-color); font-weight: 600; }
+.ativa-details dd { overflow-wrap: anywhere; }
+.ativa-hash { cursor: help; }
+.ativa-stat { display: flex; align-items: center; justify-content: space-between; border-left: .25rem solid; border-radius: .25rem; padding: .75rem; background: var(--tblr-bg-surface-secondary); }
+.ativa-stat strong { font-size: 1.35rem; }
+.ativa-preview { min-height: 230px; display: grid; place-items: center; border-radius: .4rem; background: var(--tblr-bg-surface-secondary); overflow: hidden; }
+.ativa-preview img { max-height: 380px; width: 100%; object-fit: contain; }
+.ativa-error, .ativa-json { max-width: 24rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ativa-step { display: flex; gap: 1rem; align-items: flex-start; }
+.ativa-step > span { display: grid; place-items: center; flex: 0 0 2.5rem; width: 2.5rem; height: 2.5rem; border-radius: 50%; background: var(--tblr-primary); color: #fff; font-weight: 700; }
+.ativa-step h2 { margin-bottom: .5rem; }

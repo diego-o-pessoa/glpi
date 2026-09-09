@@ -1,0 +1,55 @@
+<root>
+<name>glpisaml</name>
+<key>glpisaml</key>
+<state>Stable</state>
+<logo>https://codeberg.org/QuinQuies/glpisaml/raw/branch/main/donut.png</logo>
+<description>
+    <short>
+        <en>Extends GLPI with SSO support using SAMLv2.</en>
+    </short>
+    <long>
+        <en>Glpisaml provides SSO (MFA) support using SAML. Glpisaml is written specifically for GLPI10 and is not
+            and will not be compatible with GLPI9 or GLPI11. The plugin allows you to configure multiple IDPs
+            idealy for IT companies that want to support SSO integration with multiple environments. SAML 
+            Configuration is done via the GLPI UI. Plugin supports Just-in-time user creation and simple rules to
+            provision newly created users. For questions join our discord at: https://discord.gg/KyMdkqJcGz. 
+            If you find an issue, please register it at our Github repo.
+        </en>
+    </long>
+</description>
+<homepage>https://github.com/DonutsNL/glpisaml/wiki/</homepage>
+<download>https://github.com/DonutsNL/glpisaml/releases/</download>
+<issues>https://github.com/DonutsNL/glpisaml/issues</issues>
+<readme>https://github.com/DonutsNL/glpisaml/raw/README.md</readme>
+<authors>
+    <author>Chris Gralike</author>
+</authors>
+<versions>
+    <version>
+        <num>1.1.12</num>
+        <compatibility>~10.0.0</compatibility>
+        <download_url>https://github.com/DonutsNL/glpisaml/releases/download/v1.1.12/glpisaml.zip</download_url>
+    </version>
+</versions>
+<langs>
+    <lang>en_GB</lang>
+</langs>
+<license>GPLv3+</license>
+<tags>
+    <en>
+        <tag>SSO</tag>
+        <tag>SAML</tag>
+        <tag>Management</tag>
+        <tag>Setup</tag>
+        <tag>Authentication</tag>
+    </en>
+</tags>
+<screenshots>
+    <screenshot>https://codeberg.org/QuinQuies/glpisaml/raw/branch/main/templates/images/glpisaml1.png</screenshot>
+    <screenshot>https://codeberg.org/QuinQuies/glpisaml/raw/branch/main/templates/images/glpisaml2.png</screenshot>
+    <screenshot>https://codeberg.org/QuinQuies/glpisaml/raw/branch/main/templates/images/glpisaml3.png</screenshot>
+    <screenshot>https://codeberg.org/QuinQuies/glpisaml/raw/branch/main/templates/images/glpisaml4.png</screenshot>
+    <screenshot>https://codeberg.org/QuinQuies/glpisaml/raw/branch/main/templates/images/glpisaml5.png</screenshot>
+    <screenshot>https://codeberg.org/QuinQuies/glpisaml/raw/branch/main/templates/images/glpisaml6.png</screenshot>
+</screenshots>
+</root>

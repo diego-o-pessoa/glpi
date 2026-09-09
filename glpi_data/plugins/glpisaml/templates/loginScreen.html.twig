@@ -1,0 +1,41 @@
+<!-- implemented in Loginflow->showLoginScreen(void): string -->
+{% if showbuttons == true %}
+<style>
+.col-auto.px-2.text-center:has(.glpisaml-login-buttons){display:flex;flex-basis:100%;justify-content:center;max-width:100%;padding-top:12px}
+.glpisaml-login-buttons{margin:0 auto;width:260px}
+.glpisaml-login-buttons .card-header{display:none}
+.glpisaml-provider-list,.glpisaml-provider-item{width:260px}
+.glpisaml-provider-button{align-items:center;box-sizing:border-box;display:flex;gap:10px;justify-content:center;margin:0;padding:8px 12px;width:260px}
+.glpisaml-microsoft-icon{flex:0 0 20px}
+</style>
+<div class="glpisaml-login-buttons" style="width:260px; margin:12px auto 0;">
+    <div class="card-header">
+        <h2>{{ header }}</h2>
+    </div>
+    <div class="glpisaml-provider-list" style="width:260px;">
+        {% for button in buttons %}
+        <div class="glpisaml-provider-item" style="width:260px;">
+            <button type="submit" name="{{ postfield }}" value="{{ button.id|abs }}" class="glpisaml-provider-button" style="background:#fff; border:1px solid #8c8c8c; border-radius:0; color:#242424; cursor:pointer; font-size:14px; min-height:44px; text-align:center;">
+                <span class="glpisaml-microsoft-icon" aria-hidden="true" style="display:grid; gap:2px; grid-template-columns:repeat(2,9px); grid-template-rows:repeat(2,9px); height:20px; width:20px;"><span style="background:#f35325; display:block;"></span><span style="background:#81bc06; display:block;"></span><span style="background:#05a6f0; display:block;"></span><span style="background:#ffba08; display:block;"></span></span>
+                <span>Entrar com Microsoft</span>
+            </button>
+        </div>
+        <!-- This section should never be reached -->
+        {% else %}
+            <div><p>{{ noconfig }}</p>
+        {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+<!-- Add CSS to hide certain login buttons
+     Will be used as configurable option in 
+     version 1.2.0
+{% if enforced == true %}
+<style>
+    .mb-4:has(#login_password){ display:none; }
+    .mb-2:has(#login_remember){ display:none; }
+    .mb-3:has(.select2){ display:none; }
+</style>
+{% endif %}
+-->

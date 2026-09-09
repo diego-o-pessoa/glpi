@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<REQUEST>
+  <CONTENT>
+    <DEVICE>
+      <CARTRIDGES>
+        <DRUMBLACK>48</DRUMBLACK>
+        <TONERBLACK>OK</TONERBLACK>
+      </CARTRIDGES>
+      <FIRMWARES>
+        <DESCRIPTION>device firmware</DESCRIPTION>
+        <MANUFACTURER>Brother</MANUFACTURER>
+        <NAME>DCP-8157DN</NAME>
+        <TYPE>device</TYPE>
+        <VERSION>1.15</VERSION>
+      </FIRMWARES>
+      <INFO>
+        <COMMENTS>Brother NC-8300h, Firmware Ver.1.15  (15.02.26),MID 8C5-F07,FID 2</COMMENTS>
+        <FIRMWARE>1.15</FIRMWARE>
+        <ID>3</ID>
+        <IPS>
+          <IP>192.168.80.245</IP>
+        </IPS>
+        <MAC>30:05:5c:83:e5:0f</MAC>
+        <MANUFACTURER>Brother</MANUFACTURER>
+        <MEMORY>128</MEMORY>
+        <MODEL>DCP-8157DN</MODEL>
+        <NAME>BRN30055C8AD895</NAME>
+        <RAM>128</RAM>
+        <SERIAL>U63264E5N172665</SERIAL>
+        <TYPE>PRINTER</TYPE>
+        <UPTIME>2 days, 21:15:30.25</UPTIME>
+      </INFO>
+      <PAGECOUNTERS>
+        <SCANNED>8669</SCANNED>
+        <TOTAL>310522</TOTAL>
+      </PAGECOUNTERS>
+      <PORTS>
+        <PORT>
+          <IFDESCR>NC-8300h</IFDESCR>
+          <IFINERRORS>0</IFINERRORS>
+          <IFINOCTETS>604183655</IFINOCTETS>
+          <IFINTERNALSTATUS>1</IFINTERNALSTATUS>
+          <IFLASTCHANGE>25.50 seconds</IFLASTCHANGE>
+          <IFMTU>1500</IFMTU>
+          <IFNAME>NC-8300h</IFNAME>
+          <IFNUMBER>1</IFNUMBER>
+          <IFOUTERRORS>0</IFOUTERRORS>
+          <IFOUTOCTETS>53944380</IFOUTOCTETS>
+          <IFSPEED>100000000</IFSPEED>
+          <IFSTATUS>1</IFSTATUS>
+          <IFTYPE>7</IFTYPE>
+          <IP>192.168.80.245</IP>
+          <IPS>
+            <IP>192.168.80.245</IP>
+          </IPS>
+          <MAC>30:05:5c:83:e5:0f</MAC>
+        </PORT>
+        <PORT>
+          <IFDESCR>SoftwareLoopBack</IFDESCR>
+          <IFINERRORS>0</IFINERRORS>
+          <IFINOCTETS>2381</IFINOCTETS>
+          <IFINTERNALSTATUS>1</IFINTERNALSTATUS>
+          <IFLASTCHANGE>0.00 seconds</IFLASTCHANGE>
+          <IFMTU>1500</IFMTU>
+          <IFNAME>SoftwareLoopBack</IFNAME>
+          <IFNUMBER>2</IFNUMBER>
+          <IFOUTERRORS>0</IFOUTERRORS>
+          <IFOUTOCTETS>2381</IFOUTOCTETS>
+          <IFSPEED>0</IFSPEED>
+          <IFSTATUS>1</IFSTATUS>
+          <IFTYPE>24</IFTYPE>
+        </PORT>
+      </PORTS>
+    </DEVICE>
+    <MODULEVERSION>7.3</MODULEVERSION>
+    <PROCESSNUMBER>8</PROCESSNUMBER>
+  </CONTENT>
+  <DEVICEID>DESKTOP-R1C8ICN-2026-08-17-14-54-59</DEVICEID>
+  <QUERY>SNMPQUERY</QUERY>
+</REQUEST>

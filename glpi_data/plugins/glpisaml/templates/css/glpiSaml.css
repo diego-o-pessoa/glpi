@@ -1,0 +1,50 @@
+.glpisaml-login-buttons {
+    width: 260px;
+}
+
+.glpisaml-login-buttons .card-header {
+	display: none;
+}
+
+.glpisaml-provider-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+    width: 260px;
+}
+
+.glpisaml-provider-item {
+    width: 260px;
+}
+
+.glpisaml-provider-button {
+	align-items: center;
+	background: #fff;
+	border: 1px solid #8c8c8c;
+	border-radius: 0;
+	color: #242424;
+	cursor: pointer;
+	display: flex;
+	font-size: 14px;
+	font-weight: 400;
+	gap: 10px;
+	justify-content: flex-start;
+	min-height: 44px;
+	padding: 8px 14px;
+	text-align: left;
+    width: 260px;
+}
+
+.glpisaml-provider-button:hover,
+.glpisaml-provider-button:focus {
+	background: #f5f5f5;
+	border-color: #5f5f5f;
+	color: #242424;
+}
+
+.glpisaml-provider-icon {
+	color: #f25022;
+	font-size: 20px;
+	line-height: 1;
+	width: 20px;
+}
