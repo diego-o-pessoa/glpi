@@ -93,6 +93,8 @@ final class WallpaperManager
             ConfigService::getInt('max_image_dimension')
         );
 
+        Storage::prepare((int) $metadata['filesize']);
+
         $random = bin2hex(random_bytes(24));
         $internal = $random . '.' . $metadata['extension'];
         $thumbnail = bin2hex(random_bytes(24)) . '.jpg';
@@ -101,8 +103,25 @@ final class WallpaperManager
         $destination = Storage::wallpaperPath($internal);
         $thumbnailDestination = Storage::thumbnailPath($thumbnail);
 
-        if (!move_uploaded_file($tmpName, $staging)) {
-            throw new RuntimeException('Falha ao mover o upload para armazenamento privado.');
+        $moveWarning = null;
+        set_error_handler(static function (int $severity, string $message) use (&$moveWarning): bool {
+            $moveWarning = $message;
+            return true;
+        });
+        try {
+            $moved = move_uploaded_file($tmpName, $staging);
+        } finally {
+            restore_error_handler();
+        }
+        if (!$moved) {
+            $warning = strtolower((string) $moveWarning);
+            if (str_contains($warning, 'no space left on device') || str_contains($warning, 'errno=28')) {
+                throw new RuntimeException('Nao ha espaco livre suficiente no armazenamento privado do GLPI.');
+            }
+            if (str_contains($warning, 'permission denied')) {
+                throw new RuntimeException('O armazenamento privado do plugin nao permite gravacao. Verifique proprietario e permissoes.');
+            }
+            throw new RuntimeException('Falha ao mover o upload para armazenamento privado. Verifique espaco em disco e permissoes.');
         }
 
         $transactionStarted = false;

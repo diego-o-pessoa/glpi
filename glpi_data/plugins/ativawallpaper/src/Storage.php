@@ -8,9 +8,33 @@ use RuntimeException;
 
 final class Storage
 {
+    private const DIRECTORIES = ['wallpapers', 'thumbnails', 'tmp'];
+
     public static function root(): string
     {
         return GLPI_PLUGIN_DOC_DIR . '/ativawallpaper';
+    }
+
+    public static function prepare(int $requiredBytes = 0): void
+    {
+        $root = self::root();
+        foreach (array_merge([$root], array_map(
+            static fn (string $directory): string => $root . '/' . $directory,
+            self::DIRECTORIES
+        )) as $directory) {
+            if (!is_dir($directory) && !mkdir($directory, 0750, true) && !is_dir($directory)) {
+                throw new RuntimeException('Nao foi possivel criar o armazenamento privado do plugin.');
+            }
+            if (!is_writable($directory)) {
+                throw new RuntimeException('O armazenamento privado do plugin nao permite gravacao. Verifique proprietario e permissoes.');
+            }
+        }
+
+        $freeBytes = @disk_free_space($root);
+        $minimumFreeBytes = max(1, $requiredBytes) + 1024 * 1024;
+        if ($freeBytes !== false && $freeBytes < $minimumFreeBytes) {
+            throw new RuntimeException('Nao ha espaco livre suficiente no armazenamento privado do GLPI.');
+        }
     }
 
     public static function wallpaperPath(string $internalFilename): string

@@ -28,8 +28,13 @@ try {
     switch ($action) {
         case 'publish':
             Session::checkRight(PluginAtivawallpaperProfile::RIGHT_PUBLISH, UPDATE);
+            $upload = $_FILES['wallpaper'] ?? [];
+            // Symfony may rebuild its FileBag while GLPI stores the redirect
+            // message. Do not leave a reference to a temporary file that this
+            // action is about to move or remove.
+            unset($_FILES['wallpaper']);
             $wallpaper = (new WallpaperManager())->publishUploaded(
-                $_FILES['wallpaper'] ?? [],
+                $upload,
                 (string) ($_POST['style'] ?? 'fill'),
                 isset($_POST['lock_change']),
                 (int) Session::getLoginUserID()
