@@ -59,11 +59,11 @@
               </button>
             {% endif %}
             {% if rights.publish and current %}
-              <form method="post" action="{{ urls.action }}">
+              <form method="post" action="{{ urls.action }}" data-ativa-force-all>
                 <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="action" value="force_all">
-                <button class="btn btn-success" type="submit">
-                  <i class="ti ti-device-desktop-check me-1"></i>{{ enabled ? 'Aplicar em todos' : 'Ativar e aplicar em todos' }}
+                <button class="btn btn-success" type="submit" {{ rollout and rollout.active ? 'disabled' : '' }}>
+                  <i class="ti {{ rollout and rollout.active ? 'ti-loader-2 ativa-spin' : 'ti-device-desktop-check' }} me-1"></i>{{ rollout and rollout.active ? 'Aplicacao em andamento' : (enabled ? 'Aplicar em todos' : 'Ativar e aplicar em todos') }}
                 </button>
               </form>
             {% endif %}
@@ -108,6 +108,58 @@
       </section>
     </div>
   </div>
+
+  <section class="card shadow-sm mb-4 {{ rollout ? '' : 'd-none' }}"
+           data-ativa-rollout
+           data-progress-url="{{ urls.progress }}"
+           data-active="{{ rollout and rollout.active ? '1' : '0' }}">
+    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <div>
+        <h2 class="card-title mb-0">Aplicacao do wallpaper</h2>
+        <div class="small text-muted" data-rollout-version>
+          {% if rollout %}Versao {{ rollout.version }} · iniciada em {{ rollout.started_at }}{% endif %}
+        </div>
+      </div>
+      <span class="badge {{ rollout and rollout.complete ? (rollout.error > 0 ? 'bg-danger' : 'bg-success') : 'bg-primary' }}"
+            data-rollout-state>
+        {% if rollout and rollout.complete %}{{ rollout.error > 0 ? 'Concluida com erros' : 'Concluida' }}{% else %}Em andamento{% endif %}
+      </span>
+    </div>
+    <div class="card-body">
+      <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+        <strong data-rollout-label>
+          {% if rollout %}{{ rollout.processed }} de {{ rollout.total }} computador(es) processado(s){% endif %}
+        </strong>
+        <span class="text-muted" data-rollout-percentage>{{ rollout ? (rollout.percentage|number_format(1, ',', '.') ~ '%') : '0%' }}</span>
+      </div>
+      <div class="progress ativa-rollout-progress" role="progressbar"
+           aria-valuenow="{{ rollout ? rollout.percentage : 0 }}" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-bar progress-bar-striped {{ rollout and rollout.active ? 'progress-bar-animated' : '' }} {{ rollout and rollout.completed_with_error ? 'bg-warning' : 'bg-success' }}"
+             data-rollout-bar style="width: {{ rollout ? rollout.percentage : 0 }}%"></div>
+      </div>
+      <div class="row g-3 mt-2 ativa-rollout-counts">
+        <div class="col-6 col-md-3"><span class="text-muted">Aguardando</span><strong data-rollout-pending>{{ rollout ? rollout.pending : 0 }}</strong></div>
+        <div class="col-6 col-md-3"><span class="text-muted">Aplicando</span><strong data-rollout-applying>{{ rollout ? rollout.applying : 0 }}</strong></div>
+        <div class="col-6 col-md-3"><span class="text-muted">Concluidos</span><strong class="text-success" data-rollout-success>{{ rollout ? rollout.success : 0 }}</strong></div>
+        <div class="col-6 col-md-3"><span class="text-muted">Erros</span><strong class="text-danger" data-rollout-error>{{ rollout ? rollout.error : 0 }}</strong></div>
+      </div>
+      <div class="ativa-rollout-machines mt-3">
+        <div class="small fw-semibold mb-1" data-rollout-machines-title>Computadores desta aplicacao</div>
+        <ul class="list-unstyled mb-0" data-rollout-machines>
+          {% if rollout %}
+            {% for machine in rollout.machines %}
+              <li class="ativa-rollout-machine" data-status="{{ machine.status }}">
+                <i class="ti {{ machine.status == 'success' ? 'ti-circle-check text-success' : (machine.status == 'error' ? 'ti-alert-circle text-danger' : (machine.status == 'applying' ? 'ti-loader-2 text-primary ativa-spin' : 'ti-clock text-warning')) }}"></i>
+                <strong>{{ machine.hostname }}</strong>
+                <span class="text-muted">— {{ {'pending':'aguardando consulta','applying':'aplicando agora','success':'concluido','error':'erro'}[machine.status] }}</span>
+                {% if machine.last_error %}<div class="small text-danger ms-4">{{ machine.last_error }}</div>{% endif %}
+              </li>
+            {% endfor %}
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  </section>
 
   <section class="card shadow-sm">
     <div class="card-header"><h2 class="card-title mb-0">Status dos computadores</h2></div>

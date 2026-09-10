@@ -2,6 +2,10 @@
 
 ## Em desenvolvimento
 
+- Operacao **Aplicar em todos** agora usa um identificador exclusivo por lote,
+  invalida o ETag de cada cliente e acompanha aguardando, aplicando, sucesso e erro.
+- Dashboard ganhou barra de progresso atualizada automaticamente e lista dos
+  computadores participantes da aplicacao.
 - Correcao do repasse do cabecalho `Authorization` pelo Apache/FastCGI e
   compatibilidade adicional com `X-Ativa-Client-Token`.
 - O instalador agora inicia o cliente em polling continuo imediatamente, sem

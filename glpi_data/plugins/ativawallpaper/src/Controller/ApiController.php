@@ -81,6 +81,11 @@ final class ApiController extends AbstractController
                 return $response;
             }
 
+            $repository->markRolloutApplying(
+                (int) $client['id'],
+                (string) ($client['rollout_id'] ?? '')
+            );
+
             return $this->json($config, 200, [], $etag);
         });
     }

@@ -130,6 +130,73 @@ final class DashboardService
         return $rows;
     }
 
+    public function rolloutProgress(): ?array
+    {
+        global $DB;
+
+        $rolloutId = ConfigService::get('active_rollout_id');
+        if ($rolloutId === '') {
+            return null;
+        }
+
+        $counts = [
+            'pending'  => 0,
+            'applying' => 0,
+            'success'  => 0,
+            'error'    => 0,
+        ];
+        $machines = [];
+        $iterator = $DB->request([
+            'SELECT' => ['hostname', 'rollout_status', 'last_error', 'last_check'],
+            'FROM'   => self::TABLE,
+            'WHERE'  => ['rollout_id' => $rolloutId, 'revoked_at' => null],
+            'ORDER'  => ['hostname ASC'],
+        ]);
+        foreach ($iterator as $row) {
+            $status = (string) ($row['rollout_status'] ?? 'pending');
+            if (!array_key_exists($status, $counts)) {
+                $status = 'pending';
+            }
+            $counts[$status]++;
+            $machines[] = [
+                'hostname'   => (string) $row['hostname'],
+                'status'     => $status,
+                'last_error' => $status === 'error' ? (string) ($row['last_error'] ?? '') : '',
+                'last_check' => (string) ($row['last_check'] ?? ''),
+            ];
+        }
+
+        $total = array_sum($counts);
+        if ($total === 0) {
+            return null;
+        }
+        $processed = $counts['success'] + $counts['error'];
+        $remaining = $counts['pending'] + $counts['applying'];
+        usort($machines, static function (array $left, array $right): int {
+            $priority = ['applying' => 0, 'pending' => 1, 'error' => 2, 'success' => 3];
+            return ($priority[$left['status']] <=> $priority[$right['status']])
+                ?: strcasecmp($left['hostname'], $right['hostname']);
+        });
+
+        return [
+            'id'                => $rolloutId,
+            'version'           => ConfigService::get('active_rollout_version'),
+            'started_at'        => ConfigService::get('active_rollout_started_at'),
+            'total'             => $total,
+            'processed'         => $processed,
+            'remaining'         => $remaining,
+            'pending'           => $counts['pending'],
+            'applying'          => $counts['applying'],
+            'success'           => $counts['success'],
+            'error'             => $counts['error'],
+            'percentage'        => round(($processed / $total) * 100, 1),
+            'active'            => $remaining > 0,
+            'complete'          => $remaining === 0,
+            'completed_with_error' => $remaining === 0 && $counts['error'] > 0,
+            'machines'          => $machines,
+        ];
+    }
+
     private function statusExpression(string $status, ?array $current): ?string
     {
         global $DB;

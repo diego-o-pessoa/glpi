@@ -75,17 +75,21 @@ try {
                 ConfigService::set(['enabled' => true]);
                 Audit::record('enable', 'configuration', null, false, true);
             }
-            $count = (new ClientRepository())->setForceReapplyAll();
-            if ($count === 0) {
+            $rollout = (new ClientRepository())->startRollout();
+            if ($rollout['count'] === 0) {
                 throw new RuntimeException(
                     'Nenhum cliente Ativa Wallpaper esta registrado. Implante o AtivaWallpaperClient nas maquinas antes de aplicar.'
                 );
             }
-            ConfigService::rotatePublicationRevision();
+            ConfigService::set([
+                'active_rollout_id'         => $rollout['id'],
+                'active_rollout_started_at' => $rollout['started_at'],
+                'active_rollout_version'    => (string) (new WallpaperManager())->current()['version'],
+            ]);
             Session::addMessageAfterRedirect(
                 sprintf(
-                    'Aplicacao solicitada para %d computador(es). Os clientes aplicarao na proxima checagem.',
-                    $count
+                    'Aplicacao iniciada em %d computador(es). Acompanhe o andamento na barra de progresso.',
+                    $rollout['count']
                 ),
                 true,
                 INFO

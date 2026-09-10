@@ -15,6 +15,14 @@ function plugin_ativawallpaper_do_install(): bool
     try {
         $DB->runFile(__DIR__ . '/schema.sql');
 
+        $clientsTable = 'glpi_plugin_ativawallpaper_clients';
+        $migration->addField($clientsTable, 'rollout_id', 'varchar(64) DEFAULT NULL', ['after' => 'force_reapply']);
+        $migration->addField($clientsTable, 'rollout_status', 'varchar(16) DEFAULT NULL', ['after' => 'rollout_id']);
+        $migration->addField($clientsTable, 'rollout_started_at', 'datetime DEFAULT NULL', ['after' => 'rollout_status']);
+        $migration->addField($clientsTable, 'rollout_finished_at', 'datetime DEFAULT NULL', ['after' => 'rollout_started_at']);
+        $migration->addKey($clientsTable, ['rollout_id', 'rollout_status'], 'rollout');
+        $migration->executeMigration();
+
         $storage = GLPI_PLUGIN_DOC_DIR . '/ativawallpaper';
         foreach ([$storage, $storage . '/wallpapers', $storage . '/thumbnails', $storage . '/tmp'] as $directory) {
             if (!is_dir($directory) && !mkdir($directory, 0750, true) && !is_dir($directory)) {
@@ -36,6 +44,7 @@ function plugin_ativawallpaper_do_install(): bool
         if ($upgradeSettings !== []) {
             ConfigService::set($upgradeSettings);
         }
+        ConfigService::set(['schema_version' => PLUGIN_ATIVAWALLPAPER_VERSION]);
 
         require_once PLUGIN_ATIVAWALLPAPER_DIR . '/inc/profile.class.php';
         PluginAtivawallpaperProfile::installRights();

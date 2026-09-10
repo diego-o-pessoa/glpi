@@ -42,13 +42,16 @@ $tests['api config construction and etag'] = static function (): void {
         'minimum_client_version' => '1.0.0', 'latest_client_version' => '1.0.0',
         'server_url' => 'https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1',
     ];
-    $config = ApiConfigBuilder::build($wallpaper, ['force_reapply' => 1], $settings);
+    $config = ApiConfigBuilder::build($wallpaper, ['force_reapply' => 1, 'rollout_id' => 'rollout-1'], $settings);
     assert($config['enabled'] === true);
     assert($config['poll_interval_seconds'] === 60);
     assert($config['poll_jitter_seconds'] === 3600);
     assert($config['force_reapply'] === true);
+    assert($config['rollout_id'] === 'rollout-1');
     assert(str_ends_with($config['download_url'], '/wallpaper/20260908-001/download'));
     assert(strlen(ApiConfigBuilder::etag($config)) === 64);
+    $next = ApiConfigBuilder::build($wallpaper, ['force_reapply' => 1, 'rollout_id' => 'rollout-2'], $settings);
+    assert(ApiConfigBuilder::etag($config) !== ApiConfigBuilder::etag($next));
 };
 
 $tests['image validation rejects disguised executable'] = static function (): void {

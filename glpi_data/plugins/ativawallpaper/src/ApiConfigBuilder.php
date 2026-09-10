@@ -13,6 +13,7 @@ final class ApiConfigBuilder
         $config = [
             'enabled'                 => $enabled,
             'config_revision'         => (string) ($settings['publication_revision'] ?? ''),
+            'rollout_id'              => (string) ($client['rollout_id'] ?? ''),
             'poll_interval_seconds'   => max(60, min(86400, (int) ($settings['poll_interval_seconds'] ?? 60))),
             'poll_jitter_seconds'     => max(0, min(3600, (int) ($settings['poll_jitter_seconds'] ?? 10))),
             'force_reapply'           => (bool) ($client['force_reapply'] ?? false),

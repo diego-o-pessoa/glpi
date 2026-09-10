@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_clients` (
   `token_hash` char(64) DEFAULT NULL,
   `revoked_at` datetime DEFAULT NULL,
   `force_reapply` tinyint NOT NULL DEFAULT '0',
+  `rollout_id` varchar(64) DEFAULT NULL,
+  `rollout_status` varchar(16) DEFAULT NULL,
+  `rollout_started_at` datetime DEFAULT NULL,
+  `rollout_finished_at` datetime DEFAULT NULL,
   `last_ip` varchar(45) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `machine_guid` (`machine_guid`),
@@ -51,6 +55,7 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_clients` (
   KEY `hostname` (`hostname`),
   KEY `status` (`status`),
   KEY `last_check` (`last_check`),
+  KEY `rollout` (`rollout_id`,`rollout_status`),
   KEY `updated_at` (`updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 

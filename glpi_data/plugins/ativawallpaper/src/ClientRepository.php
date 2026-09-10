@@ -173,15 +173,25 @@ final class ClientRepository
 
         if ($status === 'success') {
             $current = (new WallpaperManager())->current();
-            if ($current !== null && $wallpaperVersion === (string) $current['version']
-                && ($sha256 === '' || !hash_equals((string) $current['sha256'], $sha256))) {
-                $status = 'error';
-                $errorCode = 'REPORTED_HASH_MISMATCH';
-                $message = 'O SHA-256 reportado nao corresponde ao wallpaper atual.';
+            if ($current !== null) {
+                if ($wallpaperVersion !== (string) $current['version']) {
+                    $status = 'error';
+                    $errorCode = 'REPORTED_VERSION_MISMATCH';
+                    $message = 'A versao reportada nao corresponde ao wallpaper atual.';
+                } elseif ($sha256 === '' || !hash_equals((string) $current['sha256'], $sha256)) {
+                    $status = 'error';
+                    $errorCode = 'REPORTED_HASH_MISMATCH';
+                    $message = 'O SHA-256 reportado nao corresponde ao wallpaper atual.';
+                }
             }
         }
 
         $now = date('Y-m-d H:i:s');
+        $reportedRolloutId = Security::cleanText($payload['rollout_id'] ?? '', 64);
+        $activeRolloutId = (string) ($client['rollout_id'] ?? '');
+        $matchesActiveRollout = $reportedRolloutId === ''
+            || $activeRolloutId === ''
+            || hash_equals($activeRolloutId, $reportedRolloutId);
         $values = [
             'computers_id'     => $this->reconcileComputer($hostname) ?? $client['computers_id'],
             'hostname'         => $hostname,
@@ -196,9 +206,13 @@ final class ClientRepository
             'last_ip'          => Security::cleanText($ipAddress ?? '', 45),
             'updated_at'       => $now,
         ];
-        if ($status === 'success') {
+        if ($status === 'success' && $matchesActiveRollout) {
             $values['last_apply'] = $now;
             $values['force_reapply'] = 0;
+        }
+        if ($activeRolloutId !== '' && $matchesActiveRollout) {
+            $values['rollout_status'] = $status;
+            $values['rollout_finished_at'] = $now;
         }
         $DB->update(self::TABLE, $values, ['id' => (int) $client['id']]);
 
@@ -218,23 +232,50 @@ final class ClientRepository
         Audit::record('force_reapply', 'client', $id, false, true);
     }
 
-    public function setForceReapplyAll(): int
+    /** @return array{id:string,count:int,started_at:string} */
+    public function startRollout(): array
     {
         global $DB;
 
         $where = ['revoked_at' => null];
         $count = (int) countElementsInTable(self::TABLE, $where);
         if ($count === 0) {
-            return 0;
+            return ['id' => '', 'count' => 0, 'started_at' => ''];
         }
 
+        $rolloutId = date('YmdHis') . '-' . bin2hex(random_bytes(12));
+        $startedAt = date('Y-m-d H:i:s');
         $DB->update(self::TABLE, [
-            'force_reapply' => 1,
-            'updated_at'    => date('Y-m-d H:i:s'),
+            'force_reapply'      => 1,
+            'rollout_id'         => $rolloutId,
+            'rollout_status'     => 'pending',
+            'rollout_started_at' => $startedAt,
+            'rollout_finished_at'=> null,
+            'updated_at'         => $startedAt,
         ], $where);
-        Audit::record('force_reapply_all', 'client', null, null, ['clients' => $count]);
+        Audit::record('force_reapply_all', 'client', null, null, [
+            'clients'    => $count,
+            'rollout_id' => $rolloutId,
+        ]);
 
-        return $count;
+        return ['id' => $rolloutId, 'count' => $count, 'started_at' => $startedAt];
+    }
+
+    public function markRolloutApplying(int $clientId, string $rolloutId): void
+    {
+        global $DB;
+        if ($rolloutId === '') {
+            return;
+        }
+        $DB->update(self::TABLE, [
+            'rollout_status'      => 'applying',
+            'rollout_finished_at' => null,
+            'updated_at'          => date('Y-m-d H:i:s'),
+        ], [
+            'id'             => $clientId,
+            'rollout_id'     => $rolloutId,
+            'rollout_status' => ['pending', 'error'],
+        ]);
     }
 
     public function revoke(int $id): void
