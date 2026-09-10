@@ -1,0 +1,69 @@
+{% set labels = {
+  'initial_applied':'Aplicacao inicial',
+  'configuration_applied':'Nova configuracao aplicada',
+  'forced_applied':'Reaplicacao solicitada',
+  'drift_corrected':'Alteracao detectada e restaurada'
+} %}
+{% set icons = {
+  'initial_applied':'ti-device-desktop-check text-primary',
+  'configuration_applied':'ti-refresh text-info',
+  'forced_applied':'ti-player-play text-primary',
+  'drift_corrected':'ti-shield-check text-success'
+} %}
+<div class="container-fluid ativa-wallpaper">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1"><i class="ti ti-shield-check me-2 text-primary"></i>Alteracoes detectadas</h1>
+      <div class="text-muted">Aplicacoes e restauracoes automaticas informadas pelos clientes</div>
+    </div>
+    <nav class="btn-group" aria-label="Navegacao Ativa Wallpaper">
+      <a class="btn btn-outline-secondary" href="{{ urls.dashboard }}">Dashboard</a>
+      <a class="btn btn-outline-secondary" href="{{ urls.history }}">Historico</a>
+      <a class="btn btn-primary" href="{{ urls.events }}">Alteracoes</a>
+      {% if can_config %}<a class="btn btn-outline-secondary" href="{{ urls.settings }}">Configuracoes</a>{% endif %}
+    </nav>
+  </div>
+
+  <div class="alert alert-info d-flex align-items-start" role="alert">
+    <i class="ti ti-info-circle me-2 fs-2"></i>
+    <div><strong>Quem alterou</strong> corresponde ao usuario da sessao do Windows no momento da deteccao. O evento confirma que o cliente encontrou divergencia e restaurou o wallpaper corporativo.</div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Eventos</div><div class="display-6">{{ summary.total }}</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="card shadow-sm border-success"><div class="card-body"><div class="text-muted">Alteracoes restauradas</div><div class="display-6 text-success">{{ summary.corrected }}</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Reaplicacoes solicitadas</div><div class="display-6">{{ summary.forced }}</div></div></div></div>
+    <div class="col-6 col-xl-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Publicacoes aplicadas</div><div class="display-6">{{ summary.published }}</div></div></div></div>
+  </div>
+
+  <section class="card shadow-sm">
+    <div class="card-body border-bottom">
+      <form method="get" action="{{ urls.events }}" class="row g-2 align-items-end">
+        <div class="col-md-6"><label class="form-label" for="ativa-event-search">Computador ou usuario</label><input class="form-control" id="ativa-event-search" name="q" value="{{ filters.q }}"></div>
+        <div class="col-md-4"><label class="form-label" for="ativa-event-type">Tipo de evento</label><select class="form-select" id="ativa-event-type" name="type"><option value="">Todos</option>{% for value, label in labels %}<option value="{{ value }}" {{ filters.type == value ? 'selected' : '' }}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="ti ti-search me-1"></i>Filtrar</button></div>
+      </form>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover table-vcenter mb-0">
+        <thead><tr><th>Data</th><th>Computador</th><th>Quem alterou/aplicou</th><th>Evento</th><th>Wallpaper</th><th>Bloqueio</th><th>Resultado</th></tr></thead>
+        <tbody>
+          {% for event in events.rows %}
+            <tr>
+              <td class="text-nowrap">{{ event.occurred_at|formatted_datetime }}</td>
+              <td><strong>{{ event.hostname }}</strong>{% if event.computers_id %}<div><a class="small" href="{{ config('root_doc') }}/front/computer.form.php?id={{ event.computers_id }}">Abrir computador #{{ event.computers_id }}</a></div>{% endif %}</td>
+              <td>{{ event.username ?: 'Sessao nao informada' }}</td>
+              <td><i class="ti {{ icons[event.event_type] ?? 'ti-circle' }} me-1"></i>{{ labels[event.event_type] ?? event.event_type }}</td>
+              <td><code>{{ event.wallpaper_version ?: '-' }}</code></td>
+              <td>{{ not event.lock_requested ? 'Nao solicitado' : (event.policy_enforced ? 'Ativo' : 'Fallback por sincronizacao') }}</td>
+              <td>{% if event.event_type == 'drift_corrected' %}<span class="badge bg-success">Restaurado automaticamente</span>{% else %}<span class="badge bg-success">Aplicado</span>{% endif %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="7" class="text-center text-muted py-5">Nenhum evento recebido. Os registros comecarao quando o cliente 1.2.0 realizar uma aplicacao.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if events.pages > 1 %}<div class="card-footer"><nav><ul class="pagination justify-content-center mb-0"><li class="page-item {{ events.page <= 1 ? 'disabled' : '' }}"><a class="page-link" href="{{ urls.events }}?page={{ events.page - 1 }}&q={{ filters.q|url_encode }}&type={{ filters.type|url_encode }}">Anterior</a></li><li class="page-item disabled"><span class="page-link">{{ events.page }} / {{ events.pages }}</span></li><li class="page-item {{ events.page >= events.pages ? 'disabled' : '' }}"><a class="page-link" href="{{ urls.events }}?page={{ events.page + 1 }}&q={{ filters.q|url_encode }}&type={{ filters.type|url_encode }}">Proxima</a></li></ul></nav></div>{% endif %}
+  </section>
+</div>

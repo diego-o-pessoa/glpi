@@ -54,6 +54,11 @@ class PluginAtivawallpaperMenu extends CommonGLPI
             'page'  => $base . '/history.php',
             'icon'  => 'ti ti-history',
         ];
+        $menu['options']['events'] = [
+            'title' => 'Alteracoes detectadas',
+            'page'  => $base . '/events.php',
+            'icon'  => 'ti ti-shield-check',
+        ];
         if (Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, READ)) {
             $menu['options']['settings'] = [
                 'title' => 'Configuracoes',

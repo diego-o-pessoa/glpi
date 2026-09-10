@@ -216,7 +216,12 @@ final class ClientRepository
         }
         $DB->update(self::TABLE, $values, ['id' => (int) $client['id']]);
 
-        return $this->findById((int) $client['id']) ?? array_replace($client, $values);
+        $updated = $this->findById((int) $client['id']) ?? array_replace($client, $values);
+        if ($status === 'success') {
+            (new ClientEventRepository())->record($updated, $payload, $ipAddress);
+        }
+
+        return $updated;
     }
 
     public function setForceReapply(int $id): void

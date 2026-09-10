@@ -7,6 +7,7 @@
     <nav class="btn-group" aria-label="Navegacao Ativa Wallpaper">
       <a class="btn btn-primary" href="{{ urls.dashboard }}"><i class="ti ti-dashboard me-1"></i>Dashboard</a>
       <a class="btn btn-outline-secondary" href="{{ urls.history }}"><i class="ti ti-history me-1"></i>Historico</a>
+      <a class="btn btn-outline-secondary" href="{{ urls.events }}"><i class="ti ti-shield-check me-1"></i>Alteracoes</a>
       {% if rights.config %}<a class="btn btn-outline-secondary" href="{{ urls.settings }}"><i class="ti ti-settings me-1"></i>Configuracoes</a>{% endif %}
     </nav>
   </div>
@@ -137,6 +138,10 @@
         <div class="progress-bar progress-bar-striped {{ rollout and rollout.active ? 'progress-bar-animated' : '' }} {{ rollout and rollout.completed_with_error ? 'bg-warning' : 'bg-success' }}"
              data-rollout-bar style="width: {{ rollout ? rollout.percentage : 0 }}%"></div>
       </div>
+      <div class="ativa-rollout-current mt-3" data-rollout-current>
+        {% if rollout and rollout.applying > 0 %}Aplicando agora...{% elseif rollout and rollout.pending > 0 %}Aguardando os computadores consultarem a API...{% elseif rollout and rollout.complete %}Processo finalizado.{% else %}Preparando aplicacao...{% endif %}
+      </div>
+      <div class="small text-muted mt-1" data-rollout-last-update>Atualizacao em tempo real aguardando inicio.</div>
       <div class="row g-3 mt-2 ativa-rollout-counts">
         <div class="col-6 col-md-3"><span class="text-muted">Aguardando</span><strong data-rollout-pending>{{ rollout ? rollout.pending : 0 }}</strong></div>
         <div class="col-6 col-md-3"><span class="text-muted">Aplicando</span><strong data-rollout-applying>{{ rollout ? rollout.applying : 0 }}</strong></div>
@@ -157,6 +162,10 @@
             {% endfor %}
           {% endif %}
         </ul>
+      </div>
+      <div class="mt-3">
+        <div class="small fw-semibold mb-1">Atividade em tempo real</div>
+        <ol class="ativa-rollout-events small mb-0" data-rollout-events aria-live="polite"></ol>
       </div>
     </div>
   </section>

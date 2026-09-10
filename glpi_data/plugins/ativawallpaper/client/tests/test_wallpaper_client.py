@@ -193,6 +193,8 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(Path(state["wallpaper_path"]).read_bytes(), content)
             self.assertEqual(len(applied), 1)
             self.assertEqual(api.reports[0]["status"], "success")
+            self.assertEqual(api.reports[0]["apply_reason"], "initial_applied")
+            self.assertRegex(api.reports[0]["apply_event_id"], r"^[a-f0-9]{32}$")
 
     def test_force_reapply_reuses_verified_cache_and_temporarily_releases_policy(self):
         content = b"verified-wallpaper"
@@ -232,7 +234,7 @@ class ClientTests(unittest.TestCase):
                 policy_function=lambda lock, path, style, _state: policies.append((lock, path, style)),
                 current_function=lambda *_args: True,
             )
-            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.1.1", "os_version": "Windows 11"}
+            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.2.0", "os_version": "Windows 11"}
             wc.atomic_write_json(client.state_path, {
                 "wallpaper_version": "20260908-001",
                 "config_revision": "revision-1",
@@ -249,6 +251,7 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(applied, [(cached, "fill")])
             self.assertEqual([entry[0] for entry in policies], [False, True])
             self.assertEqual(api.reports[0]["rollout_id"], "rollout-42")
+            self.assertEqual(api.reports[0]["apply_reason"], "forced_applied")
 
     def test_304_detects_manual_change_and_restores_cached_wallpaper(self):
         content = b"corporate-wallpaper"
@@ -273,7 +276,7 @@ class ClientTests(unittest.TestCase):
                 policy_function=lambda lock, path, style, _state: policies.append((lock, path, style)),
                 current_function=lambda *_args: False,
             )
-            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.1.1", "os_version": "Windows 11"}
+            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.2.0", "os_version": "Windows 11"}
             wc.atomic_write_json(client.state_path, {
                 "wallpaper_version": "20260908-001",
                 "sha256": digest,
@@ -291,6 +294,8 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(applied, [(cached, "fill")])
             self.assertEqual([entry[0] for entry in policies], [False, True])
             self.assertEqual(api.reports[0]["status"], "success")
+            self.assertEqual(api.reports[0]["apply_reason"], "drift_corrected")
+            self.assertRegex(api.reports[0]["apply_event_id"], r"^[a-f0-9]{32}$")
             self.assertFalse(wc.load_json(client.state_path)["status_pending"])
 
     def test_apply_failure_restores_previous_file_and_state(self):

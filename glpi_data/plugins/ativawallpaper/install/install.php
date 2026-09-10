@@ -38,8 +38,8 @@ function plugin_ativawallpaper_do_install(): bool
             $upgradeSettings['poll_interval_seconds'] = '60';
             $upgradeSettings['poll_jitter_seconds'] = '10';
         }
-        if (version_compare(ConfigService::get('latest_client_version'), '1.1.1', '<')) {
-            $upgradeSettings['latest_client_version'] = '1.1.1';
+        if (version_compare(ConfigService::get('latest_client_version'), '1.2.0', '<')) {
+            $upgradeSettings['latest_client_version'] = '1.2.0';
         }
         if ($upgradeSettings !== []) {
             ConfigService::set($upgradeSettings);
@@ -81,6 +81,7 @@ function plugin_ativawallpaper_do_uninstall(): bool
     if (!$preserve) {
         foreach ([
             'glpi_plugin_ativawallpaper_rate_limits',
+            'glpi_plugin_ativawallpaper_client_events',
             'glpi_plugin_ativawallpaper_audits',
             'glpi_plugin_ativawallpaper_clients',
             'glpi_plugin_ativawallpaper_wallpapers',

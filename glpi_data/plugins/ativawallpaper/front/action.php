@@ -5,6 +5,7 @@ declare(strict_types=1);
 use GlpiPlugin\Ativawallpaper\Audit;
 use GlpiPlugin\Ativawallpaper\ClientRepository;
 use GlpiPlugin\Ativawallpaper\ConfigService;
+use GlpiPlugin\Ativawallpaper\DashboardService;
 use GlpiPlugin\Ativawallpaper\Security;
 use GlpiPlugin\Ativawallpaper\WallpaperManager;
 
@@ -23,6 +24,9 @@ global $CFG_GLPI;
 $base = $CFG_GLPI['root_doc'] . '/plugins/ativawallpaper/front';
 $action = (string) ($_POST['action'] ?? '');
 $redirect = $base . '/dashboard.php';
+$expectsJson = str_contains(strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json')
+    || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
+$jsonPayload = null;
 
 try {
     switch ($action) {
@@ -86,14 +90,19 @@ try {
                 'active_rollout_started_at' => $rollout['started_at'],
                 'active_rollout_version'    => (string) (new WallpaperManager())->current()['version'],
             ]);
-            Session::addMessageAfterRedirect(
-                sprintf(
-                    'Aplicacao iniciada em %d computador(es). Acompanhe o andamento na barra de progresso.',
-                    $rollout['count']
-                ),
-                true,
-                INFO
+            $message = sprintf(
+                'Aplicacao iniciada em %d computador(es). Acompanhe o andamento na barra de progresso.',
+                $rollout['count']
             );
+            if ($expectsJson) {
+                $jsonPayload = [
+                    'ok'      => true,
+                    'message' => $message,
+                    'rollout' => (new DashboardService())->rolloutProgress(),
+                ];
+            } else {
+                Session::addMessageAfterRedirect($message, true, INFO);
+            }
             break;
 
         case 'revoke':
@@ -118,7 +127,7 @@ try {
             $jitter = max(0, min(3600, (int) ($_POST['poll_jitter_seconds'] ?? 10)));
             $maxUpload = max(1, min(100, (int) ($_POST['max_upload_mb'] ?? 20)));
             $minimum = Security::cleanText($_POST['minimum_client_version'] ?? '1.0.0', 32);
-            $latest = Security::cleanText($_POST['latest_client_version'] ?? '1.1.1', 32);
+            $latest = Security::cleanText($_POST['latest_client_version'] ?? '1.2.0', 32);
             if (!Security::isValidVersion($minimum) || !Security::isValidVersion($latest)) {
                 throw new RuntimeException('Versao minima ou mais recente invalida.');
             }
@@ -164,7 +173,24 @@ try {
             throw new RuntimeException('Acao invalida.');
     }
 } catch (Throwable $exception) {
-    Session::addMessageAfterRedirect(Security::cleanText($exception->getMessage(), 500), true, ERROR);
+    $message = Security::cleanText($exception->getMessage(), 500);
+    if ($expectsJson) {
+        http_response_code(422);
+        $jsonPayload = ['ok' => false, 'message' => $message];
+    } else {
+        Session::addMessageAfterRedirect($message, true, ERROR);
+    }
+}
+
+if ($expectsJson) {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    header('X-Content-Type-Options: nosniff');
+    echo json_encode(
+        $jsonPayload ?? ['ok' => true],
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+    );
+    exit;
 }
 
 Html::redirect($redirect);

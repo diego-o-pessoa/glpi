@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Glpi\Http\SessionManager;
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_ATIVAWALLPAPER_VERSION', '1.1.1');
+define('PLUGIN_ATIVAWALLPAPER_VERSION', '1.2.0');
 define('PLUGIN_ATIVAWALLPAPER_API_VERSION', 'v1');
 define('PLUGIN_ATIVAWALLPAPER_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVAWALLPAPER_MAX_GLPI', '11.1.0');

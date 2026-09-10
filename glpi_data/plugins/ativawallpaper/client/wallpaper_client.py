@@ -24,6 +24,7 @@ import ssl
 import subprocess
 import sys
 import time
+import uuid
 from typing import Any, Callable
 from urllib import error, parse, request
 
@@ -33,7 +34,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.1.1"
+CLIENT_VERSION = "1.2.0"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -673,6 +674,7 @@ class WallpaperClient:
         if changed:
             state["last_apply"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
             state["status_pending"] = True
+            self.mark_apply_event(state, "drift_corrected")
             self.logger.warning("Wallpaper drift detected and corrected")
         return changed
 
@@ -683,8 +685,22 @@ class WallpaperClient:
             "wallpaper_version": state["wallpaper_version"],
             "wallpaper_sha256": state["sha256"],
             "rollout_id": state.get("rollout_id", ""),
+            "apply_reason": state.get("apply_reason", ""),
+            "apply_event_id": state.get("apply_event_id", ""),
+            "lock_change": bool(state.get("lock_change")),
+            "policy_enforced": bool(state.get("policy_enforced")),
             "status": "success",
         })
+
+    @staticmethod
+    def mark_apply_event(state: dict[str, Any], reason: str) -> None:
+        state["apply_reason"] = reason
+        state["apply_event_id"] = uuid.uuid4().hex
+
+    @staticmethod
+    def finish_apply_event(state: dict[str, Any]) -> None:
+        state.pop("apply_reason", None)
+        state.pop("apply_event_id", None)
 
     def sync_once(self) -> tuple[int, int]:
         config = self.load_config()
@@ -700,6 +716,7 @@ class WallpaperClient:
                 atomic_write_json(self.state_path, state)
                 self.report_success(api, identity, state)
                 state["status_pending"] = False
+                self.finish_apply_event(state)
             atomic_write_json(self.state_path, state)
             return bounded_interval(state.get("poll_interval_seconds", 900)), bounded_interval(state.get("poll_jitter_seconds", 120), 0, 3600)
 
@@ -729,6 +746,7 @@ class WallpaperClient:
         wallpaper_registry_values(style)
         expected_hash = str(server["sha256"]).lower()
         requested_apply = should_download(server, state)
+        previous_version = str(state.get("wallpaper_version", ""))
         self.data_dir.mkdir(parents=True, exist_ok=True)
         extension = ".png" if server["mime_type"] == "image/png" else ".jpg"
         safe_version = "".join(character if character.isalnum() or character in ".-_" else "_" for character in str(server["wallpaper_version"]))[:64]
@@ -787,10 +805,19 @@ class WallpaperClient:
         if applied or server.get("force_reapply"):
             state["last_apply"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
             state["status_pending"] = True
+            if server.get("force_reapply"):
+                self.mark_apply_event(state, "forced_applied")
+            elif previous_version == "":
+                self.mark_apply_event(state, "initial_applied")
+            elif requested_apply:
+                self.mark_apply_event(state, "configuration_applied")
+            else:
+                self.mark_apply_event(state, "drift_corrected")
         atomic_write_json(self.state_path, state)
         if state.get("status_pending"):
             self.report_success(api, identity, state)
             state["status_pending"] = False
+            self.finish_apply_event(state)
             atomic_write_json(self.state_path, state)
             self.logger.info("Wallpaper applied and status sent")
         else:

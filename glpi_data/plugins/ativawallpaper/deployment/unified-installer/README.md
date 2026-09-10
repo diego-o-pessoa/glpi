@@ -1,6 +1,6 @@
 # Instalador unificado Ativa GLPI Agent
 
-Gera um unico `Ativa-GLPI-Agent-Setup.exe` para Windows x64 contendo o MSI
+Gera um unico `Ativa-GLPI-Agent-Setup-1.2.0.exe` para Windows x64 contendo o MSI
 oficial do GLPI Agent e o Ativa Wallpaper Client.
 
 O instalador configura o GLPI Agent como servico com:
@@ -55,8 +55,8 @@ compila o cliente de wallpaper, instala o Inno Setup via winget quando preciso e
 gera em `dist`:
 
 ```text
-Ativa-GLPI-Agent-Setup.exe
-Ativa-GLPI-Agent-Setup.manifest.json
+Ativa-GLPI-Agent-Setup-1.2.0.exe
+Ativa-GLPI-Agent-Setup-1.2.0.manifest.json
 ```
 
 Sem `-AllComputers`, o hostname piloto presente no JSON e preservado. Com essa
@@ -68,13 +68,13 @@ corporativo correto.
 Interativo:
 
 ```powershell
-.\Ativa-GLPI-Agent-Setup.exe
+.\Ativa-GLPI-Agent-Setup-1.2.0.exe
 ```
 
 Silencioso:
 
 ```text
-Ativa-GLPI-Agent-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+Ativa-GLPI-Agent-Setup-1.2.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ```
 
 O MSI oficial permanece assinado e nao e alterado. O bootstrapper gerado nao e

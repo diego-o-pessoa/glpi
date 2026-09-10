@@ -76,6 +76,29 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_audits` (
   KEY `users_id` (`users_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 
+CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_client_events` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `event_key` char(32) NOT NULL,
+  `clients_id` int unsigned NOT NULL,
+  `computers_id` int unsigned DEFAULT NULL,
+  `hostname` varchar(255) NOT NULL,
+  `username` varchar(255) DEFAULT NULL,
+  `event_type` varchar(32) NOT NULL,
+  `wallpaper_version` varchar(32) DEFAULT NULL,
+  `rollout_id` varchar(64) DEFAULT NULL,
+  `lock_requested` tinyint NOT NULL DEFAULT '0',
+  `policy_enforced` tinyint NOT NULL DEFAULT '0',
+  `ip_address` varchar(45) DEFAULT NULL,
+  `occurred_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `event_key` (`event_key`),
+  KEY `clients_id` (`clients_id`),
+  KEY `computers_id` (`computers_id`),
+  KEY `hostname` (`hostname`),
+  KEY `event_type` (`event_type`),
+  KEY `occurred_at` (`occurred_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
+
 CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_rate_limits` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `bucket_hash` char(64) NOT NULL,

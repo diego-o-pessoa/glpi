@@ -2,6 +2,13 @@
 
 ## Em desenvolvimento
 
+- Plugin e cliente 1.2.0 adicionam a aba **Alteracoes detectadas**, com usuario
+  da sessao Windows, computador, tipo de aplicacao e restauracao automatica.
+- **Aplicar em todos** passa a iniciar por AJAX e exibe imediatamente o lote,
+  o computador em processamento e uma linha do tempo consultada a cada segundo,
+  sem recarregar a pagina ao chegar a 100%.
+- Cada aplicacao possui identificador unico para que repeticoes de rede nao
+  dupliquem os eventos de auditoria enviados pelo cliente.
 - Cliente 1.1.1 corrige concorrencia entre duas instancias e deixa de
   substituir o arquivo de wallpaper que esta em uso pelo Windows.
 - A reaplicacao libera temporariamente apenas a politica criada pelo cliente,

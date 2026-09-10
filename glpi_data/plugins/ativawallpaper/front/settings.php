@@ -49,6 +49,7 @@ TemplateRenderer::getInstance()->display('@ativawallpaper/settings.html.twig', [
         'action'    => $base . '/front/action.php',
         'dashboard' => $base . '/front/dashboard.php',
         'history'   => $base . '/front/history.php',
+        'events'    => $base . '/front/events.php',
         'settings'  => $base . '/front/settings.php',
     ],
 ]);

@@ -149,6 +149,7 @@ if ($AllComputers) {
 } elseif (-not $Bootstrap.pilot_hostname) {
     throw "Informe -AllComputers para gerar um instalador sem restricao de hostname."
 }
+$Bootstrap.client_version = "1.2.0"
 
 New-Item -ItemType Directory -Force -Path $CacheDirectory, $OutputPath | Out-Null
 if (-not (Test-Path -LiteralPath $AgentMsi)) {
@@ -203,8 +204,11 @@ if (-not $Iscc) {
 $TemporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $WorkingDirectory = Join-Path $TemporaryRoot ("AtivaUnifiedInstaller-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $WorkingDirectory | Out-Null
+$Installer = Join-Path $OutputPath "Ativa-GLPI-Agent-Setup-1.2.0.exe"
 try {
     $PreparedBootstrap = Join-Path $WorkingDirectory "bootstrap-config.json"
+    $CompilerOutput = Join-Path $WorkingDirectory "output"
+    New-Item -ItemType Directory -Path $CompilerOutput | Out-Null
     $Utf8WithoutBom = New-Object Text.UTF8Encoding($false)
     [IO.File]::WriteAllText(
         $PreparedBootstrap,
@@ -217,14 +221,20 @@ try {
         "/DAgentMsiPath=$AgentMsi" `
         "/DWallpaperClientPath=$ClientExe" `
         "/DBootstrapConfigPath=$PreparedBootstrap" `
-        "/DBuildOutputDir=$OutputPath" `
-        "/DBundleVersion=1.1.1" `
+        "/DBuildOutputDir=$CompilerOutput" `
+        "/DBundleVersion=1.2.0" `
         "/DAgentVersion=$AgentVersion" `
         "/DAgentServerUrl=$AgentServerUrl" `
         $IssFile
     if ($LASTEXITCODE -ne 0) {
         throw "O compilador do Inno Setup retornou codigo $LASTEXITCODE."
     }
+
+    $CompiledInstaller = Join-Path $CompilerOutput "Ativa-GLPI-Agent-Setup.exe"
+    if (-not (Test-Path -LiteralPath $CompiledInstaller)) {
+        throw "O Inno Setup nao gerou o instalador esperado: $CompiledInstaller"
+    }
+    Copy-Item -LiteralPath $CompiledInstaller -Destination $Installer -Force
 } finally {
     $ResolvedWorkingDirectory = [IO.Path]::GetFullPath($WorkingDirectory)
     if ($ResolvedWorkingDirectory.StartsWith($TemporaryRoot, [StringComparison]::OrdinalIgnoreCase)) {
@@ -232,12 +242,11 @@ try {
     }
 }
 
-$Installer = Join-Path $OutputPath "Ativa-GLPI-Agent-Setup.exe"
 if (-not (Test-Path -LiteralPath $Installer)) {
     throw "O instalador nao foi gerado em $Installer"
 }
 $Manifest = [ordered]@{
-    bundle_version = "1.1.1"
+    bundle_version = "1.2.0"
     glpi_agent_version = $AgentVersion
     glpi_agent_server = $AgentServerUrl
     glpi_agent_sha256 = (Get-FileHash -LiteralPath $AgentMsi -Algorithm SHA256).Hash
@@ -246,7 +255,7 @@ $Manifest = [ordered]@{
     all_computers = [bool]$AllComputers
     generated_at = (Get-Date).ToString("o")
 }
-$ManifestPath = Join-Path $OutputPath "Ativa-GLPI-Agent-Setup.manifest.json"
+$ManifestPath = Join-Path $OutputPath "Ativa-GLPI-Agent-Setup-1.2.0.manifest.json"
 [IO.File]::WriteAllText($ManifestPath, ($Manifest | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
 
 Write-Host "Instalador gerado: $Installer"

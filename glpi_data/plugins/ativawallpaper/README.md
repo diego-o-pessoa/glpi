@@ -1,4 +1,4 @@
-# Ativa Wallpaper 1.1.1
+# Ativa Wallpaper 1.2.0
 
 Plugin para GLPI 11 que publica wallpapers corporativos, registra clientes
 Windows e acompanha aplicacao, pendencia, erro e indisponibilidade. Nenhum
@@ -29,7 +29,7 @@ TLS e verificacao do certificado sao obrigatorios. URLs por IP sao rejeitadas.
 5. Verifique GLPI Inventory, endpoint e `taskscheduler`.
 6. Gere o bootstrap JSON e publique o wallpaper inicial.
 
-A instalacao cria apenas quatro tabelas com prefixo
+A instalacao cria apenas cinco tabelas com prefixo
 `glpi_plugin_ativawallpaper_`, configuracoes no contexto
 `plugin:ativawallpaper`, direitos de perfil e uma acao automatica de
 reconciliacao. O core nao e alterado.
@@ -65,7 +65,13 @@ o botao passa a se chamar **Ativar e aplicar em todos** e faz as duas operacoes.
 A execucao ocorre na proxima consulta de cada cliente; computadores offline
 aplicam quando voltarem a se comunicar. No intervalo padrao, uma maquina online
 pode levar ate aproximadamente 70 segundos (60 segundos mais o jitter de ate
-10 segundos).
+10 segundos). O painel do lote e aberto imediatamente e consulta o progresso a
+cada segundo, exibindo as mudancas de estado sem recarregar a pagina.
+
+Em **Alteracoes**, o plugin registra aplicacao inicial, nova configuracao,
+reaplicacao solicitada e divergencias corrigidas automaticamente. Para uma
+divergencia, o usuario exibido e o usuario da sessao Windows no momento em que
+o cliente detectou a troca e restaurou o wallpaper corporativo.
 
 Desativar a distribuicao faz a API retornar `enabled: false`; nao apaga o
 wallpaper atual. O cliente remove somente bloqueios que ele proprio criou.
@@ -97,7 +103,7 @@ Exemplo de registro:
 {
   "hostname": "DESKTOP-R1C8ICN",
   "machine_guid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-  "client_version": "1.1.1",
+  "client_version": "1.2.0",
   "registration_secret": "valor-do-bootstrap"
 }
 ```
