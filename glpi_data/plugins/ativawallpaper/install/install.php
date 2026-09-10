@@ -38,8 +38,8 @@ function plugin_ativawallpaper_do_install(): bool
             $upgradeSettings['poll_interval_seconds'] = '60';
             $upgradeSettings['poll_jitter_seconds'] = '10';
         }
-        if (version_compare(ConfigService::get('latest_client_version'), '1.0.1', '<')) {
-            $upgradeSettings['latest_client_version'] = '1.0.1';
+        if (version_compare(ConfigService::get('latest_client_version'), '1.1.1', '<')) {
+            $upgradeSettings['latest_client_version'] = '1.1.1';
         }
         if ($upgradeSettings !== []) {
             ConfigService::set($upgradeSettings);

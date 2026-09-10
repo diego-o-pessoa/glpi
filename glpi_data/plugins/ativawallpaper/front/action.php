@@ -118,7 +118,7 @@ try {
             $jitter = max(0, min(3600, (int) ($_POST['poll_jitter_seconds'] ?? 10)));
             $maxUpload = max(1, min(100, (int) ($_POST['max_upload_mb'] ?? 20)));
             $minimum = Security::cleanText($_POST['minimum_client_version'] ?? '1.0.0', 32);
-            $latest = Security::cleanText($_POST['latest_client_version'] ?? '1.0.1', 32);
+            $latest = Security::cleanText($_POST['latest_client_version'] ?? '1.1.1', 32);
             if (!Security::isValidVersion($minimum) || !Security::isValidVersion($latest)) {
                 throw new RuntimeException('Versao minima ou mais recente invalida.');
             }

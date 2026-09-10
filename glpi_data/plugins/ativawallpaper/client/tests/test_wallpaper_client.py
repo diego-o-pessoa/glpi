@@ -87,6 +87,19 @@ def api_with_opener(opener: FakeOpener, token: str | None = "t" * 43):
 
 
 class ClientTests(unittest.TestCase):
+    @unittest.skipUnless(wc.os.name == "nt", "Windows named mutex test")
+    def test_single_instance_mutex_rejects_second_process(self):
+        original_user_key = wc.user_key
+        wc.user_key = lambda: "unit-test-exclusive-mutex"
+        try:
+            with wc.SingleInstance():
+                with self.assertRaises(wc.ClientError) as caught:
+                    with wc.SingleInstance():
+                        pass
+                self.assertEqual(caught.exception.code, "ALREADY_RUNNING")
+        finally:
+            wc.user_key = original_user_key
+
     def test_registry_style_mapping(self):
         self.assertEqual(wc.wallpaper_registry_values("fill"), ("10", "0"))
         self.assertEqual(wc.wallpaper_registry_values("fit"), ("6", "0"))
@@ -176,9 +189,109 @@ class ClientTests(unittest.TestCase):
             state = wc.load_json(client.state_path)
             self.assertEqual(state["wallpaper_version"], "20260908-001")
             self.assertFalse(state["status_pending"])
+            self.assertEqual(Path(state["wallpaper_path"]).name, "wallpaper-20260908-001.jpg")
             self.assertEqual(Path(state["wallpaper_path"]).read_bytes(), content)
             self.assertEqual(len(applied), 1)
             self.assertEqual(api.reports[0]["status"], "success")
+
+    def test_force_reapply_reuses_verified_cache_and_temporarily_releases_policy(self):
+        content = b"verified-wallpaper"
+        digest = hashlib.sha256(content).hexdigest()
+        server = {
+            "enabled": True,
+            "wallpaper_version": "20260908-001",
+            "config_revision": "revision-1",
+            "rollout_id": "rollout-42",
+            "download_url": "https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1/wallpaper/20260908-001/download",
+            "sha256": digest,
+            "style": "fill",
+            "mime_type": "image/jpeg",
+            "filesize": len(content),
+            "poll_interval_seconds": 60,
+            "poll_jitter_seconds": 10,
+            "lock_change": True,
+            "force_reapply": True,
+        }
+        api = FakeApi(server, content)
+        applied = []
+        policies = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cached = root / "data" / "wallpaper-20260908-001.jpg"
+            cached.parent.mkdir(parents=True)
+            cached.write_bytes(content)
+            wc.atomic_write_json(root / "client.json", {
+                "server": "https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1",
+                "client_token": "x" * 43,
+                "verify_tls": True,
+            })
+            client = wc.WallpaperClient(
+                root,
+                api_factory=lambda *_args: api,
+                apply_function=lambda path, style: applied.append((path, style)),
+                policy_function=lambda lock, path, style, _state: policies.append((lock, path, style)),
+                current_function=lambda *_args: True,
+            )
+            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.1.1", "os_version": "Windows 11"}
+            wc.atomic_write_json(client.state_path, {
+                "wallpaper_version": "20260908-001",
+                "config_revision": "revision-1",
+                "sha256": digest,
+                "style": "fill",
+                "wallpaper_path": str(cached),
+                "lock_change": True,
+                "distribution_enabled": True,
+            })
+
+            client.sync_once()
+
+            self.assertEqual(api.downloads, 0)
+            self.assertEqual(applied, [(cached, "fill")])
+            self.assertEqual([entry[0] for entry in policies], [False, True])
+            self.assertEqual(api.reports[0]["rollout_id"], "rollout-42")
+
+    def test_304_detects_manual_change_and_restores_cached_wallpaper(self):
+        content = b"corporate-wallpaper"
+        digest = hashlib.sha256(content).hexdigest()
+        api = FakeApi(None)
+        applied = []
+        policies = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cached = root / "data" / "wallpaper-20260908-001.jpg"
+            cached.parent.mkdir(parents=True)
+            cached.write_bytes(content)
+            wc.atomic_write_json(root / "client.json", {
+                "server": "https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1",
+                "client_token": "x" * 43,
+                "verify_tls": True,
+            })
+            client = wc.WallpaperClient(
+                root,
+                api_factory=lambda *_args: api,
+                apply_function=lambda path, style: applied.append((path, style)),
+                policy_function=lambda lock, path, style, _state: policies.append((lock, path, style)),
+                current_function=lambda *_args: False,
+            )
+            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.1.1", "os_version": "Windows 11"}
+            wc.atomic_write_json(client.state_path, {
+                "wallpaper_version": "20260908-001",
+                "sha256": digest,
+                "style": "fill",
+                "wallpaper_path": str(cached),
+                "lock_change": True,
+                "distribution_enabled": True,
+                "config_etag": "etag-1",
+                "poll_interval_seconds": 60,
+                "poll_jitter_seconds": 10,
+            })
+
+            client.sync_once()
+
+            self.assertEqual(applied, [(cached, "fill")])
+            self.assertEqual([entry[0] for entry in policies], [False, True])
+            self.assertEqual(api.reports[0]["status"], "success")
+            self.assertFalse(wc.load_json(client.state_path)["status_pending"])
 
     def test_apply_failure_restores_previous_file_and_state(self):
         old = b"old-wallpaper"

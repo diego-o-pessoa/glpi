@@ -218,7 +218,7 @@ try {
         "/DWallpaperClientPath=$ClientExe" `
         "/DBootstrapConfigPath=$PreparedBootstrap" `
         "/DBuildOutputDir=$OutputPath" `
-        "/DBundleVersion=1.0.1" `
+        "/DBundleVersion=1.1.1" `
         "/DAgentVersion=$AgentVersion" `
         "/DAgentServerUrl=$AgentServerUrl" `
         $IssFile
@@ -237,7 +237,7 @@ if (-not (Test-Path -LiteralPath $Installer)) {
     throw "O instalador nao foi gerado em $Installer"
 }
 $Manifest = [ordered]@{
-    bundle_version = "1.0.1"
+    bundle_version = "1.1.1"
     glpi_agent_version = $AgentVersion
     glpi_agent_server = $AgentServerUrl
     glpi_agent_sha256 = (Get-FileHash -LiteralPath $AgentMsi -Algorithm SHA256).Hash

@@ -11,7 +11,7 @@
   #error BuildOutputDir is required
 #endif
 #ifndef BundleVersion
-  #define BundleVersion "1.0.1"
+  #define BundleVersion "1.1.1"
 #endif
 #ifndef AgentVersion
   #define AgentVersion "1.19"

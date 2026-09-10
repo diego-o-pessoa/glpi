@@ -12,8 +12,13 @@ $DistDir = Join-Path $ClientDir "dist"
 $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 $BuildDir = Join-Path $ClientDir "build"
 New-Item -ItemType Directory -Force -Path $BuildDir, $DistDir | Out-Null
-& $VenvPython -m pip install --upgrade pip
-& $VenvPython -m pip install -r (Join-Path $ClientDir "requirements-client.txt")
+& $VenvPython -c "import PyInstaller" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    & $VenvPython -m pip install -r (Join-Path $ClientDir "requirements-client.txt")
+    if ($LASTEXITCODE -ne 0) {
+        throw "Nao foi possivel instalar as dependencias de compilacao do cliente."
+    }
+}
 & $VenvPython -m PyInstaller `
     --noconfirm `
     --clean `

@@ -2,6 +2,12 @@
 
 ## Em desenvolvimento
 
+- Cliente 1.1.1 corrige concorrencia entre duas instancias e deixa de
+  substituir o arquivo de wallpaper que esta em uso pelo Windows.
+- A reaplicacao libera temporariamente apenas a politica criada pelo cliente,
+  restaura o bloqueio em seguida e trata ACL/GPO externa sem falhar a troca.
+- Cada polling, inclusive respostas HTTP 304, verifica o wallpaper realmente
+  exibido e restaura automaticamente o corporativo quando houver alteracao.
 - Operacao **Aplicar em todos** agora usa um identificador exclusivo por lote,
   invalida o ETag de cada cliente e acompanha aguardando, aplicando, sucesso e erro.
 - Dashboard ganhou barra de progresso atualizada automaticamente e lista dos

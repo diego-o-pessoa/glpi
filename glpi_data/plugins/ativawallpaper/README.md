@@ -1,4 +1,4 @@
-# Ativa Wallpaper 1.1.0
+# Ativa Wallpaper 1.1.1
 
 Plugin para GLPI 11 que publica wallpapers corporativos, registra clientes
 Windows e acompanha aplicacao, pendencia, erro e indisponibilidade. Nenhum
@@ -97,7 +97,7 @@ Exemplo de registro:
 {
   "hostname": "DESKTOP-R1C8ICN",
   "machine_guid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-  "client_version": "1.0.1",
+  "client_version": "1.1.1",
   "registration_secret": "valor-do-bootstrap"
 }
 ```

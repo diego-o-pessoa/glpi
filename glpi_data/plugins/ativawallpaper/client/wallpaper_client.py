@@ -33,7 +33,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.0.1"
+CLIENT_VERSION = "1.1.1"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -44,8 +44,32 @@ STOP_EVENT_NAME = r"Global\AtivaWallpaperClientStop"
 MAX_JSON_BYTES = 1024 * 1024
 MAX_WALLPAPER_BYTES = 100 * 1024 * 1024
 SPI_SETDESKWALLPAPER = 0x0014
+SPI_GETDESKWALLPAPER = 0x0073
 SPIF_UPDATEINIFILE = 0x01
 SPIF_SENDCHANGE = 0x02
+ERROR_ALREADY_EXISTS = 183
+
+
+if os.name == "nt":
+    from ctypes import wintypes
+
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+    _kernel32.CreateMutexW.restype = wintypes.HANDLE
+    _kernel32.CreateEventW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]
+    _kernel32.CreateEventW.restype = wintypes.HANDLE
+    _kernel32.OpenEventW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+    _kernel32.OpenEventW.restype = wintypes.HANDLE
+    _kernel32.SetEvent.argtypes = [wintypes.HANDLE]
+    _kernel32.SetEvent.restype = wintypes.BOOL
+    _kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    _kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    _kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    _kernel32.CloseHandle.restype = wintypes.BOOL
+    _kernel32.MoveFileExW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
+    _kernel32.MoveFileExW.restype = wintypes.BOOL
+else:
+    _kernel32 = None
 
 
 class ClientError(RuntimeError):
@@ -454,58 +478,101 @@ def apply_wallpaper(path: Path, style: str) -> None:
         raise ClientError("WALLPAPER_APPLY_FAILED", f"SystemParametersInfoW failed: {exc}") from exc
 
 
+def wallpaper_is_current(path: Path, style: str) -> bool:
+    """Check the wallpaper actually displayed by the interactive Windows user."""
+    if os.name != "nt" or winreg is None:
+        return False
+    buffer = ctypes.create_unicode_buffer(32768)
+    try:
+        result = ctypes.windll.user32.SystemParametersInfoW(
+            SPI_GETDESKWALLPAPER,
+            len(buffer),
+            buffer,
+            0,
+        )
+        if not result or not buffer.value:
+            return False
+        expected_path = os.path.normcase(os.path.normpath(str(path)))
+        current_path = os.path.normcase(os.path.normpath(buffer.value))
+        if expected_path != current_path:
+            return False
+
+        expected_style, expected_tile = wallpaper_registry_values(style)
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Control Panel\Desktop", 0, winreg.KEY_READ) as key:
+            current_style, _ = winreg.QueryValueEx(key, "WallpaperStyle")
+            current_tile, _ = winreg.QueryValueEx(key, "TileWallpaper")
+        return str(current_style) == expected_style and str(current_tile) == expected_tile
+    except OSError:
+        return False
+
+
 def manage_lock_policy(lock_change: bool, wallpaper_path: Path | None, style: str, state: dict[str, Any]) -> None:
     if os.name != "nt" or winreg is None:
         return
     owned: dict[str, dict[str, Any]] = state.setdefault("owned_policy_values", {})
     targets: dict[str, tuple[str, str | int, int]] = {}
-    if lock_change and wallpaper_path is not None:
-        style_value, _ = wallpaper_registry_values(style)
-        targets = {
-            "policy_wallpaper": (r"Software\Microsoft\Windows\CurrentVersion\Policies\System", str(wallpaper_path), winreg.REG_SZ),
-            "policy_style": (r"Software\Microsoft\Windows\CurrentVersion\Policies\System", style_value, winreg.REG_SZ),
-            "no_change": (r"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop", 1, winreg.REG_DWORD),
-        }
+    try:
+        if lock_change and wallpaper_path is not None:
+            style_value, _ = wallpaper_registry_values(style)
+            targets = {
+                "policy_wallpaper": (r"Software\Microsoft\Windows\CurrentVersion\Policies\System", str(wallpaper_path), winreg.REG_SZ),
+                "policy_style": (r"Software\Microsoft\Windows\CurrentVersion\Policies\System", style_value, winreg.REG_SZ),
+                "no_change": (r"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop", 1, winreg.REG_DWORD),
+            }
 
-        # Treat the three values as one policy unit. If any value belongs to an
-        # external GPO/administrator, do not create a partial lock around it.
-        for marker, (key_path, _value, _value_type) in targets.items():
+            # Treat the three values as one policy unit. If any value belongs
+            # to an external GPO, leave that policy untouched and rely on the
+            # periodic compliance check instead.
+            for marker, (key_path, _value, _value_type) in targets.items():
+                value_name = {"policy_wallpaper": "Wallpaper", "policy_style": "WallpaperStyle", "no_change": "NoChangingWallPaper"}[marker]
+                current_exists, current_value = _read_registry_value(key_path, value_name)
+                if current_exists and (marker not in owned or current_value != owned[marker].get("value")):
+                    _remove_owned_policy_values(owned)
+                    state["policy_enforced"] = False
+                    state["policy_error"] = "Uma politica externa ja controla o wallpaper deste usuario."
+                    return
+
+        for marker, (key_path, value, value_type) in targets.items():
             value_name = {"policy_wallpaper": "Wallpaper", "policy_style": "WallpaperStyle", "no_change": "NoChangingWallPaper"}[marker]
             current_exists, current_value = _read_registry_value(key_path, value_name)
-            if current_exists and (marker not in owned or current_value != owned[marker].get("value")):
-                _remove_owned_policy_values(owned)
-                return
-
-    for marker, (key_path, value, value_type) in targets.items():
-        value_name = {"policy_wallpaper": "Wallpaper", "policy_style": "WallpaperStyle", "no_change": "NoChangingWallPaper"}[marker]
-        current_exists, current_value = _read_registry_value(key_path, value_name)
-        if marker in owned:
-            # Update only values that are still equal to what this client last wrote.
-            if current_exists and current_value != owned[marker].get("value"):
-                owned.pop(marker, None)
+            if marker in owned:
+                # Update only values that are still equal to what this client last wrote.
+                if current_exists and current_value != owned[marker].get("value"):
+                    owned.pop(marker, None)
+                    continue
+            elif current_exists:
+                # Never overwrite a GPO or policy created by another administrator.
                 continue
-        elif current_exists:
-            # Never overwrite a GPO or policy created by another administrator.
-            continue
-        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
-            winreg.SetValueEx(key, value_name, 0, value_type, value)
-        owned[marker] = {"key": key_path, "name": value_name, "value": value}
+            with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
+                winreg.SetValueEx(key, value_name, 0, value_type, value)
+            owned[marker] = {"key": key_path, "name": value_name, "value": value}
 
-    if not lock_change:
-        _remove_owned_policy_values(owned)
+        if not lock_change:
+            _remove_owned_policy_values(owned)
+        state["policy_enforced"] = bool(lock_change and len(owned) == len(targets))
+        state.pop("policy_error", None)
+    except OSError as exc:
+        # Policy keys can be ACL-protected by Windows or a domain GPO. The
+        # wallpaper application itself must still succeed; periodic polling
+        # provides the fallback enforcement in that case.
+        state["policy_enforced"] = False
+        state["policy_error"] = f"Nao foi possivel gravar a politica do Windows: {exc}"
 
 
 def _remove_owned_policy_values(owned: dict[str, dict[str, Any]]) -> None:
     assert winreg is not None
     for marker, item in list(owned.items()):
         current_exists, current_value = _read_registry_value(str(item["key"]), str(item["name"]))
-        if current_exists and current_value == item.get("value"):
+        if not current_exists or current_value != item.get("value"):
+            owned.pop(marker, None)
+            continue
+        if current_exists:
             try:
                 with winreg.OpenKey(winreg.HKEY_CURRENT_USER, str(item["key"]), 0, winreg.KEY_SET_VALUE) as key:
                     winreg.DeleteValue(key, str(item["name"]))
+                owned.pop(marker, None)
             except FileNotFoundError:
-                pass
-        owned.pop(marker, None)
+                owned.pop(marker, None)
 
 
 def _read_registry_value(key_path: str, value_name: str) -> tuple[bool, Any]:
@@ -527,6 +594,7 @@ class WallpaperClient:
         api_factory: Callable[[str, str], ApiClient] = lambda server, token: ApiClient(server, token),
         apply_function: Callable[[Path, str], None] = apply_wallpaper,
         policy_function: Callable[[bool, Path | None, str, dict[str, Any]], None] = manage_lock_policy,
+        current_function: Callable[[Path, str], bool] = wallpaper_is_current,
     ) -> None:
         self.root = root
         self.data_dir = root / "data"
@@ -536,6 +604,7 @@ class WallpaperClient:
         self.api_factory = api_factory
         self.apply_function = apply_function
         self.policy_function = policy_function
+        self.current_function = current_function
 
     def identity(self) -> dict[str, str]:
         return {
@@ -561,6 +630,62 @@ class WallpaperClient:
             return {}
         return load_json(self.state_path)
 
+    def apply_and_enforce(
+        self,
+        path: Path,
+        style: str,
+        lock_change: bool,
+        state: dict[str, Any],
+        *,
+        force: bool = False,
+    ) -> bool:
+        changed = force or not self.current_function(path, style)
+        if changed:
+            # A policy created by this client would also block its own
+            # SystemParametersInfo call. Temporarily release only the values
+            # recorded as ours, apply, and restore the lock immediately.
+            self.policy_function(False, None, style, state)
+            self.apply_function(path, style)
+        self.policy_function(lock_change, path, style, state)
+        if state.get("policy_error"):
+            self.logger.warning("Wallpaper policy fallback: %s", state["policy_error"])
+        return changed
+
+    def enforce_cached_wallpaper(self, state: dict[str, Any]) -> bool:
+        if not state.get("distribution_enabled", bool(state.get("wallpaper_path"))):
+            return False
+        path_value = state.get("wallpaper_path")
+        expected_hash = str(state.get("sha256", "")).lower()
+        if not path_value or len(expected_hash) != 64:
+            return False
+        path = Path(str(path_value))
+        if not path.is_file() or sha256_file(path) != expected_hash:
+            # Force the next request to return the complete configuration so
+            # the missing/corrupt cache can be downloaded again.
+            state.pop("config_etag", None)
+            return False
+        changed = self.apply_and_enforce(
+            path,
+            str(state.get("style", "fill")),
+            bool(state.get("lock_change")),
+            state,
+        )
+        if changed:
+            state["last_apply"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+            state["status_pending"] = True
+            self.logger.warning("Wallpaper drift detected and corrected")
+        return changed
+
+    @staticmethod
+    def report_success(api: ApiClient, identity: dict[str, str], state: dict[str, Any]) -> None:
+        api.report({
+            **identity,
+            "wallpaper_version": state["wallpaper_version"],
+            "wallpaper_sha256": state["sha256"],
+            "rollout_id": state.get("rollout_id", ""),
+            "status": "success",
+        })
+
     def sync_once(self) -> tuple[int, int]:
         config = self.load_config()
         state = self.load_state()
@@ -570,15 +695,12 @@ class WallpaperClient:
         server, response_etag = api.get_config(state.get("config_etag"))
         if server is None:
             self.logger.info("Configuration unchanged (HTTP 304)")
+            self.enforce_cached_wallpaper(state)
             if state.get("status_pending") and state.get("wallpaper_version") and state.get("sha256"):
-                api.report({
-                    **identity,
-                    "wallpaper_version": state["wallpaper_version"],
-                    "wallpaper_sha256": state["sha256"],
-                    "status": "success",
-                })
-                state["status_pending"] = False
                 atomic_write_json(self.state_path, state)
+                self.report_success(api, identity, state)
+                state["status_pending"] = False
+            atomic_write_json(self.state_path, state)
             return bounded_interval(state.get("poll_interval_seconds", 900)), bounded_interval(state.get("poll_jitter_seconds", 120), 0, 3600)
 
         interval = bounded_interval(server.get("poll_interval_seconds"))
@@ -591,7 +713,10 @@ class WallpaperClient:
 
         if not server.get("enabled"):
             self.policy_function(False, None, "fill", state)
+            state["distribution_enabled"] = False
+            state["lock_change"] = False
             state["config_revision"] = server.get("config_revision", "")
+            state["rollout_id"] = server.get("rollout_id", "")
             state["config_etag"] = response_etag
             atomic_write_json(self.state_path, state)
             self.logger.info("Distribution is disabled; keeping current wallpaper")
@@ -600,64 +725,76 @@ class WallpaperClient:
         required = ("wallpaper_version", "download_url", "sha256", "style", "mime_type", "filesize")
         if any(key not in server for key in required):
             raise ClientError("INVALID_SERVER_CONFIG", "Server configuration is missing wallpaper fields")
-        wallpaper_registry_values(str(server["style"]))
-
-        if not should_download(server, state):
-            current_path = Path(str(state["wallpaper_path"]))
-            if not current_path.is_file() or sha256_file(current_path) != str(server["sha256"]).lower():
-                server["force_reapply"] = True
-            else:
-                self.policy_function(bool(server.get("lock_change")), current_path, str(server["style"]), state)
-                state["config_etag"] = response_etag
-                atomic_write_json(self.state_path, state)
-                self.logger.info("Wallpaper is already current: %s", server["wallpaper_version"])
-                return interval, jitter
-
-        self.logger.info("Downloading wallpaper version %s", server["wallpaper_version"])
+        style = str(server["style"])
+        wallpaper_registry_values(style)
+        expected_hash = str(server["sha256"]).lower()
+        requested_apply = should_download(server, state)
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        staged = self.data_dir / "wallpaper.download"
-        api.download(str(server["download_url"]), staged, str(server["sha256"]), int(server["filesize"]))
-        self.logger.info("SHA256 verified")
-
         extension = ".png" if server["mime_type"] == "image/png" else ".jpg"
-        destination = self.data_dir / ("wallpaper" + extension)
+        safe_version = "".join(character if character.isalnum() or character in ".-_" else "_" for character in str(server["wallpaper_version"]))[:64]
+        destination = self.data_dir / f"wallpaper-{safe_version}{extension}"
         previous_path = Path(str(state.get("wallpaper_path", ""))) if state.get("wallpaper_path") else None
-        backup = self.data_dir / "wallpaper.previous"
-        _safe_unlink(backup)
-        try:
-            if previous_path and previous_path.is_file():
-                os.replace(previous_path, backup)
+        cached_path: Path | None = None
+        for candidate in (destination, previous_path):
+            if candidate is not None and candidate.is_file() and sha256_file(candidate) == expected_hash:
+                cached_path = candidate
+                break
+
+        downloaded = False
+        if cached_path is None:
+            self.logger.info("Downloading wallpaper version %s", server["wallpaper_version"])
+            staged = self.data_dir / "wallpaper.download"
+            api.download(str(server["download_url"]), staged, expected_hash, int(server["filesize"]))
+            self.logger.info("SHA256 verified")
             os.replace(staged, destination)
-            self.apply_function(destination, str(server["style"]))
-            self.policy_function(bool(server.get("lock_change")), destination, str(server["style"]), state)
+            cached_path = destination
+            downloaded = True
+
+        previous_style = str(state.get("style", "fill"))
+        previous_lock = bool(state.get("lock_change"))
+        try:
+            applied = self.apply_and_enforce(
+                cached_path,
+                style,
+                bool(server.get("lock_change")),
+                state,
+                force=requested_apply,
+            )
         except Exception as exc:
-            _safe_unlink(destination)
-            if backup.is_file() and previous_path is not None:
-                os.replace(backup, previous_path)
+            if downloaded:
+                _safe_unlink(destination)
+            if previous_path is not None and previous_path.is_file() and previous_path != cached_path:
                 try:
-                    self.apply_function(previous_path, str(state.get("style", "fill")))
+                    self.apply_function(previous_path, previous_style)
+                    self.policy_function(previous_lock, previous_path, previous_style, state)
                 except Exception:
                     pass
             if isinstance(exc, ClientError):
                 raise
             raise ClientError("WALLPAPER_APPLY_FAILED", f"Wallpaper application failed: {exc}") from exc
 
-        _safe_unlink(backup)
         state.update({
             "wallpaper_version": str(server["wallpaper_version"]),
             "config_revision": str(server.get("config_revision", "")),
-            "sha256": str(server["sha256"]).lower(),
-            "style": str(server["style"]),
-            "wallpaper_path": str(destination),
+            "rollout_id": str(server.get("rollout_id", "")),
+            "sha256": expected_hash,
+            "style": style,
+            "wallpaper_path": str(cached_path),
+            "distribution_enabled": True,
+            "lock_change": bool(server.get("lock_change")),
             "config_etag": response_etag,
-            "last_apply": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            "status_pending": True,
         })
+        if applied or server.get("force_reapply"):
+            state["last_apply"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+            state["status_pending"] = True
         atomic_write_json(self.state_path, state)
-        api.report({**identity, "wallpaper_version": state["wallpaper_version"], "wallpaper_sha256": state["sha256"], "status": "success"})
-        state["status_pending"] = False
-        atomic_write_json(self.state_path, state)
-        self.logger.info("Wallpaper applied and status sent")
+        if state.get("status_pending"):
+            self.report_success(api, identity, state)
+            state["status_pending"] = False
+            atomic_write_json(self.state_path, state)
+            self.logger.info("Wallpaper applied and status sent")
+        else:
+            self.logger.info("Wallpaper is already current: %s", server["wallpaper_version"])
         return interval, jitter
 
     def report_error(self, exc: ClientError) -> None:
@@ -669,6 +806,7 @@ class WallpaperClient:
                 **self.identity(),
                 "wallpaper_version": state.get("wallpaper_version", ""),
                 "wallpaper_sha256": state.get("sha256", ""),
+                "rollout_id": state.get("rollout_id", ""),
                 "status": "error",
                 "error_code": exc.code[:64],
                 "message": str(exc)[:500],
@@ -684,19 +822,21 @@ class SingleInstance:
     def __enter__(self) -> "SingleInstance":
         if os.name != "nt":
             return self
+        assert _kernel32 is not None
         name = "Local\\AtivaWallpaperClient-" + user_key()
-        self.handle = ctypes.windll.kernel32.CreateMutexW(None, False, name)
+        self.handle = _kernel32.CreateMutexW(None, False, name)
         if not self.handle:
             raise ClientError("MUTEX_FAILED", "Cannot create instance mutex", retriable=False)
-        if ctypes.windll.kernel32.GetLastError() == 183:
-            ctypes.windll.kernel32.CloseHandle(self.handle)
+        if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+            _kernel32.CloseHandle(self.handle)
             self.handle = None
             raise ClientError("ALREADY_RUNNING", "Client is already running for this user", retriable=False)
         return self
 
     def __exit__(self, *_: Any) -> None:
         if self.handle and os.name == "nt":
-            ctypes.windll.kernel32.CloseHandle(self.handle)
+            assert _kernel32 is not None
+            _kernel32.CloseHandle(self.handle)
 
 
 class StopEvent:
@@ -704,7 +844,8 @@ class StopEvent:
         self.handle: int | None = None
         self.flag_path = flag_path
         if os.name == "nt":
-            self.handle = ctypes.windll.kernel32.CreateEventW(None, True, False, STOP_EVENT_NAME)
+            assert _kernel32 is not None
+            self.handle = _kernel32.CreateEventW(None, True, False, STOP_EVENT_NAME)
 
     def wait(self, seconds: int) -> bool:
         deadline = time.monotonic() + max(0, seconds)
@@ -716,14 +857,16 @@ class StopEvent:
                 return False
             slice_seconds = min(2.0, remaining)
             if self.handle and os.name == "nt":
-                if ctypes.windll.kernel32.WaitForSingleObject(self.handle, int(slice_seconds * 1000)) == 0:
+                assert _kernel32 is not None
+                if _kernel32.WaitForSingleObject(self.handle, int(slice_seconds * 1000)) == 0:
                     return True
             else:
                 time.sleep(slice_seconds)
 
     def close(self) -> None:
         if self.handle and os.name == "nt":
-            ctypes.windll.kernel32.CloseHandle(self.handle)
+            assert _kernel32 is not None
+            _kernel32.CloseHandle(self.handle)
 
 
 def _bootstrap_values(args: argparse.Namespace) -> dict[str, Any]:
@@ -797,11 +940,12 @@ def install_client(args: argparse.Namespace) -> None:
 def _signal_stop() -> None:
     if os.name != "nt":
         return
+    assert _kernel32 is not None
     event_modify_state = 0x0002
-    handle = ctypes.windll.kernel32.OpenEventW(event_modify_state, False, STOP_EVENT_NAME)
+    handle = _kernel32.OpenEventW(event_modify_state, False, STOP_EVENT_NAME)
     if handle:
-        ctypes.windll.kernel32.SetEvent(handle)
-        ctypes.windll.kernel32.CloseHandle(handle)
+        _kernel32.SetEvent(handle)
+        _kernel32.CloseHandle(handle)
 
 
 def uninstall_client(remove_wallpaper: bool, debug: bool) -> None:
@@ -853,7 +997,8 @@ def uninstall_client(remove_wallpaper: bool, debug: bool) -> None:
     executable = root / EXECUTABLE_NAME
     if executable.exists():
         movefile_delay_until_reboot = 0x4
-        ctypes.windll.kernel32.MoveFileExW(str(executable), None, movefile_delay_until_reboot)
+        assert _kernel32 is not None
+        _kernel32.MoveFileExW(str(executable), None, movefile_delay_until_reboot)
     logger.info("Uninstall completed; executable deletion may finish at reboot")
 
 
