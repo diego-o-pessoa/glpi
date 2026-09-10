@@ -66,12 +66,14 @@ try {
             break;
 
         case 'force_all':
-            Session::checkRight(PluginAtivawallpaperProfile::RIGHT_CLIENTS, UPDATE);
-            if (!ConfigService::getBool('enabled')) {
-                throw new RuntimeException('Ative a distribuicao antes de aplicar o wallpaper.');
-            }
+            Session::checkRight(PluginAtivawallpaperProfile::RIGHT_PUBLISH, UPDATE);
             if ((new WallpaperManager())->current() === null) {
                 throw new RuntimeException('Publique um wallpaper antes de aplicar em todos os computadores.');
+            }
+            $wasEnabled = ConfigService::getBool('enabled');
+            if (!$wasEnabled) {
+                ConfigService::set(['enabled' => true]);
+                Audit::record('enable', 'configuration', null, false, true);
             }
             $count = (new ClientRepository())->setForceReapplyAll();
             ConfigService::rotatePublicationRevision();

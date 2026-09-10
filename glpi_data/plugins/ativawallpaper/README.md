@@ -59,11 +59,13 @@ Cada publicacao recebe uma versao `AAAAMMDD-NNN`. Versoes antigas nao sao
 apagadas. Em **Historico**, **Tornar esta versao atual** faz rollback e gera uma
 nova revisao detectavel, inclusive quando algum cliente ja tinha aquela versao.
 
-Com um wallpaper atual e a distribuicao ativa, **Aplicar em todos** solicita a
-reaplicacao para todos os clientes registrados em um unico clique. A execucao
-ocorre na proxima consulta de cada cliente; computadores offline aplicam quando
-voltarem a se comunicar. No intervalo padrao, uma maquina online pode levar ate
-aproximadamente 17 minutos (900 segundos mais o jitter de ate 120 segundos).
+Com um wallpaper atual, **Aplicar em todos** solicita a reaplicacao para todos
+os clientes registrados em um unico clique. Se a distribuicao estiver inativa,
+o botao passa a se chamar **Ativar e aplicar em todos** e faz as duas operacoes.
+A execucao ocorre na proxima consulta de cada cliente; computadores offline
+aplicam quando voltarem a se comunicar. No intervalo padrao, uma maquina online
+pode levar ate aproximadamente 17 minutos (900 segundos mais o jitter de ate
+120 segundos).
 
 Desativar a distribuicao faz a API retornar `enabled: false`; nao apaga o
 wallpaper atual. O cliente remove somente bloqueios que ele proprio criou.

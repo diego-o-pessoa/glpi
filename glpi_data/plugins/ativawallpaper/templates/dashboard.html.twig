@@ -51,19 +51,19 @@
             </div>
           {% endif %}
         </div>
-        {% if rights.publish or rights.config or (rights.clients and current and enabled) %}
+        {% if rights.publish or rights.config %}
           <div class="card-footer d-flex flex-wrap gap-2">
             {% if rights.publish %}
               <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#ativa-upload-modal">
                 <i class="ti ti-upload me-1"></i>Alterar wallpaper
               </button>
             {% endif %}
-            {% if rights.clients and current and enabled %}
+            {% if rights.publish and current %}
               <form method="post" action="{{ urls.action }}">
                 <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="action" value="force_all">
-                <button class="btn btn-success" type="submit" {{ summary.managed == 0 ? 'disabled' : '' }}>
-                  <i class="ti ti-device-desktop-check me-1"></i>Aplicar em todos
+                <button class="btn btn-success" type="submit">
+                  <i class="ti ti-device-desktop-check me-1"></i>{{ enabled ? 'Aplicar em todos' : 'Ativar e aplicar em todos' }}
                 </button>
               </form>
             {% endif %}
