@@ -1,0 +1,18 @@
+# Runtime data must never be versioned. Git cannot create a consistent backup
+# of a live MySQL data directory and may corrupt InnoDB files during a pull.
+/mysql_data/
+
+# Local credentials and generated backups.
+/.env
+/*.sql
+/*.sql.gz
+/*.sha256
+/backups/
+
+# Ativa Wallpaper build secrets and generated binaries.
+/glpi_data/plugins/ativawallpaper/deployment/unified-installer/bootstrap-config.json
+/glpi_data/plugins/ativawallpaper/deployment/unified-installer/dist/
+/glpi_data/plugins/ativawallpaper/client/dist/
+/glpi_data/plugins/ativawallpaper/client/build/
+/glpi_data/plugins/ativawallpaper/client/.venv-build/
+

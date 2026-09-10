@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+project_dir="${GLPI_PROJECT_DIR:-/opt/glpi}"
+plugin_name="${1:-ativawallpaper}"
+
+cd "$project_dir"
+
+if ! docker exec glpi_db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqladmin ping --host=127.0.0.1 --user=root --silent' >/dev/null 2>&1; then
+    echo "ERRO: glpi_db nao esta saudavel. A atualizacao foi cancelada antes do git pull." >&2
+    exit 1
+fi
+
+bash "${project_dir}/backup.sh"
+
+echo "Atualizando o repositorio..."
+git pull --ff-only
+docker compose config --quiet
+
+if ! docker exec glpi_db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqladmin ping --host=127.0.0.1 --user=root --silent' >/dev/null 2>&1; then
+    echo "ERRO: o banco deixou de responder. A instalacao do plugin nao sera executada." >&2
+    exit 1
+fi
+
+echo "Instalando/atualizando o plugin ${plugin_name}..."
+docker exec -u www-data glpi_web php /var/www/html/glpi/bin/console glpi:plugin:install "$plugin_name" --username=glpi --force
+docker exec -u www-data glpi_web php /var/www/html/glpi/bin/console glpi:plugin:activate "$plugin_name"
+
+echo "Atualizacao concluida sem reiniciar o banco."

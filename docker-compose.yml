@@ -1,15 +1,26 @@
 services:
   mysql:
-    image: mysql:8.0
+    # Keep the database engine version deterministic. Upgrade it only after a
+    # verified logical backup, never implicitly during an application update.
+    image: mysql:8.0.46
     container_name: glpi_db
-    restart: always
+    restart: unless-stopped
+    stop_grace_period: 1m
     environment:
       - MYSQL_ROOT_PASSWORD=Ativ@Adm2026
       - MYSQL_DATABASE=glpidb
       - MYSQL_USER=glpiuser
       - MYSQL_PASSWORD=Ativ@Adm2026
     volumes:
-      - ./mysql_data:/var/lib/mysql
+      # Database files live outside the Git working tree. A git pull can no
+      # longer replace or delete InnoDB redo logs.
+      - glpi_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$${MYSQL_ROOT_PASSWORD}\" mysqladmin ping --host=127.0.0.1 --user=root --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
  
   glpi:
     image: diouxx/glpi:latest
@@ -27,7 +38,8 @@ services:
       - /etc/letsencrypt/live/ad.ativalocacao.com.br/fullchain.pem:/etc/ssl/certs/glpi.crt:ro
       - /etc/letsencrypt/live/ad.ativalocacao.com.br/privkey.pem:/etc/ssl/private/glpi.key:ro
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
 
   portal_registro:
     build: ./portal-ativa
@@ -37,3 +49,7 @@ services:
     restart: always
     depends_on:
       - glpi # (Coloque aqui o nome exato do seu container do GLPI)
+
+volumes:
+  glpi_mysql_data:
+    name: glpi_mysql_data
