@@ -1,9 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-ativa-confirm]').forEach((form) => {
     form.addEventListener('submit', (event) => {
-      if (!window.confirm(form.dataset.ativaConfirm || 'Confirmar esta acao?')) {
-        event.preventDefault();
-      }
+      if (!window.confirm(form.dataset.ativaConfirm || 'Confirmar esta acao?')) event.preventDefault();
     });
   });
 
@@ -13,7 +11,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const empty = form.querySelector('[data-ativa-preview-empty]');
     const error = form.querySelector('[data-ativa-upload-error]');
     if (!input || !preview || !error) return;
-
     input.addEventListener('change', () => {
       input.classList.remove('is-invalid');
       error.textContent = '';
@@ -43,25 +40,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const forceForms = Array.from(document.querySelectorAll('[data-ativa-force-all]'));
   const machineStates = new Map();
+  const machineCycles = new Map();
+  const completedRollouts = new Set();
+  let currentRolloutId = '';
   let pollTimer = null;
   let requestRunning = false;
 
   const statuses = {
     pending: { icon: 'ti-clock text-warning', label: 'aguardando consulta da API' },
     applying: { icon: 'ti-loader-2 text-primary ativa-spin', label: 'aplicando agora' },
-    success: { icon: 'ti-circle-check text-success', label: 'concluido' },
+    success: { icon: 'ti-circle-check text-success', label: 'atualizado' },
     error: { icon: 'ti-alert-circle text-danger', label: 'erro' },
+  };
+  const cycleActions = {
+    already_current: { message: 'verificado; wallpaper ja estava correto, nenhuma aplicacao foi necessaria', className: 'text-muted' },
+    initial_applied: { message: 'wallpaper aplicado pela primeira vez', className: 'text-success' },
+    configuration_applied: { message: 'nova configuracao aplicada', className: 'text-success' },
+    forced_applied: { message: 'reaplicacao solicitada concluida', className: 'text-success' },
+    drift_corrected: { message: 'alteracao detectada e wallpaper corporativo restaurado', className: 'text-warning' },
+    disabled: { message: 'distribuicao desativada; nenhuma aplicacao realizada', className: 'text-muted' },
+    error: { message: 'falha durante a verificacao', className: 'text-danger' },
   };
 
   const setText = (selector, value) => {
     const element = rollout.querySelector(selector);
     if (element) element.textContent = String(value);
   };
-
   const timestamp = () => new Intl.DateTimeFormat('pt-BR', {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   }).format(new Date());
-
+  const formatDuration = (value) => {
+    const seconds = Math.max(0, Math.round(Number(value) || 0));
+    const minutes = Math.floor(seconds / 60);
+    return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+  };
   const appendActivity = (message, className = '') => {
     const list = rollout.querySelector('[data-rollout-events]');
     if (!list) return;
@@ -83,22 +95,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
+  const renderCycleActivity = (machines) => {
+    machines.forEach((machine) => {
+      if (!machine.last_cycle_at || !machine.last_cycle_action) return;
+      const key = `${machine.last_cycle_at}|${machine.last_cycle_action}`;
+      if (machineCycles.get(machine.hostname) === key) return;
+      machineCycles.set(machine.hostname, key);
+      const cycle = cycleActions[machine.last_cycle_action];
+      if (cycle) appendActivity(`${machine.hostname}: ${cycle.message}`, cycle.className);
+    });
+  };
+
   const renderMachines = (machines) => {
     const list = rollout.querySelector('[data-rollout-machines]');
     if (!list) return;
     list.replaceChildren();
-
     machines.forEach((machine) => {
       const status = statuses[machine.status] || statuses.pending;
       const previous = machineStates.get(machine.hostname);
       if (previous !== machine.status) {
-        if (previous === 'pending' && (machine.status === 'success' || machine.status === 'error')) {
-          appendActivity(`${machine.hostname}: aplicacao iniciada`);
-        }
         appendActivity(`${machine.hostname}: ${status.label}`, machine.status === 'error' ? 'text-danger' : '');
         machineStates.set(machine.hostname, machine.status);
       }
-
       const item = document.createElement('li');
       item.className = 'ativa-rollout-machine';
       item.dataset.status = machine.status;
@@ -120,60 +138,107 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       list.append(item);
     });
+    renderCycleActivity(machines);
   };
 
   const renderCurrentMachine = (data) => {
     const machines = Array.isArray(data.machines) ? data.machines : [];
     const applying = machines.find((machine) => machine.status === 'applying');
-    const pending = machines.find((machine) => machine.status === 'pending');
     const current = rollout.querySelector('[data-rollout-current]');
     if (!current) return;
     current.replaceChildren();
     const icon = document.createElement('i');
-    if (applying) {
+    const countdown = formatDuration(data.countdown_seconds);
+    if (data.phase === 'applying' || applying) {
       icon.className = 'ti ti-loader-2 text-primary ativa-spin fs-3';
-      current.append(icon, document.createTextNode(` Aplicando agora em ${applying.hostname}`));
-    } else if (pending) {
+      current.append(icon, document.createTextNode(` Aplicando agora em ${(applying && applying.hostname) || data.last_cycle_hostname || 'um computador'}`));
+    } else if (data.phase === 'waiting') {
       icon.className = 'ti ti-clock text-warning fs-3';
-      current.append(icon, document.createTextNode(` Aguardando ${pending.hostname} consultar a API`));
-    } else if (data.complete) {
-      icon.className = data.error > 0 ? 'ti ti-alert-circle text-danger fs-3' : 'ti ti-circle-check text-success fs-3';
-      current.append(icon, document.createTextNode(data.error > 0 ? ' Processo finalizado com erros' : ' Todos os computadores foram processados'));
+      const text = data.countdown_seconds === null
+        ? ' Aguardando o cliente informar sua proxima execucao'
+        : ` ${data.next_hostname || 'Cliente'} executara em ${countdown}`;
+      current.append(icon, document.createTextNode(text));
+    } else if (data.phase === 'cycle_complete') {
+      icon.className = 'ti ti-circle-check text-success fs-3';
+      current.append(icon, document.createTextNode(` Aplicacao concluida em ${data.last_cycle_hostname || 'todos os computadores'} — 100%`));
     } else {
-      icon.className = 'ti ti-loader-2 text-primary ativa-spin fs-3';
-      current.append(icon, document.createTextNode(' Preparando aplicacao'));
+      icon.className = data.error > 0 ? 'ti ti-alert-circle text-danger fs-3' : 'ti ti-radar text-primary fs-3';
+      const text = data.countdown_seconds === null
+        ? ' Monitoramento continuo ativo; aguardando horario informado pelos clientes'
+        : ` Monitoramento continuo: ${data.next_hostname || 'cliente'} verifica novamente em ${countdown}`;
+      current.append(icon, document.createTextNode(text));
     }
+  };
+
+  const renderProgress = (data) => {
+    const countdownPhase = data.phase === 'waiting' || data.phase === 'monitoring';
+    const value = countdownPhase ? Number(data.countdown_percentage || 0) : Number(data.percentage || 0);
+    if (countdownPhase) {
+      setText('[data-rollout-label]', data.next_hostname
+        ? `Proxima verificacao: ${data.next_hostname}`
+        : 'Aguardando o horario da proxima verificacao');
+      setText('[data-rollout-percentage]', data.countdown_seconds === null ? '--:--' : formatDuration(data.countdown_seconds));
+    } else {
+      setText('[data-rollout-label]', `${data.processed} de ${data.total} computador(es) processado(s)`);
+      setText('[data-rollout-percentage]', `${Number(data.percentage || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`);
+    }
+    const bar = rollout.querySelector('[data-rollout-bar]');
+    if (!bar) return;
+    bar.style.width = `${value}%`;
+    bar.classList.toggle('progress-bar-animated', data.phase === 'applying');
+    bar.classList.toggle('bg-primary', countdownPhase);
+    bar.classList.toggle('bg-warning', !countdownPhase && Boolean(data.completed_with_error));
+    bar.classList.toggle('bg-success', !countdownPhase && !data.completed_with_error);
+    bar.closest('[role="progressbar"]')?.setAttribute('aria-valuenow', String(value));
   };
 
   const renderRollout = (data) => {
     if (!data || !data.id) return false;
+    if (currentRolloutId !== String(data.id)) {
+      currentRolloutId = String(data.id);
+      machineStates.clear();
+      completedRollouts.delete(currentRolloutId);
+    }
     rollout.classList.remove('d-none');
     rollout.dataset.active = data.active ? '1' : '0';
+    rollout.dataset.monitoring = data.monitoring ? '1' : '0';
     setText('[data-rollout-version]', `Versao ${data.version || '-'} · iniciada em ${data.started_at || '-'}`);
-    setText('[data-rollout-label]', `${data.processed} de ${data.total} computador(es) processado(s)`);
-    setText('[data-rollout-percentage]', `${Number(data.percentage || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`);
     setText('[data-rollout-pending]', data.pending);
     setText('[data-rollout-applying]', data.applying);
     setText('[data-rollout-success]', data.success);
     setText('[data-rollout-error]', data.error);
-    setText('[data-rollout-last-update]', `Ultima consulta ao servidor: ${timestamp()}`);
+    setText('[data-rollout-last-update]', `Dados recebidos do servidor em ${timestamp()}; proxima atualizacao em 1 segundo.`);
+    renderProgress(data);
 
-    const bar = rollout.querySelector('[data-rollout-bar]');
-    if (bar) {
-      bar.style.width = `${data.percentage}%`;
-      bar.classList.toggle('progress-bar-animated', Boolean(data.active));
-      bar.classList.toggle('bg-warning', Boolean(data.completed_with_error));
-      bar.classList.toggle('bg-success', !data.completed_with_error);
-      bar.closest('[role="progressbar"]')?.setAttribute('aria-valuenow', String(data.percentage));
-    }
     const state = rollout.querySelector('[data-rollout-state]');
     if (state) {
-      state.textContent = data.complete ? (data.error > 0 ? 'Concluida com erros' : 'Concluida') : 'Em andamento';
-      state.className = `badge ${data.complete ? (data.error > 0 ? 'bg-danger' : 'bg-success') : 'bg-primary'}`;
+      if (data.phase === 'waiting') {
+        state.textContent = 'Aguardando cliente';
+        state.className = 'badge bg-warning';
+      } else if (data.phase === 'applying') {
+        state.textContent = 'Aplicando';
+        state.className = 'badge bg-primary';
+      } else if (data.phase === 'cycle_complete') {
+        state.textContent = 'Aplicado';
+        state.className = 'badge bg-success';
+      } else {
+        state.textContent = data.error > 0 ? 'Monitorando com erros' : 'Monitorando';
+        state.className = `badge ${data.error > 0 ? 'bg-danger' : 'bg-primary'}`;
+      }
     }
-    renderMachines(Array.isArray(data.machines) ? data.machines : []);
+    const machines = Array.isArray(data.machines) ? data.machines : [];
+    renderMachines(machines);
     renderCurrentMachine(data);
     setForceButtons(Boolean(data.active));
+    if (data.complete && !completedRollouts.has(currentRolloutId)) {
+      completedRollouts.add(currentRolloutId);
+      appendActivity(
+        data.error > 0
+          ? 'Aplicacao encerrada com erros; o monitoramento continua ativo.'
+          : 'Aplicacao concluida em todos os computadores; o monitoramento continua ativo.',
+        data.error > 0 ? 'text-danger' : 'text-success',
+      );
+    }
     return true;
   };
 
@@ -181,21 +246,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pollTimer !== null) window.clearTimeout(pollTimer);
     pollTimer = window.setTimeout(poll, delay);
   };
-
   const poll = async () => {
     if (requestRunning) return;
     requestRunning = true;
     try {
       const response = await fetch(rollout.dataset.progressUrl, {
-        credentials: 'same-origin',
-        cache: 'no-store',
-        headers: { Accept: 'application/json' },
+        credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      if (!renderRollout(data)) throw new Error('O servidor nao retornou uma aplicacao ativa.');
-      if (data.active) schedulePoll(1000);
-      else appendActivity(data.error > 0 ? 'Aplicacao encerrada com erros.' : 'Aplicacao concluida em todos os computadores.', data.error > 0 ? 'text-danger' : 'text-success');
+      if (!renderRollout(data)) throw new Error('O servidor nao retornou dados do ciclo.');
+      if (data.active || data.monitoring) schedulePoll(1000);
     } catch (error) {
       setText('[data-rollout-last-update]', `Falha temporaria ao consultar: ${error.message}. Nova tentativa em 5 segundos.`);
       schedulePoll(5000);
@@ -214,6 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
       rollout.querySelector('[data-rollout-events]')?.replaceChildren();
       rollout.classList.remove('d-none');
       rollout.dataset.active = '1';
+      rollout.dataset.monitoring = '0';
       setForceButtons(true);
       setText('[data-rollout-state]', 'Iniciando');
       setText('[data-rollout-label]', 'Enviando solicitacao ao servidor...');
@@ -221,19 +283,13 @@ document.addEventListener('DOMContentLoaded', () => {
       setText('[data-rollout-last-update]', `Solicitacao enviada: ${timestamp()}`);
       const bar = rollout.querySelector('[data-rollout-bar]');
       if (bar) bar.style.width = '0%';
-      renderCurrentMachine({ machines: [], complete: false });
+      renderCurrentMachine({ machines: [], phase: 'applying' });
       appendActivity('Solicitacao de aplicacao enviada ao servidor.');
 
       try {
         const response = await fetch(form.action, {
-          method: 'POST',
-          body: new FormData(form),
-          credentials: 'same-origin',
-          cache: 'no-store',
-          headers: {
-            Accept: 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-          },
+          method: 'POST', body: new FormData(form), credentials: 'same-origin', cache: 'no-store',
+          headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         });
         const contentType = response.headers.get('Content-Type') || '';
         if (!contentType.includes('application/json')) throw new Error(`Resposta inesperada do servidor (HTTP ${response.status}).`);
@@ -241,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!response.ok || !payload.ok) throw new Error(payload.message || `HTTP ${response.status}`);
         renderRollout(payload.rollout);
         appendActivity(payload.message || 'Aplicacao iniciada.');
-        if (payload.rollout?.active) schedulePoll(500);
+        if (payload.rollout?.active || payload.rollout?.monitoring) schedulePoll(500);
       } catch (error) {
         rollout.dataset.active = '0';
         setForceButtons(false);
@@ -258,5 +314,5 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  if (rollout.dataset.active === '1') schedulePoll(300);
+  if (rollout.dataset.active === '1' || rollout.dataset.monitoring === '1') schedulePoll(300);
 });

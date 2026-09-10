@@ -150,6 +150,25 @@ final class ApiController extends AbstractController
         });
     }
 
+    #[Route('/api/v1/heartbeat', name: 'ativawallpaper_api_heartbeat', methods: ['POST'])]
+    public function heartbeat(Request $request): Response
+    {
+        return $this->guard(function () use ($request): Response {
+            $this->requireHttps($request);
+            $client = $this->authenticatedClient($request);
+            (new RateLimiter())->consume('heartbeat:' . $client['id'], 120, 300);
+            (new ClientRepository())->heartbeat(
+                $client,
+                $this->jsonBody($request),
+                $request->getClientIp()
+            );
+            return $this->json([
+                'status'          => 'accepted',
+                'server_time_utc' => gmdate('c'),
+            ], 202);
+        });
+    }
+
     #[Route(
         '/api/v1/{path}',
         name: 'ativawallpaper_api_fallback',

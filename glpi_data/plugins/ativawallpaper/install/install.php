@@ -16,6 +16,11 @@ function plugin_ativawallpaper_do_install(): bool
         $DB->runFile(__DIR__ . '/schema.sql');
 
         $clientsTable = 'glpi_plugin_ativawallpaper_clients';
+        $migration->addField($clientsTable, 'next_check_at', 'datetime DEFAULT NULL', ['after' => 'last_check']);
+        $migration->addField($clientsTable, 'check_interval_seconds', 'int unsigned DEFAULT NULL', ['after' => 'next_check_at']);
+        $migration->addField($clientsTable, 'last_cycle_action', 'varchar(32) DEFAULT NULL', ['after' => 'check_interval_seconds']);
+        $migration->addField($clientsTable, 'last_cycle_at', 'datetime DEFAULT NULL', ['after' => 'last_cycle_action']);
+        $migration->addKey($clientsTable, ['next_check_at'], 'next_check_at');
         $migration->addField($clientsTable, 'rollout_id', 'varchar(64) DEFAULT NULL', ['after' => 'force_reapply']);
         $migration->addField($clientsTable, 'rollout_status', 'varchar(16) DEFAULT NULL', ['after' => 'rollout_id']);
         $migration->addField($clientsTable, 'rollout_started_at', 'datetime DEFAULT NULL', ['after' => 'rollout_status']);
@@ -38,8 +43,8 @@ function plugin_ativawallpaper_do_install(): bool
             $upgradeSettings['poll_interval_seconds'] = '60';
             $upgradeSettings['poll_jitter_seconds'] = '10';
         }
-        if (version_compare(ConfigService::get('latest_client_version'), '1.2.0', '<')) {
-            $upgradeSettings['latest_client_version'] = '1.2.0';
+        if (version_compare(ConfigService::get('latest_client_version'), '1.3.0', '<')) {
+            $upgradeSettings['latest_client_version'] = '1.3.0';
         }
         if ($upgradeSettings !== []) {
             ConfigService::set($upgradeSettings);

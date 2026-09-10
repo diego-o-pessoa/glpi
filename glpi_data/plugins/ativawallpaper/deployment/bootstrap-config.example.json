@@ -4,5 +4,5 @@
   "verify_tls": true,
   "allow_windows_server": false,
   "pilot_hostname": "DESKTOP-R1C8ICN-2026-08-17-14-54-59",
-  "client_version": "1.2.0"
+  "client_version": "1.3.0"
 }

@@ -2,6 +2,13 @@
 
 ## Em desenvolvimento
 
+- Plugin e cliente 1.3.0 removem a barra redundante de conformidade e passam a
+  exibir o ciclo completo no painel inferior.
+- O cliente envia um heartbeat com o horario exato da proxima sincronizacao;
+  o dashboard mostra a contagem regressiva e permanece atualizado a cada segundo.
+- A atividade em tempo real informa quando nenhuma troca foi necessaria e quando
+  uma alteracao do usuario foi detectada e restaurada automaticamente.
+
 - Plugin e cliente 1.2.0 adicionam a aba **Alteracoes detectadas**, com usuario
   da sessao Windows, computador, tipo de aplicacao e restauracao automatica.
 - **Aplicar em todos** passa a iniciar por AJAX e exibe imediatamente o lote,

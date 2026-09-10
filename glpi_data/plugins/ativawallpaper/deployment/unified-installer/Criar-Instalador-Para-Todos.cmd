@@ -12,7 +12,7 @@ if not exist "%~dp0bootstrap-config.json" (
     exit /b 1
 )
 
-echo Gerando Ativa-GLPI-Agent-Setup-1.2.0.exe para todos os computadores...
+echo Gerando Ativa-GLPI-Agent-Setup-1.3.0.exe para todos os computadores...
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass ^
   -File "%~dp0build-unified-installer.ps1" ^
   -BootstrapConfig "%~dp0bootstrap-config.json" ^
@@ -30,7 +30,7 @@ if errorlevel 1 (
 
 echo.
 echo Instalador criado com sucesso:
-echo %~dp0dist\Ativa-GLPI-Agent-Setup-1.2.0.exe
+echo %~dp0dist\Ativa-GLPI-Agent-Setup-1.3.0.exe
 echo.
 echo Esse mesmo arquivo pode ser instalado em todos os computadores Windows x64.
 echo.

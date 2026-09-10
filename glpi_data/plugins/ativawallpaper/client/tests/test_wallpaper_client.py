@@ -23,6 +23,7 @@ class FakeApi:
         self.content = content
         self.etag = etag
         self.reports: list[dict] = []
+        self.heartbeats: list[dict] = []
         self.downloads = 0
 
     def get_config(self, etag: str | None):
@@ -36,6 +37,9 @@ class FakeApi:
 
     def report(self, payload: dict) -> None:
         self.reports.append(payload)
+
+    def heartbeat(self, payload: dict) -> None:
+        self.heartbeats.append(payload)
 
 
 class FakeResponse:
@@ -129,6 +133,32 @@ class ClientTests(unittest.TestCase):
         self.assertLess(wc.compare_versions("1.0.0", "1.1.0"), 0)
         self.assertEqual(wc.compare_versions("1.0", "1.0.0"), 0)
         self.assertGreater(wc.compare_versions("2.0.0", "1.9.9"), 0)
+
+    def test_heartbeat_reports_exact_next_cycle_and_result(self):
+        api = FakeApi(None)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wc.atomic_write_json(root / "client.json", {
+                "server": "https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1",
+                "client_token": "x" * 43,
+                "verify_tls": True,
+            })
+            client = wc.WallpaperClient(root, api_factory=lambda *_args: api)
+            client.identity = lambda: {
+                "hostname": "PC-01",
+                "machine_guid": "guid-12345678",
+                "username": "test",
+                "client_version": "1.3.0",
+                "os_version": "Windows 11",
+            }
+            wc.atomic_write_json(client.state_path, {"last_cycle_action": "already_current"})
+
+            client.report_heartbeat(67)
+
+            self.assertEqual(len(api.heartbeats), 1)
+            self.assertEqual(api.heartbeats[0]["next_check_seconds"], 67)
+            self.assertEqual(api.heartbeats[0]["cycle_action"], "already_current")
+            self.assertEqual(api.heartbeats[0]["hostname"], "PC-01")
 
     def test_should_download_compares_version_revision_and_hash(self):
         server = {"enabled": True, "wallpaper_version": "20260908-001", "config_revision": "r1", "sha256": "a" * 64}
@@ -234,7 +264,7 @@ class ClientTests(unittest.TestCase):
                 policy_function=lambda lock, path, style, _state: policies.append((lock, path, style)),
                 current_function=lambda *_args: True,
             )
-            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.2.0", "os_version": "Windows 11"}
+            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.3.0", "os_version": "Windows 11"}
             wc.atomic_write_json(client.state_path, {
                 "wallpaper_version": "20260908-001",
                 "config_revision": "revision-1",
@@ -276,7 +306,7 @@ class ClientTests(unittest.TestCase):
                 policy_function=lambda lock, path, style, _state: policies.append((lock, path, style)),
                 current_function=lambda *_args: False,
             )
-            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.2.0", "os_version": "Windows 11"}
+            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.3.0", "os_version": "Windows 11"}
             wc.atomic_write_json(client.state_path, {
                 "wallpaper_version": "20260908-001",
                 "sha256": digest,

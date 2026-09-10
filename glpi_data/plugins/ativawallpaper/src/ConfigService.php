@@ -23,7 +23,7 @@ final class ConfigService
             'max_upload_mb'              => '20',
             'max_image_dimension'        => '16384',
             'minimum_client_version'     => '1.0.0',
-            'latest_client_version'      => '1.2.0',
+            'latest_client_version'      => '1.3.0',
             'registration_secret_hash'   => '',
             'registration_secret_rotated_at' => '',
             'publication_revision'       => '',

@@ -139,6 +139,54 @@ final class ClientRepository
         ], ['id' => $clientId]);
     }
 
+    public function heartbeat(array $client, array $payload, ?string $ipAddress): void
+    {
+        global $DB;
+
+        $seconds = (int) ($payload['next_check_seconds'] ?? 0);
+        if ($seconds < 5 || $seconds > 86400) {
+            throw new ApiException('next_check_seconds invalido', 422, 'INVALID_NEXT_CHECK');
+        }
+        $action = strtolower(Security::cleanText($payload['cycle_action'] ?? '', 32));
+        $allowed = [
+            'already_current',
+            'initial_applied',
+            'configuration_applied',
+            'forced_applied',
+            'drift_corrected',
+            'disabled',
+            'error',
+        ];
+        if (!in_array($action, $allowed, true)) {
+            $action = 'already_current';
+        }
+
+        $payloadGuid = Security::cleanText($payload['machine_guid'] ?? '', 128);
+        if ($payloadGuid !== '' && !hash_equals((string) $client['machine_guid'], $payloadGuid)) {
+            throw new ApiException('machine_guid nao corresponde ao token', 403, 'IDENTITY_MISMATCH');
+        }
+        $hostname = strtoupper(Security::cleanText($payload['hostname'] ?? $client['hostname'], 255));
+        $clientVersion = Security::cleanText($payload['client_version'] ?? $client['client_version'], 32);
+        if (!Security::isValidHostname($hostname) || !Security::isValidVersion($clientVersion)) {
+            throw new ApiException('Identidade ou versao invalida', 422, 'INVALID_PAYLOAD');
+        }
+
+        $now = time();
+        $DB->update(self::TABLE, [
+            'hostname'               => $hostname,
+            'username'               => Security::cleanText($payload['username'] ?? '', 255),
+            'client_version'         => $clientVersion,
+            'os_version'             => Security::cleanText($payload['os_version'] ?? '', 255),
+            'next_check_at'          => date('Y-m-d H:i:s', $now + $seconds),
+            'check_interval_seconds' => $seconds,
+            'last_cycle_action'      => $action,
+            'last_cycle_at'          => date('Y-m-d H:i:s', $now),
+            'last_check'             => date('Y-m-d H:i:s', $now),
+            'last_ip'                => Security::cleanText($ipAddress ?? '', 45),
+            'updated_at'             => date('Y-m-d H:i:s', $now),
+        ], ['id' => (int) $client['id']]);
+    }
+
     public function reportStatus(array $client, array $payload, ?string $ipAddress): array
     {
         global $DB;

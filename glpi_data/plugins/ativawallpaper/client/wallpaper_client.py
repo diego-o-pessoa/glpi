@@ -34,7 +34,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.2.0"
+CLIENT_VERSION = "1.3.0"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -342,6 +342,11 @@ class ApiClient:
         status, _, _ = self._json_request("POST", self.server + "/status", payload)
         if status != 202:
             raise ClientError("STATUS_REJECTED", f"Unexpected status response: {status}")
+
+    def heartbeat(self, payload: dict[str, Any]) -> None:
+        status, _, _ = self._json_request("POST", self.server + "/heartbeat", payload)
+        if status != 202:
+            raise ClientError("HEARTBEAT_REJECTED", f"Unexpected heartbeat response: {status}")
 
     def download(self, url: str, destination: Path, expected_sha256: str, expected_size: int | None = None) -> None:
         if SameOriginRedirectHandler._origin(url) != SameOriginRedirectHandler._origin(self.server):
@@ -711,7 +716,8 @@ class WallpaperClient:
         server, response_etag = api.get_config(state.get("config_etag"))
         if server is None:
             self.logger.info("Configuration unchanged (HTTP 304)")
-            self.enforce_cached_wallpaper(state)
+            corrected = self.enforce_cached_wallpaper(state)
+            state["last_cycle_action"] = "drift_corrected" if corrected else "already_current"
             if state.get("status_pending") and state.get("wallpaper_version") and state.get("sha256"):
                 atomic_write_json(self.state_path, state)
                 self.report_success(api, identity, state)
@@ -735,8 +741,9 @@ class WallpaperClient:
             state["config_revision"] = server.get("config_revision", "")
             state["rollout_id"] = server.get("rollout_id", "")
             state["config_etag"] = response_etag
-            atomic_write_json(self.state_path, state)
             self.logger.info("Distribution is disabled; keeping current wallpaper")
+            state["last_cycle_action"] = "disabled"
+            atomic_write_json(self.state_path, state)
             return interval, jitter
 
         required = ("wallpaper_version", "download_url", "sha256", "style", "mime_type", "filesize")
@@ -815,14 +822,30 @@ class WallpaperClient:
                 self.mark_apply_event(state, "drift_corrected")
         atomic_write_json(self.state_path, state)
         if state.get("status_pending"):
+            state["last_cycle_action"] = str(state.get("apply_reason", "already_current"))
             self.report_success(api, identity, state)
             state["status_pending"] = False
             self.finish_apply_event(state)
             atomic_write_json(self.state_path, state)
             self.logger.info("Wallpaper applied and status sent")
         else:
+            state["last_cycle_action"] = "already_current"
+            atomic_write_json(self.state_path, state)
             self.logger.info("Wallpaper is already current: %s", server["wallpaper_version"])
         return interval, jitter
+
+    def report_heartbeat(self, wait_seconds: int, cycle_action: str | None = None) -> None:
+        try:
+            config = self.load_config()
+            state = self.load_state()
+            api = self.api_factory(config["server"], config["client_token"])
+            api.heartbeat({
+                **self.identity(),
+                "next_check_seconds": max(5, min(86400, int(wait_seconds))),
+                "cycle_action": cycle_action or str(state.get("last_cycle_action", "already_current")),
+            })
+        except Exception:
+            self.logger.warning("Could not report next synchronization time", exc_info=True)
 
     def report_error(self, exc: ClientError) -> None:
         try:
@@ -1052,6 +1075,9 @@ def run_client(once: bool, debug: bool) -> int:
                         return 2
                     wait_seconds = backoff[min(failures, len(backoff) - 1)]
                     failures += 1
+                    client.report_heartbeat(wait_seconds, "error")
+                else:
+                    client.report_heartbeat(wait_seconds)
                 if stop.wait(wait_seconds):
                     try:
                         state = client.load_state()

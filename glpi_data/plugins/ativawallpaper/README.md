@@ -1,4 +1,4 @@
-# Ativa Wallpaper 1.2.0
+# Ativa Wallpaper 1.3.0
 
 Plugin para GLPI 11 que publica wallpapers corporativos, registra clientes
 Windows e acompanha aplicacao, pendencia, erro e indisponibilidade. Nenhum
@@ -66,7 +66,10 @@ A execucao ocorre na proxima consulta de cada cliente; computadores offline
 aplicam quando voltarem a se comunicar. No intervalo padrao, uma maquina online
 pode levar ate aproximadamente 70 segundos (60 segundos mais o jitter de ate
 10 segundos). O painel do lote e aberto imediatamente e consulta o progresso a
-cada segundo, exibindo as mudancas de estado sem recarregar a pagina.
+cada segundo. O cliente informa o instante exato da proxima sincronizacao: a
+primeira fase mostra uma contagem regressiva ate zero e a segunda mostra a
+aplicacao ate 100%. Depois disso, o painel continua monitorando os ciclos sem
+recarregar a pagina e informa quando nenhuma nova aplicacao foi necessaria.
 
 Em **Alteracoes**, o plugin registra aplicacao inicial, nova configuracao,
 reaplicacao solicitada e divergencias corrigidas automaticamente. Para uma
@@ -95,6 +98,8 @@ Todos os endpoints respondem JSON, exceto o download binario:
   individual uma unica vez;
 - `GET /config` — bearer token, ETag e `304 Not Modified`;
 - `GET /wallpaper/{id-ou-versao}/download` — bearer token, SHA como ETag;
+- `POST /heartbeat` — bearer token, resultado do ciclo e horario exato da
+  proxima sincronizacao;
 - `POST /status` e `POST /error` — bearer token e status sanitizado.
 
 Exemplo de registro:
@@ -103,7 +108,7 @@ Exemplo de registro:
 {
   "hostname": "DESKTOP-R1C8ICN",
   "machine_guid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-  "client_version": "1.2.0",
+  "client_version": "1.3.0",
   "registration_secret": "valor-do-bootstrap"
 }
 ```
