@@ -231,7 +231,7 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(destination.read_bytes(), b"previous")
             self.assertFalse(destination.with_name(destination.name + ".part").exists())
 
-    def test_api_parses_json_and_sends_bearer_token(self):
+    def test_api_parses_json_and_sends_compatible_token_headers(self):
         response = FakeResponse(json.dumps({"enabled": False}).encode())
         opener = FakeOpener(response)
         api = api_with_opener(opener)
@@ -239,6 +239,7 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(data, {"enabled": False})
         self.assertEqual(etag, "fake-etag")
         self.assertEqual(opener.requests[0].get_header("Authorization"), "Bearer " + "t" * 43)
+        self.assertEqual(opener.requests[0].get_header("X-ativa-client-token"), "t" * 43)
 
     def test_api_rejects_html_instead_of_json(self):
         api = api_with_opener(FakeOpener(FakeResponse(b"<!DOCTYPE html>", content_type="text/html")))

@@ -33,7 +33,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.0.0"
+CLIENT_VERSION = "1.0.1"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -53,6 +53,16 @@ class ClientError(RuntimeError):
         super().__init__(message)
         self.code = code
         self.retriable = retriable
+
+
+class CloseAfterEmitRotatingFileHandler(RotatingFileHandler):
+    """Avoid keeping client log files locked between polling cycles on Windows."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            super().emit(record)
+        finally:
+            self.close()
 
 
 def normalize_server_url(value: str) -> str:
@@ -244,6 +254,11 @@ class ApiClient:
         headers = {"Accept": "application/json", "User-Agent": f"AtivaWallpaperClient/{CLIENT_VERSION}"}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
+            # Some Apache CGI/FastCGI configurations hide Authorization from
+            # PHP. Keep the standard header and duplicate only the opaque
+            # plugin token in a dedicated HTTPS header as a compatibility
+            # fallback.
+            headers["X-Ativa-Client-Token"] = self.token
         return headers
 
     def _json_request(self, method: str, url: str, payload: dict[str, Any] | None = None, etag: str | None = None) -> tuple[int, dict[str, Any] | None, str | None]:
@@ -402,7 +417,13 @@ def configure_logging(root: Path, debug: bool) -> logging.Logger:
         logger.removeHandler(existing_handler)
     logger.setLevel(logging.DEBUG if debug else logging.INFO)
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s", "%Y-%m-%d %H:%M:%S")
-    handler = RotatingFileHandler(log_directory / f"client-{user_key()}.log", maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8")
+    handler = CloseAfterEmitRotatingFileHandler(
+        log_directory / f"client-{user_key()}.log",
+        maxBytes=5 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8",
+        delay=True,
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     if debug:

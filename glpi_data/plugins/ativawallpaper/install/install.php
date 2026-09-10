@@ -23,6 +23,19 @@ function plugin_ativawallpaper_do_install(): bool
         }
 
         ConfigService::installDefaults();
+        $settings = ConfigService::all();
+        $upgradeSettings = [];
+        if (($settings['poll_interval_seconds'] ?? '') === '900'
+            && ($settings['poll_jitter_seconds'] ?? '') === '120') {
+            $upgradeSettings['poll_interval_seconds'] = '60';
+            $upgradeSettings['poll_jitter_seconds'] = '10';
+        }
+        if (version_compare(ConfigService::get('latest_client_version'), '1.0.1', '<')) {
+            $upgradeSettings['latest_client_version'] = '1.0.1';
+        }
+        if ($upgradeSettings !== []) {
+            ConfigService::set($upgradeSettings);
+        }
 
         require_once PLUGIN_ATIVAWALLPAPER_DIR . '/inc/profile.class.php';
         PluginAtivawallpaperProfile::installRights();

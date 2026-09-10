@@ -84,9 +84,16 @@
 
     <div class="col-xl-5">
       <section class="card h-100 shadow-sm">
-        <div class="card-header"><h2 class="card-title mb-0">Computadores gerenciados</h2></div>
+        <div class="card-header"><h2 class="card-title mb-0">Clientes Ativa Wallpaper</h2></div>
         <div class="card-body">
           <div class="display-5 fw-bold mb-3">{{ summary.managed }}</div>
+          {% if summary.managed == 0 %}
+            <div class="alert alert-info small">
+              Computadores inventariados pelo GLPI somente aparecem aqui depois
+              que o AtivaWallpaperClient for instalado e registrado neles.
+              {% if rights.config %}<a href="{{ urls.settings }}">Abrir configuracoes de implantacao</a>.{% endif %}
+            </div>
+          {% endif %}
           <div class="row g-2 mb-4">
             <div class="col-6"><div class="ativa-stat border-success"><span>Atualizados</span><strong>{{ summary.updated }}</strong></div></div>
             <div class="col-6"><div class="ativa-stat border-warning"><span>Pendentes</span><strong>{{ summary.pending }}</strong></div></div>

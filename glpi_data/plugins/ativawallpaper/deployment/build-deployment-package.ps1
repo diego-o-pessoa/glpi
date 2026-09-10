@@ -33,7 +33,7 @@ Copy-Item -LiteralPath $ConfigPath -Destination (Join-Path $OutputDirectory "boo
 $ExeHash = Get-FileHash -Algorithm SHA512 (Join-Path $OutputDirectory "AtivaWallpaperClient.exe")
 $Manifest = @{
     package = "Ativa Wallpaper Client - Bootstrap"
-    client_version = "1.0.0"
+    client_version = "1.0.1"
     client_sha512 = $ExeHash.Hash
     install_command = 'AtivaWallpaperClient.exe --install --bootstrap-config "bootstrap-config.json"'
     generated_at = (Get-Date).ToString("o")

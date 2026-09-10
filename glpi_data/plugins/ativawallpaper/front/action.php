@@ -76,6 +76,11 @@ try {
                 Audit::record('enable', 'configuration', null, false, true);
             }
             $count = (new ClientRepository())->setForceReapplyAll();
+            if ($count === 0) {
+                throw new RuntimeException(
+                    'Nenhum cliente Ativa Wallpaper esta registrado. Implante o AtivaWallpaperClient nas maquinas antes de aplicar.'
+                );
+            }
             ConfigService::rotatePublicationRevision();
             Session::addMessageAfterRedirect(
                 sprintf(
@@ -104,12 +109,12 @@ try {
                 || !str_ends_with((string) ($parts['path'] ?? ''), '/plugins/ativawallpaper/api/v1')) {
                 throw new RuntimeException('A URL da API deve usar HTTPS, chamados.ativalocacao.com.br e terminar em /plugins/ativawallpaper/api/v1.');
             }
-            $poll = max(60, min(86400, (int) ($_POST['poll_interval_seconds'] ?? 900)));
+            $poll = max(60, min(86400, (int) ($_POST['poll_interval_seconds'] ?? 60)));
             $offline = max($poll * 2, min(2592000, (int) ($_POST['offline_after_seconds'] ?? 3600)));
-            $jitter = max(0, min(3600, (int) ($_POST['poll_jitter_seconds'] ?? 120)));
+            $jitter = max(0, min(3600, (int) ($_POST['poll_jitter_seconds'] ?? 10)));
             $maxUpload = max(1, min(100, (int) ($_POST['max_upload_mb'] ?? 20)));
             $minimum = Security::cleanText($_POST['minimum_client_version'] ?? '1.0.0', 32);
-            $latest = Security::cleanText($_POST['latest_client_version'] ?? '1.0.0', 32);
+            $latest = Security::cleanText($_POST['latest_client_version'] ?? '1.0.1', 32);
             if (!Security::isValidVersion($minimum) || !Security::isValidVersion($latest)) {
                 throw new RuntimeException('Versao minima ou mais recente invalida.');
             }

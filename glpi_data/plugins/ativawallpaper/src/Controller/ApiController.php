@@ -162,7 +162,22 @@ final class ApiController extends AbstractController
 
     private function authenticatedClient(Request $request): array
     {
-        $authorization = $request->headers->get('Authorization', '');
+        $authorization = trim((string) $request->headers->get('Authorization', ''));
+        if ($authorization === '') {
+            foreach (['HTTP_AUTHORIZATION', 'REDIRECT_HTTP_AUTHORIZATION'] as $serverKey) {
+                $forwarded = trim((string) $request->server->get($serverKey, ''));
+                if ($forwarded !== '') {
+                    $authorization = $forwarded;
+                    break;
+                }
+            }
+        }
+        if ($authorization === '') {
+            $compatibilityToken = trim((string) $request->headers->get('X-Ativa-Client-Token', ''));
+            if ($compatibilityToken !== '') {
+                $authorization = 'Bearer ' . $compatibilityToken;
+            }
+        }
         if (preg_match('/^Bearer\s+([A-Za-z0-9_-]{32,256})$/', $authorization, $match) !== 1) {
             throw new ApiException('Token ausente ou invalido', 401, 'UNAUTHORIZED', [
                 'WWW-Authenticate' => 'Bearer realm="Ativa Wallpaper"',

@@ -2,10 +2,18 @@
 
 ## Em desenvolvimento
 
+- Correcao do repasse do cabecalho `Authorization` pelo Apache/FastCGI e
+  compatibilidade adicional com `X-Ativa-Client-Token`.
+- O instalador agora inicia o cliente em polling continuo imediatamente, sem
+  aguardar o proximo logon para receber o comando **Aplicar**.
+- Polling padrao reduzido para 60 segundos, com jitter de 10 segundos, para
+  executar solicitacoes do dashboard rapidamente.
 - Botao unico **Aplicar em todos** para solicitar a reaplicacao do wallpaper
   atual em todos os clientes nao revogados.
 - Diagnostico explicito de falta de espaco e permissoes no armazenamento
   privado durante uploads.
+- Build automatizado do instalador unico para GLPI Agent 1.19 e Ativa Wallpaper
+  Client, com validacao de hash e configuracao completa do endpoint Inventory.
 
 ## 1.0.0 - 2026-09-08
 

@@ -13,11 +13,11 @@ final class ApiConfigBuilder
         $config = [
             'enabled'                 => $enabled,
             'config_revision'         => (string) ($settings['publication_revision'] ?? ''),
-            'poll_interval_seconds'   => max(60, min(86400, (int) ($settings['poll_interval_seconds'] ?? 900))),
-            'poll_jitter_seconds'     => max(0, min(3600, (int) ($settings['poll_jitter_seconds'] ?? 120))),
+            'poll_interval_seconds'   => max(60, min(86400, (int) ($settings['poll_interval_seconds'] ?? 60))),
+            'poll_jitter_seconds'     => max(0, min(3600, (int) ($settings['poll_jitter_seconds'] ?? 10))),
             'force_reapply'           => (bool) ($client['force_reapply'] ?? false),
             'minimum_client_version'  => (string) ($settings['minimum_client_version'] ?? '1.0.0'),
-            'latest_client_version'   => (string) ($settings['latest_client_version'] ?? '1.0.0'),
+            'latest_client_version'   => (string) ($settings['latest_client_version'] ?? '1.0.1'),
         ];
 
         if ($enabled && $wallpaper !== null) {

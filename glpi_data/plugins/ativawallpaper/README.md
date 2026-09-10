@@ -1,4 +1,4 @@
-# Ativa Wallpaper 1.0.0
+# Ativa Wallpaper 1.0.1
 
 Plugin para GLPI 11 que publica wallpapers corporativos, registra clientes
 Windows e acompanha aplicacao, pendencia, erro e indisponibilidade. Nenhum
@@ -64,8 +64,8 @@ os clientes registrados em um unico clique. Se a distribuicao estiver inativa,
 o botao passa a se chamar **Ativar e aplicar em todos** e faz as duas operacoes.
 A execucao ocorre na proxima consulta de cada cliente; computadores offline
 aplicam quando voltarem a se comunicar. No intervalo padrao, uma maquina online
-pode levar ate aproximadamente 17 minutos (900 segundos mais o jitter de ate
-120 segundos).
+pode levar ate aproximadamente 70 segundos (60 segundos mais o jitter de ate
+10 segundos).
 
 Desativar a distribuicao faz a API retornar `enabled: false`; nao apaga o
 wallpaper atual. O cliente remove somente bloqueios que ele proprio criou.
@@ -97,7 +97,7 @@ Exemplo de registro:
 {
   "hostname": "DESKTOP-R1C8ICN",
   "machine_guid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-  "client_version": "1.0.0",
+  "client_version": "1.0.1",
   "registration_secret": "valor-do-bootstrap"
 }
 ```
@@ -148,7 +148,7 @@ Deploy SYSTEM apenas instala e registra, sem tentar alterar HKCU.
 
 O cliente usa `ssl.create_default_context()`, recusa `verify_tls=false`, IPs,
 hostnames diferentes de `chamados.ativalocacao.com.br` e redirect para outra
-origem. Polling padrao e 900 s com jitter de ate 120 s;
+origem. Polling padrao e 60 s com jitter de ate 10 s;
 falhas usam backoff 60/120/300/900 s. O download vai para arquivo temporario,
 valida tamanho e SHA-256, e so entao troca o cache. Se a aplicacao falhar, o
 arquivo anterior e restaurado e reaplicado.
@@ -180,6 +180,14 @@ dinamico Windows sem Server.
 A versao Inventory 1.6.10 inspecionada nao fornece uma API publica estavel para
 orquestrar grupo+pacote+tarefa+auditoria. O plugin deliberadamente nao insere em
 tabelas internas do Inventory; o Setup Wizard orienta e diagnostica.
+
+## Instalador unico para novos computadores
+
+Para instalar o GLPI Agent e o cliente de wallpaper com um unico executavel,
+use [deployment/unified-installer/README.md](deployment/unified-installer/README.md).
+O build automatizado baixa e valida o MSI oficial do Agent, habilita todas as
+features (inclusive Deploy), compila o cliente e gera
+`Ativa-GLPI-Agent-Setup.exe`.
 
 ## Logs e troubleshooting
 
