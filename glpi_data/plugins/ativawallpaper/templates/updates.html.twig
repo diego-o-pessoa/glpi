@@ -1,54 +1,84 @@
 {% set component_labels = {'wallpaper_client':'Wallpaper Client', 'glpi_agent':'GLPI Agent'} %}
-{% set stage_labels = {'draft':'Rascunho', 'pilot':'Piloto', 'all':'Todos', 'paused':'Pausado'} %}
+{% set stage_labels = {'draft':'Rascunho', 'pilot':'Somente piloto', 'all':'Todos os computadores', 'paused':'Pausado'} %}
 {% set stage_colors = {'draft':'secondary', 'pilot':'warning', 'all':'success', 'paused':'secondary'} %}
-{% set status_labels = {'offered':'Oferecida', 'downloading':'Baixando', 'installing':'Instalando', 'success':'Atualizado', 'error':'Erro', 'restart_required':'Reinicio necessario'} %}
+{% set status_labels = {'offered':'Aguardando computador', 'downloading':'Baixando', 'installing':'Instalando', 'success':'Concluido', 'error':'Problema', 'restart_required':'Reinicio necessario'} %}
 {% set status_colors = {'offered':'secondary', 'downloading':'info', 'installing':'primary', 'success':'success', 'error':'danger', 'restart_required':'warning'} %}
 <div class="container-fluid ativa-wallpaper" data-ativa-update-monitor data-progress-url="{{ urls.progress }}">
   <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
-    <div><h1 class="mb-1"><i class="ti ti-cloud-download me-2 text-primary"></i>Atualizacoes</h1><div class="text-muted">Publicacao controlada e distribuicao automatica</div></div>
+    <div><h1 class="mb-1"><i class="ti ti-cloud-download me-2 text-primary"></i>Atualizacoes</h1><div class="text-muted">Atualize os computadores sem precisar gerar um novo instalador completo</div></div>
     <nav class="btn-group" aria-label="Navegacao Ativa Wallpaper"><a class="btn btn-outline-secondary" href="{{ urls.dashboard }}">Dashboard</a><a class="btn btn-outline-secondary" href="{{ urls.history }}">Historico</a><a class="btn btn-outline-secondary" href="{{ urls.events }}">Alteracoes</a><a class="btn btn-primary" href="{{ urls.updates }}">Atualizacoes</a><a class="btn btn-outline-secondary" href="{{ urls.settings }}">Configuracoes</a></nav>
   </div>
 
-  <div class="alert alert-info"><i class="ti ti-shield-check me-1"></i>Enviar um arquivo nao inicia a distribuicao. Todo pacote nasce como <strong>Rascunho</strong>; libere primeiro para um piloto e somente depois para todos.</div>
+  <div class="row g-3 mb-4">
+    <div class="col-md-4"><div class="card h-100"><div class="card-body d-flex gap-3"><span class="avatar bg-primary-lt text-primary">1</span><div><strong>Envie o arquivo</strong><div class="small text-muted mt-1">O pacote fica como rascunho e ainda nao e instalado.</div></div></div></div></div>
+    <div class="col-md-4"><div class="card h-100"><div class="card-body d-flex gap-3"><span class="avatar bg-warning-lt text-warning">2</span><div><strong>Teste em um piloto</strong><div class="small text-muted mt-1">Informe um hostname e confirme que a atualizacao funcionou.</div></div></div></div></div>
+    <div class="col-md-4"><div class="card h-100"><div class="card-body d-flex gap-3"><span class="avatar bg-success-lt text-success">3</span><div><strong>Libere para todos</strong><div class="small text-muted mt-1">O painel acompanha automaticamente cada computador.</div></div></div></div></div>
+  </div>
+
+  <div class="alert alert-info mb-4"><i class="ti ti-info-circle me-1"></i><strong>Primeira ativacao:</strong> computadores anteriores a versao 1.4.0 precisam executar o instalador unificado 1.4.0 uma vez. Depois disso, as proximas atualizacoes sao automaticas.</div>
 
   {% if can_configure %}
   <section class="card shadow-sm mb-4">
-    <div class="card-header"><h2 class="card-title mb-0">Novo pacote</h2></div>
+    <div class="card-header"><div><h2 class="card-title mb-1">1. Enviar uma nova versao</h2><div class="small text-muted">Isso nao inicia a instalacao. A liberacao e feita depois.</div></div></div>
     <div class="card-body">
-      <form method="post" action="{{ urls.action }}" enctype="multipart/form-data" class="row g-3">
+      <form method="post" action="{{ urls.action }}" enctype="multipart/form-data" class="row g-3 align-items-end">
         <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="update_upload">
-        <div class="col-md-3"><label class="form-label">Componente</label><select class="form-select" name="component" required><option value="wallpaper_client">Wallpaper Client (.exe)</option><option value="glpi_agent">GLPI Agent (.msi)</option></select></div>
-        <div class="col-md-3"><label class="form-label">Versao</label><input class="form-control" name="version" required placeholder="Ex.: 1.4.0" pattern="[0-9A-Za-z][0-9A-Za-z._+-]{0,31}"></div>
-        <div class="col-md-4"><label class="form-label">Arquivo</label><input class="form-control" type="file" name="update_package" accept=".exe,.msi" required><div class="form-hint">Maximo 250 MB; o SHA-256 sera calculado pelo servidor.</div></div>
-        <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100" type="submit"><i class="ti ti-upload me-1"></i>Enviar rascunho</button></div>
+        <div class="col-md-3"><label class="form-label">O que sera atualizado?</label><select class="form-select" name="component" required><option value="wallpaper_client">Wallpaper Client (.exe)</option><option value="glpi_agent">GLPI Agent (.msi)</option></select></div>
+        <div class="col-md-2"><label class="form-label">Nova versao</label><input class="form-control" name="version" required placeholder="Ex.: 1.5.0" pattern="[0-9A-Za-z][0-9A-Za-z._+-]{0,31}"></div>
+        <div class="col-md-5"><label class="form-label">Arquivo da atualizacao</label><input class="form-control" type="file" name="update_package" accept=".exe,.msi" required><div class="form-hint">Tamanho maximo: 250 MB. O servidor confere o SHA-256.</div></div>
+        <div class="col-md-2"><button class="btn btn-primary w-100" type="submit"><i class="ti ti-upload me-1"></i>Enviar como rascunho</button></div>
       </form>
     </div>
   </section>
   {% endif %}
 
+  <section class="card shadow-sm mb-4" data-update-overall data-package-id="{{ focus_package ? focus_package.id : '' }}">
+    <div class="card-header d-flex align-items-center justify-content-between">
+      <div><h2 class="card-title mb-1">2. Andamento da distribuicao</h2><div class="small text-muted">O painel atualiza a cada 3 segundos. Computadores ligados procuram pacotes aproximadamente a cada 60 segundos.</div></div>
+      <span class="badge bg-secondary" data-update-overall-state>{{ focus_package ? stage_labels[focus_package.release_stage] : 'Nenhum pacote' }}</span>
+    </div>
+    <div class="card-body">
+      <div class="d-flex flex-wrap justify-content-between gap-2 mb-2"><strong data-update-overall-title>{% if focus_package %}{{ component_labels[focus_package.component] }} {{ focus_package.version }}{% else %}Envie uma atualizacao para comecar{% endif %}</strong><strong data-update-overall-percentage>{% if focus_package %}{{ focus_package.summary.percentage|number_format(1, ',', '.') }}%{% else %}0%{% endif %}</strong></div>
+      <div class="progress mb-2" style="height:1rem" role="progressbar" aria-valuenow="{{ focus_package ? focus_package.summary.percentage : 0 }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-primary progress-bar-striped progress-bar-animated" data-update-overall-bar style="width:{{ focus_package ? focus_package.summary.percentage : 0 }}%"></div></div>
+      <div class="text-muted mb-4" data-update-overall-message>{% if focus_package and focus_package.summary.total > 0 %}{{ focus_package.summary.processed }} de {{ focus_package.summary.total }} computador(es) finalizaram.{% else %}Aguardando uma distribuicao ou computadores elegiveis.{% endif %}</div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3"><div class="border rounded p-3 h-100"><div class="text-muted small">Atualizados ou ja corretos</div><div class="fs-2 text-success" data-update-overall-success>{{ focus_package ? focus_package.summary.success : 0 }}</div></div></div>
+        <div class="col-6 col-lg-3"><div class="border rounded p-3 h-100"><div class="text-muted small">Aguardando</div><div class="fs-2" data-update-overall-pending>{{ focus_package ? focus_package.summary.offered : 0 }}</div></div></div>
+        <div class="col-6 col-lg-3"><div class="border rounded p-3 h-100"><div class="text-muted small">Baixando ou instalando</div><div class="fs-2 text-primary" data-update-overall-installing>{{ focus_package ? focus_package.summary.downloading + focus_package.summary.installing : 0 }}</div></div></div>
+        <div class="col-6 col-lg-3"><div class="border rounded p-3 h-100"><div class="text-muted small">Precisam de atencao</div><div class="fs-2 text-danger" data-update-overall-problem-count>{{ focus_package ? focus_package.summary.error + focus_package.summary.restart_required : 0 }}</div></div></div>
+      </div>
+
+      <div class="border rounded p-3">
+        <strong><i class="ti ti-alert-triangle me-1 text-warning"></i>Computadores que precisam de atencao</strong>
+        <div class="small text-muted mt-2" data-update-problems>Nenhum problema informado.</div>
+      </div>
+    </div>
+  </section>
+
   <section class="card shadow-sm mb-4">
-    <div class="card-header"><h2 class="card-title mb-0">Pacotes publicados</h2></div>
-    <div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>Componente</th><th>Versao</th><th>Etapa</th><th>Arquivo</th><th>Distribuicao</th>{% if can_configure %}<th>Acoes</th>{% endif %}</tr></thead><tbody>
+    <div class="card-header"><div><h2 class="card-title mb-1">3. Pacotes e liberacao</h2><div class="small text-muted">Escolha um computador piloto ou libere a versao validada para todos.</div></div></div>
+    <div class="list-group list-group-flush">
       {% for package in packages %}
-      <tr data-update-package="{{ package.id }}">
-        <td><strong>{{ component_labels[package.component] }}</strong><div class="small text-muted">por {{ package.created_by_name }} em {{ package.created_at|formatted_datetime }}</div></td>
-        <td><code>{{ package.version }}</code></td>
-        <td><span class="badge bg-{{ stage_colors[package.release_stage] }}">{{ stage_labels[package.release_stage] }}</span>{% if package.pilot_hostname %}<div class="small mt-1"><code>{{ package.pilot_hostname }}</code></div>{% endif %}</td>
-        <td><div>{{ package.original_filename }}</div><div class="small text-muted">{{ (package.filesize / 1048576)|number_format(2, ',', '.') }} MB · SHA-256 <code title="{{ package.sha256 }}">{{ package.sha256|slice(0, 12) }}...</code></div></td>
-        <td class="small"><div><span class="text-muted">Aguardando:</span> <span data-update-offered>{{ package.summary.offered }}</span> · <span class="text-primary">Instalando:</span> <span data-update-installing>{{ package.summary.downloading + package.summary.installing }}</span><br><span class="text-success">Atualizadas:</span> <span data-update-success>{{ package.summary.success }}</span> · <span class="text-danger">Erros:</span> <span data-update-error>{{ package.summary.error }}</span> · <span class="text-warning">Reinicio:</span> <span data-update-restart>{{ package.summary.restart_required }}</span></div><div class="progress mt-2" style="height:.5rem" role="progressbar" aria-valuenow="{{ package.summary.percentage }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" data-update-bar style="width:{{ package.summary.percentage }}%"></div></div><div class="text-end text-muted" data-update-percentage>{{ package.summary.percentage|number_format(1, ',', '.') }}%</div></td>
-        {% if can_configure %}<td style="min-width:270px">
-          <form method="post" action="{{ urls.action }}" class="d-flex gap-1 mb-2"><input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="update_release"><input type="hidden" name="id" value="{{ package.id }}"><input type="hidden" name="stage" value="pilot"><input class="form-control form-control-sm" name="pilot_hostname" value="{{ package.pilot_hostname }}" placeholder="Hostname piloto" required><button class="btn btn-sm btn-warning" type="submit">Piloto</button></form>
-          <div class="d-flex gap-1"><form method="post" action="{{ urls.action }}" data-ativa-confirm="Liberar esta atualizacao para todos os computadores elegiveis?"><input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="update_release"><input type="hidden" name="id" value="{{ package.id }}"><input type="hidden" name="stage" value="all"><button class="btn btn-sm btn-success" type="submit"><i class="ti ti-world me-1"></i>Liberar para todos</button></form><form method="post" action="{{ urls.action }}"><input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="update_release"><input type="hidden" name="id" value="{{ package.id }}"><input type="hidden" name="stage" value="paused"><button class="btn btn-sm btn-outline-secondary" type="submit">Pausar</button></form></div>
-        </td>{% endif %}
-      </tr>
-      {% else %}<tr><td colspan="6" class="text-center text-muted py-5">Nenhum pacote enviado.</td></tr>{% endfor %}
-    </tbody></table></div>
+      <article class="list-group-item py-3" data-update-package="{{ package.id }}">
+        <div class="row g-3 align-items-center">
+          <div class="col-lg-3"><strong>{{ component_labels[package.component] }} <code>{{ package.version }}</code></strong><div class="small text-muted mt-1">{{ package.original_filename }} · {{ (package.filesize / 1048576)|number_format(2, ',', '.') }} MB</div><div class="small text-muted">Enviado por {{ package.created_by_name }} em {{ package.created_at|formatted_datetime }}</div></div>
+          <div class="col-lg-2"><div class="small text-muted mb-1">Situacao</div><span class="badge bg-{{ stage_colors[package.release_stage] }}">{{ stage_labels[package.release_stage] }}</span>{% if package.pilot_hostname %}<div class="small mt-1">Piloto: <code>{{ package.pilot_hostname }}</code></div>{% endif %}<button class="btn btn-sm btn-link px-0 mt-1" type="button" data-update-select="{{ package.id }}">Acompanhar este pacote</button></div>
+          <div class="col-lg-3 small"><div><span class="text-success">Concluidos:</span> <span data-update-success>{{ package.summary.success }}</span> · <span class="text-danger">Problemas:</span> <span data-update-error>{{ package.summary.error }}</span></div><div><span class="text-muted">Aguardando:</span> <span data-update-offered>{{ package.summary.offered }}</span> · <span class="text-primary">Instalando:</span> <span data-update-installing>{{ package.summary.downloading + package.summary.installing }}</span> · <span class="text-warning">Reinicio:</span> <span data-update-restart>{{ package.summary.restart_required }}</span></div><span class="d-none" data-update-percentage>{{ package.summary.percentage }}%</span><div class="d-none" data-update-bar></div></div>
+          {% if can_configure %}<div class="col-lg-4">
+            <form method="post" action="{{ urls.action }}" class="d-flex gap-2 mb-2"><input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="update_release"><input type="hidden" name="id" value="{{ package.id }}"><input type="hidden" name="stage" value="pilot"><input class="form-control form-control-sm" name="pilot_hostname" value="{{ package.pilot_hostname }}" placeholder="Hostname do computador piloto" required><button class="btn btn-sm btn-warning" type="submit">Testar no piloto</button></form>
+            <div class="d-flex gap-2"><form method="post" action="{{ urls.action }}" data-ativa-confirm="Liberar esta atualizacao para todos os computadores elegiveis?"><input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="update_release"><input type="hidden" name="id" value="{{ package.id }}"><input type="hidden" name="stage" value="all"><button class="btn btn-sm btn-success" type="submit"><i class="ti ti-world me-1"></i>Liberar para todos</button></form><form method="post" action="{{ urls.action }}"><input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="update_release"><input type="hidden" name="id" value="{{ package.id }}"><input type="hidden" name="stage" value="paused"><button class="btn btn-sm btn-outline-secondary" type="submit">Pausar</button></form></div>
+          </div>{% endif %}
+        </div>
+      </article>
+      {% else %}<div class="text-center text-muted py-5">Nenhum pacote enviado.</div>{% endfor %}
+    </div>
   </section>
 
   <section class="card shadow-sm">
-    <div class="card-header"><h2 class="card-title mb-0">Atividade recente</h2></div>
-    <div class="table-responsive"><table class="table table-striped table-vcenter mb-0"><thead><tr><th>Computador</th><th>Componente</th><th>Versao</th><th>Status</th><th>Atualizado em</th><th>Detalhes</th></tr></thead><tbody data-update-installations>
-      {% for item in installations %}<tr><td><strong>{{ item.hostname }}</strong></td><td>{{ component_labels[item.component] }}</td><td><code>{{ item.from_version ?: '-' }}</code> → <code>{{ item.to_version }}</code></td><td><span class="badge bg-{{ status_colors[item.status] }}">{{ status_labels[item.status] }}</span></td><td>{{ item.updated_at|formatted_datetime }}</td><td class="ativa-error" title="{{ item.message ?: '' }}">{{ item.message ?: '-' }}</td></tr>{% else %}<tr><td colspan="6" class="text-center text-muted py-5">Nenhuma atualizacao oferecida aos clientes.</td></tr>{% endfor %}
-    </tbody></table></div><div class="card-footer small text-muted" data-update-last-refresh>Monitoramento em tempo real iniciando...</div>
+    <div class="card-header"><div><h2 class="card-title mb-1">Resultado por computador</h2><div class="small text-muted">Veja quem atualizou, quem ainda esta aguardando e o motivo de cada problema.</div></div></div>
+    <div class="table-responsive"><table class="table table-striped table-vcenter mb-0"><thead><tr><th>Computador</th><th>Atualizacao</th><th>Versao</th><th>Resultado</th><th>Ultima mudanca</th><th>Detalhes</th></tr></thead><tbody data-update-installations>
+      {% for item in installations %}<tr><td><strong>{{ item.hostname }}</strong></td><td>{{ component_labels[item.component] }}</td><td><code>{{ item.from_version ?: '-' }}</code> → <code>{{ item.to_version }}</code></td><td><span class="badge bg-{{ status_colors[item.status] }}">{{ status_labels[item.status] }}</span></td><td>{{ item.updated_at|formatted_datetime }}</td><td class="ativa-error" title="{{ item.message ?: '' }}">{{ item.message ?: '-' }}</td></tr>{% else %}<tr><td colspan="6" class="text-center text-muted py-5">Nenhuma atualizacao distribuida.</td></tr>{% endfor %}
+    </tbody></table></div><div class="card-footer small text-muted" data-update-last-refresh>Monitoramento automatico iniciando...</div>
   </section>
 </div>

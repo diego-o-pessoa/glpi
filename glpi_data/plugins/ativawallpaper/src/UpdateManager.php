@@ -185,7 +185,11 @@ final class UpdateManager
         foreach (self::COMPONENTS as $component) {
             $currentVersion = $versions[$component] !== '' ? $versions[$component] : '0.0.0';
             $package = $this->bestEligiblePackage($component, (string) $client['hostname']);
-            if ($package === null || version_compare((string) $package['version'], $currentVersion, '<=')) {
+            if ($package === null) {
+                continue;
+            }
+            if (version_compare((string) $package['version'], $currentVersion, '<=')) {
+                $this->markAlreadyCurrent($package, $client, $currentVersion);
                 continue;
             }
             $this->recordOffer($package, $client, $currentVersion);
@@ -367,12 +371,51 @@ final class UpdateManager
                 continue;
             }
             $installedVersion = Security::cleanText($client[$versionField] ?? '', 32);
-            if ($installedVersion === '' || !Security::isValidVersion($installedVersion)
-                || version_compare((string) $package['version'], $installedVersion, '<=')) {
+            if ($installedVersion !== '' && Security::isValidVersion($installedVersion)
+                && version_compare((string) $package['version'], $installedVersion, '<=')) {
+                $this->markAlreadyCurrent($package, $client, $installedVersion);
                 continue;
             }
-            $this->recordOffer($package, $client, $installedVersion);
+            $fromVersion = $installedVersion !== '' && Security::isValidVersion($installedVersion)
+                ? $installedVersion
+                : '0.0.0';
+            $this->recordOffer($package, $client, $fromVersion);
+            if (empty($client['updater_version'])) {
+                $now = date('Y-m-d H:i:s');
+                $DB->update(self::INSTALLATIONS, [
+                    'status'      => 'error',
+                    'message'     => 'Atualizador automatico ausente. Execute o instalador unificado 1.4.0 uma vez neste computador.',
+                    'finished_at' => $now,
+                    'updated_at'  => $now,
+                ], [
+                    'update_packages_id' => (int) $package['id'],
+                    'clients_id'         => (int) $client['id'],
+                ]);
+            }
         }
+    }
+
+    private function markAlreadyCurrent(array $package, array $client, string $installedVersion): void
+    {
+        global $DB;
+
+        $this->recordOffer($package, $client, $installedVersion);
+        $where = [
+            'update_packages_id' => (int) $package['id'],
+            'clients_id'         => (int) $client['id'],
+        ];
+        $tracking = $DB->request(['FROM' => self::INSTALLATIONS, 'WHERE' => $where, 'LIMIT' => 1])->current();
+        if (is_array($tracking) && in_array((string) $tracking['status'], ['success', 'restart_required'], true)) {
+            return;
+        }
+        $now = date('Y-m-d H:i:s');
+        $DB->update(self::INSTALLATIONS, [
+            'from_version' => $installedVersion,
+            'status'       => 'success',
+            'message'      => 'A versao solicitada ja estava instalada; nenhuma alteracao foi necessaria.',
+            'finished_at'  => $now,
+            'updated_at'   => $now,
+        ], $where);
     }
 
     private function validateBinary(string $path, string $component): void

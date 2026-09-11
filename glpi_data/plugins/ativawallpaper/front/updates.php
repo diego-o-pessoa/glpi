@@ -18,10 +18,19 @@ foreach ($packages as &$package) {
     $package['released_by_name'] = !empty($package['released_by']) ? getUserName((int) $package['released_by']) : '';
 }
 unset($package);
+$focusPackage = null;
+foreach ($packages as $package) {
+    if (in_array((string) $package['release_stage'], ['pilot', 'all'], true)) {
+        $focusPackage = $package;
+        break;
+    }
+}
+$focusPackage ??= $packages[0] ?? null;
 
 Html::header('Atualizacoes - Ativa Wallpaper', '', 'admin', 'pluginativawallpapermenu', 'updates');
 TemplateRenderer::getInstance()->display('@ativawallpaper/updates.html.twig', [
     'packages'      => $packages,
+    'focus_package' => $focusPackage,
     'installations' => $manager->recentInstallations(),
     'can_configure' => Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, UPDATE),
     'urls'          => [

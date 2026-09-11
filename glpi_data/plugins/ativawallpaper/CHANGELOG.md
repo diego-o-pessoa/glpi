@@ -2,6 +2,12 @@
 
 ## Em desenvolvimento
 
+- Plugin 1.4.1 simplifica a aba **Atualizacoes** e adiciona um painel principal
+  com progresso automatico, resultado geral e motivos por computador.
+- Computadores que ja possuem a versao solicitada passam a contar como
+  concluidos; clientes antigos sem o atualizador indicam a necessidade do
+  instalador unificado 1.4.0.
+
 - Plugin e cliente 1.4.0 adicionam a aba **Atualizacoes** com upload privado,
   rascunho, liberacao piloto, promocao para todos e pausa.
 - Um atualizador separado roda como SYSTEM a cada minuto, valida tamanho e

@@ -31,6 +31,15 @@ function plugin_ativawallpaper_do_install(): bool
         $migration->addKey($clientsTable, ['rollout_id', 'rollout_status'], 'rollout');
         $migration->executeMigration();
 
+        $DB->doQuery(
+            "UPDATE `glpi_plugin_ativawallpaper_update_installations` AS `installation` "
+            . "INNER JOIN `glpi_plugin_ativawallpaper_clients` AS `client` ON `client`.`id` = `installation`.`clients_id` "
+            . "SET `installation`.`status` = 'error', "
+            . "`installation`.`message` = 'Atualizador automatico ausente. Execute o instalador unificado 1.4.0 uma vez neste computador.', "
+            . "`installation`.`finished_at` = NOW(), `installation`.`updated_at` = NOW() "
+            . "WHERE `installation`.`status` = 'offered' AND `client`.`updater_version` IS NULL"
+        );
+
         $storage = GLPI_PLUGIN_DOC_DIR . '/ativawallpaper';
         foreach ([$storage, $storage . '/wallpapers', $storage . '/thumbnails', $storage . '/updates', $storage . '/tmp'] as $directory) {
             if (!is_dir($directory) && !mkdir($directory, 0750, true) && !is_dir($directory)) {
