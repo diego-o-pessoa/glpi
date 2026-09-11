@@ -26,4 +26,13 @@ echo "Instalando/atualizando o plugin ${plugin_name}..."
 docker exec -u www-data glpi_web php /var/www/html/glpi/bin/console glpi:plugin:install "$plugin_name" --username=glpi --force
 docker exec -u www-data glpi_web php /var/www/html/glpi/bin/console glpi:plugin:activate "$plugin_name"
 
+echo "Limpando o cache do GLPI..."
+if ! docker exec -u www-data glpi_web php /var/www/html/glpi/bin/console cache:clear; then
+    echo "Ajustando permissoes do cache e dos logs antes de tentar novamente..."
+    docker exec -u root glpi_web chown -R www-data:www-data \
+        /var/www/html/glpi/files/_cache \
+        /var/www/html/glpi/files/_log
+    docker exec -u www-data glpi_web php /var/www/html/glpi/bin/console cache:clear
+fi
+
 echo "Atualizacao concluida sem reiniciar o banco."
