@@ -184,6 +184,16 @@ try {
             );
             break;
 
+        case 'update_delete':
+            Session::checkRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, UPDATE);
+            $redirect = $base . '/updates.php';
+            (new UpdateManager())->deletePackage(
+                (int) ($_POST['id'] ?? 0),
+                (int) Session::getLoginUserID()
+            );
+            Session::addMessageAfterRedirect('Pacote de atualizacao removido com sucesso.', true, INFO);
+            break;
+
         case 'bootstrap':
             Session::checkRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, UPDATE);
             $rotated = ConfigService::rotateRegistrationSecret();

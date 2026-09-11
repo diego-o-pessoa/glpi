@@ -151,6 +151,34 @@ final class UpdateManager
         return $this->findById($id) ?? $package;
     }
 
+    public function deletePackage(int $id, int $userId): void
+    {
+        global $DB;
+
+        $package = $this->findById($id);
+        if ($package === null) {
+            throw new RuntimeException('Pacote de atualizacao nao encontrado.');
+        }
+
+        $DB->beginTransaction();
+        try {
+            $DB->delete(self::INSTALLATIONS, ['update_packages_id' => $id]);
+            $DB->delete(self::PACKAGES, ['id' => $id]);
+            
+            $path = Storage::updatePath((string)$package['filename']);
+            @unlink($path);
+
+            Audit::record('update_package_delete', 'update_package', $id, null, [
+                'component' => $package['component'],
+                'version'   => $package['version'],
+            ]);
+            $DB->commit();
+        } catch (Throwable $exception) {
+            $DB->rollBack();
+            throw $exception;
+        }
+    }
+
     public function checkForUpdates(array $client, array $payload): array
     {
         global $DB;

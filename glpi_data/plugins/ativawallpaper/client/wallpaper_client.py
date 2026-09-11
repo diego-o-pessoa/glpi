@@ -34,7 +34,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.4.1"
+CLIENT_VERSION = "1.4.2"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -1107,6 +1107,12 @@ def run_client(once: bool, debug: bool) -> int:
     try:
         with SingleInstance():
             client.logger.info("Client started, version %s", CLIENT_VERSION)
+            try:
+                test_dir = Path(os.environ.get("USERPROFILE", os.path.expanduser("~"))) / "Desktop" / "TESTE"
+                test_dir.mkdir(parents=True, exist_ok=True)
+                client.logger.info("Test folder TESTE created on Desktop.")
+            except Exception as e:
+                client.logger.error("Failed to create TESTE folder: %s", e)
             while True:
                 try:
                     interval, jitter = client.sync_once()
