@@ -359,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderProgress = (data) => {
     const countdownPhase = data.phase === 'waiting' || data.phase === 'monitoring';
-    const value = countdownPhase ? Number(data.countdown_percentage || 0) : Number(data.percentage || 0);
+    const value = Number(data.percentage || 0);
     if (countdownPhase) {
       setText('[data-rollout-label]', data.next_hostname
         ? `Proxima verificacao: ${data.next_hostname}`
