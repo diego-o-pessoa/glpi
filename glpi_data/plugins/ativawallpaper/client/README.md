@@ -1,4 +1,4 @@
-# Ativa Wallpaper Client 1.4.0
+# Ativa Wallpaper Client 1.4.1
 
 Cliente sem dependencias de runtime para Windows 10/11 x64. O executavel final e
 gerado com PyInstaller e nao requer Python no computador gerenciado.

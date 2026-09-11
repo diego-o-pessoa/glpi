@@ -2,7 +2,7 @@
 
 ## Em desenvolvimento
 
-- Plugin 1.4.1 simplifica a aba **Atualizacoes** e adiciona um painel principal
+- Plugin e cliente 1.4.1 simplificam a aba **Atualizacoes** e adicionam um painel principal
   com progresso automatico, resultado geral e motivos por computador.
 - Computadores que ja possuem a versao solicitada passam a contar como
   concluidos; clientes antigos sem o atualizador indicam a necessidade do

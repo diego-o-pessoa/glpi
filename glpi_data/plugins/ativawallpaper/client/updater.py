@@ -110,11 +110,16 @@ def record_retry(update_id: int, failed: bool) -> int:
 
 
 def replace_wallpaper_client(staged: Path, version: str) -> str:
-    version_check = subprocess.run(
-        [str(staged), "--version"], check=False, capture_output=True, text=True, timeout=30,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
-    embedded_version = version_check.stdout.strip()
+    version_file = staged.with_name(staged.name + ".version")
+    version_file.unlink(missing_ok=True)
+    try:
+        version_check = subprocess.run(
+            [str(staged), "--version-file", str(version_file)], check=False, capture_output=True, timeout=30,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        embedded_version = version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else ""
+    finally:
+        version_file.unlink(missing_ok=True)
     if version_check.returncode != 0 or wc.compare_versions(embedded_version, version) != 0:
         raise wc.ClientError(
             "UPDATE_VERSION_MISMATCH",

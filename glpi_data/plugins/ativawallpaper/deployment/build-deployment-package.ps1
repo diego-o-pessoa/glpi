@@ -4,6 +4,7 @@ param(
     [string]$ClientExe,
     [Parameter(Mandatory = $true)]
     [string]$BootstrapConfig,
+    [string]$ClientVersion = "",
     [string]$OutputDirectory = ".\Ativa-Wallpaper-Client-Bootstrap"
 )
 
@@ -31,9 +32,16 @@ Copy-Item -LiteralPath $ExePath -Destination (Join-Path $OutputDirectory "AtivaW
 Copy-Item -LiteralPath $ConfigPath -Destination (Join-Path $OutputDirectory "bootstrap-config.json") -Force
 
 $ExeHash = Get-FileHash -Algorithm SHA512 (Join-Path $OutputDirectory "AtivaWallpaperClient.exe")
+$VersionFile = Join-Path (Split-Path -Parent $ExePath) "client-version.txt"
+if (-not $ClientVersion -and (Test-Path -LiteralPath $VersionFile)) {
+    $ClientVersion = (Get-Content -Raw -LiteralPath $VersionFile).Trim()
+}
+if ($ClientVersion -notmatch '^\d+\.\d+\.\d+$') {
+    throw "Nao foi possivel identificar a versao incorporada no Wallpaper Client."
+}
 $Manifest = @{
     package = "Ativa Wallpaper Client - Bootstrap"
-    client_version = "1.4.0"
+    client_version = $ClientVersion
     client_sha512 = $ExeHash.Hash
     install_command = 'AtivaWallpaperClient.exe --install --bootstrap-config "bootstrap-config.json"'
     generated_at = (Get-Date).ToString("o")

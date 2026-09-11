@@ -18,7 +18,7 @@ final class ApiConfigBuilder
             'poll_jitter_seconds'     => max(0, min(3600, (int) ($settings['poll_jitter_seconds'] ?? 10))),
             'force_reapply'           => (bool) ($client['force_reapply'] ?? false),
             'minimum_client_version'  => (string) ($settings['minimum_client_version'] ?? '1.0.0'),
-            'latest_client_version'   => (string) ($settings['latest_client_version'] ?? '1.4.0'),
+            'latest_client_version'   => (string) ($settings['latest_client_version'] ?? '1.4.1'),
         ];
 
         if ($enabled && $wallpaper !== null) {

@@ -91,6 +91,12 @@ def api_with_opener(opener: FakeOpener, token: str | None = "t" * 43):
 
 
 class ClientTests(unittest.TestCase):
+    def test_version_can_be_written_without_a_console(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "version.txt"
+            self.assertEqual(wc.main(["--version-file", str(destination)]), 0)
+            self.assertEqual(destination.read_text(encoding="utf-8").strip(), wc.CLIENT_VERSION)
+
     @unittest.skipUnless(wc.os.name == "nt", "Windows named mutex test")
     def test_single_instance_mutex_rejects_second_process(self):
         original_user_key = wc.user_key

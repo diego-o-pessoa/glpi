@@ -130,7 +130,7 @@ Exemplo de registro:
 {
   "hostname": "DESKTOP-R1C8ICN",
   "machine_guid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-  "client_version": "1.4.0",
+  "client_version": "1.4.1",
   "registration_secret": "valor-do-bootstrap"
 }
 ```

@@ -34,7 +34,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.4.0"
+CLIENT_VERSION = "1.4.1"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -1148,6 +1148,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--uninstall", action="store_true", help="Uninstall the client")
     mode.add_argument("--once", action="store_true", help="Run one synchronization and exit")
     parser.add_argument("--version", action="store_true", help="Show client version and exit")
+    parser.add_argument("--version-file", help=argparse.SUPPRESS)
     parser.add_argument("--debug", action="store_true", help="Also write logs to the console")
     parser.add_argument("--server", help="HTTPS base URL of the v1 API (installation only)")
     parser.add_argument("--registration-secret", help="Bootstrap secret (prefer --bootstrap-config)")
@@ -1164,6 +1165,9 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(raw_args)
     if args.version:
         print(CLIENT_VERSION)
+        return 0
+    if args.version_file:
+        Path(args.version_file).write_text(CLIENT_VERSION + "\n", encoding="utf-8")
         return 0
     try:
         if args.install:

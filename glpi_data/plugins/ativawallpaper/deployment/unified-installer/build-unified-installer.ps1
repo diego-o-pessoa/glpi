@@ -26,6 +26,7 @@ $AgentMsi = Join-Path $CacheDirectory "GLPI-Agent-$AgentVersion-x64.msi"
 $ClientBuildScript = Join-Path $PluginRoot "client\build-client.ps1"
 $ClientExe = Join-Path $PluginRoot "client\dist\AtivaWallpaperClient.exe"
 $UpdaterExe = Join-Path $PluginRoot "client\dist\AtivaWallpaperUpdater.exe"
+$ClientVersionFile = Join-Path $PluginRoot "client\dist\client-version.txt"
 $IssFile = Join-Path $ScriptRoot "AtivaGLPIAgent.iss"
 $ExpectedWallpaperApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1"
 $ExpectedAgentServer = "https://chamados.ativalocacao.com.br:8443/marketplace/glpiinventory/"
@@ -150,8 +151,6 @@ if ($AllComputers) {
 } elseif (-not $Bootstrap.pilot_hostname) {
     throw "Informe -AllComputers para gerar um instalador sem restricao de hostname."
 }
-$Bootstrap.client_version = "1.4.0"
-
 New-Item -ItemType Directory -Force -Path $CacheDirectory, $OutputPath | Out-Null
 if (-not (Test-Path -LiteralPath $AgentMsi)) {
     $AgentDownloadUrl = "https://github.com/glpi-project/glpi-agent/releases/download/$AgentVersion/GLPI-Agent-$AgentVersion-x64.msi"
@@ -187,6 +186,15 @@ Write-Host "Compilando AtivaWallpaperClient.exe..."
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $ClientExe) -or -not (Test-Path -LiteralPath $UpdaterExe)) {
     throw "Falha ao compilar o cliente ou o atualizador automatico."
 }
+if (-not (Test-Path -LiteralPath $ClientVersionFile)) {
+    throw "O build nao gerou client-version.txt."
+}
+$ClientVersion = (Get-Content -Raw -LiteralPath $ClientVersionFile).Trim()
+if ($ClientVersion -notmatch '^\d+\.\d+\.\d+$') {
+    throw "Nao foi possivel identificar a versao incorporada no Wallpaper Client."
+}
+$BundleVersion = $ClientVersion
+$Bootstrap.client_version = $ClientVersion
 
 $Iscc = Find-InnoSetupCompiler
 if (-not $Iscc -and ($InstallInnoSetup -or $InstallBuildTools)) {
@@ -205,7 +213,7 @@ if (-not $Iscc) {
 $TemporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $WorkingDirectory = Join-Path $TemporaryRoot ("AtivaUnifiedInstaller-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $WorkingDirectory | Out-Null
-$Installer = Join-Path $OutputPath "Ativa-GLPI-Agent-Setup-1.4.0.exe"
+$Installer = Join-Path $OutputPath "Ativa-GLPI-Agent-Setup-$BundleVersion.exe"
 try {
     $PreparedBootstrap = Join-Path $WorkingDirectory "bootstrap-config.json"
     $CompilerOutput = Join-Path $WorkingDirectory "output"
@@ -224,7 +232,7 @@ try {
         "/DWallpaperUpdaterPath=$UpdaterExe" `
         "/DBootstrapConfigPath=$PreparedBootstrap" `
         "/DBuildOutputDir=$CompilerOutput" `
-        "/DBundleVersion=1.4.0" `
+        "/DBundleVersion=$BundleVersion" `
         "/DAgentVersion=$AgentVersion" `
         "/DAgentServerUrl=$AgentServerUrl" `
         $IssFile
@@ -247,12 +255,12 @@ try {
 if (-not (Test-Path -LiteralPath $Installer)) {
     throw "O instalador nao foi gerado em $Installer"
 }
-$ClientUpdatePackage = Join-Path $OutputPath "AtivaWallpaperClient-1.4.0.exe"
+$ClientUpdatePackage = Join-Path $OutputPath "AtivaWallpaperClient-$ClientVersion.exe"
 $AgentUpdatePackage = Join-Path $OutputPath "GLPI-Agent-$AgentVersion-x64.msi"
 Copy-Item -LiteralPath $ClientExe -Destination $ClientUpdatePackage -Force
 Copy-Item -LiteralPath $AgentMsi -Destination $AgentUpdatePackage -Force
 $Manifest = [ordered]@{
-    bundle_version = "1.4.0"
+    bundle_version = $BundleVersion
     glpi_agent_version = $AgentVersion
     glpi_agent_server = $AgentServerUrl
     glpi_agent_sha256 = (Get-FileHash -LiteralPath $AgentMsi -Algorithm SHA256).Hash
@@ -263,7 +271,7 @@ $Manifest = [ordered]@{
     update_packages = @(
         [ordered]@{
             component = "wallpaper_client"
-            version = "1.4.0"
+            version = $ClientVersion
             file = (Split-Path -Leaf $ClientUpdatePackage)
             sha256 = (Get-FileHash -LiteralPath $ClientUpdatePackage -Algorithm SHA256).Hash
         },
@@ -276,7 +284,7 @@ $Manifest = [ordered]@{
     )
     generated_at = (Get-Date).ToString("o")
 }
-$ManifestPath = Join-Path $OutputPath "Ativa-GLPI-Agent-Setup-1.4.0.manifest.json"
+$ManifestPath = Join-Path $OutputPath "Ativa-GLPI-Agent-Setup-$BundleVersion.manifest.json"
 [IO.File]::WriteAllText($ManifestPath, ($Manifest | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
 
 Write-Host "Instalador gerado: $Installer"
