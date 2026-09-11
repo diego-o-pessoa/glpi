@@ -29,6 +29,8 @@ function plugin_ativaupdater_do_install(): bool
         require_once PLUGIN_ATIVAUPDATER_DIR . '/inc/profile.class.php';
         PluginAtivaupdaterProfile::installRights();
 
+        $migration->executeMigration();
+
     } catch (Throwable $exception) {
         $migration->displayMessage('Falha na instalacao: ' . $exception->getMessage());
         return false;

@@ -1,0 +1,14 @@
+{
+  "name": "ativalocacao/glpi-ativaupdater",
+  "description": "Distribuição do instalador unificado",
+  "type": "glpi-plugin",
+  "license": "GPL-3.0-or-later",
+  "require": {
+    "php": ">=8.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "GlpiPlugin\\Ativaupdater\\": "src/"
+    }
+  }
+}
