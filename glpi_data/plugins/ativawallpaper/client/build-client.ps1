@@ -30,10 +30,26 @@ if ($LASTEXITCODE -ne 0) {
     --specpath $BuildDir `
     (Join-Path $ClientDir "wallpaper_client.py")
 
+& $VenvPython -m PyInstaller `
+    --noconfirm `
+    --clean `
+    --onefile `
+    --noconsole `
+    --name "AtivaWallpaperUpdater" `
+    --distpath $DistDir `
+    --workpath $BuildDir `
+    --specpath $BuildDir `
+    --paths $ClientDir `
+    (Join-Path $ClientDir "updater.py")
+
 $Exe = Join-Path $DistDir "AtivaWallpaperClient.exe"
-if (-not (Test-Path $Exe)) {
-    throw "PyInstaller did not create $Exe"
+$UpdaterExe = Join-Path $DistDir "AtivaWallpaperUpdater.exe"
+if (-not (Test-Path $Exe) -or -not (Test-Path $UpdaterExe)) {
+    throw "PyInstaller nao gerou o cliente e o atualizador esperados."
 }
 $Hash = Get-FileHash -Algorithm SHA256 $Exe
+$UpdaterHash = Get-FileHash -Algorithm SHA256 $UpdaterExe
 Write-Host "Built: $Exe"
 Write-Host "SHA-256: $($Hash.Hash)"
+Write-Host "Built: $UpdaterExe"
+Write-Host "SHA-256: $($UpdaterHash.Hash)"

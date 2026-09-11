@@ -8,6 +8,7 @@
       <a class="btn btn-primary" href="{{ urls.dashboard }}"><i class="ti ti-dashboard me-1"></i>Dashboard</a>
       <a class="btn btn-outline-secondary" href="{{ urls.history }}"><i class="ti ti-history me-1"></i>Historico</a>
       <a class="btn btn-outline-secondary" href="{{ urls.events }}"><i class="ti ti-shield-check me-1"></i>Alteracoes</a>
+      {% if rights.config %}<a class="btn btn-outline-secondary" href="{{ urls.updates }}"><i class="ti ti-cloud-download me-1"></i>Atualizacoes</a>{% endif %}
       {% if rights.config %}<a class="btn btn-outline-secondary" href="{{ urls.settings }}"><i class="ti ti-settings me-1"></i>Configuracoes</a>{% endif %}
     </nav>
   </div>

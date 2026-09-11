@@ -35,6 +35,97 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  const updateMonitor = document.querySelector('[data-ativa-update-monitor]');
+  if (updateMonitor) {
+    const componentLabels = { wallpaper_client: 'Wallpaper Client', glpi_agent: 'GLPI Agent' };
+    const statusLabels = {
+      offered: ['Oferecida', 'secondary'], downloading: ['Baixando', 'info'],
+      installing: ['Instalando', 'primary'], success: ['Atualizado', 'success'],
+      error: ['Erro', 'danger'], restart_required: ['Reinicio necessario', 'warning'],
+    };
+    const fillInstallations = (items) => {
+      const body = updateMonitor.querySelector('[data-update-installations]');
+      if (!body) return;
+      body.replaceChildren();
+      if (!items.length) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 6;
+        cell.className = 'text-center text-muted py-5';
+        cell.textContent = 'Nenhuma atualizacao oferecida aos clientes.';
+        row.append(cell);
+        body.append(row);
+        return;
+      }
+      items.forEach((item) => {
+        const row = document.createElement('tr');
+        const values = [item.hostname, componentLabels[item.component] || item.component];
+        values.forEach((value, index) => {
+          const cell = document.createElement('td');
+          if (index === 0) {
+            const strong = document.createElement('strong');
+            strong.textContent = value;
+            cell.append(strong);
+          } else cell.textContent = value;
+          row.append(cell);
+        });
+        const version = document.createElement('td');
+        version.textContent = `${item.from_version || '-'} → ${item.to_version}`;
+        row.append(version);
+        const status = document.createElement('td');
+        const badge = document.createElement('span');
+        const definition = statusLabels[item.status] || [item.status, 'secondary'];
+        badge.className = `badge bg-${definition[1]}`;
+        badge.textContent = definition[0];
+        status.append(badge);
+        row.append(status);
+        const updated = document.createElement('td');
+        updated.textContent = item.updated_at || '-';
+        row.append(updated);
+        const message = document.createElement('td');
+        message.className = 'ativa-error';
+        message.textContent = item.message || '-';
+        message.title = item.message || '';
+        row.append(message);
+        body.append(row);
+      });
+    };
+    const refreshUpdates = async () => {
+      try {
+        const response = await fetch(updateMonitor.dataset.progressUrl, {
+          credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        (Array.isArray(data.packages) ? data.packages : []).forEach((item) => {
+          const row = updateMonitor.querySelector(`[data-update-package="${Number(item.id)}"]`);
+          if (!row || !item.summary) return;
+          const set = (selector, value) => { const element = row.querySelector(selector); if (element) element.textContent = String(value); };
+          set('[data-update-offered]', item.summary.offered || 0);
+          set('[data-update-installing]', Number(item.summary.downloading || 0) + Number(item.summary.installing || 0));
+          set('[data-update-success]', item.summary.success || 0);
+          set('[data-update-error]', item.summary.error || 0);
+          set('[data-update-restart]', item.summary.restart_required || 0);
+          set('[data-update-percentage]', `${Number(item.summary.percentage || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`);
+          const bar = row.querySelector('[data-update-bar]');
+          if (bar) {
+            bar.style.width = `${Number(item.summary.percentage || 0)}%`;
+            bar.closest('[role="progressbar"]')?.setAttribute('aria-valuenow', String(item.summary.percentage || 0));
+          }
+        });
+        fillInstallations(Array.isArray(data.installations) ? data.installations : []);
+        const refreshed = updateMonitor.querySelector('[data-update-last-refresh]');
+        if (refreshed) refreshed.textContent = `Atualizado automaticamente em ${new Date().toLocaleTimeString('pt-BR')}. Proxima consulta em 3 segundos.`;
+      } catch (error) {
+        const refreshed = updateMonitor.querySelector('[data-update-last-refresh]');
+        if (refreshed) refreshed.textContent = `Falha temporaria no monitoramento: ${error.message}.`;
+      } finally {
+        window.setTimeout(refreshUpdates, 3000);
+      }
+    };
+    window.setTimeout(refreshUpdates, 500);
+  }
+
   const rollout = document.querySelector('[data-ativa-rollout]');
   if (!rollout) return;
 

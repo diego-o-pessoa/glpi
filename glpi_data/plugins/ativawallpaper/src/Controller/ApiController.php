@@ -12,6 +12,7 @@ use GlpiPlugin\Ativawallpaper\ConfigService;
 use GlpiPlugin\Ativawallpaper\RateLimiter;
 use GlpiPlugin\Ativawallpaper\Security;
 use GlpiPlugin\Ativawallpaper\Storage;
+use GlpiPlugin\Ativawallpaper\UpdateManager;
 use GlpiPlugin\Ativawallpaper\WallpaperManager;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -166,6 +167,66 @@ final class ApiController extends AbstractController
                 'status'          => 'accepted',
                 'server_time_utc' => gmdate('c'),
             ], 202);
+        });
+    }
+
+    #[Route('/api/v1/updates/check', name: 'ativawallpaper_api_updates_check', methods: ['POST'])]
+    public function updatesCheck(Request $request): Response
+    {
+        return $this->guard(function () use ($request): Response {
+            $this->requireHttps($request);
+            $client = $this->authenticatedClient($request);
+            (new RateLimiter())->consume('updates-check:' . $client['id'], 30, 300);
+            return $this->json([
+                'updates'         => (new UpdateManager())->checkForUpdates($client, $this->jsonBody($request)),
+                'check_after'     => 60,
+                'server_time_utc' => gmdate('c'),
+            ]);
+        });
+    }
+
+    #[Route('/api/v1/updates/status', name: 'ativawallpaper_api_updates_status', methods: ['POST'])]
+    public function updatesStatus(Request $request): Response
+    {
+        return $this->guard(function () use ($request): Response {
+            $this->requireHttps($request);
+            $client = $this->authenticatedClient($request);
+            (new RateLimiter())->consume('updates-status:' . $client['id'], 120, 300);
+            (new UpdateManager())->reportStatus($client, $this->jsonBody($request));
+            return $this->json(['status' => 'accepted', 'server_time_utc' => gmdate('c')], 202);
+        });
+    }
+
+    #[Route(
+        '/api/v1/updates/{id}/download',
+        name: 'ativawallpaper_api_updates_download',
+        requirements: ['id' => '\\d+'],
+        methods: ['GET']
+    )]
+    public function updateDownload(Request $request, int $id): Response
+    {
+        return $this->guard(function () use ($request, $id): Response {
+            $this->requireHttps($request);
+            $client = $this->authenticatedClient($request);
+            (new RateLimiter())->consume('updates-download:' . $client['id'], 10, 300);
+            $package = (new UpdateManager())->findDownloadForClient($id, $client);
+            if ($package === null) {
+                throw new ApiException('Atualizacao nao encontrada ou nao liberada para este computador', 404, 'UPDATE_NOT_AVAILABLE');
+            }
+            $path = Storage::updatePath((string) $package['filename']);
+            if (!is_file($path) || !is_readable($path)) {
+                throw new ApiException('Arquivo de atualizacao indisponivel', 503, 'UPDATE_FILE_UNAVAILABLE');
+            }
+            $response = new BinaryFileResponse($path);
+            $response->headers->set('Content-Type', 'application/octet-stream');
+            $extension = $package['component'] === 'wallpaper_client' ? 'exe' : 'msi';
+            $downloadName = ($package['component'] === 'wallpaper_client' ? 'AtivaWallpaperClient-' : 'GLPI-Agent-')
+                . $package['version'] . '.' . $extension;
+            $response->headers->set('Content-Disposition', 'attachment; filename="' . $downloadName . '"');
+            $response->headers->set('Cache-Control', 'private, no-store');
+            $response->headers->set('X-Content-Type-Options', 'nosniff');
+            $response->setEtag((string) $package['sha256']);
+            return $response;
         });
     }
 

@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_clients` (
   `check_interval_seconds` int unsigned DEFAULT NULL,
   `last_cycle_action` varchar(32) DEFAULT NULL,
   `last_cycle_at` datetime DEFAULT NULL,
+  `glpi_agent_version` varchar(32) DEFAULT NULL,
+  `updater_version` varchar(32) DEFAULT NULL,
+  `last_update_check` datetime DEFAULT NULL,
   `last_apply` datetime DEFAULT NULL,
   `last_error_code` varchar(64) DEFAULT NULL,
   `last_error` varchar(1000) DEFAULT NULL,
@@ -61,6 +64,48 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_clients` (
   KEY `last_check` (`last_check`),
   KEY `next_check_at` (`next_check_at`),
   KEY `rollout` (`rollout_id`,`rollout_status`),
+  KEY `updated_at` (`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
+
+CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_update_packages` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `component` varchar(32) NOT NULL,
+  `version` varchar(32) NOT NULL,
+  `filename` varchar(255) NOT NULL,
+  `original_filename` varchar(255) NOT NULL,
+  `mime_type` varchar(128) NOT NULL,
+  `filesize` bigint unsigned NOT NULL,
+  `sha256` char(64) NOT NULL,
+  `release_stage` varchar(16) NOT NULL DEFAULT 'draft',
+  `pilot_hostname` varchar(255) DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `created_by` int unsigned NOT NULL DEFAULT '0',
+  `released_at` datetime DEFAULT NULL,
+  `released_by` int unsigned DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `component_version` (`component`,`version`),
+  KEY `component_stage` (`component`,`release_stage`),
+  KEY `created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
+
+CREATE TABLE IF NOT EXISTS `glpi_plugin_ativawallpaper_update_installations` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `update_packages_id` int unsigned NOT NULL,
+  `clients_id` int unsigned NOT NULL,
+  `hostname` varchar(255) NOT NULL,
+  `component` varchar(32) NOT NULL,
+  `from_version` varchar(32) DEFAULT NULL,
+  `to_version` varchar(32) NOT NULL,
+  `status` varchar(24) NOT NULL DEFAULT 'offered',
+  `message` varchar(1000) DEFAULT NULL,
+  `offered_at` datetime NOT NULL,
+  `started_at` datetime DEFAULT NULL,
+  `finished_at` datetime DEFAULT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `package_client` (`update_packages_id`,`clients_id`),
+  KEY `client_status` (`clients_id`,`status`),
+  KEY `component_status` (`component`,`status`),
   KEY `updated_at` (`updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 

@@ -148,7 +148,7 @@ class ClientTests(unittest.TestCase):
                 "hostname": "PC-01",
                 "machine_guid": "guid-12345678",
                 "username": "test",
-                "client_version": "1.3.0",
+                "client_version": "1.4.0",
                 "os_version": "Windows 11",
             }
             wc.atomic_write_json(client.state_path, {"last_cycle_action": "already_current"})
@@ -264,7 +264,7 @@ class ClientTests(unittest.TestCase):
                 policy_function=lambda lock, path, style, _state: policies.append((lock, path, style)),
                 current_function=lambda *_args: True,
             )
-            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.3.0", "os_version": "Windows 11"}
+            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.4.0", "os_version": "Windows 11"}
             wc.atomic_write_json(client.state_path, {
                 "wallpaper_version": "20260908-001",
                 "config_revision": "revision-1",
@@ -306,7 +306,7 @@ class ClientTests(unittest.TestCase):
                 policy_function=lambda lock, path, style, _state: policies.append((lock, path, style)),
                 current_function=lambda *_args: False,
             )
-            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.3.0", "os_version": "Windows 11"}
+            client.identity = lambda: {"hostname": "PC-01", "machine_guid": "guid-12345678", "username": "test", "client_version": "1.4.0", "os_version": "Windows 11"}
             wc.atomic_write_json(client.state_path, {
                 "wallpaper_version": "20260908-001",
                 "sha256": digest,
@@ -379,6 +379,21 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(destination.read_bytes(), b"previous")
             self.assertFalse(destination.with_name(destination.name + ".part").exists())
 
+    def test_binary_download_accepts_update_content_type_and_larger_limit(self):
+        content = b"MZ" + (b"x" * 1024)
+        api = api_with_opener(FakeOpener(FakeResponse(content, content_type="application/octet-stream")))
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "client.exe"
+            api.download(
+                api.server + "/updates/7/download",
+                destination,
+                hashlib.sha256(content).hexdigest(),
+                len(content),
+                maximum_bytes=250 * 1024 * 1024,
+                allowed_content_types=("application/octet-stream",),
+            )
+            self.assertEqual(destination.read_bytes(), content)
+
     def test_api_parses_json_and_sends_compatible_token_headers(self):
         response = FakeResponse(json.dumps({"enabled": False}).encode())
         opener = FakeOpener(response)
@@ -388,6 +403,19 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(etag, "fake-etag")
         self.assertEqual(opener.requests[0].get_header("Authorization"), "Bearer " + "t" * 43)
         self.assertEqual(opener.requests[0].get_header("X-ativa-client-token"), "t" * 43)
+
+    def test_api_checks_and_reports_updates(self):
+        check_response = FakeResponse(json.dumps({"updates": [{"id": 7, "component": "wallpaper_client"}]}).encode())
+        check_opener = FakeOpener(check_response)
+        api = api_with_opener(check_opener)
+        updates = api.check_updates({"wallpaper_client_version": "1.4.0"})
+        self.assertEqual(updates[0]["id"], 7)
+        self.assertTrue(check_opener.requests[0].full_url.endswith("/updates/check"))
+
+        status_opener = FakeOpener(FakeResponse(b"{}", status=202))
+        api = api_with_opener(status_opener)
+        api.report_update({"update_id": 7, "status": "success"})
+        self.assertTrue(status_opener.requests[0].full_url.endswith("/updates/status"))
 
     def test_api_rejects_html_instead_of_json(self):
         api = api_with_opener(FakeOpener(FakeResponse(b"<!DOCTYPE html>", content_type="text/html")))

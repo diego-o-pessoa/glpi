@@ -1,7 +1,7 @@
 # Instalador unificado Ativa GLPI Agent
 
-Gera um unico `Ativa-GLPI-Agent-Setup-1.3.0.exe` para Windows x64 contendo o MSI
-oficial do GLPI Agent e o Ativa Wallpaper Client.
+Gera um unico `Ativa-GLPI-Agent-Setup-1.4.0.exe` para Windows x64 contendo o MSI
+oficial do GLPI Agent, o Ativa Wallpaper Client e o Ativa Wallpaper Updater.
 
 O instalador configura o GLPI Agent como servico com:
 
@@ -17,6 +17,13 @@ O instalador configura o GLPI Agent como servico com:
 Depois instala e registra o cliente de wallpaper. Quando existe um usuario
 interativo, tenta aplicar o wallpaper ainda durante o setup. Em instalacoes por
 SYSTEM sem sessao interativa, o cliente aplica no proximo login.
+
+Tambem cria a tarefa **Ativa Wallpaper Updater**, executada como SYSTEM a cada
+minuto. Ela atualiza Client e Agent sem reutilizar o segredo de bootstrap.
+
+Este instalador 1.4.0 deve ser executado uma vez nos computadores que ainda usam
+uma versao anterior. A partir dai, novos EXEs do Client e MSIs do Agent podem ser
+publicados diretamente na aba **Atualizacoes** do plugin.
 
 ## Gerar com dois cliques
 
@@ -55,8 +62,10 @@ compila o cliente de wallpaper, instala o Inno Setup via winget quando preciso e
 gera em `dist`:
 
 ```text
-Ativa-GLPI-Agent-Setup-1.3.0.exe
-Ativa-GLPI-Agent-Setup-1.3.0.manifest.json
+Ativa-GLPI-Agent-Setup-1.4.0.exe
+Ativa-GLPI-Agent-Setup-1.4.0.manifest.json
+AtivaWallpaperClient-1.4.0.exe
+GLPI-Agent-1.19-x64.msi
 ```
 
 Sem `-AllComputers`, o hostname piloto presente no JSON e preservado. Com essa
@@ -68,13 +77,13 @@ corporativo correto.
 Interativo:
 
 ```powershell
-.\Ativa-GLPI-Agent-Setup-1.3.0.exe
+.\Ativa-GLPI-Agent-Setup-1.4.0.exe
 ```
 
 Silencioso:
 
 ```text
-Ativa-GLPI-Agent-Setup-1.3.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+Ativa-GLPI-Agent-Setup-1.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ```
 
 O MSI oficial permanece assinado e nao e alterado. O bootstrapper gerado nao e

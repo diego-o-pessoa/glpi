@@ -20,6 +20,7 @@
       <a class="btn btn-outline-secondary" href="{{ urls.dashboard }}">Dashboard</a>
       <a class="btn btn-outline-secondary" href="{{ urls.history }}">Historico</a>
       <a class="btn btn-primary" href="{{ urls.events }}">Alteracoes</a>
+      {% if can_config %}<a class="btn btn-outline-secondary" href="{{ urls.updates }}">Atualizacoes</a>{% endif %}
       {% if can_config %}<a class="btn btn-outline-secondary" href="{{ urls.settings }}">Configuracoes</a>{% endif %}
     </nav>
   </div>

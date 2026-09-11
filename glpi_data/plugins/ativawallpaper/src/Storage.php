@@ -8,7 +8,7 @@ use RuntimeException;
 
 final class Storage
 {
-    private const DIRECTORIES = ['wallpapers', 'thumbnails', 'tmp'];
+    private const DIRECTORIES = ['wallpapers', 'thumbnails', 'updates', 'tmp'];
 
     public static function root(): string
     {
@@ -50,6 +50,14 @@ final class Storage
     public static function temporaryPath(string $suffix = '.tmp'): string
     {
         return self::safePath(self::root() . '/tmp', bin2hex(random_bytes(20)) . $suffix);
+    }
+
+    public static function updatePath(string $internalFilename): string
+    {
+        if (preg_match('/^[a-f0-9]{48}\.(?:exe|msi)$/', $internalFilename) !== 1) {
+            throw new RuntimeException('Nome interno do pacote de atualizacao invalido.');
+        }
+        return self::root() . '/updates/' . $internalFilename;
     }
 
     private static function safePath(string $directory, string $filename): string

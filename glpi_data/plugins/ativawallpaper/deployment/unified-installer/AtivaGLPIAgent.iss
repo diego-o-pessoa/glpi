@@ -4,6 +4,9 @@
 #ifndef WallpaperClientPath
   #error WallpaperClientPath is required
 #endif
+#ifndef WallpaperUpdaterPath
+  #error WallpaperUpdaterPath is required
+#endif
 #ifndef BootstrapConfigPath
   #error BootstrapConfigPath is required
 #endif
@@ -11,7 +14,7 @@
   #error BuildOutputDir is required
 #endif
 #ifndef BundleVersion
-  #define BundleVersion "1.3.0"
+  #define BundleVersion "1.4.0"
 #endif
 #ifndef AgentVersion
   #define AgentVersion "1.19"
@@ -45,6 +48,7 @@ RestartApplications=no
 [Files]
 Source: "{#AgentMsiPath}"; DestDir: "{tmp}"; DestName: "GLPI-Agent-{#AgentVersion}-x64.msi"; Flags: deleteafterinstall ignoreversion
 Source: "{#WallpaperClientPath}"; DestDir: "{tmp}"; DestName: "AtivaWallpaperClient.exe"; Flags: deleteafterinstall ignoreversion
+Source: "{#WallpaperUpdaterPath}"; DestDir: "{commonappdata}\AtivaLocacao\Wallpaper"; DestName: "AtivaWallpaperUpdater.exe"; Flags: ignoreversion
 Source: "{#BootstrapConfigPath}"; DestDir: "{tmp}"; DestName: "bootstrap-config.json"; Flags: deleteafterinstall ignoreversion
 
 [Code]
@@ -91,6 +95,8 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   AgentMsi: String;
   AgentParameters: String;
+  UpdaterPath: String;
+  TaskParameters: String;
 begin
   if CurStep <> ssPostInstall then
     exit;
@@ -111,6 +117,19 @@ begin
     'Instalando e registrando o cliente de wallpaper...',
     ExpandConstant('{tmp}\AtivaWallpaperClient.exe'),
     '--install --bootstrap-config "' + ExpandConstant('{tmp}\bootstrap-config.json') + '"'
+  );
+  UpdaterPath := ExpandConstant('{commonappdata}\AtivaLocacao\Wallpaper\AtivaWallpaperUpdater.exe');
+  TaskParameters := '/Create /TN "Ativa Wallpaper Updater" /SC MINUTE /MO 1 /RU SYSTEM /RL HIGHEST /F /TR "' +
+    UpdaterPath + ' --check"';
+  RunRequired(
+    'Configurando atualizacoes automaticas...',
+    ExpandConstant('{sys}\schtasks.exe'),
+    TaskParameters
+  );
+  RunRequired(
+    'Iniciando verificacao de atualizacoes...',
+    ExpandConstant('{sys}\schtasks.exe'),
+    '/Run /TN "Ativa Wallpaper Updater"'
   );
   StartForInteractiveUser();
 end;

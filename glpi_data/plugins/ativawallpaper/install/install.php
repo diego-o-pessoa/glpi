@@ -20,6 +20,9 @@ function plugin_ativawallpaper_do_install(): bool
         $migration->addField($clientsTable, 'check_interval_seconds', 'int unsigned DEFAULT NULL', ['after' => 'next_check_at']);
         $migration->addField($clientsTable, 'last_cycle_action', 'varchar(32) DEFAULT NULL', ['after' => 'check_interval_seconds']);
         $migration->addField($clientsTable, 'last_cycle_at', 'datetime DEFAULT NULL', ['after' => 'last_cycle_action']);
+        $migration->addField($clientsTable, 'glpi_agent_version', 'varchar(32) DEFAULT NULL', ['after' => 'last_cycle_at']);
+        $migration->addField($clientsTable, 'updater_version', 'varchar(32) DEFAULT NULL', ['after' => 'glpi_agent_version']);
+        $migration->addField($clientsTable, 'last_update_check', 'datetime DEFAULT NULL', ['after' => 'updater_version']);
         $migration->addKey($clientsTable, ['next_check_at'], 'next_check_at');
         $migration->addField($clientsTable, 'rollout_id', 'varchar(64) DEFAULT NULL', ['after' => 'force_reapply']);
         $migration->addField($clientsTable, 'rollout_status', 'varchar(16) DEFAULT NULL', ['after' => 'rollout_id']);
@@ -29,7 +32,7 @@ function plugin_ativawallpaper_do_install(): bool
         $migration->executeMigration();
 
         $storage = GLPI_PLUGIN_DOC_DIR . '/ativawallpaper';
-        foreach ([$storage, $storage . '/wallpapers', $storage . '/thumbnails', $storage . '/tmp'] as $directory) {
+        foreach ([$storage, $storage . '/wallpapers', $storage . '/thumbnails', $storage . '/updates', $storage . '/tmp'] as $directory) {
             if (!is_dir($directory) && !mkdir($directory, 0750, true) && !is_dir($directory)) {
                 throw new RuntimeException('Nao foi possivel criar o diretorio privado do plugin.');
             }
@@ -43,8 +46,8 @@ function plugin_ativawallpaper_do_install(): bool
             $upgradeSettings['poll_interval_seconds'] = '60';
             $upgradeSettings['poll_jitter_seconds'] = '10';
         }
-        if (version_compare(ConfigService::get('latest_client_version'), '1.3.0', '<')) {
-            $upgradeSettings['latest_client_version'] = '1.3.0';
+        if (version_compare(ConfigService::get('latest_client_version'), '1.4.0', '<')) {
+            $upgradeSettings['latest_client_version'] = '1.4.0';
         }
         if ($upgradeSettings !== []) {
             ConfigService::set($upgradeSettings);
@@ -86,6 +89,8 @@ function plugin_ativawallpaper_do_uninstall(): bool
     if (!$preserve) {
         foreach ([
             'glpi_plugin_ativawallpaper_rate_limits',
+            'glpi_plugin_ativawallpaper_update_installations',
+            'glpi_plugin_ativawallpaper_update_packages',
             'glpi_plugin_ativawallpaper_client_events',
             'glpi_plugin_ativawallpaper_audits',
             'glpi_plugin_ativawallpaper_clients',

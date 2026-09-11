@@ -34,10 +34,12 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.3.0"
+CLIENT_VERSION = "1.4.0"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
+UPDATER_EXECUTABLE_NAME = "AtivaWallpaperUpdater.exe"
+UPDATE_RESTART_FLAG = PRODUCT_DIR / "update-restart.flag"
 RUN_KEY = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE = "AtivaWallpaperClient"
 PRODUCT_KEY = r"SOFTWARE\AtivaLocacao\Wallpaper"
@@ -348,14 +350,34 @@ class ApiClient:
         if status != 202:
             raise ClientError("HEARTBEAT_REJECTED", f"Unexpected heartbeat response: {status}")
 
-    def download(self, url: str, destination: Path, expected_sha256: str, expected_size: int | None = None) -> None:
+    def check_updates(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        status, data, _ = self._json_request("POST", self.server + "/updates/check", payload)
+        if status != 200 or not isinstance(data, dict) or not isinstance(data.get("updates"), list):
+            raise ClientError("UPDATE_CHECK_REJECTED", f"Unexpected update check response: {status}")
+        return [item for item in data["updates"] if isinstance(item, dict)]
+
+    def report_update(self, payload: dict[str, Any]) -> None:
+        status, _, _ = self._json_request("POST", self.server + "/updates/status", payload)
+        if status != 202:
+            raise ClientError("UPDATE_STATUS_REJECTED", f"Unexpected update status response: {status}")
+
+    def download(
+        self,
+        url: str,
+        destination: Path,
+        expected_sha256: str,
+        expected_size: int | None = None,
+        *,
+        maximum_bytes: int = MAX_WALLPAPER_BYTES,
+        allowed_content_types: tuple[str, ...] = ("image/jpeg", "image/png"),
+    ) -> None:
         if SameOriginRedirectHandler._origin(url) != SameOriginRedirectHandler._origin(self.server):
             raise ClientError("UNSAFE_DOWNLOAD_URL", "Wallpaper download URL has a different origin", retriable=False)
         if not expected_sha256 or len(expected_sha256) != 64:
             raise ClientError("INVALID_SHA256", "Server supplied an invalid SHA-256", retriable=False)
-        maximum = MAX_WALLPAPER_BYTES
+        maximum = max(1, int(maximum_bytes))
         if expected_size is not None and (expected_size < 1 or expected_size > maximum):
-            raise ClientError("INVALID_FILESIZE", "Server supplied an invalid wallpaper size", retriable=False)
+            raise ClientError("INVALID_FILESIZE", "Server supplied an invalid file size", retriable=False)
 
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_name(destination.name + ".part")
@@ -365,18 +387,18 @@ class ApiClient:
         try:
             with self.opener.open(req, timeout=max(self.timeout, 60)) as response, temporary.open("wb") as handle:
                 content_type = str(response.headers.get("Content-Type", "")).split(";", 1)[0].lower()
-                if content_type not in ("image/jpeg", "image/png"):
-                    raise ClientError("INVALID_CONTENT_TYPE", "Wallpaper response is not a JPG or PNG")
+                if content_type not in allowed_content_types:
+                    raise ClientError("INVALID_CONTENT_TYPE", "Server returned an unexpected file type")
                 content_length = response.headers.get("Content-Length")
                 if content_length and int(content_length) > maximum:
-                    raise ClientError("DOWNLOAD_TOO_LARGE", "Wallpaper exceeds the client safety limit", retriable=False)
+                    raise ClientError("DOWNLOAD_TOO_LARGE", "Download exceeds the client safety limit", retriable=False)
                 while True:
                     chunk = response.read(1024 * 1024)
                     if not chunk:
                         break
                     total += len(chunk)
                     if total > maximum:
-                        raise ClientError("DOWNLOAD_TOO_LARGE", "Wallpaper exceeds the client safety limit", retriable=False)
+                        raise ClientError("DOWNLOAD_TOO_LARGE", "Download exceeds the client safety limit", retriable=False)
                     digest.update(chunk)
                     handle.write(chunk)
                 handle.flush()
@@ -384,14 +406,14 @@ class ApiClient:
             if expected_size is not None and total != expected_size:
                 raise ClientError("DOWNLOAD_INCOMPLETE", f"Expected {expected_size} bytes, received {total}")
             if not hmac.compare_digest(digest.hexdigest(), expected_sha256.lower()):
-                raise ClientError("HASH_MISMATCH", "Wallpaper SHA-256 does not match")
+                raise ClientError("HASH_MISMATCH", "Downloaded file SHA-256 does not match")
             os.replace(temporary, destination)
         except ClientError:
             _safe_unlink(temporary)
             raise
         except (error.HTTPError, error.URLError, TimeoutError, OSError, ValueError) as exc:
             _safe_unlink(temporary)
-            raise ClientError("DOWNLOAD_FAILED", f"Wallpaper download failed: {exc}") from exc
+            raise ClientError("DOWNLOAD_FAILED", f"File download failed: {exc}") from exc
 
 
 def _clean_etag(value: str | None) -> str | None:
@@ -998,6 +1020,20 @@ def _signal_stop() -> None:
         _kernel32.CloseHandle(handle)
 
 
+def _spawn_update_relauncher() -> None:
+    updater = PRODUCT_DIR / UPDATER_EXECUTABLE_NAME
+    if not updater.is_file():
+        return
+    try:
+        subprocess.Popen(
+            [str(updater), "--relaunch-client"],
+            close_fds=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except OSError:
+        pass
+
+
 def uninstall_client(remove_wallpaper: bool, debug: bool) -> None:
     ensure_supported_windows(True)
     if not is_admin():
@@ -1008,6 +1044,12 @@ def uninstall_client(remove_wallpaper: bool, debug: bool) -> None:
     (root / "uninstall.flag").touch(exist_ok=True)
     _signal_stop()
     time.sleep(2)
+    subprocess.run(
+        ["schtasks.exe", "/Delete", "/TN", "Ativa Wallpaper Updater", "/F"],
+        check=False,
+        capture_output=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
     assert winreg is not None
     try:
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, RUN_KEY, 0, winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE | winreg.KEY_WOW64_64KEY) as key:
@@ -1049,6 +1091,10 @@ def uninstall_client(remove_wallpaper: bool, debug: bool) -> None:
         movefile_delay_until_reboot = 0x4
         assert _kernel32 is not None
         _kernel32.MoveFileExW(str(executable), None, movefile_delay_until_reboot)
+    updater = root / UPDATER_EXECUTABLE_NAME
+    if updater.exists():
+        assert _kernel32 is not None
+        _kernel32.MoveFileExW(str(updater), None, 0x4)
     logger.info("Uninstall completed; executable deletion may finish at reboot")
 
 
@@ -1079,10 +1125,14 @@ def run_client(once: bool, debug: bool) -> int:
                 else:
                     client.report_heartbeat(wait_seconds)
                 if stop.wait(wait_seconds):
+                    updateRestart = UPDATE_RESTART_FLAG.exists()
+                    if updateRestart:
+                        _spawn_update_relauncher()
                     try:
-                        state = client.load_state()
-                        client.policy_function(False, None, "fill", state)
-                        atomic_write_json(client.state_path, state)
+                        if not updateRestart:
+                            state = client.load_state()
+                            client.policy_function(False, None, "fill", state)
+                            atomic_write_json(client.state_path, state)
                     except Exception:
                         client.logger.warning("Could not remove owned policy values while stopping", exc_info=debug)
                     client.logger.info("Stop requested")

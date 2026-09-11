@@ -1,4 +1,4 @@
-# Ativa Wallpaper 1.3.0
+# Ativa Wallpaper 1.4.0
 
 Plugin para GLPI 11 que publica wallpapers corporativos, registra clientes
 Windows e acompanha aplicacao, pendencia, erro e indisponibilidade. Nenhum
@@ -29,7 +29,7 @@ TLS e verificacao do certificado sao obrigatorios. URLs por IP sao rejeitadas.
 5. Verifique GLPI Inventory, endpoint e `taskscheduler`.
 6. Gere o bootstrap JSON e publique o wallpaper inicial.
 
-A instalacao cria apenas cinco tabelas com prefixo
+A instalacao cria apenas sete tabelas com prefixo
 `glpi_plugin_ativawallpaper_`, configuracoes no contexto
 `plugin:ativawallpaper`, direitos de perfil e uma acao automatica de
 reconciliacao. O core nao e alterado.
@@ -79,6 +79,25 @@ o cliente detectou a troca e restaurou o wallpaper corporativo.
 Desativar a distribuicao faz a API retornar `enabled: false`; nao apaga o
 wallpaper atual. O cliente remove somente bloqueios que ele proprio criou.
 
+## Atualizacoes automaticas
+
+Em **Atualizacoes**, envie o `AtivaWallpaperClient-<versao>.exe` ou o MSI
+oficial do GLPI Agent. O servidor valida tipo, tamanho e cabecalho binario do
+formato, calcula SHA-256 e cria o pacote como **Rascunho**. O envio nunca libera
+uma atualizacao automaticamente.
+
+Computadores instalados com uma versao anterior a 1.4.0 precisam executar uma
+unica vez o instalador unificado 1.4.0, pois ele cria a tarefa automatica. Depois
+desse primeiro rollout, as proximas versoes do Client e do Agent sao entregues
+pela aba **Atualizacoes**, sem gerar outro instalador completo.
+
+Libere primeiro para um hostname em **Piloto**. Depois da validacao, use
+**Liberar para todos**. A tarefa **Ativa Wallpaper Updater** roda como SYSTEM a
+cada minuto, baixa somente pacotes elegiveis por uma API autenticada, confirma
+tamanho e SHA-256, instala silenciosamente e informa o resultado ao painel. Uma
+maquina desligada recebe a atualizacao quando voltar. **Pausar** interrompe novas
+entregas sem desinstalar versoes ja aplicadas.
+
 ## Status
 
 - **Atualizado**: contato recente, ultimo status `success` e versao atual;
@@ -101,6 +120,9 @@ Todos os endpoints respondem JSON, exceto o download binario:
 - `POST /heartbeat` — bearer token, resultado do ciclo e horario exato da
   proxima sincronizacao;
 - `POST /status` e `POST /error` — bearer token e status sanitizado.
+- `POST /updates/check` — informa atualizacoes liberadas para o computador;
+- `GET /updates/{id}/download` — entrega autenticada com SHA-256;
+- `POST /updates/status` — registra download, instalacao, sucesso ou erro.
 
 Exemplo de registro:
 
@@ -108,7 +130,7 @@ Exemplo de registro:
 {
   "hostname": "DESKTOP-R1C8ICN",
   "machine_guid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-  "client_version": "1.3.0",
+  "client_version": "1.4.0",
   "registration_secret": "valor-do-bootstrap"
 }
 ```
@@ -132,6 +154,11 @@ SYSTEM/Administradores (controle total) e Usuarios (leitura/execucao). Somente a
 `data`, `state` e `logs` recebem permissao de modificacao para Usuarios, pois a
 aplicacao ocorre sem elevacao. Isso evita tornar o executavel de startup
 gravavel por usuarios comuns.
+
+O atualizador possui executavel separado, usa o mesmo token individual e roda
+como SYSTEM pelo Agendador de Tarefas. Pacotes ficam em uma pasta que usuarios
+comuns nao podem modificar. O segredo de bootstrap nao participa das
+atualizacoes e nao e armazenado no pacote publicado.
 
 ## Cliente Windows
 
@@ -237,8 +264,8 @@ expansao.
 ## Atualizacao, rollback e desinstalacao
 
 - Wallpaper: use **Historico > Tornar esta versao atual**.
-- Cliente: use novo pacote Inventory apenas quando o EXE mudar; wallpapers nao
-  exigem novo Deploy.
+- Cliente e Agent: publique o arquivo em **Atualizacoes**, valide no piloto e
+  libere para todos. O bootstrap nao e reutilizado.
 - Plugin: desative, substitua os arquivos e execute a atualizacao pela tela de
   plugins. `schema_version` prepara migracoes futuras.
 - Cliente: `--uninstall` sinaliza processos, remove HKLM Run, token/config e

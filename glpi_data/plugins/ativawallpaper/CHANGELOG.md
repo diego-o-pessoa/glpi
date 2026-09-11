@@ -2,6 +2,15 @@
 
 ## Em desenvolvimento
 
+- Plugin e cliente 1.4.0 adicionam a aba **Atualizacoes** com upload privado,
+  rascunho, liberacao piloto, promocao para todos e pausa.
+- Um atualizador separado roda como SYSTEM a cada minuto, valida tamanho e
+  SHA-256 e atualiza silenciosamente o Wallpaper Client ou o GLPI Agent.
+- O painel de atualizacoes acompanha em tempo real ofertas, downloads,
+  instalacoes, sucessos, erros e solicitacoes de reinicio.
+- O instalador unificado inclui e agenda o atualizador; atualizacoes futuras nao
+  reutilizam nem armazenam o segredo de bootstrap.
+
 - Plugin e cliente 1.3.0 removem a barra redundante de conformidade e passam a
   exibir o ciclo completo no painel inferior.
 - O cliente envia um heartbeat com o horario exato da proxima sincronizacao;

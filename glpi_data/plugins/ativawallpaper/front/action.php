@@ -7,6 +7,7 @@ use GlpiPlugin\Ativawallpaper\ClientRepository;
 use GlpiPlugin\Ativawallpaper\ConfigService;
 use GlpiPlugin\Ativawallpaper\DashboardService;
 use GlpiPlugin\Ativawallpaper\Security;
+use GlpiPlugin\Ativawallpaper\UpdateManager;
 use GlpiPlugin\Ativawallpaper\WallpaperManager;
 
 include '../../../inc/includes.php';
@@ -127,7 +128,7 @@ try {
             $jitter = max(0, min(3600, (int) ($_POST['poll_jitter_seconds'] ?? 10)));
             $maxUpload = max(1, min(100, (int) ($_POST['max_upload_mb'] ?? 20)));
             $minimum = Security::cleanText($_POST['minimum_client_version'] ?? '1.0.0', 32);
-            $latest = Security::cleanText($_POST['latest_client_version'] ?? '1.3.0', 32);
+            $latest = Security::cleanText($_POST['latest_client_version'] ?? '1.4.0', 32);
             if (!Security::isValidVersion($minimum) || !Security::isValidVersion($latest)) {
                 throw new RuntimeException('Versao minima ou mais recente invalida.');
             }
@@ -147,6 +148,40 @@ try {
             ConfigService::set($values);
             Audit::record('settings_update', 'configuration', null, array_intersect_key($before, $values), $values);
             Session::addMessageAfterRedirect('Configuracoes salvas.', true, INFO);
+            break;
+
+        case 'update_upload':
+            Session::checkRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, UPDATE);
+            $redirect = $base . '/updates.php';
+            $upload = $_FILES['update_package'] ?? [];
+            unset($_FILES['update_package']);
+            $package = (new UpdateManager())->publishUploaded(
+                $upload,
+                (string) ($_POST['component'] ?? ''),
+                (string) ($_POST['version'] ?? ''),
+                (int) Session::getLoginUserID()
+            );
+            Session::addMessageAfterRedirect(
+                sprintf('Pacote %s %s enviado como rascunho.', $package['component'], $package['version']),
+                true,
+                INFO
+            );
+            break;
+
+        case 'update_release':
+            Session::checkRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, UPDATE);
+            $redirect = $base . '/updates.php';
+            $package = (new UpdateManager())->release(
+                (int) ($_POST['id'] ?? 0),
+                (string) ($_POST['stage'] ?? ''),
+                isset($_POST['pilot_hostname']) ? (string) $_POST['pilot_hostname'] : null,
+                (int) Session::getLoginUserID()
+            );
+            Session::addMessageAfterRedirect(
+                sprintf('Atualizacao %s %s agora esta em: %s.', $package['component'], $package['version'], $package['release_stage']),
+                true,
+                INFO
+            );
             break;
 
         case 'bootstrap':

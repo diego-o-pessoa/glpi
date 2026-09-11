@@ -60,6 +60,11 @@ class PluginAtivawallpaperMenu extends CommonGLPI
             'icon'  => 'ti ti-shield-check',
         ];
         if (Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, READ)) {
+            $menu['options']['updates'] = [
+                'title' => 'Atualizacoes',
+                'page'  => $base . '/updates.php',
+                'icon'  => 'ti ti-cloud-download',
+            ];
             $menu['options']['settings'] = [
                 'title' => 'Configuracoes',
                 'page'  => $base . '/settings.php',
