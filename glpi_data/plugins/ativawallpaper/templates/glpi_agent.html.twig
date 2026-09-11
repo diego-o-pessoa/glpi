@@ -1,0 +1,22 @@
+<div class="container-fluid ativa-wallpaper">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="mb-1"><i class="ti ti-server me-2 text-primary"></i>GLPI Agent</h1>
+      <div class="text-muted">Ações futuras do plugin e gerenciamento do GLPI Agent</div>
+    </div>
+    <nav class="btn-group" aria-label="Navegacao Ativa Wallpaper">
+      <a class="btn btn-outline-secondary" href="{{ urls.dashboard }}"><i class="ti ti-dashboard me-1"></i>Gerenciar Wallpaper</a>
+      <a class="btn btn-primary" href="{{ urls.glpi_agent }}"><i class="ti ti-server me-1"></i>GLPI Agent</a>
+      <a class="btn btn-outline-secondary" href="{{ urls.history }}"><i class="ti ti-history me-1"></i>Historico</a>
+      <a class="btn btn-outline-secondary" href="{{ urls.events }}"><i class="ti ti-shield-check me-1"></i>Alteracoes</a>
+      {% if rights.config %}<a class="btn btn-outline-secondary" href="{{ urls.updates }}"><i class="ti ti-cloud-download me-1"></i>Atualizacoes</a>{% endif %}
+      {% if rights.config %}<a class="btn btn-outline-secondary" href="{{ urls.settings }}"><i class="ti ti-settings me-1"></i>Configuracoes</a>{% endif %}
+    </nav>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <p>Área reservada para futuras ações do GLPI Agent.</p>
+    </div>
+  </div>
+</div>

@@ -17,7 +17,8 @@
       <div class="text-muted">Aplicacoes e restauracoes automaticas informadas pelos clientes</div>
     </div>
     <nav class="btn-group" aria-label="Navegacao Ativa Wallpaper">
-      <a class="btn btn-outline-secondary" href="{{ urls.dashboard }}">Dashboard</a>
+      <a class="btn btn-outline-secondary" href="{{ urls.dashboard }}">Gerenciar Wallpaper</a>
+      <a class="btn btn-outline-secondary" href="{{ urls.glpi_agent }}">GLPI Agent</a>
       <a class="btn btn-outline-secondary" href="{{ urls.history }}">Historico</a>
       <a class="btn btn-primary" href="{{ urls.events }}">Alteracoes</a>
       {% if can_config %}<a class="btn btn-outline-secondary" href="{{ urls.updates }}">Atualizacoes</a>{% endif %}

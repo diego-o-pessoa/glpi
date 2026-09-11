@@ -8,7 +8,7 @@ class PluginAtivawallpaperMenu extends CommonGLPI
 {
     public static function getTypeName($nb = 0): string
     {
-        return 'Ativa Wallpaper';
+        return 'Agent';
     }
 
     public static function getIcon(): string

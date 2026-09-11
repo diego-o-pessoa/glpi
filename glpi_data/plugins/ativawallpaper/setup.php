@@ -14,7 +14,7 @@ define('PLUGIN_ATIVAWALLPAPER_DIR', __DIR__);
 function plugin_version_ativawallpaper(): array
 {
     return [
-        'name'         => 'Ativa Wallpaper',
+        'name'         => 'Agent',
         'version'      => PLUGIN_ATIVAWALLPAPER_VERSION,
         'author'       => 'Ativa Locacao',
         'license'      => 'GPLv3+',

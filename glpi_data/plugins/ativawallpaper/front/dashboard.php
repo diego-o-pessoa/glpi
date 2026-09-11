@@ -41,6 +41,7 @@ TemplateRenderer::getInstance()->display('@ativawallpaper/dashboard.html.twig', 
     'urls'          => [
         'action'    => $base . '/front/action.php',
         'dashboard' => $base . '/front/dashboard.php',
+        'glpi_agent' => $base . '/front/glpi_agent.php',
         'history'   => $base . '/front/history.php',
         'events'    => $base . '/front/events.php',
         'updates'   => $base . '/front/updates.php',

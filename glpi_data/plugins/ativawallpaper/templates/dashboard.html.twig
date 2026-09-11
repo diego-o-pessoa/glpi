@@ -5,7 +5,8 @@
       <div class="text-muted">Gerenciamento centralizado dos wallpapers corporativos</div>
     </div>
     <nav class="btn-group" aria-label="Navegacao Ativa Wallpaper">
-      <a class="btn btn-primary" href="{{ urls.dashboard }}"><i class="ti ti-dashboard me-1"></i>Dashboard</a>
+      <a class="btn btn-primary" href="{{ urls.dashboard }}"><i class="ti ti-dashboard me-1"></i>Gerenciar Wallpaper</a>
+      <a class="btn btn-outline-secondary" href="{{ urls.glpi_agent }}"><i class="ti ti-server me-1"></i>GLPI Agent</a>
       <a class="btn btn-outline-secondary" href="{{ urls.history }}"><i class="ti ti-history me-1"></i>Historico</a>
       <a class="btn btn-outline-secondary" href="{{ urls.events }}"><i class="ti ti-shield-check me-1"></i>Alteracoes</a>
       {% if rights.config %}<a class="btn btn-outline-secondary" href="{{ urls.updates }}"><i class="ti ti-cloud-download me-1"></i>Atualizacoes</a>{% endif %}
