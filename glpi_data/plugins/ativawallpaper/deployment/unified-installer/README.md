@@ -4,7 +4,7 @@ O gerador cria um único arquivo Windows x64:
 
 - `Ativa-Unified-Agent-Setup-X.Y.Z.exe`: instala ou atualiza o GLPI Agent, o Wallpaper Client e o serviço Ativa Unified Updater.
 
-O serviço roda como `SYSTEM`, identifica o computador no dashboard imediatamente ao iniciar e consulta as versões do Ativa Updater a cada hora. A partir do pacote 1.5.1, também consulta comandos leves a cada 15 segundos, permitindo usar **Verificar agora** sem alterar o intervalo regular. Quando encontra uma versão maior do pacote unificado, baixa o EXE, valida tamanho e SHA-256 e o executa silenciosamente. Em falhas de comunicação, tenta novamente em cinco minutos.
+O serviço roda como `SYSTEM`, identifica o computador no dashboard imediatamente ao iniciar e consulta as versões do Ativa Updater a cada hora. A partir do pacote 1.5.1, também consulta comandos leves a cada 15 segundos, permitindo usar **Verificar agora** sem alterar o intervalo regular. Quando encontra uma versão maior do pacote unificado (ou uma menor com rollback autorizado, a partir do serviço 1.3.0 / pacote 1.6.0), baixa o EXE, valida tamanho e SHA-256 e o executa silenciosamente. Em falhas de comunicação, tenta novamente em cinco minutos.
 
 ## Preparar as configurações
 
@@ -51,3 +51,19 @@ Para distribuir qualquer alteração futura:
 O GLPI Agent pode ser alterado pelos parâmetros `-AgentVersion` e `-AgentSha256` do builder. Mesmo que apenas o GLPI Agent mude, gere e publique uma nova versão do pacote unificado. Máquinas que já têm uma versão igual ou maior apenas registram “Atualizado” e não reinstalam nada.
 
 Máquinas desligadas ou sem internet atualizam quando voltarem a funcionar. O instalador contém segredos de bootstrap e deve ser distribuído somente por canal corporativo protegido.
+
+## Rollback (downgrade)
+
+Se uma versão publicada causar problemas, volte o parque para uma versão anterior pelo dashboard do **Ativa Updater**:
+
+1. no **Histórico de Versões**, clique em **Rollback** na versão desejada e confirme;
+2. clique em **Verificar agora** para antecipar (sem isso, cada máquina volta na próxima consulta, em até 1 hora);
+3. acompanhe a tabela **Computadores**: máquinas pendentes mostram “Rollback pendente” e, ao terminar, contam como “na versão atual”.
+
+Regras:
+
+- **Definir como atual** publica a versão só para atualização: máquinas em versões maiores continuam onde estão e aparecem como “Acima da versão publicada”. Somente **Rollback** (ou **Autorizar downgrade** na versão atual) faz máquinas voltarem de versão.
+- O rollback só é permitido para pacotes **1.6.0 ou superiores**. Pacotes anteriores registram o Wallpaper Client com o segredo de bootstrap embutido no build; se esse segredo já foi rotacionado, a instalação falharia no meio. A partir do 1.6.0, a reinstalação reaproveita o registro existente da máquina.
+- **Não exclua** do dashboard versões que possam ser necessárias como destino de rollback.
+- O MSI oficial do GLPI Agent aceita downgrade (`AllowDowngrades`) e preserva `etc/` e `var/`, então a máquina continua ligada ao mesmo computador no inventário.
+- Se a instalação não reconfigurar o serviço em 30 minutos, o serviço registra falha com o final do `installer-*.log` e tenta de novo após 5 min, 30 min e 1 h. Depois de 3 falhas do mesmo pacote, suspende as tentativas até a publicação de outra versão ou um **Verificar agora**.

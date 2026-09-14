@@ -34,7 +34,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.5.0"
+CLIENT_VERSION = "1.6.0"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -961,6 +961,30 @@ def _bootstrap_values(args: argparse.Namespace) -> dict[str, Any]:
     return values
 
 
+def reusable_client_token(root: Path, server: str, logger: logging.Logger, api_factory=ApiClient) -> str | None:
+    """Keep the current registration when reinstalling (upgrade or rollback).
+
+    Unified packages embed the bootstrap registration secret that was valid
+    when they were built. Reusing a token the server still accepts lets an
+    older package reinstall after that secret has been rotated.
+    """
+    path = root / "client.json"
+    if not path.is_file():
+        return None
+    try:
+        existing = load_json(path)
+        token = existing.get("client_token")
+        if not isinstance(token, str) or len(token) < 32:
+            return None
+        if normalize_server_url(str(existing.get("server", ""))) != server:
+            return None
+        api_factory(server, token).get_config(None)
+    except ClientError as exc:
+        logger.info("Existing registration cannot be reused (%s); registering again", exc.code)
+        return None
+    return token
+
+
 def install_client(args: argparse.Namespace) -> None:
     ensure_supported_windows(bool(args.allow_windows_server))
     if not is_admin():
@@ -981,7 +1005,11 @@ def install_client(args: argparse.Namespace) -> None:
         "client_version": CLIENT_VERSION,
         "os_version": windows_product_name(),
     }
-    token = ApiClient(values["server"]).register(str(values["registration_secret"]), identity)
+    token = reusable_client_token(root, values["server"], logger)
+    if token is not None:
+        logger.info("Existing client registration reused")
+    else:
+        token = ApiClient(values["server"]).register(str(values["registration_secret"]), identity)
 
     destination = root / EXECUTABLE_NAME
     _safe_unlink(root / "uninstall.flag")

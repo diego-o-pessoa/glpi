@@ -1,5 +1,7 @@
 <?php
 
+use GlpiPlugin\Ativaupdater\ReleasePolicy;
+
 class PluginAtivaupdaterRelease extends CommonDBTM
 {
     public static $rightname = 'plugin_ativaupdater_release';
@@ -25,7 +27,11 @@ class PluginAtivaupdaterRelease extends CommonDBTM
         return null;
     }
 
-    public function setActive(int $id): bool
+    /**
+     * Publishes a release to every computer. With $allowDowngrade, computers
+     * on a newer package are told to roll back to this exact version.
+     */
+    public function setActive(int $id, bool $allowDowngrade = false, int $userId = 0): bool
     {
         global $DB;
         $target = $DB->request([
@@ -36,11 +42,21 @@ class PluginAtivaupdaterRelease extends CommonDBTM
         if (count($target) !== 1) {
             return false;
         }
+        if ($allowDowngrade && !ReleasePolicy::canRollbackTo((string) $target->current()['version'])) {
+            return false;
+        }
 
         $DB->beginTransaction();
         try {
-            $DB->update($this->getTable(), ['active' => 0], ['active' => 1]);
-            $result = $DB->update($this->getTable(), ['active' => 1], ['id' => $id]);
+            $DB->update($this->getTable(), ['active' => 0, 'allow_downgrade' => 0], [
+                'OR' => ['active' => 1, 'allow_downgrade' => 1],
+            ]);
+            $result = $DB->update($this->getTable(), [
+                'active'          => 1,
+                'allow_downgrade' => $allowDowngrade ? 1 : 0,
+                'activated_at'    => date('Y-m-d H:i:s'),
+                'activated_by'    => $userId,
+            ], ['id' => $id]);
             if (!$result) {
                 throw new RuntimeException('Falha ao ativar a release.');
             }

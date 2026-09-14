@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use GlpiPlugin\Ativaupdater\ConfigService;
+use GlpiPlugin\Ativaupdater\ReleasePolicy;
 
 function plugin_ativaupdater_do_install(): bool
 {
@@ -13,6 +14,19 @@ function plugin_ativaupdater_do_install(): bool
 
     try {
         $DB->runFile(__DIR__ . '/schema.sql');
+
+        $releasesTable = 'glpi_plugin_ativaupdater_releases';
+        if ($DB->tableExists($releasesTable)) {
+            if (!$DB->fieldExists($releasesTable, 'allow_downgrade')) {
+                $migration->addField($releasesTable, 'allow_downgrade', "tinyint(1) NOT NULL DEFAULT '0'", ['after' => 'active']);
+            }
+            if (!$DB->fieldExists($releasesTable, 'activated_at')) {
+                $migration->addField($releasesTable, 'activated_at', 'datetime NULL', ['after' => 'allow_downgrade']);
+            }
+            if (!$DB->fieldExists($releasesTable, 'activated_by')) {
+                $migration->addField($releasesTable, 'activated_by', "int(11) NOT NULL DEFAULT '0'", ['after' => 'activated_at']);
+            }
+        }
 
         $clientsTable = 'glpi_plugin_ativaupdater_clients';
         if ($DB->tableExists($clientsTable)) {
@@ -39,6 +53,7 @@ function plugin_ativaupdater_do_install(): bool
         }
 
         require_once PLUGIN_ATIVAUPDATER_DIR . '/src/ConfigService.php';
+        require_once PLUGIN_ATIVAUPDATER_DIR . '/src/ReleasePolicy.php';
         ConfigService::installDefaults();
         ConfigService::set(['schema_version' => PLUGIN_ATIVAUPDATER_VERSION]);
 
@@ -57,12 +72,14 @@ function plugin_ativaupdater_do_install(): bool
                 'LIMIT' => 1,
             ]);
             if (count($active) === 1) {
-                $activeVersion = (string) $active->current()['version'];
+                $activeRelease = $active->current();
+                $activeVersion = (string) $activeRelease['version'];
+                $allowDowngrade = (int) ($activeRelease['allow_downgrade'] ?? 0) === 1;
                 $reportedClients = $DB->request(['FROM' => $clientsTable]);
                 foreach ($reportedClients as $client) {
                     $noReleaseReport = str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE')
                         || (string) $client['status'] === 'waiting_release';
-                    if ($noReleaseReport && version_compare((string) $client['installed_version'], $activeVersion, '<')) {
+                    if ($noReleaseReport && ReleasePolicy::requiresInstall((string) $client['installed_version'], $activeVersion, $allowDowngrade)) {
                         $DB->update($clientsTable, [
                             'available_version' => $activeVersion,
                             'status' => 'checking',

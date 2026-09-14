@@ -24,11 +24,26 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.2.0"
+UPDATER_VERSION = "1.3.0"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 MAX_INSTALLER_BYTES = 2 * 1024 * 1024 * 1024
 VERSION_RE = re.compile(r"^\d{1,5}\.\d{1,5}\.\d{1,5}$")
+
+# Mirrors GlpiPlugin\Ativaupdater\ReleasePolicy. Packages older than this
+# re-register the Wallpaper Client with a possibly rotated secret and cannot be
+# installed over a newer package safely.
+ROLLBACK_MIN_VERSION = (1, 6, 0)
+ACTION_UPGRADE = "upgrade"
+ACTION_DOWNGRADE = "downgrade"
+ACTION_CURRENT = "current"
+ACTION_BLOCKED_DOWNGRADE = "blocked_downgrade"
+
+# A silent installation that has not reconfigured the service after this long
+# is considered failed. Repeated failures of the same package back off and stop.
+INSTALL_TIMEOUT_SECONDS = 1800
+MAX_INSTALL_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = (300, 1800, 3600)
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "UnifiedUpdater"
@@ -119,6 +134,83 @@ def version_tuple(value: str) -> tuple[int, int, int]:
     if not VERSION_RE.fullmatch(value):
         raise UpdaterError(f"Versao invalida: {value}")
     return tuple(int(part) for part in value.split("."))  # type: ignore[return-value]
+
+
+def decide_action(installed: str, available: str, allow_downgrade: bool) -> str:
+    target = version_tuple(available)
+    try:
+        current = version_tuple(installed)
+    except UpdaterError:
+        return ACTION_UPGRADE
+    if current < target:
+        return ACTION_UPGRADE
+    if current == target:
+        return ACTION_CURRENT
+    if allow_downgrade and target >= ROLLBACK_MIN_VERSION:
+        return ACTION_DOWNGRADE
+    return ACTION_BLOCKED_DOWNGRADE
+
+
+def clear_install_failures(state: dict[str, Any]) -> None:
+    for key in ("failed_version", "failed_sha256", "failed_attempts", "retry_after"):
+        state.pop(key, None)
+
+
+def clear_pending_install(state: dict[str, Any]) -> None:
+    for key in ("pending_version", "pending_sha256", "pending_action", "pending_started_at"):
+        state.pop(key, None)
+
+
+def register_install_failure(state: dict[str, Any], now: float) -> int:
+    """Turns the pending installation into a failed attempt; returns the retry delay."""
+    version = str(state.get("pending_version", ""))
+    sha256 = str(state.get("pending_sha256", ""))
+    clear_pending_install(state)
+    same_package = state.get("failed_version") == version and state.get("failed_sha256") == sha256
+    attempts = int(state.get("failed_attempts", 0) or 0) + 1 if same_package else 1
+    delay = RETRY_BACKOFF_SECONDS[min(attempts, len(RETRY_BACKOFF_SECONDS)) - 1]
+    state.update({
+        "failed_version": version,
+        "failed_sha256": sha256,
+        "failed_attempts": attempts,
+        "retry_after": now + delay,
+    })
+    return delay
+
+
+def install_block_reason(state: dict[str, Any], release: dict[str, Any], now: float) -> tuple[str, bool] | None:
+    """Returns (message, permanent) while failed attempts forbid installing this release."""
+    if state.get("failed_version") != release["version"] or state.get("failed_sha256") != release["sha256"]:
+        return None
+    attempts = int(state.get("failed_attempts", 0) or 0)
+    if attempts >= MAX_INSTALL_ATTEMPTS:
+        return (
+            f"A instalacao de {release['version']} falhou {attempts} vezes e foi suspensa. "
+            "Publique outra versao ou use Verificar agora para tentar novamente.",
+            True,
+        )
+    remaining = int(float(state.get("retry_after", 0) or 0) - now)
+    if remaining > 0:
+        return (
+            f"A instalacao de {release['version']} falhou ({attempts} de {MAX_INSTALL_ATTEMPTS}); "
+            f"nova tentativa em {remaining} segundos.",
+            False,
+        )
+    return None
+
+
+def installer_log_tail(max_lines: int = 20, max_chars: int = 600) -> str:
+    try:
+        logs = sorted(LOG_DIR.glob("installer-*.log"), key=lambda path: path.stat().st_mtime)
+        if not logs:
+            return ""
+        with logs[-1].open("rb") as stream:
+            stream.seek(max(0, logs[-1].stat().st_size - 16384))
+            text = stream.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return " | ".join(lines[-max_lines:])[-max_chars:]
 
 
 def validate_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -263,6 +355,7 @@ class ApiClient:
         payload["sha256"] = sha256
         payload["size"] = size
         payload["download_url"] = download_url
+        payload["allow_downgrade"] = payload.get("allow_downgrade") is True
         return payload
 
     def report(self, status: str, installed: str, available: str = "", message: str = "") -> None:
@@ -337,22 +430,54 @@ def launch_installer(path: Path, logger: logging.Logger) -> None:
     logger.info("Instalador %s iniciado silenciosamente.", path.name)
 
 
-def check_once(logger: logging.Logger) -> int:
+def check_once(logger: logging.Logger, manual: bool = False) -> int:
     config = validate_config(load_json(CONFIG_PATH))
     state = get_state()
     installed = str(state.get("installed_version", "0.0.0"))
     version_tuple(installed)
     api = ApiClient(config)
     try:
+        if manual and state.get("failed_attempts"):
+            clear_install_failures(state)
+            atomic_json(STATE_PATH, state)
+            logger.info("Verificacao manual: contador de falhas de instalacao zerado.")
+
         pending_version = str(state.get("pending_version", ""))
-        pending_started_at = float(state.get("pending_started_at", 0) or 0)
-        if pending_version and time.time() - pending_started_at < int(config["check_interval_seconds"]):
-            api.report(
-                "installing", installed, pending_version,
-                "Aguardando a conclusao ou a proxima tentativa da instalacao silenciosa.",
-            )
-            logger.info("A instalacao de %s ainda esta na janela de espera.", pending_version)
-            return 0
+        if pending_version:
+            pending_started_at = float(state.get("pending_started_at", 0) or 0)
+            is_rollback = state.get("pending_action") == ACTION_DOWNGRADE
+            if pending_version == installed:
+                clear_pending_install(state)
+                clear_install_failures(state)
+                atomic_json(STATE_PATH, state)
+            elif time.time() - pending_started_at < INSTALL_TIMEOUT_SECONDS:
+                api.report(
+                    "installing", installed, pending_version,
+                    ("Rollback em andamento: " if is_rollback else "")
+                    + "aguardando a conclusao da instalacao silenciosa.",
+                )
+                logger.info("A instalacao de %s ainda esta na janela de espera.", pending_version)
+                return 0
+            else:
+                delay = register_install_failure(state, time.time())
+                attempts = int(state["failed_attempts"])
+                message = (
+                    f"A instalacao de {pending_version} nao foi concluida em "
+                    f"{INSTALL_TIMEOUT_SECONDS // 60} minutos (tentativa {attempts} de {MAX_INSTALL_ATTEMPTS})."
+                )
+                if attempts < MAX_INSTALL_ATTEMPTS:
+                    message += f" Nova tentativa em {delay} segundos."
+                tail = installer_log_tail()
+                if tail:
+                    message += f" Log do instalador: {tail}"
+                state["last_result"] = "error"
+                state["last_error"] = message[:1000]
+                state["last_check"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+                atomic_json(STATE_PATH, state)
+                api.report("error", installed, pending_version, message)
+                logger.error(message)
+                return 2
+
         api.report("checking", installed, message="Consultando a versao publicada.")
         try:
             release = api.latest()
@@ -374,25 +499,56 @@ def check_once(logger: logging.Logger) -> int:
         state["last_check"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
         state["last_available_version"] = available
         state["check_interval_seconds"] = interval
-        if version_tuple(available) <= version_tuple(installed):
+        action = decide_action(installed, available, bool(release["allow_downgrade"]))
+        if action in (ACTION_CURRENT, ACTION_BLOCKED_DOWNGRADE):
+            if action == ACTION_CURRENT:
+                clear_install_failures(state)
+                message = "A maquina ja esta na versao publicada."
+            else:
+                message = (
+                    f"Versao instalada {installed} e superior a publicada {available}; "
+                    "downgrade nao autorizado no dashboard."
+                )
             state["last_result"] = "current"
             state["last_error"] = ""
             atomic_json(STATE_PATH, state)
-            api.report("current", installed, available, "A maquina ja esta na versao publicada.")
-            logger.info("Versao atual %s; publicada %s. Nenhuma acao necessaria.", installed, available)
+            api.report("current", installed, available, message)
+            logger.info("Versao atual %s; publicada %s (%s). Nenhuma acao necessaria.", installed, available, action)
             return 0
 
+        blocked = install_block_reason(state, release, time.time())
+        if blocked is not None:
+            message, permanent = blocked
+            state["last_result"] = "error"
+            state["last_error"] = message
+            atomic_json(STATE_PATH, state)
+            api.report("error", installed, available, message)
+            logger.warning(message)
+            return 0 if permanent else 2
+
+        is_rollback = action == ACTION_DOWNGRADE
         DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
         destination = DOWNLOAD_DIR / f"Ativa-Unified-Agent-Setup-{available}.exe"
-        api.report("downloading", installed, available, "Baixando e validando o instalador.")
+        api.report(
+            "downloading", installed, available,
+            f"Rollback: baixando a versao {available} para substituir a {installed}."
+            if is_rollback else "Baixando e validando o instalador.",
+        )
         api.download(release, destination)
         state["last_result"] = "installing"
         state["pending_version"] = available
+        state["pending_sha256"] = release["sha256"]
+        state["pending_action"] = action
         state["pending_started_at"] = time.time()
         state["last_error"] = ""
         atomic_json(STATE_PATH, state)
-        api.report("installing", installed, available, "Instalacao silenciosa iniciada.")
+        api.report(
+            "installing", installed, available,
+            f"Rollback: voltando de {installed} para {available}; instalacao silenciosa iniciada."
+            if is_rollback else "Instalacao silenciosa iniciada.",
+        )
         launch_installer(destination, logger)
+        logger.info("%s de %s para %s iniciado.", "Rollback" if is_rollback else "Atualizacao", installed, available)
         return 10
     except Exception as exc:
         state["last_result"] = "error"
@@ -442,8 +598,8 @@ def configure_service(config_source: Path, installed_version: str) -> int:
         "last_result": "installed",
         "last_error": "",
     })
-    previous.pop("pending_version", None)
-    previous.pop("pending_started_at", None)
+    clear_pending_install(previous)
+    clear_install_failures(previous)
     atomic_json(STATE_PATH, previous)
     return 0
 
@@ -468,7 +624,7 @@ class ServiceRuntime:
                     logger.warning("Nao foi possivel consultar comandos agora: %s", exc)
 
             if now >= next_full_check or manual_check:
-                result = check_once(logger)
+                result = check_once(logger, manual=manual_check)
                 if result == 10:
                     self.stop_event.set()
                     break
@@ -584,7 +740,7 @@ def main() -> int:
         return configure_service(args.config, args.installed_version)
     if args.run_once:
         with SingleInstance():
-            return check_once(configure_logging(args.debug))
+            return check_once(configure_logging(args.debug), manual=True)
     if args.service:
         return run_service_dispatcher()
     parser.error("selecione --service, --run-once, --configure ou --version")

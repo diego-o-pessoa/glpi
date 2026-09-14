@@ -1,6 +1,7 @@
 <?php
 
 use GlpiPlugin\Ativaupdater\ConfigService;
+use GlpiPlugin\Ativaupdater\ReleasePolicy;
 
 include('../../../inc/includes.php');
 
@@ -56,6 +57,17 @@ if ($activeRelease) {
     echo "<p><strong>Tamanho:</strong> " . htmlescape(Toolbox::getSize((int) $activeRelease['file_size'])) . "</p>";
     echo "<p><strong>SHA-256:</strong> <code>" . htmlescape((string) $activeRelease['sha256']) . "</code></p>";
     echo "<p><strong>Publicado em:</strong> " . Html::convDateTime($activeRelease['created_at']) . "</p>";
+    if ((int) ($activeRelease['allow_downgrade'] ?? 0) === 1) {
+        echo "<p><strong>Política:</strong> <span class='badge bg-warning text-dark'>Rollback autorizado</span> "
+            . "<span class='text-muted'>Computadores em versões maiores voltarão para esta versão.</span></p>";
+    } else {
+        echo "<p><strong>Política:</strong> <span class='badge bg-success'>Somente atualização</span></p>";
+    }
+    if (!empty($activeRelease['activated_at'])) {
+        $activatedBy = (int) ($activeRelease['activated_by'] ?? 0);
+        echo "<p><strong>Ativada em:</strong> " . Html::convDateTime($activeRelease['activated_at'])
+            . ($activatedBy > 0 ? ' por ' . htmlescape(getUserName($activatedBy)) : '') . "</p>";
+    }
 } else {
     echo "<p>" . __('Nenhuma versão ativa no momento.', 'ativaupdater') . "</p>";
 }
@@ -104,25 +116,56 @@ if (count($releases) > 0) {
     }
     echo "</tr></thead><tbody>";
     
+    $setActiveForm = static function (int $id, bool $allowDowngrade, string $label, string $buttonClass, string $icon, ?string $confirm = null): string {
+        $onsubmit = $confirm !== null
+            ? ' onsubmit="return confirm(' . htmlescape(json_encode($confirm, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)) . ');"'
+            : '';
+        return "<form method='post' action='action.php' style='display:inline;'" . $onsubmit . ">"
+            . Html::hidden('action', ['value' => 'set_active'])
+            . Html::hidden('id', ['value' => $id])
+            . Html::hidden('allow_downgrade', ['value' => $allowDowngrade ? '1' : '0'])
+            . Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()])
+            . "<button type='submit' class='btn btn-sm " . $buttonClass . " me-2' title='" . htmlescape($label) . "'>"
+            . "<i class='" . $icon . "'></i> " . htmlescape($label) . "</button>"
+            . "</form>";
+    };
+    $rollbackUnsupported = 'Pacotes anteriores a ' . ReleasePolicy::ROLLBACK_MIN_VERSION . ' não suportam downgrade.';
+
     foreach ($releases as $rel) {
-        $status = $rel['active'] ? "<span class='badge bg-success'>" . __('Atual', 'ativaupdater') . "</span>" : "<span class='badge bg-secondary'>" . __('Anterior', 'ativaupdater') . "</span>";
+        $releaseId = (int) $rel['id'];
+        $releaseVersion = (string) $rel['version'];
+        $isActive = (int) $rel['active'] === 1;
+        $allowsDowngrade = $isActive && (int) ($rel['allow_downgrade'] ?? 0) === 1;
+        $canRollback = ReleasePolicy::canRollbackTo($releaseVersion);
+
+        $status = $isActive ? "<span class='badge bg-success'>" . __('Atual', 'ativaupdater') . "</span>" : "<span class='badge bg-secondary'>" . __('Anterior', 'ativaupdater') . "</span>";
+        if ($allowsDowngrade) {
+            $status .= " <span class='badge bg-warning text-dark'>Rollback</span>";
+        }
         echo "<tr>";
-        echo "<td>" . htmlescape((string) $rel['version']) . "</td>";
+        echo "<td>" . htmlescape($releaseVersion) . "</td>";
         echo "<td>" . htmlescape((string) $rel['original_filename']) . "</td>";
         echo "<td>" . htmlescape(Toolbox::getSize((int) $rel['file_size'])) . "</td>";
         echo "<td>" . Html::convDateTime($rel['created_at']) . "</td>";
         echo "<td>" . $status . "</td>";
         if ($canManage) {
-            echo "<td>";
-            if (!$rel['active']) {
-                echo "<form method='post' action='action.php' style='display:inline;'>";
-                echo Html::hidden('action', ['value' => 'set_active']);
-                echo Html::hidden('id', ['value' => $rel['id']]);
-                echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
-                echo "<button type='submit' class='btn btn-sm btn-outline-primary me-2' title='" . __('Definir como atual', 'ativaupdater') . "'><i class='fas fa-check'></i></button>";
-                echo "</form>";
+            echo "<td class='text-nowrap'>";
+            $rollbackConfirm = 'Rollback para a versão ' . $releaseVersion . ': TODOS os computadores em versões maiores '
+                . 'reinstalarão esta versão na próxima consulta. Continuar?';
+            if (!$isActive) {
+                echo $setActiveForm($releaseId, false, __('Definir como atual', 'ativaupdater'), 'btn-outline-primary', 'fas fa-check');
+                if ($canRollback) {
+                    echo $setActiveForm($releaseId, true, 'Rollback', 'btn-outline-warning', 'fas fa-undo', $rollbackConfirm);
+                } else {
+                    echo "<span class='d-inline-block me-2' tabindex='0' title='" . htmlescape($rollbackUnsupported) . "'>"
+                        . "<button type='button' class='btn btn-sm btn-outline-secondary' disabled><i class='fas fa-undo'></i> Rollback</button></span>";
+                }
+            } elseif ($allowsDowngrade) {
+                echo $setActiveForm($releaseId, false, 'Revogar downgrade', 'btn-outline-secondary', 'fas fa-ban');
+            } elseif ($canRollback) {
+                echo $setActiveForm($releaseId, true, 'Autorizar downgrade', 'btn-outline-warning', 'fas fa-undo', $rollbackConfirm);
             }
-            
+
             echo "<form method='post' action='action.php' style='display:inline;' onsubmit='return confirm(\"" . __('Tem certeza que deseja excluir esta versão?', 'ativaupdater') . "\");'>";
             echo Html::hidden('action', ['value' => 'delete']);
             echo Html::hidden('id', ['value' => $rel['id']]);
@@ -142,13 +185,16 @@ echo "</div></div>";
 
 // Clients reporting through the Windows service
 $activeVersion = $activeRelease ? (string) $activeRelease['version'] : '';
-$activePublishedAt = $activeRelease ? strtotime((string) $activeRelease['created_at']) : false;
+$activeAllowsDowngrade = $activeRelease !== null && (int) ($activeRelease['allow_downgrade'] ?? 0) === 1;
+$activePublishedAt = $activeRelease
+    ? strtotime((string) (($activeRelease['activated_at'] ?? '') ?: $activeRelease['created_at']))
+    : false;
 $checkInterval = max(300, min(86400, ConfigService::getInt('check_interval_seconds', 3600)));
 $totalClients = count($clients);
 $updatedClients = 0;
 $errorClients = 0;
 foreach ($clients as $client) {
-    if ($activeVersion !== '' && version_compare((string) $client['installed_version'], $activeVersion, '>=')) {
+    if ($activeVersion !== '' && ReleasePolicy::isOnTarget((string) $client['installed_version'], $activeVersion, $activeAllowsDowngrade)) {
         $updatedClients++;
     }
     $noReleaseYet = str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE');
@@ -204,8 +250,10 @@ if ($totalClients === 0) {
         $acknowledgedAt = strtotime((string) ($client['check_acknowledged_at'] ?? '')) ?: 0;
         $manualPending = $requestedAt > $acknowledgedAt;
         $noReleaseMessage = str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE');
-        $needsActiveVersion = $activeVersion !== ''
-            && version_compare((string) $client['installed_version'], $activeVersion, '<');
+        $clientAction = $activeVersion !== ''
+            ? ReleasePolicy::clientAction((string) $client['installed_version'], $activeVersion, $activeAllowsDowngrade)
+            : ReleasePolicy::ACTION_CURRENT;
+        $needsActiveVersion = in_array($clientAction, [ReleasePolicy::ACTION_UPGRADE, ReleasePolicy::ACTION_DOWNGRADE], true);
         $releaseIsNewerThanReport = $activePublishedAt !== false && $activePublishedAt > $lastCheckAt;
         $waitingForNextCheck = $needsActiveVersion
             && ($statusKey === 'waiting_release' || $noReleaseMessage || $releaseIsNewerThanReport);
@@ -222,9 +270,10 @@ if ($totalClients === 0) {
             $statusKey = 'waiting_check';
             $displayAvailable = $activeVersion;
             $nextCheckAt = $lastCheckAt + $checkInterval;
+            $publishedLabel = $clientAction === ReleasePolicy::ACTION_DOWNGRADE ? 'Rollback autorizado.' : 'Versão publicada.';
             $displayMessage = $nextCheckAt > time()
-                ? 'Versão publicada. Consulta automática prevista até ' . Html::convDateTime(date('Y-m-d H:i:s', $nextCheckAt)) . '.'
-                : 'Versão publicada. Aguardando o próximo contato automático do serviço.';
+                ? $publishedLabel . ' Consulta automática prevista até ' . Html::convDateTime(date('Y-m-d H:i:s', $nextCheckAt)) . '.'
+                : $publishedLabel . ' Aguardando o próximo contato automático do serviço.';
         } elseif ($statusKey === 'error' && $noReleaseMessage) {
             $statusKey = 'waiting_release';
             $displayMessage = 'Computador registrado; aguardando a primeira versão publicada.';
@@ -239,7 +288,14 @@ if ($totalClients === 0) {
                 : 'A qualquer momento');
         echo '<tr>';
         echo '<td><strong>' . htmlescape((string) $client['hostname']) . '</strong>' . ($offline ? " <span class='badge bg-secondary'>Sem contato há mais de 2 h</span>" : '') . '</td>';
-        echo '<td>' . htmlescape((string) $client['installed_version']) . '</td>';
+        echo '<td>' . htmlescape((string) $client['installed_version'])
+            . ($clientAction === ReleasePolicy::ACTION_BLOCKED_DOWNGRADE
+                ? " <span class='badge bg-secondary' title='Downgrade não autorizado para a versão publicada'>Acima da versão publicada</span>"
+                : '')
+            . ($clientAction === ReleasePolicy::ACTION_DOWNGRADE
+                ? " <span class='badge bg-warning text-dark'>Rollback pendente</span>"
+                : '')
+            . '</td>';
         echo '<td>' . htmlescape((string) ($client['wallpaper_client_version'] ?: '-')) . '</td>';
         echo '<td>' . htmlescape((string) ($client['glpi_agent_version'] ?: '-')) . '</td>';
         echo '<td>' . htmlescape($displayAvailable ?: '-') . '</td>';

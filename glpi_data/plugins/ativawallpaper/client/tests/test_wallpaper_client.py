@@ -496,5 +496,52 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(caught.exception.code, "TLS_VERIFICATION_DISABLED")
 
 
+class ReusableRegistrationTests(unittest.TestCase):
+    SERVER = "https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1"
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.logger = wc.logging.getLogger("wallpaper-registration-tests")
+        self.logger.addHandler(wc.logging.NullHandler())
+        self.logger.propagate = False
+        self.calls = []
+
+    def factory(self, error_code=None):
+        def build(server, token):
+            self.calls.append((server, token))
+            api = FakeApi({"enabled": True})
+            if error_code:
+                def fail(_etag):
+                    raise wc.ClientError(error_code, "rejected", retriable=False)
+                api.get_config = fail
+            return api
+        return build
+
+    def write_client_json(self, **values):
+        wc.atomic_write_json(self.root / "client.json", {"server": self.SERVER, "client_token": "t" * 43, **values})
+
+    def test_accepted_token_is_reused_without_registering(self):
+        self.write_client_json()
+        token = wc.reusable_client_token(self.root, self.SERVER, self.logger, api_factory=self.factory())
+        self.assertEqual(token, "t" * 43)
+        self.assertEqual(self.calls, [(self.SERVER, "t" * 43)])
+
+    def test_rejected_token_falls_back_to_registration(self):
+        self.write_client_json()
+        self.assertIsNone(wc.reusable_client_token(self.root, self.SERVER, self.logger, api_factory=self.factory("HTTP_401")))
+
+    def test_missing_invalid_or_foreign_registration_is_not_reused(self):
+        self.assertIsNone(wc.reusable_client_token(self.root, self.SERVER, self.logger, api_factory=self.factory()))
+        self.write_client_json(client_token="short")
+        self.assertIsNone(wc.reusable_client_token(self.root, self.SERVER, self.logger, api_factory=self.factory()))
+        self.write_client_json(server="https://chamados.ativalocacao.com.br:9443/plugins/ativawallpaper/api/v1")
+        self.assertIsNone(wc.reusable_client_token(self.root, self.SERVER, self.logger, api_factory=self.factory()))
+        (self.root / "client.json").write_text("not json", encoding="utf-8")
+        self.assertIsNone(wc.reusable_client_token(self.root, self.SERVER, self.logger, api_factory=self.factory()))
+        self.assertEqual(self.calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()

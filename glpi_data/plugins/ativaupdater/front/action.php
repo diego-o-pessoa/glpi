@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use GlpiPlugin\Ativaupdater\ConfigService;
+use GlpiPlugin\Ativaupdater\ReleasePolicy;
 
 include('../../../inc/includes.php');
 
@@ -17,7 +18,7 @@ $redirectWithError = static function (string $message): never {
 };
 
 $storageDirectory = GLPI_PLUGIN_DOC_DIR . '/ativaupdater/releases';
-$markClientsAwaiting = static function (string $version): void {
+$markClientsAwaiting = static function (string $version, bool $allowDowngrade = false): void {
     global $DB;
 
     $table = 'glpi_plugin_ativaupdater_clients';
@@ -26,7 +27,8 @@ $markClientsAwaiting = static function (string $version): void {
     }
     $iterator = $DB->request(['FROM' => $table]);
     foreach ($iterator as $client) {
-        if (version_compare((string) $client['installed_version'], $version, '>=')) {
+        $clientAction = ReleasePolicy::clientAction((string) $client['installed_version'], $version, $allowDowngrade);
+        if (!in_array($clientAction, [ReleasePolicy::ACTION_UPGRADE, ReleasePolicy::ACTION_DOWNGRADE], true)) {
             continue;
         }
         $status = (string) $client['status'];
@@ -39,7 +41,9 @@ $markClientsAwaiting = static function (string $version): void {
         $DB->update($table, [
             'available_version' => $version,
             'status' => 'checking',
-            'message' => 'Nova versão publicada; aguardando a próxima consulta automática do serviço.',
+            'message' => $clientAction === ReleasePolicy::ACTION_DOWNGRADE
+                ? 'Rollback autorizado para ' . $version . '; aguardando a próxima consulta automática do serviço.'
+                : 'Nova versão publicada; aguardando a próxima consulta automática do serviço.',
         ], ['id' => (int) $client['id']]);
     }
 };
@@ -83,7 +87,7 @@ if ($action === 'check_now') {
 
 if ($action === 'upload') {
     $version = trim((string) ($_POST['version'] ?? ''));
-    if (!preg_match('/^\d{1,5}\.\d{1,5}\.\d{1,5}$/D', $version)) {
+    if (!ReleasePolicy::isValidVersion($version)) {
         $redirectWithError('Informe uma versão no formato X.Y.Z, por exemplo 1.4.4.');
     }
 
@@ -161,9 +165,19 @@ if ($action === 'upload') {
         $redirectWithError('Não foi possível validar o instalador depois do upload.');
     }
 
+    $newerPublished = false;
+    foreach ($DB->request(['SELECT' => ['version'], 'FROM' => 'glpi_plugin_ativaupdater_releases']) as $existingRelease) {
+        if (version_compare((string) $existingRelease['version'], $version, '>')) {
+            $newerPublished = true;
+            break;
+        }
+    }
+
     $DB->beginTransaction();
     try {
-        $DB->update('glpi_plugin_ativaupdater_releases', ['active' => 0], ['active' => 1]);
+        $DB->update('glpi_plugin_ativaupdater_releases', ['active' => 0, 'allow_downgrade' => 0], [
+            'OR' => ['active' => 1, 'allow_downgrade' => 1],
+        ]);
         $ok = $DB->insert('glpi_plugin_ativaupdater_releases', [
             'version'           => $version,
             'original_filename' => mb_substr($originalName, 0, 255),
@@ -174,6 +188,9 @@ if ($action === 'upload') {
             'created_at'        => date('Y-m-d H:i:s'),
             'created_by'        => Session::getLoginUserID(),
             'active'            => 1,
+            'allow_downgrade'   => 0,
+            'activated_at'      => date('Y-m-d H:i:s'),
+            'activated_by'      => Session::getLoginUserID(),
         ]);
         if (!$ok) {
             throw new RuntimeException('Falha ao registrar a versão no banco de dados.');
@@ -191,17 +208,40 @@ if ($action === 'upload') {
     }
 
     Session::addMessageAfterRedirect('Versão ' . $version . ' publicada e ativada. Os serviços consultarão automaticamente em até uma hora.', true, INFO);
+    if ($newerPublished) {
+        Session::addMessageAfterRedirect(
+            'Existe uma versão maior que ' . $version . ' já publicada. Computadores nela não farão downgrade; use "Rollback" para forçar.',
+            true,
+            WARNING
+        );
+    }
     Html::redirect('dashboard.php');
 }
 
 if ($action === 'set_active') {
     $id = (int) ($_POST['id'] ?? 0);
+    $allowDowngrade = ($_POST['allow_downgrade'] ?? '0') === '1';
     $release = new PluginAtivaupdaterRelease();
-    if ($id <= 0 || !$release->getFromDB($id) || !$release->setActive($id)) {
+    if ($id <= 0 || !$release->getFromDB($id)) {
+        $redirectWithError('Versão não encontrada.');
+    }
+    $version = (string) $release->fields['version'];
+    if ($allowDowngrade && !ReleasePolicy::canRollbackTo($version)) {
+        $redirectWithError(
+            'Pacotes anteriores a ' . ReleasePolicy::ROLLBACK_MIN_VERSION . ' não suportam downgrade. Escolha uma versão igual ou superior.'
+        );
+    }
+    if (!$release->setActive($id, $allowDowngrade, (int) Session::getLoginUserID())) {
         $redirectWithError('Não foi possível ativar a versão selecionada.');
     }
-    $markClientsAwaiting((string) $release->fields['version']);
-    Session::addMessageAfterRedirect('Versão ativa atualizada.', true, INFO);
+    $markClientsAwaiting($version, $allowDowngrade);
+    Session::addMessageAfterRedirect(
+        $allowDowngrade
+            ? 'Rollback autorizado: todos os computadores voltarão para a versão ' . $version . ' na próxima consulta. Use "Verificar agora" para antecipar.'
+            : 'Versão ' . $version . ' ativa, somente para atualização. Computadores em versões maiores não farão downgrade.',
+        true,
+        INFO
+    );
     Html::redirect('dashboard.php');
 }
 

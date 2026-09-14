@@ -24,11 +24,26 @@ Exemplo de resposta:
   "sha256": "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
   "published_at": "2026-09-14T15:00:00Z",
   "download_url": "https://chamados.ativalocacao.com.br:8443/plugins/ativaupdater/api/v1/download/1.4.4",
-  "check_interval_seconds": 3600
+  "check_interval_seconds": 3600,
+  "allow_downgrade": false
 }
 ```
 
-Também existe `GET /releases/{version}` para uma versão específica.
+Também existe `GET /releases/{version}` para uma versão específica; nela `allow_downgrade` é `true` apenas se a versão consultada for a ativa com rollback autorizado.
+
+### Upgrade e downgrade
+
+O serviço (1.3.0+) compara a versão instalada com `version`:
+
+| Situação | Ação do serviço |
+|---|---|
+| instalada menor que a publicada | instala (upgrade) |
+| instalada igual à publicada | nada (`current`) |
+| instalada maior e `allow_downgrade` = `false` | nada; reporta `current` com "downgrade não autorizado" |
+| instalada maior, `allow_downgrade` = `true` e publicada ≥ 1.6.0 | instala a versão publicada (rollback) |
+| instalada maior e publicada < 1.6.0 | nada: pacotes anteriores não suportam rollback |
+
+`allow_downgrade` só é `true` quando um administrador usa **Rollback** ou **Autorizar downgrade** no dashboard. Um novo upload sempre publica como somente atualização. A mesma regra está em `src/ReleasePolicy.php` (servidor) e em `decide_action()` (serviço). Mantenha as duas alinhadas. Serviços anteriores a 1.3.0 ignoram o campo e nunca fazem downgrade.
 
 ## Download autenticado
 
@@ -59,7 +74,7 @@ Content-Type: application/json
 }
 ```
 
-Status aceitos: `checking`, `current`, `downloading`, `installing`, `updated` e `error`.
+Status aceitos: `checking`, `waiting_release`, `current`, `downloading`, `installing`, `updated` e `error`. Durante um rollback, `downloading` e `installing` trazem mensagens iniciadas por "Rollback". Uma instalação que não termina em 30 minutos é reportada como `error`, com o final do log do instalador.
 
 ## Códigos principais
 

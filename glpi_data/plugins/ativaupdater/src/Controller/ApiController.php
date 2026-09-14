@@ -6,6 +6,7 @@ namespace GlpiPlugin\Ativaupdater\Controller;
 
 use Glpi\Controller\AbstractController;
 use GlpiPlugin\Ativaupdater\ConfigService;
+use GlpiPlugin\Ativaupdater\ReleasePolicy;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -15,7 +16,6 @@ use Symfony\Component\Routing\Attribute\Route;
 
 final class ApiController extends AbstractController
 {
-    private const VERSION_PATTERN = '/^\d{1,5}\.\d{1,5}\.\d{1,5}$/D';
     private const STATUS_VALUES = [
         'checking', 'waiting_release', 'current', 'downloading', 'installing', 'updated', 'error',
     ];
@@ -71,12 +71,14 @@ final class ApiController extends AbstractController
             'published_at'           => gmdate('Y-m-d\TH:i:s\Z', strtotime((string) $release['created_at'])),
             'download_url'           => $this->configuredBaseUrl() . '/download/' . rawurlencode((string) $release['version']),
             'check_interval_seconds' => max(300, min(86400, ConfigService::getInt('check_interval_seconds', 3600))),
+            // Only honoured by services >= 1.3.0; older services ignore unknown keys.
+            'allow_downgrade'        => (int) $release['active'] === 1 && (int) ($release['allow_downgrade'] ?? 0) === 1,
         ];
     }
 
     private function findRelease(string $version): ?array
     {
-        if (!preg_match(self::VERSION_PATTERN, $version)) {
+        if (!ReleasePolicy::isValidVersion($version)) {
             return null;
         }
 
@@ -206,7 +208,7 @@ final class ApiController extends AbstractController
         $versions = [];
         foreach (['updater_version', 'installed_version', 'available_version', 'wallpaper_client_version'] as $field) {
             $value = trim((string) ($payload[$field] ?? ''));
-            if ($value !== '' && !preg_match(self::VERSION_PATTERN, $value)) {
+            if ($value !== '' && !ReleasePolicy::isValidVersion($value)) {
                 return $this->error('INVALID_VERSION', 'Versao informada invalida.', 422);
             }
             $versions[$field] = $value;

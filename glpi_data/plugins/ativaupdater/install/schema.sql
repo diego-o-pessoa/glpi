@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativaupdater_releases` (
   `created_at` datetime NOT NULL,
   `created_by` int(11) NOT NULL DEFAULT '0',
   `active` tinyint(1) NOT NULL DEFAULT '0',
+  `allow_downgrade` tinyint(1) NOT NULL DEFAULT '0',
+  `activated_at` datetime NULL,
+  `activated_by` int(11) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `version` (`version`),
   KEY `active` (`active`)
