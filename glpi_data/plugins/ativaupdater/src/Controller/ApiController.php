@@ -17,7 +17,7 @@ final class ApiController extends AbstractController
 {
     private const VERSION_PATTERN = '/^\d{1,5}\.\d{1,5}\.\d{1,5}$/D';
     private const STATUS_VALUES = [
-        'checking', 'current', 'downloading', 'installing', 'updated', 'error',
+        'checking', 'waiting_release', 'current', 'downloading', 'installing', 'updated', 'error',
     ];
 
     private function checkAuth(Request $request): ?JsonResponse

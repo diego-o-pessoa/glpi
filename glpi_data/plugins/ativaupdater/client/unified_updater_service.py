@@ -24,7 +24,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.1.0"
+UPDATER_VERSION = "1.1.1"
 DEFAULT_INTERVAL = 3600
 MAX_INSTALLER_BYTES = 2 * 1024 * 1024 * 1024
 VERSION_RE = re.compile(r"^\d{1,5}\.\d{1,5}\.\d{1,5}$")
@@ -40,6 +40,10 @@ MUTEX_NAME = r"Global\AtivaUnifiedUpdater"
 
 
 class UpdaterError(RuntimeError):
+    pass
+
+
+class NoReleaseError(UpdaterError):
     pass
 
 
@@ -229,6 +233,8 @@ class ApiClient:
             return self.opener.open(request, timeout=timeout)
         except HTTPError as exc:
             body = exc.read(4096).decode("utf-8", errors="replace")
+            if exc.code == 404 and '"NO_RELEASE"' in body:
+                raise NoReleaseError("Nenhuma versao foi publicada.") from exc
             raise UpdaterError(f"API respondeu HTTP {exc.code}: {body}") from exc
         except (URLError, OSError) as exc:
             raise UpdaterError(f"Falha de comunicacao com a API: {exc}") from exc
@@ -337,7 +343,21 @@ def check_once(logger: logging.Logger) -> int:
             logger.info("A instalacao de %s ainda esta na janela de espera.", pending_version)
             return 0
         api.report("checking", installed, message="Consultando a versao publicada.")
-        release = api.latest()
+        try:
+            release = api.latest()
+        except NoReleaseError:
+            state["last_check"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+            state["last_result"] = "waiting_release"
+            state["last_available_version"] = ""
+            state["last_error"] = ""
+            state["check_interval_seconds"] = int(config["check_interval_seconds"])
+            atomic_json(STATE_PATH, state)
+            api.report(
+                "waiting_release", installed,
+                message="Computador registrado; aguardando a primeira versao publicada.",
+            )
+            logger.info("Nenhuma versao publicada; nova consulta no intervalo configurado.")
+            return 0
         available = str(release["version"])
         interval = max(300, min(86400, int(release.get("check_interval_seconds", config["check_interval_seconds"]))))
         state["last_check"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")

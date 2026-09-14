@@ -18,6 +18,12 @@ $redirectWithError = static function (string $message): never {
 
 $storageDirectory = GLPI_PLUGIN_DOC_DIR . '/ativaupdater/releases';
 $action = (string) ($_POST['action'] ?? '');
+if ($action === '' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $receivedBytes = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+    if ($receivedBytes > 0) {
+        $redirectWithError('O servidor não recebeu o formulário completo. Verifique os limites upload_max_filesize e post_max_size do PHP.');
+    }
+}
 
 if ($action === 'upload') {
     $version = trim((string) ($_POST['version'] ?? ''));
@@ -66,11 +72,29 @@ if ($action === 'upload') {
     ) {
         $redirectWithError('Não foi possível preparar o armazenamento privado.');
     }
+    if (!is_writable($storageDirectory)) {
+        $redirectWithError('O armazenamento privado do Ativa Updater não permite gravação. Execute novamente a atualização do plugin para corrigir as permissões.');
+    }
+    $freeBytes = @disk_free_space($storageDirectory);
+    if ($freeBytes !== false && $freeBytes < $size + 1024 * 1024) {
+        $redirectWithError('Não há espaço livre suficiente para publicar o instalador.');
+    }
 
     $storedFilename = bin2hex(random_bytes(24)) . '.exe';
     $target = $storageDirectory . DIRECTORY_SEPARATOR . $storedFilename;
-    if (!move_uploaded_file($temporary, $target)) {
-        $redirectWithError('Falha ao mover o upload para o armazenamento privado.');
+    $moveWarning = null;
+    set_error_handler(static function (int $severity, string $message) use (&$moveWarning): bool {
+        $moveWarning = $message;
+        return true;
+    });
+    try {
+        $moved = move_uploaded_file($temporary, $target);
+    } finally {
+        restore_error_handler();
+    }
+    if (!$moved) {
+        $details = trim((string) $moveWarning);
+        $redirectWithError('Falha ao mover o upload para o armazenamento privado.' . ($details !== '' ? ' Detalhe: ' . $details : ''));
     }
     @chmod($target, 0640);
 
@@ -98,6 +122,10 @@ if ($action === 'upload') {
         if (!$ok) {
             throw new RuntimeException('Falha ao registrar a versão no banco de dados.');
         }
+        $releaseId = (int) $DB->insertId();
+        if ($releaseId <= 0) {
+            throw new RuntimeException('A versão não recebeu um identificador no banco de dados.');
+        }
         $DB->commit();
     } catch (Throwable $exception) {
         $DB->rollBack();
@@ -105,7 +133,7 @@ if ($action === 'upload') {
         $redirectWithError($exception->getMessage());
     }
 
-    Session::addMessageAfterRedirect('Versão ' . $version . ' publicada. Os serviços consultarão a API em até uma hora.', true, INFO);
+    Session::addMessageAfterRedirect('Versão ' . $version . ' publicada e ativada. Os serviços consultarão automaticamente em até uma hora.', true, INFO);
     Html::redirect('dashboard.php');
 }
 

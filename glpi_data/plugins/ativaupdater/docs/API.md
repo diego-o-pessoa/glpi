@@ -49,7 +49,7 @@ Content-Type: application/json
 {
   "machine_guid": "00000000-0000-0000-0000-000000000000",
   "hostname": "TI-01-000013",
-  "updater_version": "1.1.0",
+  "updater_version": "1.1.1",
   "installed_version": "1.4.5",
   "wallpaper_client_version": "1.5.0",
   "glpi_agent_version": "1.19",

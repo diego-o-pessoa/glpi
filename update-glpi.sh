@@ -18,7 +18,7 @@ git pull --ff-only
 docker compose config --quiet
 
 echo "Configurando o limite para pacotes de atualizacao..."
-docker exec glpi_web sh -c 'for php_conf_dir in /etc/php/*/apache2/conf.d; do [ -d "$php_conf_dir" ] || continue; printf "%s\n" "upload_max_filesize=512M" "post_max_size=520M" "memory_limit=512M" > "$php_conf_dir/99-ativa-uploads.ini"; done; apache2ctl graceful'
+docker exec glpi_web sh -c 'for php_conf_dir in /etc/php/*/apache2/conf.d; do [ -d "$php_conf_dir" ] || continue; printf "%s\n" "upload_max_filesize=512M" "post_max_size=520M" "memory_limit=512M" "max_execution_time=300" "max_input_time=300" > "$php_conf_dir/99-ativa-uploads.ini"; done; apache2ctl graceful'
 
 if ! docker exec glpi_db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqladmin ping --host=127.0.0.1 --user=root --silent' >/dev/null 2>&1; then
     echo "ERRO: o banco deixou de responder. A instalacao do plugin nao sera executada." >&2
@@ -28,6 +28,19 @@ fi
 echo "Instalando/atualizando o plugin ${plugin_name}..."
 docker exec -u www-data glpi_web php /var/www/html/glpi/bin/console glpi:plugin:install "$plugin_name" --username=glpi --force
 docker exec -u www-data glpi_web php /var/www/html/glpi/bin/console glpi:plugin:activate "$plugin_name"
+
+if [[ "$plugin_name" == "ativaupdater" ]]; then
+    echo "Garantindo as permissoes do armazenamento privado do Ativa Updater..."
+    docker exec -u root glpi_web sh -c '
+        install -d -o www-data -g www-data -m 0750 \
+            /var/www/html/glpi/files/_plugins/ativaupdater \
+            /var/www/html/glpi/files/_plugins/ativaupdater/releases \
+            /var/www/html/glpi/files/_plugins/ativaupdater/tmp
+        chown -R www-data:www-data /var/www/html/glpi/files/_plugins/ativaupdater
+        find /var/www/html/glpi/files/_plugins/ativaupdater -type d -exec chmod 0750 {} \;
+        find /var/www/html/glpi/files/_plugins/ativaupdater -type f -exec chmod 0640 {} \;
+    '
+fi
 
 echo "Limpando o cache do GLPI..."
 if ! docker exec -u www-data glpi_web php /var/www/html/glpi/bin/console cache:clear; then

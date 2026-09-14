@@ -149,7 +149,8 @@ foreach ($clients as $client) {
     if ($activeVersion !== '' && version_compare((string) $client['installed_version'], $activeVersion, '>=')) {
         $updatedClients++;
     }
-    if ((string) $client['status'] === 'error') {
+    $noReleaseYet = str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE');
+    if ((string) $client['status'] === 'error' && !$noReleaseYet) {
         $errorClients++;
     }
 }
@@ -158,8 +159,12 @@ $progress = $totalClients > 0 ? (int) round(($updatedClients / $totalClients) * 
 echo "<div class='card mb-4'>";
 echo "<div class='card-header d-flex justify-content-between'><h3>Computadores</h3><span id='refresh-countdown' class='text-muted'>Atualização da tela em 15 s</span></div>";
 echo "<div class='card-body'>";
-echo "<div class='d-flex justify-content-between mb-1'><span>{$updatedClients} de {$totalClients} computador(es) na versão atual</span><strong>{$progress}%</strong></div>";
-echo "<div class='progress mb-3' style='height: 20px'><div class='progress-bar bg-success' role='progressbar' style='width: {$progress}%' aria-valuenow='{$progress}' aria-valuemin='0' aria-valuemax='100'>{$progress}%</div></div>";
+if ($activeVersion === '') {
+    echo "<div class='alert alert-info mb-3'>{$totalClients} computador(es) identificado(s). Publique o primeiro instalador unificado para iniciar a distribuição automática.</div>";
+} else {
+    echo "<div class='d-flex justify-content-between mb-1'><span>{$updatedClients} de {$totalClients} computador(es) na versão atual</span><strong>{$progress}%</strong></div>";
+    echo "<div class='progress mb-3' style='height: 20px'><div class='progress-bar bg-success' role='progressbar' style='width: {$progress}%' aria-valuenow='{$progress}' aria-valuemin='0' aria-valuemax='100'>{$progress}%</div></div>";
+}
 if ($errorClients > 0) {
     echo "<div class='alert alert-danger'>{$errorClients} computador(es) informaram erro. Consulte o motivo na tabela.</div>";
 }
@@ -169,6 +174,7 @@ if ($totalClients === 0) {
     echo "<div class='table-responsive'><table class='table table-striped align-middle'><thead><tr><th>Computador</th><th>Pacote unificado</th><th>Wallpaper</th><th>GLPI Agent</th><th>Disponível</th><th>Status</th><th>Última consulta</th><th>Detalhes</th></tr></thead><tbody>";
     $labels = [
         'checking' => ['Consultando', 'bg-info'],
+        'waiting_release' => ['Aguardando publicação', 'bg-info'],
         'current' => ['Atualizado', 'bg-success'],
         'downloading' => ['Baixando', 'bg-primary'],
         'installing' => ['Instalando', 'bg-warning text-dark'],
@@ -177,6 +183,9 @@ if ($totalClients === 0) {
     ];
     foreach ($clients as $client) {
         $statusKey = (string) $client['status'];
+        if ($statusKey === 'error' && str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE')) {
+            $statusKey = 'waiting_release';
+        }
         [$statusLabel, $statusClass] = $labels[$statusKey] ?? [$statusKey, 'bg-secondary'];
         $lastCheck = (string) $client['last_check'];
         $offline = strtotime($lastCheck) < time() - 7200;
