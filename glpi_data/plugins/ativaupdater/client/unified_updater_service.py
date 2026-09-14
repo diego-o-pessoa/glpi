@@ -40,10 +40,14 @@ ACTION_CURRENT = "current"
 ACTION_BLOCKED_DOWNGRADE = "blocked_downgrade"
 
 # A silent installation that has not reconfigured the service after this long
-# is considered failed. Repeated failures of the same package back off and stop.
+# is considered failed. Repeated failures of the same package back off; from
+# MAX_INSTALL_ATTEMPTS on, the package is retried once a day so transient
+# causes (e.g. Windows Installer busy) heal without an administrator.
 INSTALL_TIMEOUT_SECONDS = 1800
 MAX_INSTALL_ATTEMPTS = 3
-RETRY_BACKOFF_SECONDS = (300, 1800, 3600)
+RETRY_BACKOFF_SECONDS = (300, 1800)
+SUSPENDED_RETRY_SECONDS = 86400
+NOT_SESSION_ZERO_EXIT_CODE = 3
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "UnifiedUpdater"
@@ -52,6 +56,7 @@ STATE_PATH = PRODUCT_DIR / "state.json"
 DOWNLOAD_DIR = PRODUCT_DIR / "downloads"
 LOG_DIR = PRODUCT_DIR / "logs"
 WALLPAPER_VERSION_PATH = PROGRAM_DATA / "AtivaLocacao" / "Wallpaper" / "version.json"
+WALLPAPER_CLIENT_PATH = PROGRAM_DATA / "AtivaLocacao" / "Wallpaper" / "AtivaWallpaperClient.exe"
 MUTEX_NAME = r"Global\AtivaUnifiedUpdater"
 
 
@@ -168,7 +173,11 @@ def register_install_failure(state: dict[str, Any], now: float) -> int:
     clear_pending_install(state)
     same_package = state.get("failed_version") == version and state.get("failed_sha256") == sha256
     attempts = int(state.get("failed_attempts", 0) or 0) + 1 if same_package else 1
-    delay = RETRY_BACKOFF_SECONDS[min(attempts, len(RETRY_BACKOFF_SECONDS)) - 1]
+    delay = (
+        SUSPENDED_RETRY_SECONDS
+        if attempts >= MAX_INSTALL_ATTEMPTS
+        else RETRY_BACKOFF_SECONDS[min(attempts, len(RETRY_BACKOFF_SECONDS)) - 1]
+    )
     state.update({
         "failed_version": version,
         "failed_sha256": sha256,
@@ -183,20 +192,21 @@ def install_block_reason(state: dict[str, Any], release: dict[str, Any], now: fl
     if state.get("failed_version") != release["version"] or state.get("failed_sha256") != release["sha256"]:
         return None
     attempts = int(state.get("failed_attempts", 0) or 0)
+    remaining = int(float(state.get("retry_after", 0) or 0) - now)
+    if remaining <= 0:
+        return None
     if attempts >= MAX_INSTALL_ATTEMPTS:
         return (
             f"A instalacao de {release['version']} falhou {attempts} vezes e foi suspensa. "
-            "Publique outra versao ou use Verificar agora para tentar novamente.",
+            f"Nova tentativa automatica em {max(1, remaining // 3600)} h; "
+            "use Verificar agora para tentar imediatamente.",
             True,
         )
-    remaining = int(float(state.get("retry_after", 0) or 0) - now)
-    if remaining > 0:
-        return (
-            f"A instalacao de {release['version']} falhou ({attempts} de {MAX_INSTALL_ATTEMPTS}); "
-            f"nova tentativa em {remaining} segundos.",
-            False,
-        )
-    return None
+    return (
+        f"A instalacao de {release['version']} falhou ({attempts} de {MAX_INSTALL_ATTEMPTS}); "
+        f"nova tentativa em {remaining} segundos.",
+        False,
+    )
 
 
 def installer_log_tail(max_lines: int = 20, max_chars: int = 600) -> str:
@@ -211,6 +221,200 @@ def installer_log_tail(max_lines: int = 20, max_chars: int = 600) -> str:
         return ""
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     return " | ".join(lines[-max_lines:])[-max_chars:]
+
+
+def cleanup_downloads(keep: Path | None = None) -> None:
+    """Remove installers from previous versions so ProgramData does not grow forever."""
+    try:
+        candidates = list(DOWNLOAD_DIR.glob("Ativa-Unified-Agent-Setup-*"))
+    except OSError:
+        return
+    for path in candidates:
+        if keep is not None and path.name.lower() == keep.name.lower():
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            # An installer that is still running stays locked; retry next time.
+            continue
+
+
+def is_glpi_agent_display_name(name: str) -> bool:
+    # The official MSI registers "GLPI Agent <version>", e.g. "GLPI Agent 1.19".
+    # Do not match other products such as "GLPI Agent Monitor".
+    return re.fullmatch(r"glpi agent(?:\s+v?\d[\w.+-]*)?(?:\s+\(.*\))?", name.strip().lower()) is not None
+
+
+# WTS_CONNECTSTATE_CLASS values that belong to a logged-on user.
+WTS_ACTIVE = 0
+WTS_DISCONNECTED = 4
+
+
+def select_user_sessions(sessions: list[tuple[int, int]]) -> list[int]:
+    """Session ids (from (id, state) pairs) where a user may be logged on."""
+    return [
+        session_id
+        for session_id, state in sessions
+        if session_id != 0 and state in (WTS_ACTIVE, WTS_DISCONNECTED)
+    ]
+
+
+def current_session_id() -> int | None:
+    if os.name != "nt":
+        return None
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.GetCurrentProcessId.restype = wintypes.DWORD
+    kernel32.ProcessIdToSessionId.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.ProcessIdToSessionId.restype = wintypes.BOOL
+    session = wintypes.DWORD()
+    if not kernel32.ProcessIdToSessionId(kernel32.GetCurrentProcessId(), ctypes.byref(session)):
+        return None
+    return int(session.value)
+
+
+class WTS_SESSION_INFOW(ctypes.Structure):
+    _fields_ = [
+        ("SessionId", wintypes.DWORD),
+        ("pWinStationName", wintypes.LPWSTR),
+        ("State", ctypes.c_int),
+    ]
+
+
+class STARTUPINFOW(ctypes.Structure):
+    _fields_ = [
+        ("cb", wintypes.DWORD),
+        ("lpReserved", wintypes.LPWSTR),
+        ("lpDesktop", wintypes.LPWSTR),
+        ("lpTitle", wintypes.LPWSTR),
+        ("dwX", wintypes.DWORD),
+        ("dwY", wintypes.DWORD),
+        ("dwXSize", wintypes.DWORD),
+        ("dwYSize", wintypes.DWORD),
+        ("dwXCountChars", wintypes.DWORD),
+        ("dwYCountChars", wintypes.DWORD),
+        ("dwFillAttribute", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("wShowWindow", wintypes.WORD),
+        ("cbReserved2", wintypes.WORD),
+        ("lpReserved2", ctypes.POINTER(ctypes.c_byte)),
+        ("hStdInput", wintypes.HANDLE),
+        ("hStdOutput", wintypes.HANDLE),
+        ("hStdError", wintypes.HANDLE),
+    ]
+
+
+class PROCESS_INFORMATION(ctypes.Structure):
+    _fields_ = [
+        ("hProcess", wintypes.HANDLE),
+        ("hThread", wintypes.HANDLE),
+        ("dwProcessId", wintypes.DWORD),
+        ("dwThreadId", wintypes.DWORD),
+    ]
+
+
+def enumerate_sessions() -> list[tuple[int, int]]:
+    wtsapi32 = ctypes.WinDLL("wtsapi32", use_last_error=True)
+    wtsapi32.WTSEnumerateSessionsW.argtypes = [
+        wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD,
+        ctypes.POINTER(ctypes.POINTER(WTS_SESSION_INFOW)), ctypes.POINTER(wintypes.DWORD),
+    ]
+    wtsapi32.WTSEnumerateSessionsW.restype = wintypes.BOOL
+    wtsapi32.WTSFreeMemory.argtypes = [wintypes.LPVOID]
+    info = ctypes.POINTER(WTS_SESSION_INFOW)()
+    count = wintypes.DWORD()
+    if not wtsapi32.WTSEnumerateSessionsW(None, 0, 1, ctypes.byref(info), ctypes.byref(count)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        return [(int(info[index].SessionId), int(info[index].State)) for index in range(count.value)]
+    finally:
+        wtsapi32.WTSFreeMemory(info)
+
+
+def launch_in_session(session_id: int, executable: Path) -> None:
+    """Start executable as the user logged on to session_id. Requires LocalSystem."""
+    maximum_allowed = 0x02000000
+    security_impersonation = 2
+    token_primary = 1
+    create_unicode_environment = 0x00000400
+    wtsapi32 = ctypes.WinDLL("wtsapi32", use_last_error=True)
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    userenv = ctypes.WinDLL("userenv", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    wtsapi32.WTSQueryUserToken.argtypes = [wintypes.ULONG, ctypes.POINTER(wintypes.HANDLE)]
+    wtsapi32.WTSQueryUserToken.restype = wintypes.BOOL
+    advapi32.DuplicateTokenEx.argtypes = [
+        wintypes.HANDLE, wintypes.DWORD, wintypes.LPVOID, ctypes.c_int, ctypes.c_int, ctypes.POINTER(wintypes.HANDLE),
+    ]
+    advapi32.DuplicateTokenEx.restype = wintypes.BOOL
+    advapi32.CreateProcessAsUserW.argtypes = [
+        wintypes.HANDLE, wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.LPVOID, wintypes.LPVOID, wintypes.BOOL,
+        wintypes.DWORD, wintypes.LPVOID, wintypes.LPCWSTR, ctypes.POINTER(STARTUPINFOW),
+        ctypes.POINTER(PROCESS_INFORMATION),
+    ]
+    advapi32.CreateProcessAsUserW.restype = wintypes.BOOL
+    userenv.CreateEnvironmentBlock.argtypes = [ctypes.POINTER(wintypes.LPVOID), wintypes.HANDLE, wintypes.BOOL]
+    userenv.CreateEnvironmentBlock.restype = wintypes.BOOL
+    userenv.DestroyEnvironmentBlock.argtypes = [wintypes.LPVOID]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+    user_token = wintypes.HANDLE()
+    primary_token = wintypes.HANDLE()
+    environment = wintypes.LPVOID()
+    try:
+        if not wtsapi32.WTSQueryUserToken(session_id, ctypes.byref(user_token)):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if not advapi32.DuplicateTokenEx(
+            user_token, maximum_allowed, None, security_impersonation, token_primary, ctypes.byref(primary_token)
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if not userenv.CreateEnvironmentBlock(ctypes.byref(environment), primary_token, False):
+            raise ctypes.WinError(ctypes.get_last_error())
+        desktop = ctypes.create_unicode_buffer("winsta0\\default")
+        command_line = ctypes.create_unicode_buffer(f'"{executable}"')
+        startup = STARTUPINFOW()
+        startup.cb = ctypes.sizeof(STARTUPINFOW)
+        startup.lpDesktop = ctypes.cast(desktop, wintypes.LPWSTR)
+        process = PROCESS_INFORMATION()
+        if not advapi32.CreateProcessAsUserW(
+            primary_token, str(executable), command_line, None, None, False,
+            create_unicode_environment, environment, str(executable.parent),
+            ctypes.byref(startup), ctypes.byref(process),
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        kernel32.CloseHandle(process.hThread)
+        kernel32.CloseHandle(process.hProcess)
+    finally:
+        if environment:
+            userenv.DestroyEnvironmentBlock(environment)
+        for handle in (primary_token, user_token):
+            if handle:
+                kernel32.CloseHandle(handle)
+
+
+def start_wallpaper_clients(logger: logging.Logger) -> int:
+    """Start the Wallpaper Client for every logged-on user after an installation.
+
+    The unified installer runs as SYSTEM when launched by this service or by
+    GLPI Inventory. Inno Setup's ExecAsOriginalUser would then start the client
+    as SYSTEM in session 0, where it has no visible desktop, while the users'
+    clients stay stopped until their next logon. Returns
+    NOT_SESSION_ZERO_EXIT_CODE outside session 0 so the installer can fall back
+    to starting the client for the user who ran it.
+    """
+    if current_session_id() != 0:
+        return NOT_SESSION_ZERO_EXIT_CODE
+    if not WALLPAPER_CLIENT_PATH.is_file():
+        logger.warning("Cliente de wallpaper nao encontrado em %s.", WALLPAPER_CLIENT_PATH)
+        return 0
+    started = 0
+    for session_id in select_user_sessions(enumerate_sessions()):
+        try:
+            launch_in_session(session_id, WALLPAPER_CLIENT_PATH)
+            started += 1
+        except OSError as exc:
+            logger.warning("Nao foi possivel iniciar o cliente de wallpaper na sessao %s: %s", session_id, exc)
+    logger.info("Cliente de wallpaper iniciado em %d sessao(oes) de usuario.", started)
+    return 0
 
 
 def validate_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -240,6 +444,14 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
         "verify_tls": True,
         "check_interval_seconds": interval,
     }
+
+
+def configured_interval(state: dict[str, Any]) -> int:
+    try:
+        interval = int(state.get("check_interval_seconds", DEFAULT_INTERVAL))
+    except (TypeError, ValueError):
+        interval = DEFAULT_INTERVAL
+    return max(300, min(86400, interval))
 
 
 def get_state() -> dict[str, Any]:
@@ -286,7 +498,7 @@ def glpi_agent_version() -> str:
                     try:
                         with winreg.OpenKey(root, winreg.EnumKey(root, index)) as entry:
                             name = str(winreg.QueryValueEx(entry, "DisplayName")[0])
-                            if name.strip().lower() != "glpi agent":
+                            if not is_glpi_agent_display_name(name):
                                 continue
                             version = str(winreg.QueryValueEx(entry, "DisplayVersion")[0]).strip()
                             if re.fullmatch(r"\d{1,5}\.\d{1,5}(?:\.\d{1,5})?", version):
@@ -431,10 +643,18 @@ def launch_installer(path: Path, logger: logging.Logger) -> None:
 
 
 def check_once(logger: logging.Logger, manual: bool = False) -> int:
-    config = validate_config(load_json(CONFIG_PATH))
+    try:
+        config = validate_config(load_json(CONFIG_PATH))
+    except (UpdaterError, ValueError, TypeError) as exc:
+        logger.error("Configuracao do servico invalida; nova tentativa em 5 minutos: %s", exc)
+        return 2
     state = get_state()
     installed = str(state.get("installed_version", "0.0.0"))
-    version_tuple(installed)
+    if not VERSION_RE.fullmatch(installed):
+        # A damaged state file must not stop the service: reinstalling the
+        # published package rewrites installed_version through --configure.
+        logger.warning("installed_version invalida no estado local (%r); considerando 0.0.0.", installed)
+        installed = "0.0.0"
     api = ApiClient(config)
     try:
         if manual and state.get("failed_attempts"):
@@ -467,6 +687,11 @@ def check_once(logger: logging.Logger, manual: bool = False) -> int:
                 )
                 if attempts < MAX_INSTALL_ATTEMPTS:
                     message += f" Nova tentativa em {delay} segundos."
+                else:
+                    message += (
+                        f" Tentativas suspensas; nova tentativa automatica em {delay // 3600} h "
+                        "ou use Verificar agora."
+                    )
                 tail = installer_log_tail()
                 if tail:
                     message += f" Log do instalador: {tail}"
@@ -501,9 +726,17 @@ def check_once(logger: logging.Logger, manual: bool = False) -> int:
         state["check_interval_seconds"] = interval
         action = decide_action(installed, available, bool(release["allow_downgrade"]))
         if action in (ACTION_CURRENT, ACTION_BLOCKED_DOWNGRADE):
+            status = "current"
             if action == ACTION_CURRENT:
                 clear_install_failures(state)
-                message = "A maquina ja esta na versao publicada."
+                cleanup_downloads()
+                if state.get("last_result") == "installed":
+                    # First contact after --configure: tell the dashboard the
+                    # silent installation finished instead of a generic state.
+                    status = "updated"
+                    message = f"Versao {installed} instalada com sucesso."
+                else:
+                    message = "A maquina ja esta na versao publicada."
             else:
                 message = (
                     f"Versao instalada {installed} e superior a publicada {available}; "
@@ -512,7 +745,7 @@ def check_once(logger: logging.Logger, manual: bool = False) -> int:
             state["last_result"] = "current"
             state["last_error"] = ""
             atomic_json(STATE_PATH, state)
-            api.report("current", installed, available, message)
+            api.report(status, installed, available, message)
             logger.info("Versao atual %s; publicada %s (%s). Nenhuma acao necessaria.", installed, available, action)
             return 0
 
@@ -529,6 +762,7 @@ def check_once(logger: logging.Logger, manual: bool = False) -> int:
         is_rollback = action == ACTION_DOWNGRADE
         DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
         destination = DOWNLOAD_DIR / f"Ativa-Unified-Agent-Setup-{available}.exe"
+        cleanup_downloads(keep=destination)
         api.report(
             "downloading", installed, available,
             f"Rollback: baixando a versao {available} para substituir a {installed}."
@@ -624,15 +858,26 @@ class ServiceRuntime:
                     logger.warning("Nao foi possivel consultar comandos agora: %s", exc)
 
             if now >= next_full_check or manual_check:
-                result = check_once(logger, manual=manual_check)
+                try:
+                    result = check_once(logger, manual=manual_check)
+                except Exception:
+                    # Never let an unexpected error end the service: Windows
+                    # only restarts it automatically after a crash, not after
+                    # a clean stop, and the machine would stop updating.
+                    logger.exception("Falha inesperada na verificacao; nova tentativa em 300 segundos.")
+                    result = 2
                 if result == 10:
-                    self.stop_event.set()
-                    break
-                interval = 300 if result != 0 else int(get_state().get("check_interval_seconds", DEFAULT_INTERVAL))
-                interval = max(300, min(86400, interval))
-                next_full_check = time.monotonic() + interval
-                if result != 0:
-                    logger.warning("Nova tentativa completa agendada em 300 segundos.")
+                    # Keep running: the installer stops this service before
+                    # replacing its executable and starts it again at the end.
+                    # If the installer dies before that, the next check detects
+                    # the timeout instead of leaving the machine unattended.
+                    next_full_check = time.monotonic() + INSTALL_TIMEOUT_SECONDS + 60
+                    logger.info("Instalador iniciado; aguardando o instalador reiniciar o servico.")
+                else:
+                    interval = 300 if result != 0 else configured_interval(get_state())
+                    next_full_check = time.monotonic() + interval
+                    if result != 0:
+                        logger.warning("Nova tentativa completa agendada em 300 segundos.")
 
             wait_seconds = min(COMMAND_POLL_SECONDS, max(1.0, next_full_check - time.monotonic()))
             self.stop_event.wait(wait_seconds)
@@ -726,6 +971,10 @@ def main() -> int:
     parser.add_argument("--service", action="store_true", help="Executa pelo Windows Service Control Manager")
     parser.add_argument("--run-once", action="store_true", help="Faz uma verificacao imediata")
     parser.add_argument("--configure", action="store_true", help="Instala a configuracao local protegida")
+    parser.add_argument(
+        "--start-wallpaper-clients", action="store_true",
+        help="Inicia o cliente de wallpaper nas sessoes de usuario (uso pelo instalador como SYSTEM)",
+    )
     parser.add_argument("--config", type=Path)
     parser.add_argument("--installed-version", default="")
     parser.add_argument("--debug", action="store_true")
@@ -738,6 +987,8 @@ def main() -> int:
         if args.config is None or not args.installed_version:
             parser.error("--configure exige --config e --installed-version")
         return configure_service(args.config, args.installed_version)
+    if args.start_wallpaper_clients:
+        return start_wallpaper_clients(configure_logging(args.debug))
     if args.run_once:
         with SingleInstance():
             return check_once(configure_logging(args.debug), manual=True)

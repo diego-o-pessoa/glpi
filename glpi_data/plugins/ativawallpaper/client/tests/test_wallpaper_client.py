@@ -496,6 +496,63 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(caught.exception.code, "TLS_VERIFICATION_DISABLED")
 
 
+class SilentUpdateTests(unittest.TestCase):
+    def test_client_refuses_to_run_in_session_zero(self):
+        original = wc.current_session_id
+        wc.current_session_id = lambda: 0
+        try:
+            with self.assertRaises(wc.ClientError) as caught:
+                wc.run_client(once=True, debug=False)
+            self.assertEqual(caught.exception.code, "INTERACTIVE_SESSION_REQUIRED")
+        finally:
+            wc.current_session_id = original
+
+    @unittest.skipUnless(wc.os.name == "nt", "Windows session API")
+    def test_interactive_test_process_is_not_in_session_zero(self):
+        self.assertNotEqual(wc.current_session_id(), 0)
+
+    def test_replace_executable_waits_for_the_stopping_client(self):
+        with tempfile.TemporaryDirectory() as directory:
+            staged = Path(directory) / "client.exe.new"
+            destination = Path(directory) / "client.exe"
+            staged.write_bytes(b"new")
+            destination.write_bytes(b"old")
+            real_replace = wc.os.replace
+            calls = []
+
+            def flaky_replace(source, target):
+                calls.append(source)
+                if len(calls) < 3:
+                    raise PermissionError("file in use")
+                real_replace(source, target)
+
+            wc.os.replace = flaky_replace
+            try:
+                wc.replace_executable(staged, destination, attempts=5, delay_seconds=0)
+            finally:
+                wc.os.replace = real_replace
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(destination.read_bytes(), b"new")
+
+    def test_replace_executable_gives_up_and_cleans_staged_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            staged = Path(directory) / "client.exe.new"
+            staged.write_bytes(b"new")
+            real_replace = wc.os.replace
+
+            def locked(_source, _target):
+                raise PermissionError("file in use")
+
+            wc.os.replace = locked
+            try:
+                with self.assertRaises(wc.ClientError) as caught:
+                    wc.replace_executable(staged, Path(directory) / "client.exe", attempts=2, delay_seconds=0)
+            finally:
+                wc.os.replace = real_replace
+            self.assertEqual(caught.exception.code, "CLIENT_REPLACE_FAILED")
+            self.assertFalse(staged.exists())
+
+
 class ReusableRegistrationTests(unittest.TestCase):
     SERVER = "https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1"
 

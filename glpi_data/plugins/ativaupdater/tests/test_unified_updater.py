@@ -92,10 +92,10 @@ class FailureTrackingTests(unittest.TestCase):
         state = {"pending_version": "1.6.0", "pending_sha256": SHA, "pending_started_at": 1.0}
         self.assertEqual(updater.register_install_failure(state, 1000.0), 300)
         self.assertNotIn("pending_version", state)
-        for expected_delay in (1800, 3600):
+        for expected_delay in (1800, updater.SUSPENDED_RETRY_SECONDS, updater.SUSPENDED_RETRY_SECONDS):
             state.update({"pending_version": "1.6.0", "pending_sha256": SHA})
             self.assertEqual(updater.register_install_failure(state, 1000.0), expected_delay)
-        self.assertEqual(state["failed_attempts"], 3)
+        self.assertEqual(state["failed_attempts"], 4)
 
         state.update({"pending_version": "1.6.1", "pending_sha256": "c" * 64})
         self.assertEqual(updater.register_install_failure(state, 1000.0), 300)
@@ -107,8 +107,70 @@ class FailureTrackingTests(unittest.TestCase):
         self.assertEqual(updater.install_block_reason(state, release, 1000.0)[1], False)
         self.assertIsNone(updater.install_block_reason(state, release, 1300.0))
         self.assertIsNone(updater.install_block_reason(state, {"version": "1.6.0", "sha256": "c" * 64}, 1000.0))
-        state["failed_attempts"] = updater.MAX_INSTALL_ATTEMPTS
-        self.assertEqual(updater.install_block_reason(state, release, 99999.0)[1], True)
+
+    def test_suspended_package_is_retried_daily(self) -> None:
+        release = {"version": "1.6.0", "sha256": SHA}
+        state = {
+            "failed_version": "1.6.0",
+            "failed_sha256": SHA,
+            "failed_attempts": updater.MAX_INSTALL_ATTEMPTS,
+            "retry_after": 1000.0 + updater.SUSPENDED_RETRY_SECONDS,
+        }
+        message, permanent = updater.install_block_reason(state, release, 1000.0)
+        self.assertTrue(permanent)
+        self.assertIn("24 h", message)
+        self.assertIsNone(updater.install_block_reason(state, release, 1000.0 + updater.SUSPENDED_RETRY_SECONDS))
+
+
+class ComponentDetectionTests(unittest.TestCase):
+    def test_glpi_agent_display_name(self) -> None:
+        for name in ("GLPI Agent", "GLPI Agent 1.19", "glpi agent 1.19.1 (x64)", " GLPI Agent v1.20-git "):
+            with self.subTest(name=name):
+                self.assertTrue(updater.is_glpi_agent_display_name(name))
+        for name in ("GLPI Agent Monitor", "GLPI Agent Monitor 1.3", "FusionInventory Agent 2.6", "GLPI"):
+            with self.subTest(name=name):
+                self.assertFalse(updater.is_glpi_agent_display_name(name))
+
+
+class WallpaperClientStartTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.logger = logging.getLogger("ativaupdater-session-tests")
+        self.logger.addHandler(logging.NullHandler())
+        self.logger.propagate = False
+
+    def test_only_user_sessions_are_selected(self) -> None:
+        sessions = [(0, updater.WTS_DISCONNECTED), (1, updater.WTS_ACTIVE), (2, updater.WTS_DISCONNECTED), (3, 6)]
+        self.assertEqual(updater.select_user_sessions(sessions), [1, 2])
+
+    def test_outside_session_zero_asks_installer_to_fall_back(self) -> None:
+        with mock.patch.object(updater, "current_session_id", return_value=1), \
+                mock.patch.object(updater, "enumerate_sessions") as enumerate_sessions:
+            self.assertEqual(updater.start_wallpaper_clients(self.logger), updater.NOT_SESSION_ZERO_EXIT_CODE)
+        enumerate_sessions.assert_not_called()
+
+    def test_system_starts_client_in_each_user_session(self) -> None:
+        launched: list[int] = []
+
+        def launch(session_id: int, _executable: Path) -> None:
+            if session_id == 2:
+                raise OSError("session logging off")
+            launched.append(session_id)
+
+        with tempfile.TemporaryDirectory() as directory:
+            client = Path(directory) / "AtivaWallpaperClient.exe"
+            client.write_bytes(b"MZ")
+            with mock.patch.object(updater, "current_session_id", return_value=0), \
+                    mock.patch.object(updater, "WALLPAPER_CLIENT_PATH", client), \
+                    mock.patch.object(updater, "enumerate_sessions", return_value=[(1, 0), (2, 0), (3, 4)]), \
+                    mock.patch.object(updater, "launch_in_session", side_effect=launch):
+                self.assertEqual(updater.start_wallpaper_clients(self.logger), 0)
+        self.assertEqual(launched, [1, 3])
+
+    @unittest.skipUnless(updater.os.name == "nt", "Windows session APIs")
+    def test_windows_session_apis_are_callable(self) -> None:
+        current = updater.current_session_id()
+        self.assertIsNotNone(current)
+        self.assertIn(current, [session_id for session_id, _ in updater.enumerate_sessions()])
 
 
 class FakeApi:
@@ -242,7 +304,7 @@ class CheckOnceTests(unittest.TestCase):
             failed_version="1.6.0",
             failed_sha256=SHA,
             failed_attempts=updater.MAX_INSTALL_ATTEMPTS,
-            retry_after=0,
+            retry_after=time.time() + updater.SUSPENDED_RETRY_SECONDS,
         )
         self.publish("1.6.0", allow_downgrade=True)
 
@@ -258,6 +320,75 @@ class CheckOnceTests(unittest.TestCase):
         self.publish("1.6.0", allow_downgrade=True)
         self.assertEqual(updater.check_once(self.logger), 0)
         self.assertNotIn("failed_attempts", self.state())
+
+    def test_first_check_after_installation_reports_updated_once(self) -> None:
+        self.write_state(installed_version="1.6.0", last_result="installed")
+        self.publish("1.6.0", allow_downgrade=False)
+        self.assertEqual(updater.check_once(self.logger), 0)
+        status, installed, _, message = self.last_report()
+        self.assertEqual((status, installed), ("updated", "1.6.0"))
+        self.assertIn("instalada com sucesso", message)
+
+        self.assertEqual(updater.check_once(self.logger), 0)
+        self.assertEqual(self.last_report()[0], "current")
+
+    def test_invalid_installed_version_reinstalls_instead_of_stopping(self) -> None:
+        self.write_state(installed_version="corrompido")
+        self.publish("1.6.0", allow_downgrade=False)
+        self.assertEqual(updater.check_once(self.logger), 10)
+        self.assertEqual(len(self.launched), 1)
+
+    def test_invalid_configuration_is_retried_later(self) -> None:
+        updater.CONFIG_PATH.write_text("{not json", encoding="utf-8")
+        self.assertEqual(updater.check_once(self.logger), 2)
+        self.assertEqual(FakeApi.instances, [])
+
+    def test_previous_installers_are_removed(self) -> None:
+        download_dir = updater.DOWNLOAD_DIR
+        download_dir.mkdir(parents=True)
+        old = download_dir / "Ativa-Unified-Agent-Setup-1.5.1.exe"
+        old.write_bytes(b"MZ")
+        self.write_state(installed_version="1.6.0")
+        self.publish("1.6.1", allow_downgrade=False)
+        self.assertEqual(updater.check_once(self.logger), 10)
+        self.assertFalse(old.exists())
+        self.assertTrue((download_dir / "Ativa-Unified-Agent-Setup-1.6.1.exe").exists())
+
+        self.write_state(installed_version="1.6.1", last_result="installed")
+        self.assertEqual(updater.check_once(self.logger), 0)
+        self.assertEqual(list(download_dir.iterdir()), [])
+
+
+class ServiceRuntimeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.logger = logging.getLogger("ativaupdater-runtime-tests")
+        self.logger.addHandler(logging.NullHandler())
+        self.logger.propagate = False
+
+    def run_once_with(self, check_once) -> list[float]:
+        runtime = updater.ServiceRuntime()
+        waits: list[float] = []
+
+        def wait(seconds: float) -> bool:
+            waits.append(seconds)
+            runtime.stop_event.set()
+            return True
+
+        runtime.stop_event.wait = wait  # type: ignore[method-assign]
+        with mock.patch.object(updater, "check_once", side_effect=check_once), \
+                mock.patch.object(updater, "get_state", return_value={"check_interval_seconds": 3600}):
+            runtime.run(self.logger)
+        return waits
+
+    def test_unexpected_error_does_not_end_the_service(self) -> None:
+        waits = self.run_once_with(RuntimeError("boom"))
+        self.assertEqual(len(waits), 1)
+
+    def test_service_keeps_running_after_launching_installer(self) -> None:
+        # Previously the loop broke out immediately; it must now wait so that
+        # an installer that dies early is detected by the timeout.
+        waits = self.run_once_with(lambda _logger, manual=False: 10)
+        self.assertEqual(len(waits), 1)
 
 
 class ConfigTests(unittest.TestCase):

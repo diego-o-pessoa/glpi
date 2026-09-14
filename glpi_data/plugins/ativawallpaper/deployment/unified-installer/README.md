@@ -66,4 +66,12 @@ Regras:
 - O rollback só é permitido para pacotes **1.6.0 ou superiores**. Pacotes anteriores registram o Wallpaper Client com o segredo de bootstrap embutido no build; se esse segredo já foi rotacionado, a instalação falharia no meio. A partir do 1.6.0, a reinstalação reaproveita o registro existente da máquina.
 - **Não exclua** do dashboard versões que possam ser necessárias como destino de rollback.
 - O MSI oficial do GLPI Agent aceita downgrade (`AllowDowngrades`) e preserva `etc/` e `var/`, então a máquina continua ligada ao mesmo computador no inventário.
-- Se a instalação não reconfigurar o serviço em 30 minutos, o serviço registra falha com o final do `installer-*.log` e tenta de novo após 5 min, 30 min e 1 h. Depois de 3 falhas do mesmo pacote, suspende as tentativas até a publicação de outra versão ou um **Verificar agora**.
+- Se a instalação não reconfigurar o serviço em 30 minutos, o serviço registra falha com o final do `installer-*.log` e tenta de novo após 5 min e 30 min. A partir da 3ª falha do mesmo pacote, tenta uma vez por dia; **Verificar agora** ou a publicação de outra versão libera uma tentativa imediata.
+
+## Como a atualização silenciosa acontece
+
+1. Na consulta (a cada hora ou por **Verificar agora**), o serviço compara a versão publicada com a instalada e decide entre atualizar, voltar (rollback autorizado) ou não fazer nada.
+2. Se precisar instalar, baixa o EXE, valida tamanho e SHA-256, remove instaladores de versões anteriores e executa o setup em modo `/VERYSILENT`.
+3. O setup para o serviço e espera ele terminar. Depois atualiza o GLPI Agent, repetindo por até 5 minutos se o Windows Installer estiver ocupado (código 1618), atualiza o Wallpaper Client e reconfigura e inicia o serviço.
+4. O Wallpaper Client é iniciado novamente em **cada sessão de usuário conectada**. Antes, quando o setup rodava como SYSTEM, o cliente só voltava no próximo logon.
+5. Ao reiniciar, o serviço reporta **Atualizado** ("Versão X instalada com sucesso") no dashboard.

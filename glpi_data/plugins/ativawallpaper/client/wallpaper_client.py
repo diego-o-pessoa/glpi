@@ -71,6 +71,9 @@ if os.name == "nt":
     _kernel32.CloseHandle.restype = wintypes.BOOL
     _kernel32.MoveFileExW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
     _kernel32.MoveFileExW.restype = wintypes.BOOL
+    _kernel32.GetCurrentProcessId.restype = wintypes.DWORD
+    _kernel32.ProcessIdToSessionId.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    _kernel32.ProcessIdToSessionId.restype = wintypes.BOOL
 else:
     _kernel32 = None
 
@@ -985,6 +988,21 @@ def reusable_client_token(root: Path, server: str, logger: logging.Logger, api_f
     return token
 
 
+def replace_executable(staged: Path, destination: Path, attempts: int = 30, delay_seconds: float = 1.0) -> None:
+    """Replace the client executable, waiting for stopping clients to release it."""
+    last_error: OSError | None = None
+    for attempt in range(attempts):
+        try:
+            os.replace(staged, destination)
+            return
+        except OSError as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                time.sleep(delay_seconds)
+    _safe_unlink(staged)
+    raise ClientError("CLIENT_REPLACE_FAILED", f"Could not replace the running client: {last_error}", retriable=False)
+
+
 def install_client(args: argparse.Namespace) -> None:
     ensure_supported_windows(bool(args.allow_windows_server))
     if not is_admin():
@@ -1015,11 +1033,17 @@ def install_client(args: argparse.Namespace) -> None:
     _safe_unlink(root / "uninstall.flag")
     temporary = root / (EXECUTABLE_NAME + ".new")
     if source != destination.resolve():
-        if destination.exists():
-            _signal_stop()
-            time.sleep(2)
         shutil.copy2(source, temporary)
-        os.replace(temporary, destination)
+        if destination.exists():
+            # The flag tells running clients this is an update, so they keep the
+            # wallpaper policy while exiting; the installer starts them again.
+            atomic_write_json(UPDATE_RESTART_FLAG, {"version": CLIENT_VERSION, "created_at": time.time()})
+        try:
+            if destination.exists():
+                _signal_stop()
+            replace_executable(temporary, destination)
+        finally:
+            _safe_unlink(UPDATE_RESTART_FLAG)
 
     atomic_write_json(root / "client.json", {
         "server": values["server"],
@@ -1126,7 +1150,22 @@ def uninstall_client(remove_wallpaper: bool, debug: bool) -> None:
     logger.info("Uninstall completed; executable deletion may finish at reboot")
 
 
+def current_session_id() -> int | None:
+    if os.name != "nt":
+        return None
+    assert _kernel32 is not None
+    session = wintypes.DWORD()
+    if not _kernel32.ProcessIdToSessionId(_kernel32.GetCurrentProcessId(), ctypes.byref(session)):
+        return None
+    return int(session.value)
+
+
 def run_client(once: bool, debug: bool) -> int:
+    if current_session_id() == 0:
+        # Session 0 hosts services and SYSTEM. A client there has no visible
+        # desktop, would report the machine account as the user and keep the
+        # real users' clients from being started by the installer.
+        raise ClientError("INTERACTIVE_SESSION_REQUIRED", "The client must run in a logged-on user session", retriable=False)
     ensure_supported_windows(False)
     client = WallpaperClient(debug=debug)
     stop = StopEvent()
@@ -1135,12 +1174,6 @@ def run_client(once: bool, debug: bool) -> int:
     try:
         with SingleInstance():
             client.logger.info("Client started, version %s", CLIENT_VERSION)
-            try:
-                test_file = Path(os.environ.get("USERPROFILE", os.path.expanduser("~"))) / "Desktop" / "teste.txt"
-                test_file.write_text("teste", encoding="utf-8")
-                client.logger.info("Test file teste.txt created on Desktop.")
-            except Exception as e:
-                client.logger.error("Failed to create teste.txt file: %s", e)
             while True:
                 try:
                     interval, jitter = client.sync_once()

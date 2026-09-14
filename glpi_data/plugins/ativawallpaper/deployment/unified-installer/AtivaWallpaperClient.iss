@@ -85,7 +85,56 @@ begin
     Log('Codigo de saida: ' + IntToStr(ResultCode));
 end;
 
-procedure StartForInteractiveUser();
+procedure InstallGlpiAgent(const Parameters: String);
+var
+  Attempt: Integer;
+  ResultCode: Integer;
+begin
+  WizardForm.StatusLabel.Caption := 'Instalando ou atualizando o GLPI Agent...';
+  for Attempt := 1 to 10 do begin
+    Log('Instalando o GLPI Agent (tentativa ' + IntToStr(Attempt) + '): msiexec.exe ' + Parameters);
+    if not Exec(ExpandConstant('{sys}\msiexec.exe'), Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      RaiseException('A instalacao do GLPI Agent nao pode ser iniciada. Codigo: ' + IntToStr(ResultCode));
+    { 1618: outra instalacao do Windows Installer em andamento (ex.: Windows Update). }
+    if ResultCode <> 1618 then
+      break;
+    Log('Windows Installer ocupado (1618); nova tentativa em 30 segundos.');
+    Sleep(30000);
+  end;
+
+  if (ResultCode <> 0) and (ResultCode <> 1641) and (ResultCode <> 3010) then
+    RaiseException('A instalacao do GLPI Agent falhou. Codigo de saida: ' + IntToStr(ResultCode));
+
+  if (ResultCode = 1641) or (ResultCode = 3010) then
+    AgentRestartRequired := True;
+end;
+
+procedure StopUpdaterService();
+var
+  Attempt: Integer;
+  ResultCode: Integer;
+begin
+  if not Exec(ExpandConstant('{sys}\sc.exe'), 'query AtivaUnifiedUpdater', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then begin
+    Log('Servico AtivaUnifiedUpdater ainda nao instalado.');
+    exit;
+  end;
+
+  { O servico pode ter iniciado este proprio instalador. Pare-o antes de substituir o executavel. }
+  RunOptional(ExpandConstant('{sys}\sc.exe'), 'stop AtivaUnifiedUpdater');
+  for Attempt := 1 to 60 do begin
+    if Exec(ExpandConstant('{cmd}'),
+      '/C ""' + ExpandConstant('{sys}\sc.exe') + '" query AtivaUnifiedUpdater | "' + ExpandConstant('{sys}\find.exe') + '" "STOPPED""',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then begin
+      Log('Servico AtivaUnifiedUpdater parado.');
+      break;
+    end;
+    Sleep(1000);
+  end;
+  { O SCM informa STOPPED pouco antes de o processo liberar o executavel. }
+  Sleep(3000);
+end;
+
+procedure StartForInteractiveUser(const UpdaterPath: String);
 var
   ResultCode: Integer;
   ClientPath: String;
@@ -95,6 +144,15 @@ begin
     Log('Cliente instalado nao foi encontrado para iniciar o polling: ' + ClientPath);
     exit;
   end;
+
+  { Como SYSTEM (servico de atualizacao ou GLPI Inventory), ExecAsOriginalUser iniciaria o
+    cliente na sessao 0, sem area de trabalho visivel. O servico inicia uma instancia em cada
+    sessao de usuario conectada e retorna 3 quando o instalador nao roda na sessao 0. }
+  if Exec(UpdaterPath, '--start-wallpaper-clients', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then begin
+    Log('Cliente de wallpaper iniciado nas sessoes de usuario conectadas.');
+    exit;
+  end;
+  Log('Inicio por sessao nao aplicado (codigo ' + IntToStr(ResultCode) + '); usando o usuario que executou o instalador.');
 
   if ExecAsOriginalUser(ClientPath, '', '', SW_HIDE, ewNoWait, ResultCode) then begin
     Log('Cliente de wallpaper iniciado em modo continuo para o usuario interativo.');
@@ -111,9 +169,7 @@ var
   ResultCode: Integer;
 begin
   if CurStep = ssInstall then begin
-    { O servico pode ter iniciado este proprio instalador. Pare-o antes de substituir o executavel. }
-    RunOptional(ExpandConstant('{sys}\sc.exe'), 'stop AtivaUnifiedUpdater');
-    Sleep(5000);
+    StopUpdaterService();
     exit;
   end;
 
@@ -126,11 +182,7 @@ begin
     'ADDLOCAL=ALL EXECMODE=1 RUNNOW=1 GLPI_VERSION=11 ' +
     'ADD_FIREWALL_EXCEPTION=1 NO_SSL_CHECK=0 NO_HTTPD=0 NO_P2P=0 ' +
     'SCAN_PROFILES=1 TAG="Ativa-Locacao"';
-  RunRequired(
-    'Instalando ou atualizando o GLPI Agent...',
-    ExpandConstant('{sys}\msiexec.exe'),
-    AgentParameters
-  );
+  InstallGlpiAgent(AgentParameters);
 
   RunRequired(
     'Instalando e registrando o cliente de wallpaper...',
@@ -169,7 +221,7 @@ begin
     ExpandConstant('{sys}\sc.exe'),
     'start AtivaUnifiedUpdater'
   );
-  StartForInteractiveUser();
+  StartForInteractiveUser(UpdaterPath);
 end;
 
 function NeedRestart(): Boolean;

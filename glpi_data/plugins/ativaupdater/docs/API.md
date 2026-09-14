@@ -74,7 +74,7 @@ Content-Type: application/json
 }
 ```
 
-Status aceitos: `checking`, `waiting_release`, `current`, `downloading`, `installing`, `updated` e `error`. Durante um rollback, `downloading` e `installing` trazem mensagens iniciadas por "Rollback". Uma instalação que não termina em 30 minutos é reportada como `error`, com o final do log do instalador.
+Status aceitos: `checking`, `waiting_release`, `current`, `downloading`, `installing`, `updated` e `error`. Durante um rollback, `downloading` e `installing` trazem mensagens iniciadas por "Rollback". Uma instalação que não termina em 30 minutos é reportada como `error`, com o final do log do instalador. Na primeira consulta depois de uma instalação concluída, o serviço envia `updated`; nas seguintes, `current`.
 
 ## Códigos principais
 
