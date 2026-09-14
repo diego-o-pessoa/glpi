@@ -53,7 +53,7 @@ echo "<div class='card-body'>";
 if ($activeRelease) {
     echo "<p><strong>Versão:</strong> " . htmlescape((string) $activeRelease['version']) . "</p>";
     echo "<p><strong>Arquivo:</strong> " . htmlescape((string) $activeRelease['original_filename']) . "</p>";
-    echo "<p><strong>Tamanho:</strong> " . Html::formatSize($activeRelease['file_size']) . "</p>";
+    echo "<p><strong>Tamanho:</strong> " . htmlescape(Toolbox::getSize((int) $activeRelease['file_size'])) . "</p>";
     echo "<p><strong>SHA-256:</strong> <code>" . htmlescape((string) $activeRelease['sha256']) . "</code></p>";
     echo "<p><strong>Publicado em:</strong> " . Html::convDateTime($activeRelease['created_at']) . "</p>";
 } else {
@@ -109,7 +109,7 @@ if (count($releases) > 0) {
         echo "<tr>";
         echo "<td>" . htmlescape((string) $rel['version']) . "</td>";
         echo "<td>" . htmlescape((string) $rel['original_filename']) . "</td>";
-        echo "<td>" . Html::formatSize($rel['file_size']) . "</td>";
+        echo "<td>" . htmlescape(Toolbox::getSize((int) $rel['file_size'])) . "</td>";
         echo "<td>" . Html::convDateTime($rel['created_at']) . "</td>";
         echo "<td>" . $status . "</td>";
         if ($canManage) {
