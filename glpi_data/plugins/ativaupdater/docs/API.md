@@ -90,22 +90,38 @@ GET /plugins/ativaupdater/api/v1/commands/{machine_guid}
 ```
 
 ```json
-{ "check_now": true, "poll_after_seconds": 15 }
+{ "check_now": true, "request_seq": 7, "command": "reinstall", "poll_after_seconds": 15 }
 ```
 
-- O botão **Verificar agora** incrementa `check_request_seq` de todos os computadores, inclusive dos que estão instalando.
-- O serviço (1.2.0+) consulta este endpoint a cada 15 s enquanto não está acompanhando uma instalação. Com `check_now` igual a `true`, faz a verificação completa na hora.
-- O primeiro `POST /status` seguinte confirma o pedido, copiando o número para `check_ack_seq`.
-- A comparação usa números, e não horários: com fusos diferentes entre o usuário do GLPI e o servidor, os horários faziam o pedido parecer já confirmado e o comando nunca chegava. As datas do plugin usam o fuso do servidor (`date.timezone` do PHP).
+- `command`: `check` (Verificar agora), `reinstall`, `restart_service` ou `send_logs`. Serviços anteriores a 1.5.0 leem só `check_now` e tratam qualquer comando como verificação.
+- O dashboard incrementa `check_request_seq` e grava `command`. O serviço 1.5.0+ consulta este endpoint a cada 15 s **o tempo todo**, inclusive durante download e instalação.
+- `check` e `reinstall` cancelam o trabalho em andamento. `send_logs` e `restart_service` respondem por `POST /diagnostics`.
+- **Confirmação:** o serviço 1.5.0+ envia `command_seq` (o maior comando que recebeu) em `/status` e `/diagnostics`, e o servidor copia o valor para `check_ack_seq`, sem nunca ultrapassar o pedido. Serviços antigos não enviam `command_seq`: qualquer relatório confirma o pedido.
+- A comparação usa números, e não horários, porque o usuário do GLPI e a API podem estar em fusos diferentes. As datas do plugin usam o fuso do servidor (`date.timezone` do PHP).
+
+## Diagnóstico sob demanda
+
+```http
+POST /plugins/ativaupdater/api/v1/diagnostics
+Content-Type: application/json
+```
+
+```json
+{ "machine_guid": "…", "hostname": "TI-01-000013", "updater_version": "1.5.0", "command_seq": 7, "diagnostics": "texto" }
+```
+
+Grava `diagnostics_log` (até 65.000 caracteres) e `diagnostics_at`, confirmando o comando. O texto nunca inclui o token da API.
+
+`POST /status` também aceita `recovery_note` (até 255 caracteres), enviado uma vez depois que o vigia repara o computador. O servidor grava em `recovery_note` e `recovery_at`.
 
 Estados no dashboard:
 
 | Estado | Quando |
 |---|---|
-| **Verificando agora** | pedido enviado há menos de 2 minutos |
-| Status atual (Baixando/Instalando) | o computador está instalando e verifica ao terminar |
-| **Sem resposta ao comando** | o serviço não confirmou em 2 minutos (parado, sem acesso à API ou sem memória) |
-| **Serviço sem Verificar agora** | serviço anterior a 1.2.0 (pacotes 1.5.0): só consulta no intervalo automático |
+| **Verificando agora** / **Reinstalação solicitada** / **Reiniciando serviço** | comando enviado há menos de 2 minutos |
+| Status atual (Baixando/Instalando) | serviço 1.2.0 a 1.4.x instalando: verifica ao terminar |
+| **Sem resposta ao comando** | o serviço não confirmou em 2 minutos (parado, sem acesso à API) |
+| **Serviço sem Verificar agora** | serviço anterior a 1.2.0: só consulta no intervalo automático |
 
 ## Códigos principais
 

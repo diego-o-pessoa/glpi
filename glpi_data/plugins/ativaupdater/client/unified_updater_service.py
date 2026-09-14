@@ -1018,7 +1018,9 @@ def launch_installer(path: Path, logger: logging.Logger) -> tuple[Any, Path]:
         "/VERYSILENT",
         "/SUPPRESSMSGBOXES",
         "/NORESTART",
-        "/CLOSEAPPLICATIONS",
+        # /CLOSEAPPLICATIONS made the Restart Manager try to stop this very
+        # service for 90 s and then abort the whole installation.
+        "/NOCLOSEAPPLICATIONS",
         f"/LOG={install_log}",
         # Tells the installer that this service is supervising it: the service
         # keeps running until the end instead of being stopped up front.

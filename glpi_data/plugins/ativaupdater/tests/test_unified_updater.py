@@ -225,6 +225,28 @@ class FakeProcess:
         return self.exit_code
 
 
+class LaunchInstallerTests(unittest.TestCase):
+    def test_restart_manager_is_not_asked_to_close_the_service(self) -> None:
+        # Seen on TI-01-000013: /CLOSEAPPLICATIONS made Inno try to stop this
+        # service for 90 s and abort the installation.
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(updater, "LOG_DIR", Path(directory)), \
+                mock.patch.object(updater.subprocess, "Popen") as popen:
+            popen.return_value.pid = 1
+            updater.launch_installer(Path(directory) / "setup.exe", quiet_logger("launch"))
+        command = popen.call_args.args[0]
+        self.assertIn("/NOCLOSEAPPLICATIONS", command)
+        self.assertNotIn("/CLOSEAPPLICATIONS", command)
+        self.assertIn("/SUPERVISED=1", command)
+
+    def test_service_is_built_as_console_application(self) -> None:
+        # Windowed PyInstaller builds show blocking message boxes that nobody
+        # can close in session 0; "--configure" hung the installer that way.
+        build_script = (MODULE_PATH.parent / "build-service.ps1").read_text(encoding="utf-8")
+        self.assertIn("--console", build_script)
+        self.assertNotIn("--noconsole `", build_script)
+
+
 class SuperviseInstallerTests(unittest.TestCase):
     def test_exit_code_is_returned(self) -> None:
         self.assertEqual(updater.supervise_installer(FakeProcess(4), lambda: False), ("exited", 4))

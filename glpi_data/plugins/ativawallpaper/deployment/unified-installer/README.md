@@ -71,17 +71,37 @@ Regras:
 ## Como a atualização silenciosa acontece
 
 1. Na consulta (a cada hora ou por **Verificar agora**), o serviço compara a versão publicada com a instalada e decide entre atualizar, voltar (rollback autorizado) ou não fazer nada.
-2. Se precisar instalar, baixa o EXE, valida tamanho e SHA-256, remove instaladores de versões anteriores e executa o setup em modo `/VERYSILENT /SUPERVISED=1`.
-3. O serviço **continua rodando e acompanha o processo do instalador**. O setup renomeia o executável do serviço em uso (`AtivaUnifiedUpdater.exe.old-*`), atualiza o GLPI Agent (repetindo por até 5 minutos se o Windows Installer estiver ocupado, código 1618), atualiza o Wallpaper Client e reconfigura o serviço.
-4. No fim, o setup reinicia o serviço para carregar o novo executável e inicia o Wallpaper Client em **cada sessão de usuário conectada**.
+2. Se precisar instalar, baixa o EXE (retomando downloads interrompidos), valida tamanho e SHA-256, remove instaladores de versões anteriores e executa o setup com `/VERYSILENT /SUPERVISED=1 /NOCLOSEAPPLICATIONS`. Falhas de rede momentâneas (timeout, conexão recusada) são repetidas antes de desistir.
+3. O serviço **continua rodando e acompanha o processo do instalador**. O setup renomeia o executável do serviço em uso (`AtivaUnifiedUpdater.exe.old-*`), atualiza o GLPI Agent (repetindo por até 5 minutos se o Windows Installer estiver ocupado, código 1618), atualiza o Wallpaper Client (mantendo o registro existente se o servidor não responder) e reconfigura o serviço. Se a instalação for abortada, o executável renomeado é devolvido.
+4. No fim, o setup reinicia o serviço para carregar o novo executável, cria ou atualiza o **vigia** e inicia o Wallpaper Client em **cada sessão de usuário conectada**.
 5. O novo serviço reporta **Atualizado** ("Versão X instalada com sucesso") no dashboard.
 
-## Verificar agora
+> O serviço é gerado como aplicativo de **console** (`build-service.ps1`). Na versão sem console, o PyInstaller mostrava avisos em uma caixa de mensagem que ninguém consegue fechar quando o programa roda como SYSTEM, e o passo `--configure` travava o instalador indefinidamente.
 
-O botão envia o comando a todos os computadores. A coluna **Serviço** do dashboard mostra a versão do serviço de cada máquina:
+## Verificar agora e ações por computador
 
-- **1.2.0 ou superior:** recebe o comando em até 15 s e mostra **Verificando agora**. Se estiver instalando, verifica ao terminar. Sem confirmação em 2 minutos, aparece **Sem resposta ao comando**; nesse caso confira no computador o serviço "Ativa Unified Updater" e o `logs\service.log`.
-- **Anterior a 1.2.0 (pacote 1.5.0):** aparece **Serviço sem Verificar agora**. Essas máquinas só consultam no intervalo automático (1 h) até receberem um pacote novo com sucesso.
+O dashboard atualiza a seção **Computadores** sozinho, a cada 3 s, sem recarregar a página.
+
+- **Verificar agora** (todos): o serviço 1.5.0+ recebe o comando em até 15 s mesmo durante downloads e instalações, **cancela o que estiver fazendo** (inclusive o instalador em andamento) e recomeça a verificação. Serviços 1.2.0 a 1.4.x só verificam depois de terminar a instalação atual; anteriores a 1.2.0 não recebem comandos.
+- **Logs** (por computador): coleta `service.log`, `watchdog.log`, a última falha de instalação, o log do instalador e o do Wallpaper Client e mostra tudo em **Ver logs enviados**.
+- **Reinstalar**: cancela o que estiver em andamento e instala de novo o pacote publicado, mesmo que a versão já esteja instalada. Não faz downgrade sem rollback autorizado.
+- **Reiniciar serviço**: envia os logs e reinicia o serviço "Ativa Unified Updater".
+
+As três ações por computador exigem o serviço 1.5.0 (pacote 1.6.2) ou superior. Sem confirmação em 2 minutos, o status vira **Sem resposta ao comando**.
+
+## Vigia (segurança na máquina)
+
+O instalador cria a tarefa agendada **Ativa Unified Updater Watchdog**, que roda a cada 15 minutos como SYSTEM uma **cópia separada** do serviço (`UnifiedUpdater\watchdog\AtivaUnifiedUpdater.exe`). Essa cópia só é substituída depois que uma versão nova do serviço consegue falar com a API. O vigia:
+
+- **inicia o serviço** se ele estiver parado e nenhuma instalação estiver em andamento;
+- **recria o serviço** se ele tiver sido removido;
+- **restaura o executável** do serviço a partir da cópia se ele estiver ausente ou não iniciar;
+- **encerra um instalador travado** há mais de 45 minutos;
+- **reinicia o serviço** se ele parar de dar sinal de vida (heartbeat) por 30 minutos.
+
+Cada reparo é registrado em `logs\watchdog.log` e aparece no dashboard, na coluna Detalhes, como "Vigia: …". Se a tarefa agendada for apagada, o serviço a recria ao iniciar.
+
+**Logs** também traz o estado do serviço, os instaladores em execução, o espaço livre em disco e o `configure.log`. O texto não inclui a configuração nem o token da API.
 
 ## Falhas, novas tentativas e log de erro
 

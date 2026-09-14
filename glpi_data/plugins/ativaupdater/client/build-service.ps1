@@ -21,11 +21,16 @@ if ($LASTEXITCODE -ne 0) {
     }
 }
 
+# Console subsystem on purpose. In windowed (--noconsole) builds the PyInstaller
+# bootloader reports warnings such as "Failed to remove temporary directory"
+# with a blocking MessageBox. As SYSTEM in session 0 nobody can close it, so
+# "--configure" hung the unified installer forever. Services, scheduled tasks
+# and installer steps run without a visible console anyway.
 & $VenvPython -m PyInstaller `
     --noconfirm `
     --clean `
     --onefile `
-    --noconsole `
+    --console `
     --name "AtivaUnifiedUpdater" `
     --distpath $DistDirectory `
     --workpath $BuildDirectory `

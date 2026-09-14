@@ -48,6 +48,10 @@ WizardStyle=modern
 SetupLogging=yes
 CloseApplications=no
 RestartApplications=no
+; Services up to 1.4.0 pass /CLOSEAPPLICATIONS, which overrides CloseApplications=no.
+; The Restart Manager then tried to stop the updater service for 90 s and aborted
+; the installation. A filter that matches no file keeps it from checking anything.
+CloseApplicationsFilter=*.ativa-restart-manager-disabled
 
 [Files]
 Source: "{#WallpaperClientPath}"; DestDir: "{tmp}"; DestName: "AtivaWallpaperClient.exe"; Flags: deleteafterinstall ignoreversion
@@ -59,6 +63,7 @@ Source: "{#UpdaterConfigPath}"; DestDir: "{tmp}"; DestName: "ativaupdater-servic
 [Code]
 var
   AgentRestartRequired: Boolean;
+  ReplacedUpdaterPath: String;
 
 procedure RunRequired(const Description, Filename, Parameters: String);
 var
@@ -151,6 +156,8 @@ begin
       pode ser renomeado, liberando o caminho para a nova versao; o servico e reiniciado no fim. }
     ReplacedPath := UpdaterPath + '.old-' + GetDateTimeString('yyyymmddhhnnss', #0, #0);
     if RenameFile(UpdaterPath, ReplacedPath) then begin
+      { Guardado para DeinitializeSetup devolver o executavel se a instalacao for abortada. }
+      ReplacedUpdaterPath := ReplacedPath;
       Log('Executavel do servico em uso renomeado para ' + ReplacedPath);
       exit;
     end;
@@ -283,8 +290,19 @@ begin
 end;
 
 procedure DeinitializeSetup();
+var
+  UpdaterPath: String;
 begin
+  UpdaterPath := ExpandConstant('{commonappdata}\AtivaLocacao\UnifiedUpdater\AtivaUnifiedUpdater.exe');
+  { Instalacao abortada antes de copiar o novo executavel: o rollback do Inno nao conhece a
+    renomeacao feita em PrepareUpdaterExecutable, entao o servico ficaria sem executavel. }
+  if (ReplacedUpdaterPath <> '') and (not FileExists(UpdaterPath)) and FileExists(ReplacedUpdaterPath) then begin
+    if RenameFile(ReplacedUpdaterPath, UpdaterPath) then
+      Log('Executavel anterior do servico restaurado: ' + UpdaterPath)
+    else
+      Log('Falha ao restaurar o executavel anterior do servico a partir de ' + ReplacedUpdaterPath);
+  end;
   { Se a atualizacao falhar depois de parar o servico, devolva o monitoramento ao Windows. }
-  if FileExists(ExpandConstant('{commonappdata}\AtivaLocacao\UnifiedUpdater\AtivaUnifiedUpdater.exe')) then
+  if FileExists(UpdaterPath) then
     RunOptional(ExpandConstant('{sys}\sc.exe'), 'start AtivaUnifiedUpdater');
 end;
