@@ -14,6 +14,16 @@ function plugin_ativaupdater_do_install(): bool
     try {
         $DB->runFile(__DIR__ . '/schema.sql');
 
+        $clientsTable = 'glpi_plugin_ativaupdater_clients';
+        if ($DB->tableExists($clientsTable)) {
+            if (!$DB->fieldExists($clientsTable, 'wallpaper_client_version')) {
+                $migration->addField($clientsTable, 'wallpaper_client_version', "varchar(32) NOT NULL DEFAULT ''");
+            }
+            if (!$DB->fieldExists($clientsTable, 'glpi_agent_version')) {
+                $migration->addField($clientsTable, 'glpi_agent_version', "varchar(32) NOT NULL DEFAULT ''");
+            }
+        }
+
         // Create storage directories
         $storage = GLPI_PLUGIN_DOC_DIR . '/ativaupdater';
         foreach ([$storage, $storage . '/releases', $storage . '/tmp'] as $directory) {

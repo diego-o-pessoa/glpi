@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace GlpiPlugin\Ativaupdater\Controller;
 
+use Glpi\Controller\AbstractController;
 use GlpiPlugin\Ativaupdater\ConfigService;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -12,7 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
 use Symfony\Component\Routing\Attribute\Route;
 
-final class ApiController
+final class ApiController extends AbstractController
 {
     private const VERSION_PATTERN = '/^\d{1,5}\.\d{1,5}\.\d{1,5}$/D';
     private const STATUS_VALUES = [
@@ -48,6 +49,16 @@ final class ApiController
     private function configuredBaseUrl(): string
     {
         return rtrim((string) ConfigService::get('api_base_url', ''), '/');
+    }
+
+    #[Route('/api/v1/health', name: 'ativaupdater_api_health', methods: ['GET'])]
+    public function health(): Response
+    {
+        return new JsonResponse([
+            'status' => 'ok',
+            'plugin_version' => PLUGIN_ATIVAUPDATER_VERSION,
+            'api_version' => '1',
+        ]);
     }
 
     private function releaseArray(array $release): array
@@ -193,12 +204,16 @@ final class ApiController
         }
 
         $versions = [];
-        foreach (['updater_version', 'installed_version', 'available_version'] as $field) {
+        foreach (['updater_version', 'installed_version', 'available_version', 'wallpaper_client_version'] as $field) {
             $value = trim((string) ($payload[$field] ?? ''));
             if ($value !== '' && !preg_match(self::VERSION_PATTERN, $value)) {
                 return $this->error('INVALID_VERSION', 'Versao informada invalida.', 422);
             }
             $versions[$field] = $value;
+        }
+        $agentVersion = trim((string) ($payload['glpi_agent_version'] ?? ''));
+        if ($agentVersion !== '' && !preg_match('/^\d{1,5}\.\d{1,5}(?:\.\d{1,5})?$/D', $agentVersion)) {
+            return $this->error('INVALID_VERSION', 'Versao do GLPI Agent invalida.', 422);
         }
 
         $data = [
@@ -206,6 +221,8 @@ final class ApiController
             'updater_version'   => $versions['updater_version'],
             'installed_version' => $versions['installed_version'],
             'available_version' => $versions['available_version'],
+            'wallpaper_client_version' => $versions['wallpaper_client_version'],
+            'glpi_agent_version' => $agentVersion,
             'status'            => $status,
             'message'           => mb_substr(trim((string) ($payload['message'] ?? '')), 0, 1000),
             'last_ip'           => mb_substr((string) ($request->getClientIp() ?? ''), 0, 64),

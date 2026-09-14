@@ -24,7 +24,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.0.0"
+UPDATER_VERSION = "1.1.0"
 DEFAULT_INTERVAL = 3600
 MAX_INSTALLER_BYTES = 2 * 1024 * 1024 * 1024
 VERSION_RE = re.compile(r"^\d{1,5}\.\d{1,5}\.\d{1,5}$")
@@ -35,6 +35,7 @@ CONFIG_PATH = PRODUCT_DIR / "service-config.json"
 STATE_PATH = PRODUCT_DIR / "state.json"
 DOWNLOAD_DIR = PRODUCT_DIR / "downloads"
 LOG_DIR = PRODUCT_DIR / "logs"
+WALLPAPER_VERSION_PATH = PROGRAM_DATA / "AtivaLocacao" / "Wallpaper" / "version.json"
 MUTEX_NAME = r"Global\AtivaUnifiedUpdater"
 
 
@@ -167,6 +168,39 @@ def machine_guid() -> str:
         return str(winreg.QueryValueEx(key, "MachineGuid")[0]).strip().lower()
 
 
+def wallpaper_client_version() -> str:
+    try:
+        version = str(load_json(WALLPAPER_VERSION_PATH).get("client_version", ""))
+        return version if VERSION_RE.fullmatch(version) else ""
+    except (OSError, UpdaterError):
+        return ""
+
+
+def glpi_agent_version() -> str:
+    if os.name != "nt":
+        return ""
+    import winreg
+
+    uninstall = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+    for registry_view in (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, uninstall, 0, winreg.KEY_READ | registry_view) as root:
+                for index in range(winreg.QueryInfoKey(root)[0]):
+                    try:
+                        with winreg.OpenKey(root, winreg.EnumKey(root, index)) as entry:
+                            name = str(winreg.QueryValueEx(entry, "DisplayName")[0])
+                            if name.strip().lower() != "glpi agent":
+                                continue
+                            version = str(winreg.QueryValueEx(entry, "DisplayVersion")[0]).strip()
+                            if re.fullmatch(r"\d{1,5}\.\d{1,5}(?:\.\d{1,5})?", version):
+                                return version
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return ""
+
+
 class ApiClient:
     def __init__(self, config: dict[str, Any]):
         self.base_url = str(config["api_url"])
@@ -231,6 +265,8 @@ class ApiClient:
             "updater_version": UPDATER_VERSION,
             "installed_version": installed,
             "available_version": available,
+            "wallpaper_client_version": wallpaper_client_version(),
+            "glpi_agent_version": glpi_agent_version(),
             "status": status,
             "message": message[:1000],
         }
@@ -316,7 +352,7 @@ def check_once(logger: logging.Logger) -> int:
             return 0
 
         DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        destination = DOWNLOAD_DIR / f"Ativa-Wallpaper-Client-Setup-{available}.exe"
+        destination = DOWNLOAD_DIR / f"Ativa-Unified-Agent-Setup-{available}.exe"
         api.report("downloading", installed, available, "Baixando e validando o instalador.")
         api.download(release, destination)
         state["last_result"] = "installing"
@@ -347,11 +383,21 @@ def configure_service(config_source: Path, installed_version: str) -> int:
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     if os.name == "nt":
+        # A previous implementation applied /inheritance:r recursively. On
+        # regular files this could remove every inherited ACE while the
+        # inheritable (OI)(CI) grants only remained on the parent directory,
+        # leaving the service executable with an empty ACL. Reset children
+        # first, then protect only the root; children inherit SYSTEM/Admin.
+        subprocess.run(
+            ["icacls.exe", str(PRODUCT_DIR), "/reset", "/T", "/C"],
+            check=True,
+            capture_output=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
         subprocess.run(
             [
                 "icacls.exe", str(PRODUCT_DIR), "/inheritance:r",
                 "/grant:r", "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F",
-                "/T", "/C",
             ],
             check=True,
             capture_output=True,
@@ -376,12 +422,15 @@ class ServiceRuntime:
         self.stop_event = threading.Event()
 
     def run(self, logger: logging.Logger) -> None:
+        logger.info("Servico %s iniciado; primeira consulta imediata.", UPDATER_VERSION)
         while not self.stop_event.is_set():
             result = check_once(logger)
             if result == 10:
                 self.stop_event.set()
                 break
-            interval = int(get_state().get("check_interval_seconds", DEFAULT_INTERVAL))
+            interval = 300 if result != 0 else int(get_state().get("check_interval_seconds", DEFAULT_INTERVAL))
+            if result != 0:
+                logger.warning("Nova tentativa agendada em 300 segundos.")
             self.stop_event.wait(max(300, min(86400, interval)))
 
 

@@ -1,11 +1,10 @@
-# Instaladores Ativa para Windows
+# Instalador unificado Ativa para Windows
 
-O gerador cria dois instaladores para Windows x64:
+O gerador cria um único arquivo Windows x64:
 
-- `Ativa-Wallpaper-Client-Setup-X.Y.Z.exe`: instala o cliente de wallpaper e o serviço **Ativa Unified Updater**;
-- `Ativa-GLPI-Agent-Setup-Only-X.Y.exe`: instala o GLPI Agent oficial apontando para o inventário da Ativa.
+- `Ativa-Unified-Agent-Setup-X.Y.Z.exe`: instala ou atualiza o GLPI Agent, o Wallpaper Client e o serviço Ativa Unified Updater.
 
-O serviço de atualização roda como `SYSTEM`, consulta o plugin **Ativa Updater** imediatamente ao iniciar e depois a cada hora. Quando encontra uma versão maior, baixa o instalador do Wallpaper Client, confere tamanho e SHA-256 e executa a atualização silenciosamente. O serviço informa ao dashboard se está consultando, baixando, instalando, atualizado ou com erro.
+O serviço roda como `SYSTEM`, identifica o computador no dashboard imediatamente ao iniciar e consulta o plugin Ativa Updater a cada hora. Quando encontra uma versão maior do pacote unificado, baixa o EXE, valida tamanho e SHA-256 e o executa silenciosamente. Em falhas de comunicação, tenta novamente em cinco minutos.
 
 ## Preparar as configurações
 
@@ -18,7 +17,7 @@ Os dois arquivos contêm segredos. Não faça commit deles nem os envie por cana
 
 ## Gerar com dois cliques
 
-Execute `Criar-Instalador-Para-Todos.cmd`. O script localiza o Python e o Inno Setup já instalados. Com `-InstallBuildTools`, tenta instalar dependências ausentes pela fonte comunitária do winget.
+Atualize `unified-version.txt` para uma versão nova no formato `X.Y.Z` e execute `Criar-Instalador-Para-Todos.cmd`.
 
 O fluxo equivalente no PowerShell é:
 
@@ -32,24 +31,23 @@ cd C:\Github\glpi\glpi_data\plugins\ativawallpaper\deployment\unified-installer
   -InstallBuildTools
 ```
 
-Os arquivos são gerados em `dist`. A versão do instalador de wallpaper é obtida diretamente do `CLIENT_VERSION` existente em `wallpaper_client.py`.
+O arquivo final e seu manifesto SHA-256 são gerados em `dist`.
 
-## Primeira instalação e atualizações seguintes
+## Primeira instalação e atualizações
 
-Instale uma vez os dois arquivos nos computadores. Para instalação silenciosa:
+Instale uma única vez:
 
 ```text
-Ativa-GLPI-Agent-Setup-Only-1.19.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
-Ativa-Wallpaper-Client-Setup-X.Y.Z.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+Ativa-Unified-Agent-Setup-X.Y.Z.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ```
 
-Depois disso, para atualizar o Wallpaper Client:
+Para distribuir qualquer alteração futura:
 
-1. altere `CLIENT_VERSION` e o código do cliente;
-2. gere novamente `Ativa-Wallpaper-Client-Setup-X.Y.Z.exe`;
-3. envie esse instalador na tela **Ativa Updater**, informando exatamente a mesma versão `X.Y.Z`;
-4. o arquivo enviado passa a ser a versão ativa e os serviços o instalam em até uma hora.
+1. atualize o componente desejado;
+2. aumente a versão de `unified-version.txt`;
+3. gere o instalador novamente;
+4. envie o EXE em **Ativa Updater**, informando a mesma versão `X.Y.Z`.
 
-Máquinas desligadas ou sem internet atualizam quando iniciarem o serviço e conseguirem acessar a API. Se a versão instalada já for igual ou maior que a publicada, o serviço apenas registra “Atualizado” e não executa o instalador.
+O GLPI Agent pode ser alterado pelos parâmetros `-AgentVersion` e `-AgentSha256` do builder. Mesmo que apenas o GLPI Agent mude, gere e publique uma nova versão do pacote unificado. Máquinas que já têm uma versão igual ou maior apenas registram “Atualizado” e não reinstalam nada.
 
-O instalador e a configuração da API devem ser distribuídos somente em ambiente corporativo. Para rollout amplo, também é recomendável assinar o EXE com o certificado de code signing da organização.
+Máquinas desligadas ou sem internet atualizam quando voltarem a funcionar. O instalador contém segredos de bootstrap e deve ser distribuído somente por canal corporativo protegido.

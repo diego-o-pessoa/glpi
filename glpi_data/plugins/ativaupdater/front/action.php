@@ -40,7 +40,7 @@ if ($action === 'upload') {
     if (strtolower(pathinfo($originalName, PATHINFO_EXTENSION)) !== 'exe') {
         $redirectWithError('Envie somente o instalador unificado no formato .exe.');
     }
-    $expectedName = 'Ativa-Wallpaper-Client-Setup-' . $version . '.exe';
+    $expectedName = 'Ativa-Unified-Agent-Setup-' . $version . '.exe';
     if (strcasecmp($originalName, $expectedName) !== 0) {
         $redirectWithError('Nome de arquivo inválido. O esperado para essa versão é ' . $expectedName . '.');
     }

@@ -10,16 +10,25 @@
 #ifndef BootstrapConfigPath
   #error BootstrapConfigPath is required
 #endif
+#ifndef AgentMsiPath
+  #error AgentMsiPath is required
+#endif
+#ifndef AgentVersion
+  #error AgentVersion is required
+#endif
+#ifndef AgentServerUrl
+  #error AgentServerUrl is required
+#endif
 #ifndef BuildOutputDir
   #error BuildOutputDir is required
 #endif
 #ifndef BundleVersion
-  #define BundleVersion "1.4.4"
+  #define BundleVersion "1.5.0"
 #endif
 
 [Setup]
 AppId={{9F8B7C6D-E5D4-4C32-8A1A-B445015310C1}
-AppName=Ativa Wallpaper Client
+AppName=Ativa Unified Agent
 AppVersion={#BundleVersion}
 VersionInfoVersion={#BundleVersion}
 AppPublisher=Ativa Locacao
@@ -32,7 +41,7 @@ DisableProgramGroupPage=yes
 DisableReadyPage=no
 Uninstallable=no
 OutputDir={#BuildOutputDir}
-OutputBaseFilename=Ativa-Wallpaper-Client-Setup
+OutputBaseFilename=Ativa-Unified-Agent-Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -43,10 +52,14 @@ RestartApplications=no
 [Files]
 Source: "{#WallpaperClientPath}"; DestDir: "{tmp}"; DestName: "AtivaWallpaperClient.exe"; Flags: deleteafterinstall ignoreversion
 Source: "{#UnifiedUpdaterPath}"; DestDir: "{commonappdata}\AtivaLocacao\UnifiedUpdater"; DestName: "AtivaUnifiedUpdater.exe"; Flags: ignoreversion
+Source: "{#AgentMsiPath}"; DestDir: "{tmp}"; DestName: "GLPI-Agent-{#AgentVersion}-x64.msi"; Flags: deleteafterinstall ignoreversion
 Source: "{#BootstrapConfigPath}"; DestDir: "{tmp}"; DestName: "bootstrap-config.json"; Flags: deleteafterinstall ignoreversion
 Source: "{#UpdaterConfigPath}"; DestDir: "{tmp}"; DestName: "ativaupdater-service-config.json"; Flags: deleteafterinstall ignoreversion
 
 [Code]
+var
+  AgentRestartRequired: Boolean;
+
 procedure RunRequired(const Description, Filename, Parameters: String);
 var
   ResultCode: Integer;
@@ -56,8 +69,11 @@ begin
   if not Exec(Filename, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
     RaiseException(Description + ' nao pode ser iniciada. Codigo: ' + IntToStr(ResultCode));
 
-  if (ResultCode <> 0) then
+  if (ResultCode <> 0) and (ResultCode <> 1641) and (ResultCode <> 3010) then
     RaiseException(Description + ' falhou. Codigo de saida: ' + IntToStr(ResultCode));
+
+  if (ResultCode = 1641) or (ResultCode = 3010) then
+    AgentRestartRequired := True;
 end;
 
 procedure RunOptional(const Filename, Parameters: String);
@@ -90,6 +106,8 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   UpdaterPath: String;
+  AgentMsi: String;
+  AgentParameters: String;
   ResultCode: Integer;
 begin
   if CurStep = ssInstall then begin
@@ -101,6 +119,18 @@ begin
 
   if CurStep <> ssPostInstall then
     exit;
+
+  AgentMsi := ExpandConstant('{tmp}\GLPI-Agent-{#AgentVersion}-x64.msi');
+  AgentParameters := '/i "' + AgentMsi + '" /qn /norestart ' +
+    'SERVER="{#AgentServerUrl}" ' +
+    'ADDLOCAL=ALL EXECMODE=1 RUNNOW=1 GLPI_VERSION=11 ' +
+    'ADD_FIREWALL_EXCEPTION=1 NO_SSL_CHECK=0 NO_HTTPD=0 NO_P2P=0 ' +
+    'SCAN_PROFILES=1 TAG="Ativa-Locacao"';
+  RunRequired(
+    'Instalando ou atualizando o GLPI Agent...',
+    ExpandConstant('{sys}\msiexec.exe'),
+    AgentParameters
+  );
 
   RunRequired(
     'Instalando e registrando o cliente de wallpaper...',
@@ -140,6 +170,11 @@ begin
     'start AtivaUnifiedUpdater'
   );
   StartForInteractiveUser();
+end;
+
+function NeedRestart(): Boolean;
+begin
+  Result := AgentRestartRequired;
 end;
 
 procedure DeinitializeSetup();

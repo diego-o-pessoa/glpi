@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativaupdater_clients` (
   `updater_version` varchar(32) NOT NULL DEFAULT '',
   `installed_version` varchar(32) NOT NULL DEFAULT '',
   `available_version` varchar(32) NOT NULL DEFAULT '',
+  `wallpaper_client_version` varchar(32) NOT NULL DEFAULT '',
+  `glpi_agent_version` varchar(32) NOT NULL DEFAULT '',
   `status` varchar(32) NOT NULL DEFAULT 'checking',
   `message` text NULL,
   `last_ip` varchar(64) NOT NULL DEFAULT '',

@@ -78,7 +78,7 @@ if ($canManage) {
     echo "<div class='mb-3'>";
     echo "<label for='installer' class='form-label'>" . __('Instalador (.exe)', 'ativaupdater') . "</label>";
     echo "<input type='file' class='form-control' id='installer' name='installer' accept='.exe' required>";
-    echo "<div class='form-text'>Envie o arquivo completo Ativa-Wallpaper-Client-Setup-X.Y.Z.exe gerado pelo builder.</div>";
+    echo "<div class='form-text'>Envie o arquivo Ativa-Unified-Agent-Setup-X.Y.Z.exe. Ele atualiza GLPI Agent, Wallpaper Client e Ativa Updater juntos.</div>";
     echo "</div>";
     
     echo "<button type='submit' class='btn btn-primary'>" . __('Enviar e publicar', 'ativaupdater') . "</button>";
@@ -166,7 +166,7 @@ if ($errorClients > 0) {
 if ($totalClients === 0) {
     echo "<p class='text-muted mb-0'>Nenhum serviço se identificou ainda. Depois da instalação, a primeira consulta acontece imediatamente.</p>";
 } else {
-    echo "<div class='table-responsive'><table class='table table-striped align-middle'><thead><tr><th>Computador</th><th>Instalada</th><th>Disponível</th><th>Status</th><th>Última consulta</th><th>Detalhes</th></tr></thead><tbody>";
+    echo "<div class='table-responsive'><table class='table table-striped align-middle'><thead><tr><th>Computador</th><th>Pacote unificado</th><th>Wallpaper</th><th>GLPI Agent</th><th>Disponível</th><th>Status</th><th>Última consulta</th><th>Detalhes</th></tr></thead><tbody>";
     $labels = [
         'checking' => ['Consultando', 'bg-info'],
         'current' => ['Atualizado', 'bg-success'],
@@ -183,6 +183,8 @@ if ($totalClients === 0) {
         echo '<tr>';
         echo '<td><strong>' . htmlescape((string) $client['hostname']) . '</strong>' . ($offline ? " <span class='badge bg-secondary'>Sem contato há mais de 2 h</span>" : '') . '</td>';
         echo '<td>' . htmlescape((string) $client['installed_version']) . '</td>';
+        echo '<td>' . htmlescape((string) ($client['wallpaper_client_version'] ?: '-')) . '</td>';
+        echo '<td>' . htmlescape((string) ($client['glpi_agent_version'] ?: '-')) . '</td>';
         echo '<td>' . htmlescape((string) $client['available_version']) . '</td>';
         echo "<td><span class='badge {$statusClass}'>" . htmlescape($statusLabel) . '</span></td>';
         echo '<td>' . Html::convDateTime($lastCheck) . '</td>';

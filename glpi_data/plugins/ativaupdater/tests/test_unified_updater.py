@@ -13,6 +13,10 @@ SPEC.loader.exec_module(updater)
 
 
 class VersionTests(unittest.TestCase):
+    def test_updater_version_is_valid(self) -> None:
+        self.assertEqual(updater.UPDATER_VERSION, "1.1.0")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 1, 0))
+
     def test_semantic_version_comparison(self) -> None:
         self.assertLess(updater.version_tuple("1.4.3"), updater.version_tuple("1.4.4"))
         self.assertGreater(updater.version_tuple("2.0.0"), updater.version_tuple("1.99.99"))
@@ -54,6 +58,12 @@ class ConfigTests(unittest.TestCase):
         config["check_interval_seconds"] = 60
         with self.assertRaises(updater.UpdaterError):
             updater.validate_config(config)
+
+
+class ComponentVersionTests(unittest.TestCase):
+    def test_non_windows_glpi_agent_version_is_empty(self) -> None:
+        if updater.os.name != "nt":
+            self.assertEqual(updater.glpi_agent_version(), "")
 
 
 if __name__ == "__main__":

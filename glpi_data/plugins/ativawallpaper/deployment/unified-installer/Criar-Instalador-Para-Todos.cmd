@@ -22,7 +22,7 @@ if not exist "%~dp0ativaupdater-service-config.json" (
     exit /b 1
 )
 
-echo Gerando os instaladores Ativa para todos os computadores...
+echo Gerando o instalador unificado Ativa para todos os computadores...
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass ^
   -File "%~dp0build-unified-installer.ps1" ^
   -BootstrapConfig "%~dp0bootstrap-config.json" ^
@@ -40,7 +40,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo Instaladores criados com sucesso em:
+echo Instalador unificado criado com sucesso em:
 echo %~dp0dist
 echo.
 echo Esse mesmo arquivo pode ser instalado em todos os computadores Windows x64.
