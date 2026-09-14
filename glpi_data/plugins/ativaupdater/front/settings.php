@@ -10,24 +10,6 @@ if (!Session::haveRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, READ)) {
     Session::checkRight('config', UPDATE);
 }
 
-if (isset($_POST['download_service_config'])) {
-    if (!Session::haveRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, UPDATE)) {
-        Session::checkRight('config', UPDATE);
-    }
-    $payload = [
-        'api_url'                => rtrim((string) ConfigService::get('api_base_url', ''), '/'),
-        'api_token'              => (string) ConfigService::get('api_token', ''),
-        'check_interval_seconds' => max(300, min(86400, ConfigService::getInt('check_interval_seconds', 3600))),
-        'verify_tls'             => true,
-    ];
-    header('Content-Type: application/json; charset=utf-8');
-    header('Content-Disposition: attachment; filename="ativaupdater-service-config.json"');
-    header('Cache-Control: no-store, max-age=0');
-    header('X-Content-Type-Options: nosniff');
-    echo json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-    exit;
-}
-
 if (isset($_POST['update'])) {
     if (!Session::haveRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, UPDATE)) {
         Session::checkRight('config', UPDATE);
@@ -65,6 +47,8 @@ if (isset($_POST['generate_token'])) {
 
 Html::header(__('Ativa Updater', 'ativaupdater'), $_SERVER['PHP_SELF'], 'plugins', 'ativaupdater');
 
+global $CFG_GLPI;
+$frontBase = $CFG_GLPI['root_doc'] . '/plugins/ativaupdater/front';
 $enabled = ConfigService::getBool('api_enabled');
 $apiUrl = (string) ConfigService::get('api_base_url', '');
 $interval = ConfigService::getInt('check_interval_seconds', 3600);
@@ -91,8 +75,14 @@ echo "<hr><h4>Configuração protegida do serviço</h4>";
 echo "<p>Token atual: <code>" . htmlescape($maskedToken) . "</code></p>";
 echo "<p class='text-muted'>Baixe o JSON e entregue-o ao gerador do instalador. Ele contém o token da API e não deve ser enviado por canais públicos.</p>";
 echo "<div class='d-flex gap-2'>";
-echo "<form method='post' action='{$self}'>" . Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]) . "<button type='submit' name='download_service_config' class='btn btn-success'><i class='fas fa-download'></i> Baixar configuração do serviço</button></form>";
-echo "<form method='post' action='{$self}' onsubmit='return confirm(\"O token atual deixará de funcionar em todas as máquinas. Continuar?\");'>" . Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]) . "<button type='submit' name='generate_token' class='btn btn-outline-warning'>Gerar novo token</button></form>";
+echo "<form method='post' action='" . htmlescape($frontBase . '/download_service_config.php') . "'>";
+echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
+echo "<button type='submit' class='btn btn-success'><i class='fas fa-download'></i> Baixar configuração do serviço</button>";
+echo "</form>";
+echo "<form method='post' action='{$self}' onsubmit='return confirm(\"O token atual deixará de funcionar em todas as máquinas. Continuar?\");'>";
+echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
+echo "<button type='submit' name='generate_token' class='btn btn-outline-warning'>Gerar novo token</button>";
+echo "</form>";
 echo "</div></div></div></div>";
 
 Html::footer();
