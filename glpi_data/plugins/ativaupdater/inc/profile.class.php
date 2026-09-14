@@ -92,21 +92,44 @@ class PluginAtivaupdaterProfile extends Profile
             }
         }
 
-        if (!isset($_SESSION['glpiactiveprofile']['id'])) {
-            return;
+        // Plugin updates are normally executed by bin/console inside Docker.
+        // In that context there is no interactive PHP session, so granting
+        // rights only to glpiactiveprofile leaves every profile with zero
+        // access and both plugin pages fail at Session::checkRight().
+        $profileIds = [];
+        $configurationRights = $DB->request([
+            'SELECT' => ['profiles_id', 'rights'],
+            'FROM'   => 'glpi_profilerights',
+            'WHERE'  => ['name' => 'config'],
+        ]);
+        foreach ($configurationRights as $configurationRight) {
+            if (((int) $configurationRight['rights'] & UPDATE) === UPDATE) {
+                $profileIds[] = (int) $configurationRight['profiles_id'];
+            }
         }
 
-        $profileId = (int) $_SESSION['glpiactiveprofile']['id'];
-        foreach ($instance->getAllRights() as $right) {
-            $value = match ($right['field']) {
-                self::RIGHT_VIEW => READ,
-                default => READ | UPDATE,
-            };
-            $DB->update('glpi_profilerights', ['rights' => $value], [
-                'profiles_id' => $profileId,
-                'name'        => $right['field'],
-            ]);
-            $_SESSION['glpiactiveprofile'][$right['field']] = $value;
+        if (isset($_SESSION['glpiactiveprofile']['id'])) {
+            $profileIds[] = (int) $_SESSION['glpiactiveprofile']['id'];
+        }
+        $profileIds = array_values(array_unique(array_filter($profileIds)));
+
+        foreach ($profileIds as $profileId) {
+            foreach ($instance->getAllRights() as $right) {
+                $value = match ($right['field']) {
+                    self::RIGHT_VIEW => READ,
+                    default => READ | UPDATE,
+                };
+                $DB->update('glpi_profilerights', ['rights' => $value], [
+                    'profiles_id' => $profileId,
+                    'name'        => $right['field'],
+                ]);
+
+                if (isset($_SESSION['glpiactiveprofile']['id'])
+                    && (int) $_SESSION['glpiactiveprofile']['id'] === $profileId
+                ) {
+                    $_SESSION['glpiactiveprofile'][$right['field']] = $value;
+                }
+            }
         }
     }
 

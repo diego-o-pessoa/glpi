@@ -4,7 +4,9 @@ use Glpi\Application\View\TemplateRenderer;
 
 include('../../../inc/includes.php');
 
-Session::checkRight(PluginAtivaupdaterProfile::RIGHT_VIEW, READ);
+if (!Session::haveRight(PluginAtivaupdaterProfile::RIGHT_VIEW, READ)) {
+    Session::checkRight('config', UPDATE);
+}
 
 Html::header(
     __('Ativa Updater', 'ativaupdater'),
@@ -15,7 +17,8 @@ Html::header(
 
 $release = new PluginAtivaupdaterRelease();
 $activeRelease = $release->getActiveRelease();
-$canManage = Session::haveRight(PluginAtivaupdaterProfile::RIGHT_MANAGE, UPDATE);
+$canManage = Session::haveRight(PluginAtivaupdaterProfile::RIGHT_MANAGE, UPDATE)
+    || Session::haveRight('config', UPDATE);
 
 // Get all releases
 global $DB;

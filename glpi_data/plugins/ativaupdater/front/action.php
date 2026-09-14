@@ -7,7 +7,9 @@ use GlpiPlugin\Ativaupdater\ConfigService;
 include('../../../inc/includes.php');
 
 Session::checkLoginUser();
-Session::checkRight(PluginAtivaupdaterProfile::RIGHT_MANAGE, UPDATE);
+if (!Session::haveRight(PluginAtivaupdaterProfile::RIGHT_MANAGE, UPDATE)) {
+    Session::checkRight('config', UPDATE);
+}
 
 $redirectWithError = static function (string $message): never {
     Session::addMessageAfterRedirect($message, false, ERROR);

@@ -6,10 +6,14 @@ use GlpiPlugin\Ativaupdater\ConfigService;
 
 include('../../../inc/includes.php');
 
-Session::checkRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, READ);
+if (!Session::haveRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, READ)) {
+    Session::checkRight('config', UPDATE);
+}
 
 if (isset($_POST['download_service_config'])) {
-    Session::checkRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, UPDATE);
+    if (!Session::haveRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, UPDATE)) {
+        Session::checkRight('config', UPDATE);
+    }
     $payload = [
         'api_url'                => rtrim((string) ConfigService::get('api_base_url', ''), '/'),
         'api_token'              => (string) ConfigService::get('api_token', ''),
@@ -25,7 +29,9 @@ if (isset($_POST['download_service_config'])) {
 }
 
 if (isset($_POST['update'])) {
-    Session::checkRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, UPDATE);
+    if (!Session::haveRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, UPDATE)) {
+        Session::checkRight('config', UPDATE);
+    }
     $apiUrl = rtrim(trim((string) ($_POST['api_base_url'] ?? '')), '/');
     $interval = filter_var($_POST['check_interval_seconds'] ?? null, FILTER_VALIDATE_INT);
     $maxUpload = filter_var($_POST['max_upload_mb'] ?? null, FILTER_VALIDATE_INT);
@@ -49,7 +55,9 @@ if (isset($_POST['update'])) {
 }
 
 if (isset($_POST['generate_token'])) {
-    Session::checkRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, UPDATE);
+    if (!Session::haveRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, UPDATE)) {
+        Session::checkRight('config', UPDATE);
+    }
     ConfigService::set(['api_token' => ConfigService::generateToken()]);
     Session::addMessageAfterRedirect('Novo token gerado. Gere outro arquivo de configuração e atualize os instaladores.', true, INFO);
     Html::redirect($_SERVER['PHP_SELF']);

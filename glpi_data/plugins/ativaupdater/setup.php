@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Glpi\Http\SessionManager;
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_ATIVAUPDATER_VERSION', '1.1.0');
+define('PLUGIN_ATIVAUPDATER_VERSION', '1.1.1');
 define('PLUGIN_ATIVAUPDATER_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVAUPDATER_MAX_GLPI', '11.1.0');
 define('PLUGIN_ATIVAUPDATER_DIR', __DIR__);
@@ -48,11 +48,13 @@ function plugin_init_ativaupdater(): void
     Plugin::registerClass(PluginAtivaupdaterRelease::class);
     Plugin::registerClass(PluginAtivaupdaterProfile::class, ['addtabon' => [Profile::class]]);
 
-    if (Session::haveRight(PluginAtivaupdaterProfile::RIGHT_VIEW, READ)) {
+    $isPluginAdministrator = Session::haveRight('config', UPDATE);
+
+    if (Session::haveRight(PluginAtivaupdaterProfile::RIGHT_VIEW, READ) || $isPluginAdministrator) {
         $PLUGIN_HOOKS['menu_toadd']['ativaupdater']['admin'] = PluginAtivaupdaterMenu::class;
     }
 
-    if (Session::haveRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, UPDATE)) {
+    if (Session::haveRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, UPDATE) || $isPluginAdministrator) {
         $PLUGIN_HOOKS[Hooks::CONFIG_PAGE]['ativaupdater'] = 'front/settings.php';
     }
 }
