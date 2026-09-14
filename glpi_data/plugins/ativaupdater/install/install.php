@@ -41,6 +41,32 @@ function plugin_ativaupdater_do_install(): bool
 
         $migration->executeMigration();
 
+        // Reconcile reports created before the first release existed. The
+        // service will replace this transitional state on its next scheduled
+        // contact, but the dashboard must not keep showing a stale 404.
+        if ($DB->tableExists('glpi_plugin_ativaupdater_releases') && $DB->tableExists($clientsTable)) {
+            $active = $DB->request([
+                'FROM' => 'glpi_plugin_ativaupdater_releases',
+                'WHERE' => ['active' => 1],
+                'LIMIT' => 1,
+            ]);
+            if (count($active) === 1) {
+                $activeVersion = (string) $active->current()['version'];
+                $reportedClients = $DB->request(['FROM' => $clientsTable]);
+                foreach ($reportedClients as $client) {
+                    $noReleaseReport = str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE')
+                        || (string) $client['status'] === 'waiting_release';
+                    if ($noReleaseReport && version_compare((string) $client['installed_version'], $activeVersion, '<')) {
+                        $DB->update($clientsTable, [
+                            'available_version' => $activeVersion,
+                            'status' => 'checking',
+                            'message' => 'Nova versão publicada; aguardando a próxima consulta automática do serviço.',
+                        ], ['id' => (int) $client['id']]);
+                    }
+                }
+            }
+        }
+
     } catch (Throwable $exception) {
         $migration->displayMessage('Falha na instalacao: ' . $exception->getMessage());
         return false;

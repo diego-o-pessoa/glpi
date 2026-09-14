@@ -1,6 +1,6 @@
 <?php
 
-use Glpi\Application\View\TemplateRenderer;
+use GlpiPlugin\Ativaupdater\ConfigService;
 
 include('../../../inc/includes.php');
 
@@ -142,6 +142,8 @@ echo "</div></div>";
 
 // Clients reporting through the Windows service
 $activeVersion = $activeRelease ? (string) $activeRelease['version'] : '';
+$activePublishedAt = $activeRelease ? strtotime((string) $activeRelease['created_at']) : false;
+$checkInterval = max(300, min(86400, ConfigService::getInt('check_interval_seconds', 3600)));
 $totalClients = count($clients);
 $updatedClients = 0;
 $errorClients = 0;
@@ -175,6 +177,7 @@ if ($totalClients === 0) {
     $labels = [
         'checking' => ['Consultando', 'bg-info'],
         'waiting_release' => ['Aguardando publicação', 'bg-info'],
+        'waiting_check' => ['Aguardando próxima consulta', 'bg-info'],
         'current' => ['Atualizado', 'bg-success'],
         'downloading' => ['Baixando', 'bg-primary'],
         'installing' => ['Instalando', 'bg-warning text-dark'],
@@ -183,21 +186,38 @@ if ($totalClients === 0) {
     ];
     foreach ($clients as $client) {
         $statusKey = (string) $client['status'];
-        if ($statusKey === 'error' && str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE')) {
+        $lastCheck = (string) $client['last_check'];
+        $lastCheckAt = strtotime($lastCheck) ?: 0;
+        $noReleaseMessage = str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE');
+        $needsActiveVersion = $activeVersion !== ''
+            && version_compare((string) $client['installed_version'], $activeVersion, '<');
+        $releaseIsNewerThanReport = $activePublishedAt !== false && $activePublishedAt > $lastCheckAt;
+        $waitingForNextCheck = $needsActiveVersion
+            && ($statusKey === 'waiting_release' || $noReleaseMessage || $releaseIsNewerThanReport);
+        $displayMessage = (string) ($client['message'] ?: '-');
+        $displayAvailable = (string) $client['available_version'];
+        if ($waitingForNextCheck) {
+            $statusKey = 'waiting_check';
+            $displayAvailable = $activeVersion;
+            $nextCheckAt = $lastCheckAt + $checkInterval;
+            $displayMessage = $nextCheckAt > time()
+                ? 'Versão publicada. Consulta automática prevista até ' . Html::convDateTime(date('Y-m-d H:i:s', $nextCheckAt)) . '.'
+                : 'Versão publicada. Aguardando o próximo contato automático do serviço.';
+        } elseif ($statusKey === 'error' && $noReleaseMessage) {
             $statusKey = 'waiting_release';
+            $displayMessage = 'Computador registrado; aguardando a primeira versão publicada.';
         }
         [$statusLabel, $statusClass] = $labels[$statusKey] ?? [$statusKey, 'bg-secondary'];
-        $lastCheck = (string) $client['last_check'];
-        $offline = strtotime($lastCheck) < time() - 7200;
+        $offline = $lastCheckAt < time() - 7200;
         echo '<tr>';
         echo '<td><strong>' . htmlescape((string) $client['hostname']) . '</strong>' . ($offline ? " <span class='badge bg-secondary'>Sem contato há mais de 2 h</span>" : '') . '</td>';
         echo '<td>' . htmlescape((string) $client['installed_version']) . '</td>';
         echo '<td>' . htmlescape((string) ($client['wallpaper_client_version'] ?: '-')) . '</td>';
         echo '<td>' . htmlescape((string) ($client['glpi_agent_version'] ?: '-')) . '</td>';
-        echo '<td>' . htmlescape((string) $client['available_version']) . '</td>';
+        echo '<td>' . htmlescape($displayAvailable ?: '-') . '</td>';
         echo "<td><span class='badge {$statusClass}'>" . htmlescape($statusLabel) . '</span></td>';
         echo '<td>' . Html::convDateTime($lastCheck) . '</td>';
-        echo '<td>' . htmlescape((string) ($client['message'] ?: '-')) . '</td>';
+        echo '<td>' . htmlescape($displayMessage) . '</td>';
         echo '</tr>';
     }
     echo '</tbody></table></div>';

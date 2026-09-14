@@ -17,6 +17,32 @@ $redirectWithError = static function (string $message): never {
 };
 
 $storageDirectory = GLPI_PLUGIN_DOC_DIR . '/ativaupdater/releases';
+$markClientsAwaiting = static function (string $version): void {
+    global $DB;
+
+    $table = 'glpi_plugin_ativaupdater_clients';
+    if (!$DB->tableExists($table)) {
+        return;
+    }
+    $iterator = $DB->request(['FROM' => $table]);
+    foreach ($iterator as $client) {
+        if (version_compare((string) $client['installed_version'], $version, '>=')) {
+            continue;
+        }
+        $status = (string) $client['status'];
+        if (in_array($status, ['downloading', 'installing'], true)) {
+            continue;
+        }
+        if ($status === 'error' && !str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE')) {
+            continue;
+        }
+        $DB->update($table, [
+            'available_version' => $version,
+            'status' => 'checking',
+            'message' => 'Nova versão publicada; aguardando a próxima consulta automática do serviço.',
+        ], ['id' => (int) $client['id']]);
+    }
+};
 $action = (string) ($_POST['action'] ?? '');
 if ($action === '' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $receivedBytes = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
@@ -126,6 +152,7 @@ if ($action === 'upload') {
         if ($releaseId <= 0) {
             throw new RuntimeException('A versão não recebeu um identificador no banco de dados.');
         }
+        $markClientsAwaiting($version);
         $DB->commit();
     } catch (Throwable $exception) {
         $DB->rollBack();
@@ -143,6 +170,7 @@ if ($action === 'set_active') {
     if ($id <= 0 || !$release->getFromDB($id) || !$release->setActive($id)) {
         $redirectWithError('Não foi possível ativar a versão selecionada.');
     }
+    $markClientsAwaiting((string) $release->fields['version']);
     Session::addMessageAfterRedirect('Versão ativa atualizada.', true, INFO);
     Html::redirect('dashboard.php');
 }
