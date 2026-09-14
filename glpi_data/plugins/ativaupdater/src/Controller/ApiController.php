@@ -7,7 +7,9 @@ namespace GlpiPlugin\Ativaupdater\Controller;
 use Glpi\Controller\AbstractController;
 use GlpiPlugin\Ativaupdater\ConfigService;
 use GlpiPlugin\Ativaupdater\InstallStatus;
+use GlpiPlugin\Ativaupdater\ManualCheck;
 use GlpiPlugin\Ativaupdater\ReleasePolicy;
+use GlpiPlugin\Ativaupdater\ServerClock;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -70,7 +72,7 @@ final class ApiController extends AbstractController
             'file_name'              => (string) $release['original_filename'],
             'size'                   => (int) $release['file_size'],
             'sha256'                 => strtolower((string) $release['sha256']),
-            'published_at'           => gmdate('Y-m-d\TH:i:s\Z', strtotime((string) $release['created_at'])),
+            'published_at'           => gmdate('Y-m-d\TH:i:s\Z', ServerClock::toTimestamp((string) $release['created_at'])),
             'download_url'           => $this->configuredBaseUrl() . '/download/' . rawurlencode((string) $release['version']),
             'check_interval_seconds' => max(300, min(86400, ConfigService::getInt('check_interval_seconds', 3600))),
             // Only honoured by services >= 1.3.0; older services ignore unknown keys.
@@ -235,7 +237,7 @@ final class ApiController extends AbstractController
             'status'            => $status,
             'message'           => mb_substr(trim((string) ($payload['message'] ?? '')), 0, 1000),
             'last_ip'           => mb_substr((string) ($request->getClientIp() ?? ''), 0, 64),
-            'last_check'        => date('Y-m-d H:i:s'),
+            'last_check'        => ServerClock::now(),
         ];
         if (in_array($status, InstallStatus::FINISHED, true)) {
             $data['install_log'] = null;
@@ -251,11 +253,7 @@ final class ApiController extends AbstractController
         ]);
         if (count($existing) === 1) {
             $current = $existing->current();
-            $requestedAt = strtotime((string) ($current['check_requested_at'] ?? '')) ?: 0;
-            $acknowledgedAt = strtotime((string) ($current['check_acknowledged_at'] ?? '')) ?: 0;
-            if ($requestedAt > $acknowledgedAt) {
-                $data['check_acknowledged_at'] = date('Y-m-d H:i:s');
-            }
+            $data += ManualCheck::acknowledgement($current, $data['last_check']);
             $data['install_started_at'] = InstallStatus::installStartedAt(
                 $status,
                 $current['install_started_at'] ?? null,
@@ -297,12 +295,8 @@ final class ApiController extends AbstractController
         if (count($iterator) !== 1) {
             return $this->error('CLIENT_NOT_FOUND', 'Computador ainda nao registrado.', 404);
         }
-        $client = $iterator->current();
-        $requestedAt = strtotime((string) ($client['check_requested_at'] ?? '')) ?: 0;
-        $acknowledgedAt = strtotime((string) ($client['check_acknowledged_at'] ?? '')) ?: 0;
-
         return new JsonResponse([
-            'check_now' => $requestedAt > $acknowledgedAt,
+            'check_now' => ManualCheck::isPending($iterator->current()),
             'poll_after_seconds' => 15,
         ]);
     }

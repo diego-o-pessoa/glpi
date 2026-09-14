@@ -76,6 +76,13 @@ Regras:
 4. No fim, o setup reinicia o serviço para carregar o novo executável e inicia o Wallpaper Client em **cada sessão de usuário conectada**.
 5. O novo serviço reporta **Atualizado** ("Versão X instalada com sucesso") no dashboard.
 
+## Verificar agora
+
+O botão envia o comando a todos os computadores. A coluna **Serviço** do dashboard mostra a versão do serviço de cada máquina:
+
+- **1.2.0 ou superior:** recebe o comando em até 15 s e mostra **Verificando agora**. Se estiver instalando, verifica ao terminar. Sem confirmação em 2 minutos, aparece **Sem resposta ao comando**; nesse caso confira no computador o serviço "Ativa Unified Updater" e o `logs\service.log`.
+- **Anterior a 1.2.0 (pacote 1.5.0):** aparece **Serviço sem Verificar agora**. Essas máquinas só consultam no intervalo automático (1 h) até receberem um pacote novo com sucesso.
+
 ## Falhas, novas tentativas e log de erro
 
 | Situação | O que o serviço faz | Status no dashboard |

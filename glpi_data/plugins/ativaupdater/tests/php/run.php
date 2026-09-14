@@ -3,10 +3,14 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../src/ReleasePolicy.php';
+require_once __DIR__ . '/../../src/ServerClock.php';
 require_once __DIR__ . '/../../src/InstallStatus.php';
+require_once __DIR__ . '/../../src/ManualCheck.php';
 
 use GlpiPlugin\Ativaupdater\InstallStatus;
+use GlpiPlugin\Ativaupdater\ManualCheck;
 use GlpiPlugin\Ativaupdater\ReleasePolicy;
+use GlpiPlugin\Ativaupdater\ServerClock;
 
 function check(bool $condition, string $message = 'check failed'): void
 {
@@ -74,7 +78,7 @@ $tests['installation start is kept across attempts and cleared when finished'] =
 };
 
 $tests['stuck installations are detected'] = static function (): void {
-    $now = strtotime('2026-09-15 12:00:00');
+    $now = ServerClock::toTimestamp('2026-09-15 12:00:00');
     $recent = '2026-09-15 11:50:00';
     check(!InstallStatus::isStuck('installing', '2026-09-15 11:40:00', $recent, $now));
     check(InstallStatus::isStuck('installing', '2026-09-15 11:00:00', '2026-09-15 11:10:00', $now), 'no contact');
@@ -82,6 +86,52 @@ $tests['stuck installations are detected'] = static function (): void {
     check(!InstallStatus::isStuck('current', '2026-09-15 08:30:00', '2026-09-15 08:30:00', $now));
     check(!InstallStatus::isStuck('install_failed', '2026-09-15 08:30:00', '2026-09-15 08:30:00', $now));
     check(!InstallStatus::isStuck('installing', null, $recent, $now));
+};
+
+$tests['server clock ignores the logged-in user timezone'] = static function (): void {
+    $original = date_default_timezone_get();
+    try {
+        $before = ServerClock::now();
+        // GLPI switches the default timezone to the user preference in web requests.
+        date_default_timezone_set('Pacific/Kiritimati');
+        $after = ServerClock::now();
+        check(abs(ServerClock::toTimestamp($after) - ServerClock::toTimestamp($before)) <= 2, 'timezone switch shifted the clock');
+        check(abs(ServerClock::toTimestamp($after) - time()) <= 2, 'round trip');
+        check(ServerClock::format(0) === (new DateTimeImmutable('@0'))->setTimezone(ServerClock::timezone())->format('Y-m-d H:i:s'));
+        check(ServerClock::toTimestamp('') === 0 && ServerClock::toTimestamp(null) === 0);
+    } finally {
+        date_default_timezone_set($original);
+    }
+};
+
+$tests['manual check handshake uses sequences'] = static function (): void {
+    $client = ['check_request_seq' => 3, 'check_ack_seq' => 2, 'updater_version' => '1.4.0', 'status' => 'checking'];
+    check(ManualCheck::isPending($client));
+    $ack = ManualCheck::acknowledgement($client, '2026-09-15 10:00:00');
+    check($ack === ['check_ack_seq' => 3, 'check_acknowledged_at' => '2026-09-15 10:00:00']);
+    check(!ManualCheck::isPending(array_merge($client, $ack)));
+    check(ManualCheck::acknowledgement(array_merge($client, $ack), 'x') === []);
+    check(!ManualCheck::isPending([]));
+};
+
+$tests['manual check states'] = static function (): void {
+    $now = time();
+    $pending = [
+        'check_request_seq' => 1,
+        'check_ack_seq' => 0,
+        'updater_version' => '1.4.0',
+        'status' => 'checking',
+        'check_requested_at' => ServerClock::format($now - 10),
+    ];
+    check(ManualCheck::state(['check_request_seq' => 1, 'check_ack_seq' => 1], $now) === ManualCheck::STATE_NONE);
+    check(ManualCheck::state($pending, $now) === ManualCheck::STATE_WAITING);
+    check(ManualCheck::state(array_merge($pending, ['updater_version' => '1.1.1']), $now) === ManualCheck::STATE_UNSUPPORTED);
+    check(ManualCheck::state(array_merge($pending, ['updater_version' => '']), $now) === ManualCheck::STATE_UNSUPPORTED);
+    check(ManualCheck::state(array_merge($pending, ['status' => 'installing']), $now) === ManualCheck::STATE_BUSY);
+    check(ManualCheck::state(array_merge($pending, ['status' => 'retrying']), $now) === ManualCheck::STATE_WAITING);
+    $late = array_merge($pending, ['check_requested_at' => ServerClock::format($now - ManualCheck::RESPONSE_TIMEOUT_SECONDS - 5)]);
+    check(ManualCheck::state($late, $now) === ManualCheck::STATE_NO_RESPONSE);
+    check(ManualCheck::supports('1.2.0') && !ManualCheck::supports('1.1.9') && !ManualCheck::supports('x'));
 };
 
 $failed = 0;

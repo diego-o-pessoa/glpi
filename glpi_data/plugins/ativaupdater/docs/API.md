@@ -83,6 +83,30 @@ Status aceitos: `checking`, `waiting_release`, `current`, `downloading`, `instal
 
 Relatórios de falha incluem o campo opcional `install_log` (texto, até ~24 KB), com o log coletado da instalação. O servidor guarda até 65.000 caracteres e apaga o log quando o computador informa `current`, `updated` ou `waiting_release`. O corpo aceito em `/status` vai até 128 KiB.
 
+## Verificação imediata ("Verificar agora")
+
+```http
+GET /plugins/ativaupdater/api/v1/commands/{machine_guid}
+```
+
+```json
+{ "check_now": true, "poll_after_seconds": 15 }
+```
+
+- O botão **Verificar agora** incrementa `check_request_seq` de todos os computadores, inclusive dos que estão instalando.
+- O serviço (1.2.0+) consulta este endpoint a cada 15 s enquanto não está acompanhando uma instalação. Com `check_now` igual a `true`, faz a verificação completa na hora.
+- O primeiro `POST /status` seguinte confirma o pedido, copiando o número para `check_ack_seq`.
+- A comparação usa números, e não horários: com fusos diferentes entre o usuário do GLPI e o servidor, os horários faziam o pedido parecer já confirmado e o comando nunca chegava. As datas do plugin usam o fuso do servidor (`date.timezone` do PHP).
+
+Estados no dashboard:
+
+| Estado | Quando |
+|---|---|
+| **Verificando agora** | pedido enviado há menos de 2 minutos |
+| Status atual (Baixando/Instalando) | o computador está instalando e verifica ao terminar |
+| **Sem resposta ao comando** | o serviço não confirmou em 2 minutos (parado, sem acesso à API ou sem memória) |
+| **Serviço sem Verificar agora** | serviço anterior a 1.2.0 (pacotes 1.5.0): só consulta no intervalo automático |
+
 ## Códigos principais
 
 - `401`: cabeçalho Bearer ausente ou malformado;

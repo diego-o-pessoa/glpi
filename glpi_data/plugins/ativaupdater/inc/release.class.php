@@ -1,6 +1,7 @@
 <?php
 
 use GlpiPlugin\Ativaupdater\ReleasePolicy;
+use GlpiPlugin\Ativaupdater\ServerClock;
 
 class PluginAtivaupdaterRelease extends CommonDBTM
 {
@@ -54,7 +55,7 @@ class PluginAtivaupdaterRelease extends CommonDBTM
             $result = $DB->update($this->getTable(), [
                 'active'          => 1,
                 'allow_downgrade' => $allowDowngrade ? 1 : 0,
-                'activated_at'    => date('Y-m-d H:i:s'),
+                'activated_at'    => ServerClock::now(),
                 'activated_by'    => $userId,
             ], ['id' => $id]);
             if (!$result) {

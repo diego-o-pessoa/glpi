@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativaupdater_clients` (
   `last_check` datetime NOT NULL,
   `check_requested_at` datetime NULL,
   `check_acknowledged_at` datetime NULL,
+  `check_request_seq` int unsigned NOT NULL DEFAULT '0',
+  `check_ack_seq` int unsigned NOT NULL DEFAULT '0',
   `install_started_at` datetime NULL,
   `install_log` mediumtext NULL,
   PRIMARY KEY (`id`),

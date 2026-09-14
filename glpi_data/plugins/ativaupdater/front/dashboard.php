@@ -2,7 +2,9 @@
 
 use GlpiPlugin\Ativaupdater\ConfigService;
 use GlpiPlugin\Ativaupdater\InstallStatus;
+use GlpiPlugin\Ativaupdater\ManualCheck;
 use GlpiPlugin\Ativaupdater\ReleasePolicy;
+use GlpiPlugin\Ativaupdater\ServerClock;
 
 include('../../../inc/includes.php');
 
@@ -188,7 +190,7 @@ echo "</div></div>";
 $activeVersion = $activeRelease ? (string) $activeRelease['version'] : '';
 $activeAllowsDowngrade = $activeRelease !== null && (int) ($activeRelease['allow_downgrade'] ?? 0) === 1;
 $activePublishedAt = $activeRelease
-    ? strtotime((string) (($activeRelease['activated_at'] ?? '') ?: $activeRelease['created_at']))
+    ? ServerClock::toTimestamp((string) (($activeRelease['activated_at'] ?? '') ?: $activeRelease['created_at']))
     : false;
 $checkInterval = max(300, min(86400, ConfigService::getInt('check_interval_seconds', 3600)));
 $totalClients = count($clients);
@@ -235,12 +237,14 @@ if ($errorClients > 0) {
 if ($totalClients === 0) {
     echo "<p class='text-muted mb-0'>Nenhum serviço se identificou ainda. Depois da instalação, a primeira consulta acontece imediatamente.</p>";
 } else {
-    echo "<div class='table-responsive'><table class='table table-striped align-middle'><thead><tr><th>Computador</th><th>Pacote unificado</th><th>Wallpaper</th><th>GLPI Agent</th><th>Disponível</th><th>Status</th><th>Última consulta</th><th>Próxima consulta</th><th>Detalhes</th></tr></thead><tbody>";
+    echo "<div class='table-responsive'><table class='table table-striped align-middle'><thead><tr><th>Computador</th><th>Pacote unificado</th><th>Serviço</th><th>Wallpaper</th><th>GLPI Agent</th><th>Disponível</th><th>Status</th><th>Última consulta</th><th>Próxima consulta</th><th>Detalhes</th></tr></thead><tbody>";
     $labels = [
         'checking' => ['Consultando', 'bg-info'],
         'waiting_release' => ['Aguardando publicação', 'bg-info'],
         'waiting_check' => ['Aguardando próxima consulta', 'bg-info'],
         'manual_check' => ['Verificando agora', 'bg-primary'],
+        'manual_unsupported' => ['Serviço sem Verificar agora', 'bg-secondary'],
+        'manual_no_response' => ['Sem resposta ao comando', 'bg-danger'],
         'current' => ['Atualizado', 'bg-success'],
         'downloading' => ['Baixando', 'bg-primary'],
         'installing' => ['Instalando', 'bg-warning text-dark'],
@@ -254,10 +258,13 @@ if ($totalClients === 0) {
         $installLog = (string) ($client['install_log'] ?? '');
         $stuck = InstallStatus::isStuck($statusKey, $client['install_started_at'] ?? null, (string) $client['last_check'], time());
         $lastCheck = (string) $client['last_check'];
-        $lastCheckAt = strtotime($lastCheck) ?: 0;
-        $requestedAt = strtotime((string) ($client['check_requested_at'] ?? '')) ?: 0;
-        $acknowledgedAt = strtotime((string) ($client['check_acknowledged_at'] ?? '')) ?: 0;
-        $manualPending = $requestedAt > $acknowledgedAt;
+        $lastCheckAt = ServerClock::toTimestamp($lastCheck);
+        $manualState = ManualCheck::state($client, time());
+        $serviceVersion = (string) ($client['updater_version'] ?? '');
+        $nextRegularCheckAt = $lastCheckAt + $checkInterval;
+        $nextRegularCheckLabel = $nextRegularCheckAt > time()
+            ? Html::convDateTime(ServerClock::format($nextRegularCheckAt))
+            : 'a qualquer momento';
         $noReleaseMessage = str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE');
         $clientAction = $activeVersion !== ''
             ? ReleasePolicy::clientAction((string) $client['installed_version'], $activeVersion, $activeAllowsDowngrade)
@@ -278,20 +285,35 @@ if ($totalClients === 0) {
                 . ' e o computador não informa progresso desde ' . Html::convDateTime($lastCheck) . '. '
                 . 'O serviço pode estar parado, com o instalador travado, ou em versão anterior à 1.4.0 (sem acompanhamento da instalação). '
                 . 'No computador, consulte C:\\ProgramData\\AtivaLocacao\\UnifiedUpdater\\logs.';
-        } elseif ($manualPending) {
-            $supportsManualCheck = version_compare((string) $client['updater_version'], '1.2.0', '>=');
-            $statusKey = $supportsManualCheck ? 'manual_check' : 'waiting_check';
+        } elseif ($manualState === ManualCheck::STATE_UNSUPPORTED) {
+            $statusKey = 'manual_unsupported';
+            $displayMessage = 'O serviço deste computador (versão ' . ($serviceVersion !== '' ? $serviceVersion : 'desconhecida')
+                . ') é anterior a ' . ManualCheck::MIN_SERVICE_VERSION . ' e não recebe o comando "Verificar agora". '
+                . 'Ele consultará sozinho no intervalo automático (próxima consulta: ' . $nextRegularCheckLabel . '). '
+                . 'O comando passa a funcionar depois que o pacote atual for instalado nele.';
+        } elseif ($manualState === ManualCheck::STATE_BUSY) {
+            // Keep the real progress label (Baixando/Instalando).
+            $displayMessage = 'Verificação solicitada; será feita quando a instalação em andamento terminar. ' . $displayMessage;
+        } elseif ($manualState === ManualCheck::STATE_NO_RESPONSE) {
+            $statusKey = 'manual_no_response';
+            $displayMessage = 'O serviço não confirmou a verificação solicitada em '
+                . Html::convDateTime((string) $client['check_requested_at'])
+                . ' (último contato: ' . Html::convDateTime($lastCheck) . '). '
+                . 'No computador, confira se o serviço "Ativa Unified Updater" está em execução e se ele acessa '
+                . 'chamados.ativalocacao.com.br:8443; o log fica em C:\\ProgramData\\AtivaLocacao\\UnifiedUpdater\\logs\\service.log.';
+        } elseif ($manualState === ManualCheck::STATE_WAITING) {
+            $statusKey = 'manual_check';
             $displayAvailable = $activeVersion ?: $displayAvailable;
-            $displayMessage = $supportsManualCheck
-                ? 'Comando enviado; o serviço iniciará a consulta em até 15 segundos.'
-                : 'Comando registrado. Será atendido após este computador receber o pacote 1.5.1.';
+            $displayMessage = 'Comando enviado; o serviço iniciará a consulta em até 15 segundos.';
         } elseif ($waitingForNextCheck) {
             $statusKey = 'waiting_check';
             $displayAvailable = $activeVersion;
-            $nextCheckAt = $lastCheckAt + $checkInterval;
             $publishedLabel = $clientAction === ReleasePolicy::ACTION_DOWNGRADE ? 'Rollback autorizado.' : 'Versão publicada.';
-            $displayMessage = $nextCheckAt > time()
-                ? $publishedLabel . ' Consulta automática prevista até ' . Html::convDateTime(date('Y-m-d H:i:s', $nextCheckAt)) . '.'
+            $displayMessage = $nextRegularCheckAt > time()
+                ? $publishedLabel . ' Consulta automática prevista até ' . $nextRegularCheckLabel . '.'
+                    . (ManualCheck::supports($serviceVersion)
+                        ? ' Use "Verificar agora" para antecipar.'
+                        : ' Este serviço (versão ' . ($serviceVersion !== '' ? $serviceVersion : 'desconhecida') . ') não aceita "Verificar agora".')
                 : $publishedLabel . ' Aguardando o próximo contato automático do serviço.';
         } elseif ($statusKey === 'error' && $noReleaseMessage) {
             $statusKey = 'waiting_release';
@@ -299,12 +321,9 @@ if ($totalClients === 0) {
         }
         [$statusLabel, $statusClass] = $labels[$statusKey] ?? [$statusKey, 'bg-secondary'];
         $offline = $lastCheckAt < time() - 7200;
-        $nextRegularCheckAt = $lastCheckAt + $checkInterval;
-        $nextCheckLabel = $manualPending
-            ? 'Após a verificação atual'
-            : ($nextRegularCheckAt > time()
-                ? Html::convDateTime(date('Y-m-d H:i:s', $nextRegularCheckAt))
-                : 'A qualquer momento');
+        $nextCheckLabel = $manualState === ManualCheck::STATE_WAITING
+            ? 'Em até 15 segundos'
+            : ucfirst($nextRegularCheckLabel);
         echo '<tr>';
         echo '<td><strong>' . htmlescape((string) $client['hostname']) . '</strong>' . ($offline ? " <span class='badge bg-secondary'>Sem contato há mais de 2 h</span>" : '') . '</td>';
         echo '<td>' . htmlescape((string) $client['installed_version'])
@@ -313,6 +332,11 @@ if ($totalClients === 0) {
                 : '')
             . ($clientAction === ReleasePolicy::ACTION_DOWNGRADE
                 ? " <span class='badge bg-warning text-dark'>Rollback pendente</span>"
+                : '')
+            . '</td>';
+        echo '<td>' . htmlescape($serviceVersion !== '' ? $serviceVersion : '-')
+            . ($serviceVersion !== '' && !ManualCheck::supports($serviceVersion)
+                ? " <span class='badge bg-secondary' title='Não recebe o comando Verificar agora'>desatualizado</span>"
                 : '')
             . '</td>';
         echo '<td>' . htmlescape((string) ($client['wallpaper_client_version'] ?: '-')) . '</td>';

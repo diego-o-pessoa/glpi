@@ -42,6 +42,12 @@ function plugin_ativaupdater_do_install(): bool
             if (!$DB->fieldExists($clientsTable, 'check_acknowledged_at')) {
                 $migration->addField($clientsTable, 'check_acknowledged_at', 'datetime NULL');
             }
+            if (!$DB->fieldExists($clientsTable, 'check_request_seq')) {
+                $migration->addField($clientsTable, 'check_request_seq', "int unsigned NOT NULL DEFAULT '0'");
+            }
+            if (!$DB->fieldExists($clientsTable, 'check_ack_seq')) {
+                $migration->addField($clientsTable, 'check_ack_seq', "int unsigned NOT NULL DEFAULT '0'");
+            }
             if (!$DB->fieldExists($clientsTable, 'install_started_at')) {
                 $migration->addField($clientsTable, 'install_started_at', 'datetime NULL');
             }

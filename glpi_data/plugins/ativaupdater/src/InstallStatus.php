@@ -57,11 +57,11 @@ final class InstallStatus
         if (!in_array($status, self::IN_PROGRESS, true)) {
             return false;
         }
-        $lastContact = strtotime((string) $lastCheck) ?: 0;
+        $lastContact = ServerClock::toTimestamp($lastCheck);
         if ($lastContact > 0 && $now - $lastContact > self::NO_CONTACT_SECONDS) {
             return true;
         }
-        $startedAt = strtotime((string) $installStartedAt) ?: 0;
+        $startedAt = ServerClock::toTimestamp($installStartedAt);
         return $startedAt > 0 && $now - $startedAt > self::MAX_DURATION_SECONDS;
     }
 }

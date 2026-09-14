@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
+use Glpi\DBAL\QueryExpression;
 use GlpiPlugin\Ativaupdater\ConfigService;
+use GlpiPlugin\Ativaupdater\ManualCheck;
 use GlpiPlugin\Ativaupdater\ReleasePolicy;
+use GlpiPlugin\Ativaupdater\ServerClock;
 
 include('../../../inc/includes.php');
 
@@ -59,29 +62,44 @@ if ($action === 'check_now') {
     global $DB;
     $table = 'glpi_plugin_ativaupdater_clients';
     $requested = 0;
+    $busy = 0;
+    $unsupported = 0;
     if ($DB->tableExists($table)) {
-        $now = date('Y-m-d H:i:s');
+        $now = ServerClock::now();
         $iterator = $DB->request(['FROM' => $table]);
         foreach ($iterator as $client) {
-            if (in_array((string) $client['status'], ['downloading', 'installing'], true)) {
-                continue;
-            }
-            if ($DB->update($table, [
+            $fields = [
+                'check_request_seq'  => new QueryExpression(DBmysql::quoteName('check_request_seq') . ' + 1'),
                 'check_requested_at' => $now,
-                'status' => 'checking',
-                'message' => 'Verificação manual solicitada pelo dashboard.',
-            ], ['id' => (int) $client['id']])) {
+            ];
+            // Computers in the middle of an installation also receive the
+            // command (they check as soon as the installer finishes), but
+            // keep showing their real progress.
+            if (in_array((string) $client['status'], ManualCheck::BUSY_STATUSES, true)) {
+                $busy++;
+            } else {
+                $fields['status'] = 'checking';
+                $fields['message'] = 'Verificação manual solicitada pelo dashboard.';
+            }
+            if (!ManualCheck::supports((string) $client['updater_version'])) {
+                $unsupported++;
+            }
+            if ($DB->update($table, $fields, ['id' => (int) $client['id']])) {
                 $requested++;
             }
         }
     }
-    Session::addMessageAfterRedirect(
-        $requested > 0
-            ? 'Verificação imediata solicitada para ' . $requested . ' computador(es). O serviço receberá o comando em até 15 segundos.'
-            : 'Nenhum computador disponível para verificar agora.',
-        true,
-        INFO
-    );
+    $message = $requested > 0
+        ? 'Verificação imediata solicitada para ' . $requested . ' computador(es). O serviço receberá o comando em até 15 segundos.'
+        : 'Nenhum computador identificado para verificar.';
+    if ($busy > 0) {
+        $message .= ' ' . $busy . ' computador(es) estão baixando ou instalando e verificarão ao terminar.';
+    }
+    if ($unsupported > 0) {
+        $message .= ' ' . $unsupported . ' computador(es) têm serviço anterior a ' . ManualCheck::MIN_SERVICE_VERSION
+            . ', que não aceita este comando, e só consultarão no intervalo automático.';
+    }
+    Session::addMessageAfterRedirect($message, true, INFO);
     Html::redirect('dashboard.php');
 }
 
@@ -185,11 +203,11 @@ if ($action === 'upload') {
             'file_path'         => $target,
             'file_size'         => $actualSize,
             'sha256'            => strtolower($sha256),
-            'created_at'        => date('Y-m-d H:i:s'),
+            'created_at'        => ServerClock::now(),
             'created_by'        => Session::getLoginUserID(),
             'active'            => 1,
             'allow_downgrade'   => 0,
-            'activated_at'      => date('Y-m-d H:i:s'),
+            'activated_at'      => ServerClock::now(),
             'activated_by'      => Session::getLoginUserID(),
         ]);
         if (!$ok) {
