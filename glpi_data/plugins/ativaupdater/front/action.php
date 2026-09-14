@@ -51,6 +51,36 @@ if ($action === '' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 
+if ($action === 'check_now') {
+    global $DB;
+    $table = 'glpi_plugin_ativaupdater_clients';
+    $requested = 0;
+    if ($DB->tableExists($table)) {
+        $now = date('Y-m-d H:i:s');
+        $iterator = $DB->request(['FROM' => $table]);
+        foreach ($iterator as $client) {
+            if (in_array((string) $client['status'], ['downloading', 'installing'], true)) {
+                continue;
+            }
+            if ($DB->update($table, [
+                'check_requested_at' => $now,
+                'status' => 'checking',
+                'message' => 'Verificação manual solicitada pelo dashboard.',
+            ], ['id' => (int) $client['id']])) {
+                $requested++;
+            }
+        }
+    }
+    Session::addMessageAfterRedirect(
+        $requested > 0
+            ? 'Verificação imediata solicitada para ' . $requested . ' computador(es). O serviço receberá o comando em até 15 segundos.'
+            : 'Nenhum computador disponível para verificar agora.',
+        true,
+        INFO
+    );
+    Html::redirect('dashboard.php');
+}
+
 if ($action === 'upload') {
     $version = trim((string) ($_POST['version'] ?? ''));
     if (!preg_match('/^\d{1,5}\.\d{1,5}\.\d{1,5}$/D', $version)) {

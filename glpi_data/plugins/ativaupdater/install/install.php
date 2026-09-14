@@ -22,6 +22,12 @@ function plugin_ativaupdater_do_install(): bool
             if (!$DB->fieldExists($clientsTable, 'glpi_agent_version')) {
                 $migration->addField($clientsTable, 'glpi_agent_version', "varchar(32) NOT NULL DEFAULT ''");
             }
+            if (!$DB->fieldExists($clientsTable, 'check_requested_at')) {
+                $migration->addField($clientsTable, 'check_requested_at', 'datetime NULL');
+            }
+            if (!$DB->fieldExists($clientsTable, 'check_acknowledged_at')) {
+                $migration->addField($clientsTable, 'check_acknowledged_at', 'datetime NULL');
+            }
         }
 
         // Create storage directories

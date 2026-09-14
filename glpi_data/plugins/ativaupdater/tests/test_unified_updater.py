@@ -14,8 +14,9 @@ SPEC.loader.exec_module(updater)
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.1.1")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 1, 1))
+        self.assertEqual(updater.UPDATER_VERSION, "1.2.0")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 2, 0))
+        self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
         self.assertLess(updater.version_tuple("1.4.3"), updater.version_tuple("1.4.4"))

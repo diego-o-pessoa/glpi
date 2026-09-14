@@ -4,7 +4,7 @@ O gerador cria um único arquivo Windows x64:
 
 - `Ativa-Unified-Agent-Setup-X.Y.Z.exe`: instala ou atualiza o GLPI Agent, o Wallpaper Client e o serviço Ativa Unified Updater.
 
-O serviço roda como `SYSTEM`, identifica o computador no dashboard imediatamente ao iniciar e consulta o plugin Ativa Updater a cada hora. Quando encontra uma versão maior do pacote unificado, baixa o EXE, valida tamanho e SHA-256 e o executa silenciosamente. Em falhas de comunicação, tenta novamente em cinco minutos.
+O serviço roda como `SYSTEM`, identifica o computador no dashboard imediatamente ao iniciar e consulta as versões do Ativa Updater a cada hora. A partir do pacote 1.5.1, também consulta comandos leves a cada 15 segundos, permitindo usar **Verificar agora** sem alterar o intervalo regular. Quando encontra uma versão maior do pacote unificado, baixa o EXE, valida tamanho e SHA-256 e o executa silenciosamente. Em falhas de comunicação, tenta novamente em cinco minutos.
 
 ## Preparar as configurações
 

@@ -236,6 +236,12 @@ final class ApiController extends AbstractController
             'LIMIT' => 1,
         ]);
         if (count($existing) === 1) {
+            $current = $existing->current();
+            $requestedAt = strtotime((string) ($current['check_requested_at'] ?? '')) ?: 0;
+            $acknowledgedAt = strtotime((string) ($current['check_acknowledged_at'] ?? '')) ?: 0;
+            if ($requestedAt > $acknowledgedAt) {
+                $data['check_acknowledged_at'] = date('Y-m-d H:i:s');
+            }
             $ok = $DB->update('glpi_plugin_ativaupdater_clients', $data, ['machine_guid' => $guid]);
         } else {
             $ok = $DB->insert('glpi_plugin_ativaupdater_clients', ['machine_guid' => $guid] + $data);
@@ -244,5 +250,36 @@ final class ApiController extends AbstractController
         return $ok
             ? new JsonResponse(['ok' => true], 202)
             : $this->error('DATABASE_ERROR', 'Nao foi possivel registrar o status.', 500);
+    }
+
+    #[Route(
+        '/api/v1/commands/{machineGuid}',
+        name: 'ativaupdater_api_commands',
+        requirements: ['machineGuid' => '[a-fA-F0-9-]{32,64}'],
+        methods: ['GET']
+    )]
+    public function commands(Request $request, string $machineGuid): Response
+    {
+        if ($error = $this->checkAuth($request)) {
+            return $error;
+        }
+
+        global $DB;
+        $iterator = $DB->request([
+            'FROM' => 'glpi_plugin_ativaupdater_clients',
+            'WHERE' => ['machine_guid' => strtolower($machineGuid)],
+            'LIMIT' => 1,
+        ]);
+        if (count($iterator) !== 1) {
+            return $this->error('CLIENT_NOT_FOUND', 'Computador ainda nao registrado.', 404);
+        }
+        $client = $iterator->current();
+        $requestedAt = strtotime((string) ($client['check_requested_at'] ?? '')) ?: 0;
+        $acknowledgedAt = strtotime((string) ($client['check_acknowledged_at'] ?? '')) ?: 0;
+
+        return new JsonResponse([
+            'check_now' => $requestedAt > $acknowledgedAt,
+            'poll_after_seconds' => 15,
+        ]);
     }
 }

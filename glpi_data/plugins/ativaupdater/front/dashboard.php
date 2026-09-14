@@ -159,7 +159,18 @@ foreach ($clients as $client) {
 $progress = $totalClients > 0 ? (int) round(($updatedClients / $totalClients) * 100) : 0;
 
 echo "<div class='card mb-4'>";
-echo "<div class='card-header d-flex justify-content-between'><h3>Computadores</h3><span id='refresh-countdown' class='text-muted'>Atualização da tela em 15 s</span></div>";
+echo "<div class='card-header d-flex justify-content-between align-items-center'>";
+echo "<h3 class='mb-0'>Computadores</h3>";
+echo "<div class='d-flex align-items-center gap-3'>";
+echo "<span id='refresh-countdown' class='text-muted'>Atualização da tela em 15 s</span>";
+if ($canManage && $totalClients > 0) {
+    echo "<form method='post' action='action.php' class='m-0'>";
+    echo Html::hidden('action', ['value' => 'check_now']);
+    echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
+    echo "<button type='submit' class='btn btn-primary btn-sm'><i class='fas fa-sync-alt me-1'></i>Verificar agora</button>";
+    echo "</form>";
+}
+echo "</div></div>";
 echo "<div class='card-body'>";
 if ($activeVersion === '') {
     echo "<div class='alert alert-info mb-3'>{$totalClients} computador(es) identificado(s). Publique o primeiro instalador unificado para iniciar a distribuição automática.</div>";
@@ -173,11 +184,12 @@ if ($errorClients > 0) {
 if ($totalClients === 0) {
     echo "<p class='text-muted mb-0'>Nenhum serviço se identificou ainda. Depois da instalação, a primeira consulta acontece imediatamente.</p>";
 } else {
-    echo "<div class='table-responsive'><table class='table table-striped align-middle'><thead><tr><th>Computador</th><th>Pacote unificado</th><th>Wallpaper</th><th>GLPI Agent</th><th>Disponível</th><th>Status</th><th>Última consulta</th><th>Detalhes</th></tr></thead><tbody>";
+    echo "<div class='table-responsive'><table class='table table-striped align-middle'><thead><tr><th>Computador</th><th>Pacote unificado</th><th>Wallpaper</th><th>GLPI Agent</th><th>Disponível</th><th>Status</th><th>Última consulta</th><th>Próxima consulta</th><th>Detalhes</th></tr></thead><tbody>";
     $labels = [
         'checking' => ['Consultando', 'bg-info'],
         'waiting_release' => ['Aguardando publicação', 'bg-info'],
         'waiting_check' => ['Aguardando próxima consulta', 'bg-info'],
+        'manual_check' => ['Verificando agora', 'bg-primary'],
         'current' => ['Atualizado', 'bg-success'],
         'downloading' => ['Baixando', 'bg-primary'],
         'installing' => ['Instalando', 'bg-warning text-dark'],
@@ -188,6 +200,9 @@ if ($totalClients === 0) {
         $statusKey = (string) $client['status'];
         $lastCheck = (string) $client['last_check'];
         $lastCheckAt = strtotime($lastCheck) ?: 0;
+        $requestedAt = strtotime((string) ($client['check_requested_at'] ?? '')) ?: 0;
+        $acknowledgedAt = strtotime((string) ($client['check_acknowledged_at'] ?? '')) ?: 0;
+        $manualPending = $requestedAt > $acknowledgedAt;
         $noReleaseMessage = str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE');
         $needsActiveVersion = $activeVersion !== ''
             && version_compare((string) $client['installed_version'], $activeVersion, '<');
@@ -196,7 +211,14 @@ if ($totalClients === 0) {
             && ($statusKey === 'waiting_release' || $noReleaseMessage || $releaseIsNewerThanReport);
         $displayMessage = (string) ($client['message'] ?: '-');
         $displayAvailable = (string) $client['available_version'];
-        if ($waitingForNextCheck) {
+        if ($manualPending) {
+            $supportsManualCheck = version_compare((string) $client['updater_version'], '1.2.0', '>=');
+            $statusKey = $supportsManualCheck ? 'manual_check' : 'waiting_check';
+            $displayAvailable = $activeVersion ?: $displayAvailable;
+            $displayMessage = $supportsManualCheck
+                ? 'Comando enviado; o serviço iniciará a consulta em até 15 segundos.'
+                : 'Comando registrado. Será atendido após este computador receber o pacote 1.5.1.';
+        } elseif ($waitingForNextCheck) {
             $statusKey = 'waiting_check';
             $displayAvailable = $activeVersion;
             $nextCheckAt = $lastCheckAt + $checkInterval;
@@ -209,6 +231,12 @@ if ($totalClients === 0) {
         }
         [$statusLabel, $statusClass] = $labels[$statusKey] ?? [$statusKey, 'bg-secondary'];
         $offline = $lastCheckAt < time() - 7200;
+        $nextRegularCheckAt = $lastCheckAt + $checkInterval;
+        $nextCheckLabel = $manualPending
+            ? 'Após a verificação atual'
+            : ($nextRegularCheckAt > time()
+                ? Html::convDateTime(date('Y-m-d H:i:s', $nextRegularCheckAt))
+                : 'A qualquer momento');
         echo '<tr>';
         echo '<td><strong>' . htmlescape((string) $client['hostname']) . '</strong>' . ($offline ? " <span class='badge bg-secondary'>Sem contato há mais de 2 h</span>" : '') . '</td>';
         echo '<td>' . htmlescape((string) $client['installed_version']) . '</td>';
@@ -217,6 +245,7 @@ if ($totalClients === 0) {
         echo '<td>' . htmlescape($displayAvailable ?: '-') . '</td>';
         echo "<td><span class='badge {$statusClass}'>" . htmlescape($statusLabel) . '</span></td>';
         echo '<td>' . Html::convDateTime($lastCheck) . '</td>';
+        echo '<td>' . htmlescape($nextCheckLabel) . '</td>';
         echo '<td>' . htmlescape($displayMessage) . '</td>';
         echo '</tr>';
     }

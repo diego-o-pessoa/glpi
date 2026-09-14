@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativaupdater_clients` (
   `message` text NULL,
   `last_ip` varchar(64) NOT NULL DEFAULT '',
   `last_check` datetime NOT NULL,
+  `check_requested_at` datetime NULL,
+  `check_acknowledged_at` datetime NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `machine_guid` (`machine_guid`),
   KEY `status` (`status`),

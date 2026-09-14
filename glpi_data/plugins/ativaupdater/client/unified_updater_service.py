@@ -18,14 +18,15 @@ import threading
 import time
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHandler
 
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.1.1"
+UPDATER_VERSION = "1.2.0"
 DEFAULT_INTERVAL = 3600
+COMMAND_POLL_SECONDS = 15
 MAX_INSTALLER_BYTES = 2 * 1024 * 1024 * 1024
 VERSION_RE = re.compile(r"^\d{1,5}\.\d{1,5}\.\d{1,5}$")
 
@@ -280,6 +281,16 @@ class ApiClient:
         with self._request(self.base_url + "/status", method="POST", data=data, timeout=30) as response:
             response.read(4096)
 
+    def command_pending(self) -> bool:
+        url = self.base_url + "/commands/" + quote(machine_guid(), safe="")
+        with self._request(url, timeout=30) as response:
+            if "application/json" not in response.headers.get("Content-Type", ""):
+                raise UpdaterError("A API respondeu commands com tipo de conteudo invalido.")
+            payload = json.loads(response.read(65537).decode("utf-8"))
+        if not isinstance(payload, dict) or not isinstance(payload.get("check_now"), bool):
+            raise UpdaterError("Resposta de comandos invalida.")
+        return bool(payload["check_now"])
+
     def download(self, release: dict[str, Any], destination: Path) -> None:
         temporary = destination.with_suffix(".part")
         temporary.unlink(missing_ok=True)
@@ -443,15 +454,32 @@ class ServiceRuntime:
 
     def run(self, logger: logging.Logger) -> None:
         logger.info("Servico %s iniciado; primeira consulta imediata.", UPDATER_VERSION)
+        next_full_check = 0.0
         while not self.stop_event.is_set():
-            result = check_once(logger)
-            if result == 10:
-                self.stop_event.set()
-                break
-            interval = 300 if result != 0 else int(get_state().get("check_interval_seconds", DEFAULT_INTERVAL))
-            if result != 0:
-                logger.warning("Nova tentativa agendada em 300 segundos.")
-            self.stop_event.wait(max(300, min(86400, interval)))
+            now = time.monotonic()
+            manual_check = False
+            if now < next_full_check:
+                try:
+                    config = validate_config(load_json(CONFIG_PATH))
+                    manual_check = ApiClient(config).command_pending()
+                    if manual_check:
+                        logger.info("Verificacao imediata recebida do dashboard.")
+                except Exception as exc:
+                    logger.warning("Nao foi possivel consultar comandos agora: %s", exc)
+
+            if now >= next_full_check or manual_check:
+                result = check_once(logger)
+                if result == 10:
+                    self.stop_event.set()
+                    break
+                interval = 300 if result != 0 else int(get_state().get("check_interval_seconds", DEFAULT_INTERVAL))
+                interval = max(300, min(86400, interval))
+                next_full_check = time.monotonic() + interval
+                if result != 0:
+                    logger.warning("Nova tentativa completa agendada em 300 segundos.")
+
+            wait_seconds = min(COMMAND_POLL_SECONDS, max(1.0, next_full_check - time.monotonic()))
+            self.stop_event.wait(wait_seconds)
 
 
 SERVICE_WIN32_OWN_PROCESS = 0x10
