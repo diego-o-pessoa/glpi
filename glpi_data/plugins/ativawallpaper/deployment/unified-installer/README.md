@@ -1,95 +1,55 @@
-# Instalador unificado Ativa GLPI Agent
+# Instaladores Ativa para Windows
 
-Gera um unico `Ativa-GLPI-Agent-Setup-1.4.1.exe` para Windows x64 contendo o MSI
-oficial do GLPI Agent, o Ativa Wallpaper Client e o Ativa Wallpaper Updater.
+O gerador cria dois instaladores para Windows x64:
 
-O instalador configura o GLPI Agent como servico com:
+- `Ativa-Wallpaper-Client-Setup-X.Y.Z.exe`: instala o cliente de wallpaper e o serviço **Ativa Unified Updater**;
+- `Ativa-GLPI-Agent-Setup-Only-X.Y.exe`: instala o GLPI Agent oficial apontando para o inventário da Ativa.
 
-- servidor `https://chamados.ativalocacao.com.br:8443/marketplace/glpiinventory/`;
-- todas as features do MSI (`ADDLOCAL=ALL`), incluindo Inventory e Deploy;
-- primeira execucao imediata (`RUNNOW=1`);
-- verificacao TLS habilitada;
-- HTTP listener e excecao de firewall habilitados para wake-up;
-- P2P de pacotes habilitado;
-- inventario de softwares nos perfis de usuarios;
-- tag `Ativa-Locacao`.
+O serviço de atualização roda como `SYSTEM`, consulta o plugin **Ativa Updater** imediatamente ao iniciar e depois a cada hora. Quando encontra uma versão maior, baixa o instalador do Wallpaper Client, confere tamanho e SHA-256 e executa a atualização silenciosamente. O serviço informa ao dashboard se está consultando, baixando, instalando, atualizado ou com erro.
 
-Depois instala e registra o cliente de wallpaper. Quando existe um usuario
-interativo, tenta aplicar o wallpaper ainda durante o setup. Em instalacoes por
-SYSTEM sem sessao interativa, o cliente aplica no proximo login.
+## Preparar as configurações
 
-Tambem cria a tarefa **Ativa Wallpaper Updater**, executada como SYSTEM a cada
-minuto. Ela atualiza Client e Agent sem reutilizar o segredo de bootstrap.
+Baixe os dois arquivos no GLPI e coloque-os nesta pasta:
 
-O instalador 1.4.0 ou mais recente deve ser executado uma vez nos computadores que ainda usam
-uma versao anterior. A partir dai, novos EXEs do Client e MSIs do Agent podem ser
-publicados diretamente na aba **Atualizacoes** do plugin.
+1. `bootstrap-config.json`, em **Ativa Wallpaper > Configurações**;
+2. `ativaupdater-service-config.json`, em **Ativa Updater > Configurações > Baixar configuração do serviço**.
+
+Os dois arquivos contêm segredos. Não faça commit deles nem os envie por canal público.
 
 ## Gerar com dois cliques
 
-Em um Windows x64 com acesso a internet:
+Execute `Criar-Instalador-Para-Todos.cmd`. O script localiza o Python e o Inno Setup já instalados. Com `-InstallBuildTools`, tenta instalar dependências ausentes pela fonte comunitária do winget.
 
-1. Baixe um novo `bootstrap-config.json` em **Administracao > Ativa Wallpaper
-   > Configuracoes**.
-2. Coloque o JSON nesta pasta, sem alterar o nome.
-3. Execute `Criar-Instalador-Para-Todos.cmd`.
-
-O `.cmd` instala automaticamente Python 3.12 e Inno Setup 6 via winget quando
-necessario. Em seguida baixa o Agent, valida o hash, compila tudo e abre o
-resultado em `dist`.
-
-O builder usa explicitamente a fonte comunitaria `winget` e nao consulta a
-`msstore`. Se a instalacao automatica do Inno Setup ainda falhar, execute uma
-vez e repita o `.cmd`:
-
-```powershell
-winget install --id JRSoftware.InnoSetup --exact --source winget
-```
-
-O fluxo equivalente pela linha de comando e:
+O fluxo equivalente no PowerShell é:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
-cd deployment\unified-installer
+cd C:\Github\glpi\glpi_data\plugins\ativawallpaper\deployment\unified-installer
 .\build-unified-installer.ps1 `
   -BootstrapConfig ".\bootstrap-config.json" `
+  -UpdaterConfig ".\ativaupdater-service-config.json" `
   -AllComputers `
   -InstallBuildTools
 ```
 
-O comando baixa o GLPI Agent 1.19 da release oficial, valida o SHA-256 fixado,
-compila o cliente de wallpaper, instala o Inno Setup via winget quando preciso e
-gera em `dist`:
+Os arquivos são gerados em `dist`. A versão do instalador de wallpaper é obtida diretamente do `CLIENT_VERSION` existente em `wallpaper_client.py`.
+
+## Primeira instalação e atualizações seguintes
+
+Instale uma vez os dois arquivos nos computadores. Para instalação silenciosa:
 
 ```text
-Ativa-GLPI-Agent-Setup-1.4.1.exe
-Ativa-GLPI-Agent-Setup-1.4.1.manifest.json
-AtivaWallpaperClient-1.4.1.exe
-GLPI-Agent-1.19-x64.msi
+Ativa-GLPI-Agent-Setup-Only-1.19.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+Ativa-Wallpaper-Client-Setup-X.Y.Z.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ```
 
-Sem `-AllComputers`, o hostname piloto presente no JSON e preservado. Com essa
-opcao, a restricao e removida para rollout; limite a distribuicao ao grupo
-corporativo correto.
+Depois disso, para atualizar o Wallpaper Client:
 
-## Instalar
+1. altere `CLIENT_VERSION` e o código do cliente;
+2. gere novamente `Ativa-Wallpaper-Client-Setup-X.Y.Z.exe`;
+3. envie esse instalador na tela **Ativa Updater**, informando exatamente a mesma versão `X.Y.Z`;
+4. o arquivo enviado passa a ser a versão ativa e os serviços o instalam em até uma hora.
 
-Interativo:
+Máquinas desligadas ou sem internet atualizam quando iniciarem o serviço e conseguirem acessar a API. Se a versão instalada já for igual ou maior que a publicada, o serviço apenas registra “Atualizado” e não executa o instalador.
 
-```powershell
-.\Ativa-GLPI-Agent-Setup-1.4.1.exe
-```
-
-Silencioso:
-
-```text
-Ativa-GLPI-Agent-Setup-1.4.1.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
-```
-
-O MSI oficial permanece assinado e nao e alterado. O bootstrapper gerado nao e
-assinado por padrao; para distribuicao ampla, assine-o com o certificado de code
-signing da organizacao.
-
-O instalador contem o segredo de registro do wallpaper. Depois do rollout,
-rotacione o segredo no GLPI. Instaladores antigos deixam de registrar novos
-clientes, mas os clientes ja registrados continuam funcionando.
+O instalador e a configuração da API devem ser distribuídos somente em ambiente corporativo. Para rollout amplo, também é recomendável assinar o EXE com o certificado de code signing da organização.

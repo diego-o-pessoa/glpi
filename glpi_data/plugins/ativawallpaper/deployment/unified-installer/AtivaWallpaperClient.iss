@@ -1,8 +1,11 @@
 #ifndef WallpaperClientPath
   #error WallpaperClientPath is required
 #endif
-#ifndef WallpaperUpdaterPath
-  #error WallpaperUpdaterPath is required
+#ifndef UnifiedUpdaterPath
+  #error UnifiedUpdaterPath is required
+#endif
+#ifndef UpdaterConfigPath
+  #error UpdaterConfigPath is required
 #endif
 #ifndef BootstrapConfigPath
   #error BootstrapConfigPath is required
@@ -11,13 +14,14 @@
   #error BuildOutputDir is required
 #endif
 #ifndef BundleVersion
-  #define BundleVersion "1.4.2"
+  #define BundleVersion "1.4.4"
 #endif
 
 [Setup]
 AppId={{9F8B7C6D-E5D4-4C32-8A1A-B445015310C1}
 AppName=Ativa Wallpaper Client
 AppVersion={#BundleVersion}
+VersionInfoVersion={#BundleVersion}
 AppPublisher=Ativa Locacao
 AppPublisherURL=https://chamados.ativalocacao.com.br:8443/
 CreateAppDir=no
@@ -38,8 +42,9 @@ RestartApplications=no
 
 [Files]
 Source: "{#WallpaperClientPath}"; DestDir: "{tmp}"; DestName: "AtivaWallpaperClient.exe"; Flags: deleteafterinstall ignoreversion
-Source: "{#WallpaperUpdaterPath}"; DestDir: "{commonappdata}\AtivaLocacao\Wallpaper"; DestName: "AtivaWallpaperUpdater.exe"; Flags: ignoreversion
+Source: "{#UnifiedUpdaterPath}"; DestDir: "{commonappdata}\AtivaLocacao\UnifiedUpdater"; DestName: "AtivaUnifiedUpdater.exe"; Flags: ignoreversion
 Source: "{#BootstrapConfigPath}"; DestDir: "{tmp}"; DestName: "bootstrap-config.json"; Flags: deleteafterinstall ignoreversion
+Source: "{#UpdaterConfigPath}"; DestDir: "{tmp}"; DestName: "ativaupdater-service-config.json"; Flags: deleteafterinstall ignoreversion
 
 [Code]
 procedure RunRequired(const Description, Filename, Parameters: String);
@@ -53,6 +58,15 @@ begin
 
   if (ResultCode <> 0) then
     RaiseException(Description + ' falhou. Codigo de saida: ' + IntToStr(ResultCode));
+end;
+
+procedure RunOptional(const Filename, Parameters: String);
+var
+  ResultCode: Integer;
+begin
+  Log('Executando: ' + Filename + ' ' + Parameters);
+  if Exec(Filename, Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Log('Codigo de saida: ' + IntToStr(ResultCode));
 end;
 
 procedure StartForInteractiveUser();
@@ -76,8 +90,15 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   UpdaterPath: String;
-  TaskParameters: String;
+  ResultCode: Integer;
 begin
+  if CurStep = ssInstall then begin
+    { O servico pode ter iniciado este proprio instalador. Pare-o antes de substituir o executavel. }
+    RunOptional(ExpandConstant('{sys}\sc.exe'), 'stop AtivaUnifiedUpdater');
+    Sleep(5000);
+    exit;
+  end;
+
   if CurStep <> ssPostInstall then
     exit;
 
@@ -87,18 +108,43 @@ begin
     '--install --bootstrap-config "' + ExpandConstant('{tmp}\bootstrap-config.json') + '"'
   );
   
-  UpdaterPath := ExpandConstant('{commonappdata}\AtivaLocacao\Wallpaper\AtivaWallpaperUpdater.exe');
-  TaskParameters := '/Create /TN "Ativa Wallpaper Updater" /SC MINUTE /MO 1 /RU SYSTEM /RL HIGHEST /F /TR "' +
-    UpdaterPath + ' --check"';
+  UpdaterPath := ExpandConstant('{commonappdata}\AtivaLocacao\UnifiedUpdater\AtivaUnifiedUpdater.exe');
   RunRequired(
-    'Configurando atualizacoes automaticas...',
-    ExpandConstant('{sys}\schtasks.exe'),
-    TaskParameters
+    'Configurando o servico de atualizacao...',
+    UpdaterPath,
+    '--configure --config "' + ExpandConstant('{tmp}\ativaupdater-service-config.json') + '" --installed-version {#BundleVersion}'
+  );
+
+  { Remove a tarefa do atualizador anterior para nao haver dois mecanismos concorrentes. }
+  RunOptional(ExpandConstant('{sys}\schtasks.exe'), '/Delete /TN "Ativa Wallpaper Updater" /F');
+
+  if not Exec(ExpandConstant('{sys}\sc.exe'), 'query AtivaUnifiedUpdater', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then begin
+    RunRequired(
+      'Registrando o servico de atualizacao...',
+      ExpandConstant('{sys}\sc.exe'),
+      'create AtivaUnifiedUpdater binPath= "' + UpdaterPath + ' --service" start= auto DisplayName= "Ativa Unified Updater"'
+    );
+  end;
+  RunRequired(
+    'Atualizando os parametros do servico...',
+    ExpandConstant('{sys}\sc.exe'),
+    'config AtivaUnifiedUpdater binPath= "' + UpdaterPath + ' --service" start= auto DisplayName= "Ativa Unified Updater"'
+  );
+  RunOptional(
+    ExpandConstant('{sys}\sc.exe'),
+    'failure AtivaUnifiedUpdater reset= 86400 actions= restart/60000/restart/60000/restart/60000'
   );
   RunRequired(
-    'Iniciando verificacao de atualizacoes...',
-    ExpandConstant('{sys}\schtasks.exe'),
-    '/Run /TN "Ativa Wallpaper Updater"'
+    'Iniciando o servico de atualizacao...',
+    ExpandConstant('{sys}\sc.exe'),
+    'start AtivaUnifiedUpdater'
   );
   StartForInteractiveUser();
+end;
+
+procedure DeinitializeSetup();
+begin
+  { Se a atualizacao falhar depois de parar o servico, devolva o monitoramento ao Windows. }
+  if FileExists(ExpandConstant('{commonappdata}\AtivaLocacao\UnifiedUpdater\AtivaUnifiedUpdater.exe')) then
+    RunOptional(ExpandConstant('{sys}\sc.exe'), 'start AtivaUnifiedUpdater');
 end;

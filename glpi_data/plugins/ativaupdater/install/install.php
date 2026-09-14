@@ -47,6 +47,7 @@ function plugin_ativaupdater_do_uninstall(): bool
     PluginAtivaupdaterProfile::uninstallRights();
 
     $tables = [
+        'glpi_plugin_ativaupdater_clients',
         'glpi_plugin_ativaupdater_releases',
     ];
 

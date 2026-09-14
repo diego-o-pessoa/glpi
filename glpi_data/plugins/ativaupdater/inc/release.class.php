@@ -28,20 +28,28 @@ class PluginAtivaupdaterRelease extends CommonDBTM
     public function setActive(int $id): bool
     {
         global $DB;
+        $target = $DB->request([
+            'FROM'  => $this->getTable(),
+            'WHERE' => ['id' => $id],
+            'LIMIT' => 1,
+        ]);
+        if (count($target) !== 1) {
+            return false;
+        }
 
-        // Deactivate all
-        $DB->update(
-            $this->getTable(),
-            ['active' => 0],
-            [true] // WHERE 1
-        );
-
-        // Activate the selected one
-        return $DB->update(
-            $this->getTable(),
-            ['active' => 1],
-            ['id' => $id]
-        );
+        $DB->beginTransaction();
+        try {
+            $DB->update($this->getTable(), ['active' => 0], ['active' => 1]);
+            $result = $DB->update($this->getTable(), ['active' => 1], ['id' => $id]);
+            if (!$result) {
+                throw new RuntimeException('Falha ao ativar a release.');
+            }
+            $DB->commit();
+            return true;
+        } catch (Throwable) {
+            $DB->rollBack();
+            return false;
+        }
     }
     
     public function canCreateItem()

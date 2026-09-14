@@ -27,6 +27,18 @@ $iterator = $DB->request([
 foreach ($iterator as $row) {
     $releases[] = $row;
 }
+usort($releases, static fn(array $left, array $right): int => version_compare($right['version'], $left['version']));
+
+$clients = [];
+if ($DB->tableExists('glpi_plugin_ativaupdater_clients')) {
+    $clientIterator = $DB->request([
+        'FROM'  => 'glpi_plugin_ativaupdater_clients',
+        'ORDER' => ['last_check DESC'],
+    ]);
+    foreach ($clientIterator as $row) {
+        $clients[] = $row;
+    }
+}
 
 echo "<div class='container-fluid mt-3'>";
 echo "<h2>" . __('Ativa Updater Dashboard', 'ativaupdater') . "</h2>";
@@ -57,12 +69,13 @@ if ($canManage) {
     
     echo "<div class='mb-3'>";
     echo "<label for='version' class='form-label'>" . __('Versão (ex: 1.4.4)', 'ativaupdater') . "</label>";
-    echo "<input type='text' class='form-control' id='version' name='version' required pattern='^\\d+\\.\\d+\\.\\d+.*$'>";
+    echo "<input type='text' class='form-control' id='version' name='version' required pattern='^\\d+\\.\\d+\\.\\d+$'>";
     echo "</div>";
     
     echo "<div class='mb-3'>";
     echo "<label for='installer' class='form-label'>" . __('Instalador (.exe)', 'ativaupdater') . "</label>";
     echo "<input type='file' class='form-control' id='installer' name='installer' accept='.exe' required>";
+    echo "<div class='form-text'>Envie o arquivo completo Ativa-Wallpaper-Client-Setup-X.Y.Z.exe gerado pelo builder.</div>";
     echo "</div>";
     
     echo "<button type='submit' class='btn btn-primary'>" . __('Enviar e publicar', 'ativaupdater') . "</button>";
@@ -124,6 +137,73 @@ if (count($releases) > 0) {
 }
 echo "</div></div>";
 
+// Clients reporting through the Windows service
+$activeVersion = $activeRelease ? (string) $activeRelease['version'] : '';
+$totalClients = count($clients);
+$updatedClients = 0;
+$errorClients = 0;
+foreach ($clients as $client) {
+    if ($activeVersion !== '' && version_compare((string) $client['installed_version'], $activeVersion, '>=')) {
+        $updatedClients++;
+    }
+    if ((string) $client['status'] === 'error') {
+        $errorClients++;
+    }
+}
+$progress = $totalClients > 0 ? (int) round(($updatedClients / $totalClients) * 100) : 0;
+
+echo "<div class='card mb-4'>";
+echo "<div class='card-header d-flex justify-content-between'><h3>Computadores</h3><span id='refresh-countdown' class='text-muted'>Atualização da tela em 15 s</span></div>";
+echo "<div class='card-body'>";
+echo "<div class='d-flex justify-content-between mb-1'><span>{$updatedClients} de {$totalClients} computador(es) na versão atual</span><strong>{$progress}%</strong></div>";
+echo "<div class='progress mb-3' style='height: 20px'><div class='progress-bar bg-success' role='progressbar' style='width: {$progress}%' aria-valuenow='{$progress}' aria-valuemin='0' aria-valuemax='100'>{$progress}%</div></div>";
+if ($errorClients > 0) {
+    echo "<div class='alert alert-danger'>{$errorClients} computador(es) informaram erro. Consulte o motivo na tabela.</div>";
+}
+if ($totalClients === 0) {
+    echo "<p class='text-muted mb-0'>Nenhum serviço se identificou ainda. Depois da instalação, a primeira consulta acontece imediatamente.</p>";
+} else {
+    echo "<div class='table-responsive'><table class='table table-striped align-middle'><thead><tr><th>Computador</th><th>Instalada</th><th>Disponível</th><th>Status</th><th>Última consulta</th><th>Detalhes</th></tr></thead><tbody>";
+    $labels = [
+        'checking' => ['Consultando', 'bg-info'],
+        'current' => ['Atualizado', 'bg-success'],
+        'downloading' => ['Baixando', 'bg-primary'],
+        'installing' => ['Instalando', 'bg-warning text-dark'],
+        'updated' => ['Atualizado', 'bg-success'],
+        'error' => ['Erro', 'bg-danger'],
+    ];
+    foreach ($clients as $client) {
+        $statusKey = (string) $client['status'];
+        [$statusLabel, $statusClass] = $labels[$statusKey] ?? [$statusKey, 'bg-secondary'];
+        $lastCheck = (string) $client['last_check'];
+        $offline = strtotime($lastCheck) < time() - 7200;
+        echo '<tr>';
+        echo '<td><strong>' . Html::clean((string) $client['hostname']) . '</strong>' . ($offline ? " <span class='badge bg-secondary'>Sem contato há mais de 2 h</span>" : '') . '</td>';
+        echo '<td>' . Html::clean((string) $client['installed_version']) . '</td>';
+        echo '<td>' . Html::clean((string) $client['available_version']) . '</td>';
+        echo "<td><span class='badge {$statusClass}'>" . Html::clean($statusLabel) . '</span></td>';
+        echo '<td>' . Html::convDateTime($lastCheck) . '</td>';
+        echo '<td>' . Html::clean((string) ($client['message'] ?: '-')) . '</td>';
+        echo '</tr>';
+    }
+    echo '</tbody></table></div>';
+}
+echo "</div></div>";
+
 echo "</div>";
+
+echo <<<'HTML'
+<script>
+(() => {
+    let remaining = 15;
+    const target = document.getElementById('refresh-countdown');
+    window.setInterval(() => {
+        remaining -= 1;
+        if (target) target.textContent = `Atualização da tela em ${remaining} s`;
+        if (remaining <= 0) window.location.reload();
+    }, 1000);
+})();
+</script>
+HTML;
 
 Html::footer();

@@ -18,7 +18,7 @@ git pull --ff-only
 docker compose config --quiet
 
 echo "Configurando o limite para pacotes de atualizacao..."
-docker exec glpi_web sh -c 'for php_conf_dir in /etc/php/*/apache2/conf.d; do [ -d "$php_conf_dir" ] || continue; printf "%s\n" "upload_max_filesize=256M" "post_max_size=260M" "memory_limit=512M" > "$php_conf_dir/99-ativa-uploads.ini"; done; apache2ctl graceful'
+docker exec glpi_web sh -c 'for php_conf_dir in /etc/php/*/apache2/conf.d; do [ -d "$php_conf_dir" ] || continue; printf "%s\n" "upload_max_filesize=512M" "post_max_size=520M" "memory_limit=512M" > "$php_conf_dir/99-ativa-uploads.ini"; done; apache2ctl graceful'
 
 if ! docker exec glpi_db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqladmin ping --host=127.0.0.1 --user=root --silent' >/dev/null 2>&1; then
     echo "ERRO: o banco deixou de responder. A instalacao do plugin nao sera executada." >&2

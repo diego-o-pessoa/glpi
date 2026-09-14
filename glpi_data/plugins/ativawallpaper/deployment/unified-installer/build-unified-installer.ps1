@@ -2,6 +2,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$BootstrapConfig,
+    [string]$UpdaterConfig = ".\ativaupdater-service-config.json",
     [string]$OutputDirectory = ".\dist",
     [string]$Python = "py",
     [string]$AgentVersion = "1.19",
@@ -16,6 +17,11 @@ $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $PluginRoot = (Resolve-Path (Join-Path $ScriptRoot "..\..")).Path
 $BootstrapPath = (Resolve-Path $BootstrapConfig).Path
+if (-not (Test-Path -LiteralPath $UpdaterConfig -PathType Leaf)) {
+    throw "Configuracao do Ativa Updater nao encontrada: $UpdaterConfig. Baixe-a em Ativa Updater > Configuracoes."
+}
+$UpdaterConfigPath = (Resolve-Path $UpdaterConfig).Path
+$UpdaterPluginRoot = (Resolve-Path (Join-Path $ScriptRoot "..\..\..\ativaupdater")).Path
 $OutputPath = if ([IO.Path]::IsPathRooted($OutputDirectory)) {
     [IO.Path]::GetFullPath($OutputDirectory)
 } else {
@@ -25,11 +31,13 @@ $CacheDirectory = Join-Path $ScriptRoot ".cache"
 $AgentMsi = Join-Path $CacheDirectory "GLPI-Agent-$AgentVersion-x64.msi"
 $ClientBuildScript = Join-Path $PluginRoot "client\build-client.ps1"
 $ClientExe = Join-Path $PluginRoot "client\dist\AtivaWallpaperClient.exe"
-$UpdaterExe = Join-Path $PluginRoot "client\dist\AtivaWallpaperUpdater.exe"
+$UnifiedUpdaterBuildScript = Join-Path $UpdaterPluginRoot "client\build-service.ps1"
+$UnifiedUpdaterExe = Join-Path $UpdaterPluginRoot "client\dist\AtivaUnifiedUpdater.exe"
 $ClientVersionFile = Join-Path $PluginRoot "client\dist\client-version.txt"
 $ClientIssFile = Join-Path $ScriptRoot "AtivaWallpaperClient.iss"
 $AgentIssFile = Join-Path $ScriptRoot "AtivaGLPIAgentOnly.iss"
 $ExpectedWallpaperApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1"
+$ExpectedUpdaterApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativaupdater/api/v1"
 $ExpectedAgentServer = "https://chamados.ativalocacao.com.br:8443/marketplace/glpiinventory/"
 
 function Find-InnoSetupCompiler {
@@ -136,6 +144,9 @@ if ($AgentServerUrl -ne $ExpectedAgentServer) {
 if (-not (Test-Path -LiteralPath $ClientBuildScript)) {
     throw "Script de build do cliente nao encontrado: $ClientBuildScript"
 }
+if (-not (Test-Path -LiteralPath $UnifiedUpdaterBuildScript)) {
+    throw "Script de build do servico de atualizacao nao encontrado: $UnifiedUpdaterBuildScript"
+}
 
 $Bootstrap = Get-Content -Raw -LiteralPath $BootstrapPath | ConvertFrom-Json
 if ($Bootstrap.verify_tls -ne $true) {
@@ -153,6 +164,21 @@ if ($AllComputers) {
     throw "Informe -AllComputers para gerar um instalador sem restricao de hostname."
 }
 New-Item -ItemType Directory -Force -Path $CacheDirectory, $OutputPath | Out-Null
+
+$UpdaterBootstrap = Get-Content -Raw -LiteralPath $UpdaterConfigPath | ConvertFrom-Json
+if ($UpdaterBootstrap.verify_tls -ne $true) {
+    throw "ativaupdater-service-config.json deve conter verify_tls=true."
+}
+if ([string]$UpdaterBootstrap.api_url -ne $ExpectedUpdaterApi) {
+    throw "A API do Ativa Updater deve ser $ExpectedUpdaterApi"
+}
+if ([string]$UpdaterBootstrap.api_token -notmatch '^[a-fA-F0-9]{64}$') {
+    throw "ativaupdater-service-config.json nao contem um token valido."
+}
+$UpdaterInterval = [int]$UpdaterBootstrap.check_interval_seconds
+if ($UpdaterInterval -lt 300 -or $UpdaterInterval -gt 86400) {
+    throw "O intervalo do Ativa Updater deve estar entre 300 e 86400 segundos."
+}
 if (-not (Test-Path -LiteralPath $AgentMsi)) {
     $AgentDownloadUrl = "https://github.com/glpi-project/glpi-agent/releases/download/$AgentVersion/GLPI-Agent-$AgentVersion-x64.msi"
     Write-Host "Baixando GLPI Agent $AgentVersion da release oficial..."
@@ -184,8 +210,8 @@ if (-not $PythonExecutable) {
 
 Write-Host "Compilando AtivaWallpaperClient.exe..."
 & $ClientBuildScript -Python $PythonExecutable
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $ClientExe) -or -not (Test-Path -LiteralPath $UpdaterExe)) {
-    throw "Falha ao compilar o cliente ou o atualizador automatico."
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $ClientExe)) {
+    throw "Falha ao compilar o cliente de wallpaper."
 }
 if (-not (Test-Path -LiteralPath $ClientVersionFile)) {
     throw "O build nao gerou client-version.txt."
@@ -196,6 +222,12 @@ if ($ClientVersion -notmatch '^\d+\.\d+\.\d+$') {
 }
 $BundleVersion = $ClientVersion
 $Bootstrap.client_version = $ClientVersion
+
+Write-Host "Compilando o servico AtivaUnifiedUpdater.exe..."
+& $UnifiedUpdaterBuildScript -Python $PythonExecutable
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $UnifiedUpdaterExe)) {
+    throw "Falha ao compilar o servico Ativa Unified Updater."
+}
 
 $Iscc = Find-InnoSetupCompiler
 if (-not $Iscc -and ($InstallInnoSetup -or $InstallBuildTools)) {
@@ -220,6 +252,7 @@ $AgentInstaller = Join-Path $OutputPath "Ativa-GLPI-Agent-Setup-Only-$AgentVersi
 
 try {
     $PreparedBootstrap = Join-Path $WorkingDirectory "bootstrap-config.json"
+    $PreparedUpdaterConfig = Join-Path $WorkingDirectory "ativaupdater-service-config.json"
     $CompilerOutput = Join-Path $WorkingDirectory "output"
     New-Item -ItemType Directory -Path $CompilerOutput | Out-Null
     $Utf8WithoutBom = New-Object Text.UTF8Encoding($false)
@@ -228,11 +261,17 @@ try {
         ($Bootstrap | ConvertTo-Json -Depth 8),
         $Utf8WithoutBom
     )
+    [IO.File]::WriteAllText(
+        $PreparedUpdaterConfig,
+        ($UpdaterBootstrap | ConvertTo-Json -Depth 8),
+        $Utf8WithoutBom
+    )
 
     Write-Host "Gerando instalador do Wallpaper Client..."
     & $Iscc `
         "/DWallpaperClientPath=$ClientExe" `
-        "/DWallpaperUpdaterPath=$UpdaterExe" `
+        "/DUnifiedUpdaterPath=$UnifiedUpdaterExe" `
+        "/DUpdaterConfigPath=$PreparedUpdaterConfig" `
         "/DBootstrapConfigPath=$PreparedBootstrap" `
         "/DBuildOutputDir=$CompilerOutput" `
         "/DBundleVersion=$BundleVersion" `
@@ -274,34 +313,18 @@ try {
 if (-not (Test-Path -LiteralPath $ClientInstaller) -or -not (Test-Path -LiteralPath $AgentInstaller)) {
     throw "Os instaladores nao foram gerados corretamente."
 }
-$ClientUpdatePackage = Join-Path $OutputPath "AtivaWallpaperClient-$ClientVersion.exe"
-$AgentUpdatePackage = Join-Path $OutputPath "GLPI-Agent-$AgentVersion-x64.msi"
-Copy-Item -LiteralPath $ClientExe -Destination $ClientUpdatePackage -Force
-Copy-Item -LiteralPath $AgentMsi -Destination $AgentUpdatePackage -Force
 $Manifest = [ordered]@{
     bundle_version = $BundleVersion
     glpi_agent_version = $AgentVersion
     glpi_agent_server = $AgentServerUrl
     glpi_agent_sha256 = (Get-FileHash -LiteralPath $AgentMsi -Algorithm SHA256).Hash
     wallpaper_client_sha256 = (Get-FileHash -LiteralPath $ClientExe -Algorithm SHA256).Hash
-    wallpaper_updater_sha256 = (Get-FileHash -LiteralPath $UpdaterExe -Algorithm SHA256).Hash
+    unified_updater_sha256 = (Get-FileHash -LiteralPath $UnifiedUpdaterExe -Algorithm SHA256).Hash
+    updater_api = $ExpectedUpdaterApi
+    updater_interval_seconds = $UpdaterInterval
     installer_client_sha256 = (Get-FileHash -LiteralPath $ClientInstaller -Algorithm SHA256).Hash
     installer_agent_sha256 = (Get-FileHash -LiteralPath $AgentInstaller -Algorithm SHA256).Hash
     all_computers = [bool]$AllComputers
-    update_packages = @(
-        [ordered]@{
-            component = "wallpaper_client"
-            version = $ClientVersion
-            file = (Split-Path -Leaf $ClientUpdatePackage)
-            sha256 = (Get-FileHash -LiteralPath $ClientUpdatePackage -Algorithm SHA256).Hash
-        },
-        [ordered]@{
-            component = "glpi_agent"
-            version = $AgentVersion
-            file = (Split-Path -Leaf $AgentUpdatePackage)
-            sha256 = (Get-FileHash -LiteralPath $AgentUpdatePackage -Algorithm SHA256).Hash
-        }
-    )
     generated_at = (Get-Date).ToString("o")
 }
 $ManifestPath = Join-Path $OutputPath "Ativa-GLPI-Agent-Setup-$BundleVersion.manifest.json"
@@ -310,6 +333,4 @@ $ManifestPath = Join-Path $OutputPath "Ativa-GLPI-Agent-Setup-$BundleVersion.man
 Write-Host "Instalador Wallpaper Client: $ClientInstaller"
 Write-Host "Instalador GLPI Agent: $AgentInstaller"
 Write-Host "Manifesto e hashes: $ManifestPath"
-Write-Host "Pacote de atualizacao do Wallpaper Client: $ClientUpdatePackage"
-Write-Host "Pacote de atualizacao do GLPI Agent: $AgentUpdatePackage"
 Write-Warning "O instalador contem o segredo de bootstrap. Distribua-o somente por canal protegido e rotacione o segredo apos o rollout."

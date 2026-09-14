@@ -13,3 +13,20 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativaupdater_releases` (
   UNIQUE KEY `version` (`version`),
   KEY `active` (`active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `glpi_plugin_ativaupdater_clients` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `machine_guid` varchar(64) NOT NULL,
+  `hostname` varchar(255) NOT NULL,
+  `updater_version` varchar(32) NOT NULL DEFAULT '',
+  `installed_version` varchar(32) NOT NULL DEFAULT '',
+  `available_version` varchar(32) NOT NULL DEFAULT '',
+  `status` varchar(32) NOT NULL DEFAULT 'checking',
+  `message` text NULL,
+  `last_ip` varchar(64) NOT NULL DEFAULT '',
+  `last_check` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `machine_guid` (`machine_guid`),
+  KEY `status` (`status`),
+  KEY `last_check` (`last_check`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

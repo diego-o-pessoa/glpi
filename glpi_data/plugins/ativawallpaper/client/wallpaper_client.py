@@ -34,7 +34,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.4.3"
+CLIENT_VERSION = "1.4.4"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"

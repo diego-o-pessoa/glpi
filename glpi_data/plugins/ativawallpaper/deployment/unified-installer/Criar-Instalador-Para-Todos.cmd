@@ -12,10 +12,21 @@ if not exist "%~dp0bootstrap-config.json" (
     exit /b 1
 )
 
-echo Gerando Ativa-GLPI-Agent-Setup-1.4.1.exe para todos os computadores...
+if not exist "%~dp0ativaupdater-service-config.json" (
+    echo.
+    echo ERRO: ativaupdater-service-config.json nao encontrado.
+    echo Baixe o arquivo em Ativa Updater ^> Configuracoes
+    echo e coloque-o nesta mesma pasta.
+    echo.
+    pause
+    exit /b 1
+)
+
+echo Gerando os instaladores Ativa para todos os computadores...
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass ^
   -File "%~dp0build-unified-installer.ps1" ^
   -BootstrapConfig "%~dp0bootstrap-config.json" ^
+  -UpdaterConfig "%~dp0ativaupdater-service-config.json" ^
   -OutputDirectory "%~dp0dist" ^
   -AllComputers ^
   -InstallBuildTools
@@ -29,8 +40,8 @@ if errorlevel 1 (
 )
 
 echo.
-echo Instalador criado com sucesso:
-echo %~dp0dist\Ativa-GLPI-Agent-Setup-1.4.1.exe
+echo Instaladores criados com sucesso em:
+echo %~dp0dist
 echo.
 echo Esse mesmo arquivo pode ser instalado em todos os computadores Windows x64.
 echo.

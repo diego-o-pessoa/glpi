@@ -1,48 +1,103 @@
 <?php
 
+declare(strict_types=1);
+
 namespace GlpiPlugin\Ativaupdater\Controller;
 
 use GlpiPlugin\Ativaupdater\ConfigService;
-use PluginAtivaupdaterRelease;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
-use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+use Symfony\Component\Routing\Attribute\Route;
 
-class ApiController
+final class ApiController
 {
+    private const VERSION_PATTERN = '/^\d{1,5}\.\d{1,5}\.\d{1,5}$/D';
+    private const STATUS_VALUES = [
+        'checking', 'current', 'downloading', 'installing', 'updated', 'error',
+    ];
+
     private function checkAuth(Request $request): ?JsonResponse
     {
         if (!ConfigService::getBool('api_enabled')) {
-            return new JsonResponse(['error' => 'API is disabled'], 403);
+            return $this->error('API_DISABLED', 'A API de atualizacao esta desabilitada.', 503);
         }
 
-        $authHeader = $request->headers->get('Authorization', '');
-        if (!$authHeader || !str_starts_with($authHeader, 'Bearer ')) {
-            return new JsonResponse(['error' => 'Missing or invalid Authorization header'], 401);
+        $header = trim((string) $request->headers->get('Authorization', ''));
+        if (!preg_match('/^Bearer\s+([^\s]+)$/D', $header, $matches)) {
+            return $this->error('UNAUTHORIZED', 'Token Bearer ausente ou invalido.', 401);
         }
 
-        $token = substr($authHeader, 7);
-        $expectedToken = ConfigService::get('api_token');
-
-        if (!hash_equals($expectedToken, $token)) {
-            return new JsonResponse(['error' => 'Invalid token'], 403);
+        $expected = (string) ConfigService::get('api_token', '');
+        if ($expected === '' || !hash_equals($expected, $matches[1])) {
+            return $this->error('FORBIDDEN', 'Token sem permissao para esta API.', 403);
         }
 
         return null;
     }
 
-    private function getReleaseArray($release, string $baseUrl): array
+    private function error(string $code, string $message, int $status): JsonResponse
+    {
+        return new JsonResponse([
+            'error' => ['code' => $code, 'message' => $message],
+        ], $status);
+    }
+
+    private function configuredBaseUrl(): string
+    {
+        return rtrim((string) ConfigService::get('api_base_url', ''), '/');
+    }
+
+    private function releaseArray(array $release): array
     {
         return [
-            'version'      => $release['version'],
-            'file_name'    => $release['original_filename'],
-            'size'         => (int)$release['file_size'],
-            'sha256'       => $release['sha256'],
-            'published_at' => gmdate('Y-m-d\TH:i:sP', strtotime($release['created_at'])),
-            'download_url' => $baseUrl . '/api/v1/download/' . urlencode($release['version'])
+            'version'                => (string) $release['version'],
+            'file_name'              => (string) $release['original_filename'],
+            'size'                   => (int) $release['file_size'],
+            'sha256'                 => strtolower((string) $release['sha256']),
+            'published_at'           => gmdate('Y-m-d\TH:i:s\Z', strtotime((string) $release['created_at'])),
+            'download_url'           => $this->configuredBaseUrl() . '/download/' . rawurlencode((string) $release['version']),
+            'check_interval_seconds' => max(300, min(86400, ConfigService::getInt('check_interval_seconds', 3600))),
         ];
+    }
+
+    private function findRelease(string $version): ?array
+    {
+        if (!preg_match(self::VERSION_PATTERN, $version)) {
+            return null;
+        }
+
+        global $DB;
+        $iterator = $DB->request([
+            'FROM'  => 'glpi_plugin_ativaupdater_releases',
+            'WHERE' => ['version' => $version],
+            'LIMIT' => 1,
+        ]);
+
+        return count($iterator) === 1 ? $iterator->current() : null;
+    }
+
+    private function safeReleasePath(array $release): ?string
+    {
+        $storage = realpath(GLPI_PLUGIN_DOC_DIR . '/ativaupdater/releases');
+        $storedFilename = (string) ($release['stored_filename'] ?? '');
+        if ($storage === false || !preg_match('/^[a-zA-Z0-9._-]{1,255}\.exe$/D', $storedFilename)) {
+            return null;
+        }
+
+        $path = realpath($storage . DIRECTORY_SEPARATOR . $storedFilename);
+        $prefix = rtrim($storage, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        if ($path === false || !is_file($path) || !str_starts_with($path, $prefix)) {
+            return null;
+        }
+
+        if ((int) filesize($path) !== (int) $release['file_size']) {
+            return null;
+        }
+
+        return $path;
     }
 
     #[Route('/api/v1/latest', name: 'ativaupdater_api_latest', methods: ['GET'])]
@@ -52,15 +107,17 @@ class ApiController
             return $error;
         }
 
-        $release = new PluginAtivaupdaterRelease();
-        $active = $release->getActiveRelease();
-
-        if (!$active) {
-            return new JsonResponse(['error' => 'No active release found'], 404);
+        global $DB;
+        $iterator = $DB->request([
+            'FROM'  => 'glpi_plugin_ativaupdater_releases',
+            'WHERE' => ['active' => 1],
+            'LIMIT' => 1,
+        ]);
+        if (count($iterator) !== 1) {
+            return $this->error('NO_RELEASE', 'Nenhuma versao foi publicada.', 404);
         }
 
-        $baseUrl = $request->getSchemeAndHttpHost() . $request->getBasePath() . '/plugins/ativaupdater';
-        return new JsonResponse($this->getReleaseArray($active, $baseUrl));
+        return new JsonResponse($this->releaseArray($iterator->current()));
     }
 
     #[Route('/api/v1/releases/{version}', name: 'ativaupdater_api_release_version', methods: ['GET'])]
@@ -70,20 +127,10 @@ class ApiController
             return $error;
         }
 
-        global $DB;
-        $iterator = $DB->request([
-            'FROM'  => 'glpi_plugin_ativaupdater_releases',
-            'WHERE' => ['version' => $version],
-            'LIMIT' => 1
-        ]);
-
-        if (count($iterator) === 0) {
-            return new JsonResponse(['error' => 'Release not found'], 404);
-        }
-
-        $rel = $iterator->current();
-        $baseUrl = $request->getSchemeAndHttpHost() . $request->getBasePath() . '/plugins/ativaupdater';
-        return new JsonResponse($this->getReleaseArray($rel, $baseUrl));
+        $release = $this->findRelease($version);
+        return $release === null
+            ? $this->error('NOT_FOUND', 'Versao nao encontrada.', 404)
+            : new JsonResponse($this->releaseArray($release));
     }
 
     #[Route('/api/v1/download/{version}', name: 'ativaupdater_api_download', methods: ['GET'])]
@@ -93,38 +140,92 @@ class ApiController
             return $error;
         }
 
-        global $DB;
-        $iterator = $DB->request([
-            'FROM'  => 'glpi_plugin_ativaupdater_releases',
-            'WHERE' => ['version' => $version],
-            'LIMIT' => 1
-        ]);
-
-        if (count($iterator) === 0) {
-            return new JsonResponse(['error' => 'Release not found'], 404);
+        $release = $this->findRelease($version);
+        if ($release === null) {
+            return $this->error('NOT_FOUND', 'Versao nao encontrada.', 404);
         }
 
-        $rel = $iterator->current();
-        $path = $rel['file_path'];
-
-        $storageDir = GLPI_PLUGIN_DOC_DIR . '/ativaupdater/releases';
-        if (!str_starts_with(realpath($path), realpath($storageDir)) || !file_exists($path)) {
-            return new JsonResponse(['error' => 'File not found on server'], 404);
+        $path = $this->safeReleasePath($release);
+        if ($path === null) {
+            return $this->error('FILE_UNAVAILABLE', 'O instalador publicado nao esta disponivel.', 404);
         }
 
-        $response = new StreamedResponse(function () use ($path) {
-            $stream = fopen($path, 'rb');
-            while (!feof($stream)) {
-                echo fread($stream, 8192);
-                flush();
-            }
-            fclose($stream);
-        });
-
+        $response = new BinaryFileResponse($path);
+        $response->setContentDisposition(
+            ResponseHeaderBag::DISPOSITION_ATTACHMENT,
+            basename((string) $release['original_filename'])
+        );
         $response->headers->set('Content-Type', 'application/octet-stream');
-        $response->headers->set('Content-Length', (string)filesize($path));
-        $response->headers->set('Content-Disposition', 'attachment; filename="' . $rel['original_filename'] . '"');
-
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->headers->set('Cache-Control', 'private, no-store, max-age=0');
+        $response->headers->set('X-Ativa-SHA256', strtolower((string) $release['sha256']));
         return $response;
+    }
+
+    #[Route('/api/v1/status', name: 'ativaupdater_api_status', methods: ['POST'])]
+    public function status(Request $request): Response
+    {
+        if ($error = $this->checkAuth($request)) {
+            return $error;
+        }
+
+        if (strlen($request->getContent()) > 16384) {
+            return $this->error('PAYLOAD_TOO_LARGE', 'Relatorio de status muito grande.', 413);
+        }
+
+        try {
+            $payload = json_decode($request->getContent(), true, 16, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return $this->error('INVALID_JSON', 'JSON invalido.', 400);
+        }
+        if (!is_array($payload)) {
+            return $this->error('INVALID_PAYLOAD', 'Conteudo invalido.', 400);
+        }
+
+        $guid = strtolower(trim((string) ($payload['machine_guid'] ?? '')));
+        $hostname = trim((string) ($payload['hostname'] ?? ''));
+        $status = strtolower(trim((string) ($payload['status'] ?? '')));
+        if (!preg_match('/^[a-f0-9-]{32,64}$/D', $guid)
+            || !preg_match('/^[a-zA-Z0-9._-]{1,255}$/D', $hostname)
+            || !in_array($status, self::STATUS_VALUES, true)
+        ) {
+            return $this->error('INVALID_PAYLOAD', 'Identificacao ou status invalido.', 422);
+        }
+
+        $versions = [];
+        foreach (['updater_version', 'installed_version', 'available_version'] as $field) {
+            $value = trim((string) ($payload[$field] ?? ''));
+            if ($value !== '' && !preg_match(self::VERSION_PATTERN, $value)) {
+                return $this->error('INVALID_VERSION', 'Versao informada invalida.', 422);
+            }
+            $versions[$field] = $value;
+        }
+
+        $data = [
+            'hostname'          => $hostname,
+            'updater_version'   => $versions['updater_version'],
+            'installed_version' => $versions['installed_version'],
+            'available_version' => $versions['available_version'],
+            'status'            => $status,
+            'message'           => mb_substr(trim((string) ($payload['message'] ?? '')), 0, 1000),
+            'last_ip'           => mb_substr((string) ($request->getClientIp() ?? ''), 0, 64),
+            'last_check'        => date('Y-m-d H:i:s'),
+        ];
+
+        global $DB;
+        $existing = $DB->request([
+            'FROM'  => 'glpi_plugin_ativaupdater_clients',
+            'WHERE' => ['machine_guid' => $guid],
+            'LIMIT' => 1,
+        ]);
+        if (count($existing) === 1) {
+            $ok = $DB->update('glpi_plugin_ativaupdater_clients', $data, ['machine_guid' => $guid]);
+        } else {
+            $ok = $DB->insert('glpi_plugin_ativaupdater_clients', ['machine_guid' => $guid] + $data);
+        }
+
+        return $ok
+            ? new JsonResponse(['ok' => true], 202)
+            : $this->error('DATABASE_ERROR', 'Nao foi possivel registrar o status.', 500);
     }
 }

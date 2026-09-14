@@ -11,8 +11,11 @@ class ConfigService
     public static function defaults(): array
     {
         return [
-            'api_enabled' => '1',
-            'api_token'   => self::generateToken(),
+            'api_enabled'           => '1',
+            'api_token'             => self::generateToken(),
+            'api_base_url'          => 'https://chamados.ativalocacao.com.br:8443/plugins/ativaupdater/api/v1',
+            'check_interval_seconds' => '3600',
+            'max_upload_mb'         => '500',
         ];
     }
 
@@ -42,6 +45,12 @@ class ConfigService
     {
         $value = self::get($key, $default);
         return in_array($value, [1, '1', true, 'true', 'on', 'yes'], true);
+    }
+
+    public static function getInt(string $key, int $default = 0): int
+    {
+        $value = filter_var(self::get($key, $default), FILTER_VALIDATE_INT);
+        return $value === false ? $default : (int) $value;
     }
 
     public static function set(array $values): void

@@ -1,30 +1,20 @@
-# Documentação da API - Ativa Updater
+# API do Ativa Updater
 
-A API permite consultar e baixar a versão mais recente ou versões específicas do instalador unificado.
-
-## Autenticação
-
-Todos os endpoints exigem um cabeçalho HTTP de autorização:
+A API distribui o instalador completo do Wallpaper Client e recebe o estado do serviço Windows. Todos os endpoints exigem:
 
 ```http
-Authorization: Bearer <SEU_TOKEN>
+Authorization: Bearer <TOKEN>
 ```
 
-O token pode ser gerado/visualizado na página de Configurações do plugin no GLPI.
+O arquivo pronto para o serviço pode ser baixado em **Ativa Updater > Configurações**. Não registre o token em logs e não publique esse JSON.
 
----
-
-## Obter versão atual
-
-Retorna os detalhes da versão marcada atualmente como ativa.
-
-**Request:**
+## Versão publicada
 
 ```http
 GET /plugins/ativaupdater/api/v1/latest
 ```
 
-**Response (200 OK):**
+Exemplo de resposta:
 
 ```json
 {
@@ -32,45 +22,47 @@ GET /plugins/ativaupdater/api/v1/latest
   "file_name": "Ativa-Wallpaper-Client-Setup-1.4.4.exe",
   "size": 32581742,
   "sha256": "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
-  "published_at": "2026-09-11T15:00:00Z",
-  "download_url": "https://servidor/plugins/ativaupdater/api/v1/download/1.4.4"
+  "published_at": "2026-09-14T15:00:00Z",
+  "download_url": "https://chamados.ativalocacao.com.br:8443/plugins/ativaupdater/api/v1/download/1.4.4",
+  "check_interval_seconds": 3600
 }
 ```
 
----
+Também existe `GET /releases/{version}` para uma versão específica.
 
-## Obter versão específica
-
-Retorna os detalhes de uma versão específica pelo seu número de versão.
-
-**Request:**
+## Download autenticado
 
 ```http
-GET /plugins/ativaupdater/api/v1/releases/{version}
+GET /plugins/ativaupdater/api/v1/download/1.4.4
 ```
 
-**Response (200 OK):**
-*(Mesmo formato do endpoint latest)*
+O cliente valida o tamanho, o SHA-256 do conteúdo e a assinatura `MZ` antes da execução. Redirecionamentos e mudanças de origem são recusados.
 
----
-
-## Download
-
-Faz o streaming do arquivo de instalação. 
-
-**Request:**
+## Estado de uma máquina
 
 ```http
-GET /plugins/ativaupdater/api/v1/download/{version}
+POST /plugins/ativaupdater/api/v1/status
+Content-Type: application/json
 ```
 
-**Response:**
-Retorna o conteúdo binário (`application/octet-stream`) do executável associado àquela versão.
+```json
+{
+  "machine_guid": "00000000-0000-0000-0000-000000000000",
+  "hostname": "TI-01-000013",
+  "updater_version": "1.0.0",
+  "installed_version": "1.4.3",
+  "available_version": "1.4.4",
+  "status": "downloading",
+  "message": "Baixando e validando o instalador."
+}
+```
 
----
+Status aceitos: `checking`, `current`, `downloading`, `installing`, `updated` e `error`.
 
-## Erros Comuns
+## Códigos principais
 
-- `401 Unauthorized`: Cabeçalho `Authorization` não enviado ou malformado.
-- `403 Forbidden`: Token inválido ou API desabilitada.
-- `404 Not Found`: Nenhuma versão publicada encontrada ou arquivo não encontrado.
+- `401`: cabeçalho Bearer ausente ou malformado;
+- `403`: token inválido;
+- `404`: versão ou arquivo não encontrado;
+- `422`: relatório do cliente inválido;
+- `503`: API desabilitada.
