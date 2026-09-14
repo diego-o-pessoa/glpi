@@ -58,49 +58,107 @@ if ($action === '' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 
+$expectsJson = strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
+$respond = static function (bool $ok, string $message) use ($expectsJson): never {
+    if ($expectsJson) {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store');
+        echo json_encode(['ok' => $ok, 'message' => $message], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+    Session::addMessageAfterRedirect($message, false, $ok ? INFO : ERROR);
+    Html::redirect('dashboard.php');
+};
+
+/**
+ * Queue a dashboard command for one computer. Returns the fields written, or
+ * null when the computer's service cannot run it.
+ */
+$requestCommand = static function (array $client, string $command, string $now): ?array {
+    global $DB;
+    $version = (string) $client['updater_version'];
+    if (!ManualCheck::supports($version, $command)) {
+        return null;
+    }
+    $fields = [
+        'check_request_seq'  => new QueryExpression(DBmysql::quoteName('check_request_seq') . ' + 1'),
+        'check_requested_at' => $now,
+        'command'            => $command,
+    ];
+    $restarts = in_array($command, [ManualCheck::COMMAND_CHECK, ManualCheck::COMMAND_REINSTALL], true);
+    // Services 1.5.0+ cancel an installation in progress; older ones finish it first.
+    if ($restarts && (ManualCheck::cancelsInstallations($version)
+        || !in_array((string) $client['status'], ManualCheck::BUSY_STATUSES, true))
+    ) {
+        $fields['status'] = 'checking';
+        $fields['message'] = $command === ManualCheck::COMMAND_REINSTALL
+            ? 'Reinstalação solicitada pelo dashboard.'
+            : 'Verificação reiniciada pelo dashboard.';
+    }
+    return $DB->update('glpi_plugin_ativaupdater_clients', $fields, ['id' => (int) $client['id']]) ? $fields : null;
+};
+
 if ($action === 'check_now') {
     global $DB;
     $table = 'glpi_plugin_ativaupdater_clients';
     $requested = 0;
-    $busy = 0;
+    $waiting = 0;
     $unsupported = 0;
     if ($DB->tableExists($table)) {
         $now = ServerClock::now();
-        $iterator = $DB->request(['FROM' => $table]);
-        foreach ($iterator as $client) {
-            $fields = [
-                'check_request_seq'  => new QueryExpression(DBmysql::quoteName('check_request_seq') . ' + 1'),
-                'check_requested_at' => $now,
-            ];
-            // Computers in the middle of an installation also receive the
-            // command (they check as soon as the installer finishes), but
-            // keep showing their real progress.
-            if (in_array((string) $client['status'], ManualCheck::BUSY_STATUSES, true)) {
-                $busy++;
-            } else {
-                $fields['status'] = 'checking';
-                $fields['message'] = 'Verificação manual solicitada pelo dashboard.';
-            }
-            if (!ManualCheck::supports((string) $client['updater_version'])) {
+        foreach ($DB->request(['FROM' => $table]) as $client) {
+            $fields = $requestCommand($client, ManualCheck::COMMAND_CHECK, $now);
+            if ($fields === null) {
                 $unsupported++;
+                continue;
             }
-            if ($DB->update($table, $fields, ['id' => (int) $client['id']])) {
-                $requested++;
+            $requested++;
+            if (!isset($fields['status'])) {
+                $waiting++;
             }
         }
     }
     $message = $requested > 0
-        ? 'Verificação imediata solicitada para ' . $requested . ' computador(es). O serviço receberá o comando em até 15 segundos.'
-        : 'Nenhum computador identificado para verificar.';
-    if ($busy > 0) {
-        $message .= ' ' . $busy . ' computador(es) estão baixando ou instalando e verificarão ao terminar.';
+        ? 'Verificação reiniciada em ' . $requested . ' computador(es): o que estava em andamento é cancelado e a consulta recomeça em até 15 segundos.'
+        : 'Nenhum computador pôde receber o comando.';
+    if ($waiting > 0) {
+        $message .= ' ' . $waiting . ' computador(es) com serviço anterior a ' . ManualCheck::REMOTE_ACTIONS_MIN_VERSION
+            . ' terminam a instalação atual antes de verificar.';
     }
     if ($unsupported > 0) {
         $message .= ' ' . $unsupported . ' computador(es) têm serviço anterior a ' . ManualCheck::MIN_SERVICE_VERSION
-            . ', que não aceita este comando, e só consultarão no intervalo automático.';
+            . ', que não aceita comandos, e só consultarão no intervalo automático.';
     }
-    Session::addMessageAfterRedirect($message, true, INFO);
-    Html::redirect('dashboard.php');
+    $respond(true, $message);
+}
+
+if ($action === 'client_command') {
+    global $DB;
+    $command = (string) ($_POST['command'] ?? '');
+    $id = (int) ($_POST['id'] ?? 0);
+    if (!in_array($command, ManualCheck::COMMANDS, true) || $id <= 0) {
+        $respond(false, 'Comando inválido.');
+    }
+    $iterator = $DB->request(['FROM' => 'glpi_plugin_ativaupdater_clients', 'WHERE' => ['id' => $id], 'LIMIT' => 1]);
+    if (count($iterator) !== 1) {
+        $respond(false, 'Computador não encontrado.');
+    }
+    $client = $iterator->current();
+    $hostname = (string) $client['hostname'];
+    if ($requestCommand($client, $command, ServerClock::now()) === null) {
+        $respond(false, sprintf(
+            '%s: o serviço (versão %s) não aceita este comando; é necessário o serviço %s ou superior.',
+            $hostname,
+            (string) $client['updater_version'] ?: 'desconhecida',
+            $command === ManualCheck::COMMAND_CHECK ? ManualCheck::MIN_SERVICE_VERSION : ManualCheck::REMOTE_ACTIONS_MIN_VERSION
+        ));
+    }
+    $respond(true, match ($command) {
+        ManualCheck::COMMAND_REINSTALL => $hostname . ': reinstalação solicitada; começa em até 15 segundos.',
+        ManualCheck::COMMAND_RESTART_SERVICE => $hostname . ': o serviço será reiniciado em até 15 segundos.',
+        ManualCheck::COMMAND_SEND_LOGS => $hostname . ': coleta de logs solicitada; aparecerão na tabela em até 15 segundos.',
+        default => $hostname . ': verificação reiniciada; começa em até 15 segundos.',
+    });
 }
 
 if ($action === 'upload') {

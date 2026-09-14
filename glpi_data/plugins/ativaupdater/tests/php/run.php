@@ -112,6 +112,32 @@ $tests['manual check handshake uses sequences'] = static function (): void {
     check(!ManualCheck::isPending(array_merge($client, $ack)));
     check(ManualCheck::acknowledgement(array_merge($client, $ack), 'x') === []);
     check(!ManualCheck::isPending([]));
+
+    // Services 1.5.0+ acknowledge only the command they actually received.
+    $newer = ['check_request_seq' => 5, 'check_ack_seq' => 2, 'command' => 'reinstall'];
+    check(ManualCheck::acknowledgement($newer, 'now', 2) === [], 'report before the command arrived');
+    check(ManualCheck::acknowledgement($newer, 'now', 4)['check_ack_seq'] === 4);
+    check(ManualCheck::acknowledgement($newer, 'now', 9)['check_ack_seq'] === 5, 'never beyond the request');
+    check(ManualCheck::command($newer) === ManualCheck::COMMAND_REINSTALL);
+    check(ManualCheck::command(['check_request_seq' => 1, 'check_ack_seq' => 0, 'command' => 'bogus']) === ManualCheck::COMMAND_CHECK);
+    check(ManualCheck::command(['check_request_seq' => 1, 'check_ack_seq' => 1, 'command' => 'reinstall']) === '');
+};
+
+$tests['remote actions require service 1.5.0'] = static function (): void {
+    check(ManualCheck::supports('1.2.0', ManualCheck::COMMAND_CHECK));
+    foreach ([ManualCheck::COMMAND_REINSTALL, ManualCheck::COMMAND_RESTART_SERVICE, ManualCheck::COMMAND_SEND_LOGS] as $command) {
+        check(!ManualCheck::supports('1.4.0', $command), $command);
+        check(ManualCheck::supports('1.5.0', $command), $command);
+    }
+    check(!ManualCheck::cancelsInstallations('1.4.0') && ManualCheck::cancelsInstallations('1.5.0'));
+    $now = time();
+    $installing = [
+        'check_request_seq' => 1, 'check_ack_seq' => 0, 'status' => 'installing',
+        'check_requested_at' => ServerClock::format($now - 10),
+    ];
+    check(ManualCheck::state($installing + ['updater_version' => '1.5.0'], $now) === ManualCheck::STATE_WAITING, 'new service cancels');
+    check(ManualCheck::state($installing + ['updater_version' => '1.4.0'], $now) === ManualCheck::STATE_BUSY, 'old service finishes first');
+    check(ManualCheck::state($installing + ['updater_version' => '1.4.0', 'command' => 'send_logs'], $now) === ManualCheck::STATE_UNSUPPORTED);
 };
 
 $tests['manual check states'] = static function (): void {

@@ -589,6 +589,42 @@ class ReusableRegistrationTests(unittest.TestCase):
         self.write_client_json()
         self.assertIsNone(wc.reusable_client_token(self.root, self.SERVER, self.logger, api_factory=self.factory("HTTP_401")))
 
+    def test_unreachable_server_keeps_the_existing_registration(self):
+        # A network timeout during the unified installation must not abort it.
+        self.write_client_json()
+
+        def unreachable(server, token):
+            api = FakeApi({"enabled": True})
+
+            def fail(_etag):
+                raise wc.ClientError("SERVER_UNAVAILABLE", "timed out")
+            api.get_config = fail
+            return api
+
+        self.assertEqual(wc.reusable_client_token(self.root, self.SERVER, self.logger, api_factory=unreachable), "t" * 43)
+
+    def test_registration_retries_only_transient_failures(self):
+        class FlakyApi:
+            def __init__(self, errors):
+                self.errors = list(errors)
+                self.calls = 0
+
+            def register(self, _secret, _identity):
+                self.calls += 1
+                if self.errors:
+                    raise self.errors.pop(0)
+                return "token-" + "x" * 40
+
+        sleeps = []
+        flaky = FlakyApi([wc.ClientError("SERVER_UNAVAILABLE", "timeout"), wc.ClientError("HTTP_503", "busy")])
+        self.assertTrue(wc.register_with_retries(flaky, "s", {}, self.logger, sleep=sleeps.append).startswith("token-"))
+        self.assertEqual((flaky.calls, sleeps), (3, [5, 15]))
+
+        rejected = FlakyApi([wc.ClientError("HTTP_401", "bad secret", retriable=False)])
+        with self.assertRaises(wc.ClientError):
+            wc.register_with_retries(rejected, "s", {}, self.logger, sleep=sleeps.append)
+        self.assertEqual(rejected.calls, 1)
+
     def test_missing_invalid_or_foreign_registration_is_not_reused(self):
         self.assertIsNone(wc.reusable_client_token(self.root, self.SERVER, self.logger, api_factory=self.factory()))
         self.write_client_json(client_token="short")

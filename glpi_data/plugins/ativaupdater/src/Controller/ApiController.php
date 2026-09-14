@@ -226,6 +226,11 @@ final class ApiController extends AbstractController
         if ($installLog !== null && !is_string($installLog)) {
             return $this->error('INVALID_PAYLOAD', 'Log de instalacao invalido.', 422);
         }
+        $reportedSeq = $this->commandSeq($payload);
+        $recoveryNote = $payload['recovery_note'] ?? null;
+        if ($recoveryNote !== null && !is_string($recoveryNote)) {
+            return $this->error('INVALID_PAYLOAD', 'Nota de recuperacao invalida.', 422);
+        }
 
         $data = [
             'hostname'          => $hostname,
@@ -244,6 +249,10 @@ final class ApiController extends AbstractController
         } elseif ($installLog !== null) {
             $data['install_log'] = mb_substr($installLog, 0, InstallStatus::LOG_MAX_CHARS);
         }
+        if ($recoveryNote !== null && trim($recoveryNote) !== '') {
+            $data['recovery_note'] = mb_substr(trim($recoveryNote), 0, 255);
+            $data['recovery_at'] = $data['last_check'];
+        }
 
         global $DB;
         $existing = $DB->request([
@@ -253,7 +262,7 @@ final class ApiController extends AbstractController
         ]);
         if (count($existing) === 1) {
             $current = $existing->current();
-            $data += ManualCheck::acknowledgement($current, $data['last_check']);
+            $data += ManualCheck::acknowledgement($current, $data['last_check'], $reportedSeq);
             $data['install_started_at'] = InstallStatus::installStartedAt(
                 $status,
                 $current['install_started_at'] ?? null,
@@ -295,9 +304,60 @@ final class ApiController extends AbstractController
         if (count($iterator) !== 1) {
             return $this->error('CLIENT_NOT_FOUND', 'Computador ainda nao registrado.', 404);
         }
+        $client = $iterator->current();
+        $pending = ManualCheck::isPending($client);
         return new JsonResponse([
-            'check_now' => ManualCheck::isPending($iterator->current()),
+            // check_now is the only field read by services older than 1.5.0.
+            'check_now'          => $pending,
+            'request_seq'        => (int) ($client['check_request_seq'] ?? 0),
+            'command'            => $pending ? ManualCheck::command($client) : null,
             'poll_after_seconds' => 15,
         ]);
+    }
+
+    #[Route('/api/v1/diagnostics', name: 'ativaupdater_api_diagnostics', methods: ['POST'])]
+    public function diagnostics(Request $request): Response
+    {
+        if ($error = $this->checkAuth($request)) {
+            return $error;
+        }
+        if (strlen($request->getContent()) > 262144) {
+            return $this->error('PAYLOAD_TOO_LARGE', 'Diagnostico muito grande.', 413);
+        }
+        try {
+            $payload = json_decode($request->getContent(), true, 16, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return $this->error('INVALID_JSON', 'JSON invalido.', 400);
+        }
+        $guid = is_array($payload) ? strtolower(trim((string) ($payload['machine_guid'] ?? ''))) : '';
+        $diagnostics = is_array($payload) ? ($payload['diagnostics'] ?? null) : null;
+        if (!preg_match('/^[a-f0-9-]{32,64}$/D', $guid) || !is_string($diagnostics)) {
+            return $this->error('INVALID_PAYLOAD', 'Identificacao ou diagnostico invalido.', 422);
+        }
+
+        global $DB;
+        $iterator = $DB->request([
+            'FROM'  => 'glpi_plugin_ativaupdater_clients',
+            'WHERE' => ['machine_guid' => $guid],
+            'LIMIT' => 1,
+        ]);
+        if (count($iterator) !== 1) {
+            return $this->error('CLIENT_NOT_FOUND', 'Computador ainda nao registrado.', 404);
+        }
+        $now = ServerClock::now();
+        $data = [
+            'diagnostics_log' => mb_substr($diagnostics, 0, InstallStatus::LOG_MAX_CHARS),
+            'diagnostics_at'  => $now,
+        ] + ManualCheck::acknowledgement($iterator->current(), $now, $this->commandSeq($payload));
+
+        return $DB->update('glpi_plugin_ativaupdater_clients', $data, ['machine_guid' => $guid])
+            ? new JsonResponse(['ok' => true], 202)
+            : $this->error('DATABASE_ERROR', 'Nao foi possivel registrar o diagnostico.', 500);
+    }
+
+    private function commandSeq(array $payload): ?int
+    {
+        $value = $payload['command_seq'] ?? null;
+        return is_int($value) && $value >= 0 ? $value : null;
     }
 }

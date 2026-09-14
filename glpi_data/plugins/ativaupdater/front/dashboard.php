@@ -1,10 +1,7 @@
 <?php
 
-use GlpiPlugin\Ativaupdater\ConfigService;
-use GlpiPlugin\Ativaupdater\InstallStatus;
-use GlpiPlugin\Ativaupdater\ManualCheck;
+use GlpiPlugin\Ativaupdater\ClientsView;
 use GlpiPlugin\Ativaupdater\ReleasePolicy;
-use GlpiPlugin\Ativaupdater\ServerClock;
 
 include('../../../inc/includes.php');
 
@@ -35,17 +32,6 @@ foreach ($iterator as $row) {
     $releases[] = $row;
 }
 usort($releases, static fn(array $left, array $right): int => version_compare($right['version'], $left['version']));
-
-$clients = [];
-if ($DB->tableExists('glpi_plugin_ativaupdater_clients')) {
-    $clientIterator = $DB->request([
-        'FROM'  => 'glpi_plugin_ativaupdater_clients',
-        'ORDER' => ['last_check DESC'],
-    ]);
-    foreach ($clientIterator as $row) {
-        $clients[] = $row;
-    }
-}
 
 echo "<div class='container-fluid mt-3'>";
 echo "<h2>" . __('Ativa Updater Dashboard', 'ativaupdater') . "</h2>";
@@ -186,177 +172,25 @@ if (count($releases) > 0) {
 }
 echo "</div></div>";
 
-// Clients reporting through the Windows service
-$activeVersion = $activeRelease ? (string) $activeRelease['version'] : '';
-$activeAllowsDowngrade = $activeRelease !== null && (int) ($activeRelease['allow_downgrade'] ?? 0) === 1;
-$activePublishedAt = $activeRelease
-    ? ServerClock::toTimestamp((string) (($activeRelease['activated_at'] ?? '') ?: $activeRelease['created_at']))
-    : false;
-$checkInterval = max(300, min(86400, ConfigService::getInt('check_interval_seconds', 3600)));
-$totalClients = count($clients);
-$updatedClients = 0;
-$errorClients = 0;
-foreach ($clients as $client) {
-    if ($activeVersion !== '' && ReleasePolicy::isOnTarget((string) $client['installed_version'], $activeVersion, $activeAllowsDowngrade)) {
-        $updatedClients++;
-    }
-    $noReleaseYet = str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE');
-    $clientStatus = (string) $client['status'];
-    if (($clientStatus === 'error' && !$noReleaseYet)
-        || $clientStatus === InstallStatus::STATUS_INSTALL_FAILED
-        || InstallStatus::isStuck($clientStatus, $client['install_started_at'] ?? null, (string) $client['last_check'], time())
-    ) {
-        $errorClients++;
-    }
-}
-$progress = $totalClients > 0 ? (int) round(($updatedClients / $totalClients) * 100) : 0;
-
-echo "<div class='card mb-4'>";
-echo "<div class='card-header d-flex justify-content-between align-items-center'>";
+// Clients reporting through the Windows service. The section is refreshed in
+// place by polling front/clients.php; only changes are re-rendered.
+$clientsData = ClientsView::load();
+$clientsNow = time();
+echo "<div class='card mb-4' id='ativaupdater-clients-card' data-endpoint='clients.php'"
+    . " data-signature='" . htmlescape(ClientsView::signature($clientsData, $clientsNow)) . "'>";
+echo "<div class='card-header d-flex justify-content-between align-items-center flex-wrap gap-2'>";
 echo "<h3 class='mb-0'>Computadores</h3>";
 echo "<div class='d-flex align-items-center gap-3'>";
-echo "<span id='refresh-countdown' class='text-muted'>Atualização da tela em 15 s</span>";
-if ($canManage && $totalClients > 0) {
-    echo "<form method='post' action='action.php' class='m-0'>";
-    echo Html::hidden('action', ['value' => 'check_now']);
-    echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
-    echo "<button type='submit' class='btn btn-primary btn-sm'><i class='fas fa-sync-alt me-1'></i>Verificar agora</button>";
-    echo "</form>";
+echo "<span id='ativaupdater-live-indicator' class='text-muted small'><i class='fas fa-circle text-success me-1' style='font-size: .6rem'></i>Ao vivo</span>";
+if ($canManage) {
+    echo "<button type='button' class='btn btn-primary btn-sm' data-ativaupdater-command='check_now'"
+        . " data-confirm='" . htmlescape('Cancelar o que está em andamento em todos os computadores e recomeçar a verificação agora?') . "'>"
+        . "<i class='fas fa-sync-alt me-1'></i>Verificar agora</button>";
 }
 echo "</div></div>";
 echo "<div class='card-body'>";
-if ($activeVersion === '') {
-    echo "<div class='alert alert-info mb-3'>{$totalClients} computador(es) identificado(s). Publique o primeiro instalador unificado para iniciar a distribuição automática.</div>";
-} else {
-    echo "<div class='d-flex justify-content-between mb-1'><span>{$updatedClients} de {$totalClients} computador(es) na versão atual</span><strong>{$progress}%</strong></div>";
-    echo "<div class='progress mb-3' style='height: 20px'><div class='progress-bar bg-success' role='progressbar' style='width: {$progress}%' aria-valuenow='{$progress}' aria-valuemin='0' aria-valuemax='100'>{$progress}%</div></div>";
-}
-if ($errorClients > 0) {
-    echo "<div class='alert alert-danger'>{$errorClients} computador(es) informaram erro. Consulte o motivo na tabela.</div>";
-}
-if ($totalClients === 0) {
-    echo "<p class='text-muted mb-0'>Nenhum serviço se identificou ainda. Depois da instalação, a primeira consulta acontece imediatamente.</p>";
-} else {
-    echo "<div class='table-responsive'><table class='table table-striped align-middle'><thead><tr><th>Computador</th><th>Pacote unificado</th><th>Serviço</th><th>Wallpaper</th><th>GLPI Agent</th><th>Disponível</th><th>Status</th><th>Última consulta</th><th>Próxima consulta</th><th>Detalhes</th></tr></thead><tbody>";
-    $labels = [
-        'checking' => ['Consultando', 'bg-info'],
-        'waiting_release' => ['Aguardando publicação', 'bg-info'],
-        'waiting_check' => ['Aguardando próxima consulta', 'bg-info'],
-        'manual_check' => ['Verificando agora', 'bg-primary'],
-        'manual_unsupported' => ['Serviço sem Verificar agora', 'bg-secondary'],
-        'manual_no_response' => ['Sem resposta ao comando', 'bg-danger'],
-        'current' => ['Atualizado', 'bg-success'],
-        'downloading' => ['Baixando', 'bg-primary'],
-        'installing' => ['Instalando', 'bg-warning text-dark'],
-        InstallStatus::STATUS_RETRYING => ['Nova tentativa', 'bg-warning text-dark'],
-        InstallStatus::STATUS_INSTALL_FAILED => ['Falha na Instalação', 'bg-danger'],
-        'updated' => ['Atualizado', 'bg-success'],
-        'error' => ['Erro', 'bg-danger'],
-    ];
-    foreach ($clients as $client) {
-        $statusKey = (string) $client['status'];
-        $installLog = (string) ($client['install_log'] ?? '');
-        $stuck = InstallStatus::isStuck($statusKey, $client['install_started_at'] ?? null, (string) $client['last_check'], time());
-        $lastCheck = (string) $client['last_check'];
-        $lastCheckAt = ServerClock::toTimestamp($lastCheck);
-        $manualState = ManualCheck::state($client, time());
-        $serviceVersion = (string) ($client['updater_version'] ?? '');
-        $nextRegularCheckAt = $lastCheckAt + $checkInterval;
-        $nextRegularCheckLabel = $nextRegularCheckAt > time()
-            ? Html::convDateTime(ServerClock::format($nextRegularCheckAt))
-            : 'a qualquer momento';
-        $noReleaseMessage = str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE');
-        $clientAction = $activeVersion !== ''
-            ? ReleasePolicy::clientAction((string) $client['installed_version'], $activeVersion, $activeAllowsDowngrade)
-            : ReleasePolicy::ACTION_CURRENT;
-        $needsActiveVersion = in_array($clientAction, [ReleasePolicy::ACTION_UPGRADE, ReleasePolicy::ACTION_DOWNGRADE], true);
-        $releaseIsNewerThanReport = $activePublishedAt !== false && $activePublishedAt > $lastCheckAt;
-        $waitingForNextCheck = $needsActiveVersion
-            && ($statusKey === 'waiting_release' || $noReleaseMessage || $releaseIsNewerThanReport);
-        $displayMessage = (string) ($client['message'] ?: '-');
-        $displayAvailable = (string) $client['available_version'];
-        if ($stuck) {
-            // Checked before the manual command: a computer that stopped
-            // reporting would otherwise show "Verificando agora" forever.
-            $statusKey = InstallStatus::STATUS_INSTALL_FAILED;
-            $startedAt = (string) ($client['install_started_at'] ?? '');
-            $displayMessage = 'A instalação não foi concluída'
-                . ($startedAt !== '' ? ' (iniciada em ' . Html::convDateTime($startedAt) . ')' : '')
-                . ' e o computador não informa progresso desde ' . Html::convDateTime($lastCheck) . '. '
-                . 'O serviço pode estar parado, com o instalador travado, ou em versão anterior à 1.4.0 (sem acompanhamento da instalação). '
-                . 'No computador, consulte C:\\ProgramData\\AtivaLocacao\\UnifiedUpdater\\logs.';
-        } elseif ($manualState === ManualCheck::STATE_UNSUPPORTED) {
-            $statusKey = 'manual_unsupported';
-            $displayMessage = 'O serviço deste computador (versão ' . ($serviceVersion !== '' ? $serviceVersion : 'desconhecida')
-                . ') é anterior a ' . ManualCheck::MIN_SERVICE_VERSION . ' e não recebe o comando "Verificar agora". '
-                . 'Ele consultará sozinho no intervalo automático (próxima consulta: ' . $nextRegularCheckLabel . '). '
-                . 'O comando passa a funcionar depois que o pacote atual for instalado nele.';
-        } elseif ($manualState === ManualCheck::STATE_BUSY) {
-            // Keep the real progress label (Baixando/Instalando).
-            $displayMessage = 'Verificação solicitada; será feita quando a instalação em andamento terminar. ' . $displayMessage;
-        } elseif ($manualState === ManualCheck::STATE_NO_RESPONSE) {
-            $statusKey = 'manual_no_response';
-            $displayMessage = 'O serviço não confirmou a verificação solicitada em '
-                . Html::convDateTime((string) $client['check_requested_at'])
-                . ' (último contato: ' . Html::convDateTime($lastCheck) . '). '
-                . 'No computador, confira se o serviço "Ativa Unified Updater" está em execução e se ele acessa '
-                . 'chamados.ativalocacao.com.br:8443; o log fica em C:\\ProgramData\\AtivaLocacao\\UnifiedUpdater\\logs\\service.log.';
-        } elseif ($manualState === ManualCheck::STATE_WAITING) {
-            $statusKey = 'manual_check';
-            $displayAvailable = $activeVersion ?: $displayAvailable;
-            $displayMessage = 'Comando enviado; o serviço iniciará a consulta em até 15 segundos.';
-        } elseif ($waitingForNextCheck) {
-            $statusKey = 'waiting_check';
-            $displayAvailable = $activeVersion;
-            $publishedLabel = $clientAction === ReleasePolicy::ACTION_DOWNGRADE ? 'Rollback autorizado.' : 'Versão publicada.';
-            $displayMessage = $nextRegularCheckAt > time()
-                ? $publishedLabel . ' Consulta automática prevista até ' . $nextRegularCheckLabel . '.'
-                    . (ManualCheck::supports($serviceVersion)
-                        ? ' Use "Verificar agora" para antecipar.'
-                        : ' Este serviço (versão ' . ($serviceVersion !== '' ? $serviceVersion : 'desconhecida') . ') não aceita "Verificar agora".')
-                : $publishedLabel . ' Aguardando o próximo contato automático do serviço.';
-        } elseif ($statusKey === 'error' && $noReleaseMessage) {
-            $statusKey = 'waiting_release';
-            $displayMessage = 'Computador registrado; aguardando a primeira versão publicada.';
-        }
-        [$statusLabel, $statusClass] = $labels[$statusKey] ?? [$statusKey, 'bg-secondary'];
-        $offline = $lastCheckAt < time() - 7200;
-        $nextCheckLabel = $manualState === ManualCheck::STATE_WAITING
-            ? 'Em até 15 segundos'
-            : ucfirst($nextRegularCheckLabel);
-        echo '<tr>';
-        echo '<td><strong>' . htmlescape((string) $client['hostname']) . '</strong>' . ($offline ? " <span class='badge bg-secondary'>Sem contato há mais de 2 h</span>" : '') . '</td>';
-        echo '<td>' . htmlescape((string) $client['installed_version'])
-            . ($clientAction === ReleasePolicy::ACTION_BLOCKED_DOWNGRADE
-                ? " <span class='badge bg-secondary' title='Downgrade não autorizado para a versão publicada'>Acima da versão publicada</span>"
-                : '')
-            . ($clientAction === ReleasePolicy::ACTION_DOWNGRADE
-                ? " <span class='badge bg-warning text-dark'>Rollback pendente</span>"
-                : '')
-            . '</td>';
-        echo '<td>' . htmlescape($serviceVersion !== '' ? $serviceVersion : '-')
-            . ($serviceVersion !== '' && !ManualCheck::supports($serviceVersion)
-                ? " <span class='badge bg-secondary' title='Não recebe o comando Verificar agora'>desatualizado</span>"
-                : '')
-            . '</td>';
-        echo '<td>' . htmlescape((string) ($client['wallpaper_client_version'] ?: '-')) . '</td>';
-        echo '<td>' . htmlescape((string) ($client['glpi_agent_version'] ?: '-')) . '</td>';
-        echo '<td>' . htmlescape($displayAvailable ?: '-') . '</td>';
-        echo "<td><span class='badge {$statusClass}'>" . htmlescape($statusLabel) . '</span></td>';
-        echo '<td>' . Html::convDateTime($lastCheck) . '</td>';
-        echo '<td>' . htmlescape($nextCheckLabel) . '</td>';
-        echo '<td>' . htmlescape($displayMessage);
-        if ($installLog !== '') {
-            echo "<details class='mt-2 install-log'><summary class='text-danger'>Ver log da instalação</summary>"
-                . "<pre class='mt-2 p-2 bg-light border small' style='max-height: 360px; overflow: auto; white-space: pre-wrap;'>"
-                . htmlescape($installLog)
-                . '</pre></details>';
-        }
-        echo '</td>';
-        echo '</tr>';
-    }
-    echo '</tbody></table></div>';
-}
+echo "<div id='ativaupdater-live-message'></div>";
+echo "<div id='ativaupdater-clients-body'>" . ClientsView::render($clientsData, $canManage, $clientsNow) . "</div>";
 echo "</div></div>";
 
 echo "</div>";
@@ -364,19 +198,108 @@ echo "</div>";
 echo <<<'HTML'
 <script>
 (() => {
-    let remaining = 15;
-    const target = document.getElementById('refresh-countdown');
-    window.setInterval(() => {
-        // Keep an opened installation log readable instead of reloading it away.
-        if (document.querySelector('details.install-log[open]')) {
-            remaining = 15;
-            if (target) target.textContent = 'Atualização pausada enquanto um log está aberto';
-            return;
+    const card = document.getElementById('ativaupdater-clients-card');
+    if (!card) return;
+    const body = document.getElementById('ativaupdater-clients-body');
+    const indicator = document.getElementById('ativaupdater-live-indicator');
+    const messageBox = document.getElementById('ativaupdater-live-message');
+    const csrfToken = () => document.querySelector('meta[property="glpi:csrf_token"]')?.getAttribute('content') || '';
+    let signature = card.dataset.signature || '';
+    let refreshing = false;
+    let failures = 0;
+
+    const setIndicator = (text, ok) => {
+        indicator.innerHTML = '';
+        const dot = document.createElement('i');
+        dot.className = 'fas fa-circle me-1 ' + (ok ? 'text-success' : 'text-danger');
+        dot.style.fontSize = '.6rem';
+        indicator.append(dot, document.createTextNode(text));
+    };
+
+    const showMessage = (text, ok) => {
+        messageBox.innerHTML = '';
+        if (!text) return;
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-dismissible ' + (ok ? 'alert-info' : 'alert-danger');
+        alert.textContent = text;
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'btn-close';
+        close.addEventListener('click', () => alert.remove());
+        alert.append(close);
+        messageBox.append(alert);
+    };
+
+    const refresh = async (force = false) => {
+        if (refreshing || (document.hidden && !force)) return;
+        refreshing = true;
+        try {
+            const url = card.dataset.endpoint + '?signature=' + encodeURIComponent(force ? '' : signature);
+            const response = await fetch(url, {
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+            });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const data = await response.json();
+            if (data.changed && typeof data.html === 'string') {
+                // Keep opened logs open across updates.
+                const opened = Array.from(body.querySelectorAll('details[open][data-key]')).map((item) => item.dataset.key);
+                body.innerHTML = data.html;
+                opened.forEach((key) => body.querySelector('details[data-key="' + CSS.escape(key) + '"]')?.setAttribute('open', ''));
+            }
+            signature = data.signature || signature;
+            failures = 0;
+            setIndicator('Ao vivo · ' + new Date().toLocaleTimeString('pt-BR'), true);
+        } catch (error) {
+            failures += 1;
+            setIndicator(failures > 2 ? 'Sem conexão com o GLPI; tentando novamente' : 'Atualizando...', failures <= 2);
+        } finally {
+            refreshing = false;
         }
-        remaining -= 1;
-        if (target) target.textContent = `Atualização da tela em ${remaining} s`;
-        if (remaining <= 0) window.location.reload();
-    }, 1000);
+    };
+
+    const sendCommand = async (button) => {
+        const command = button.dataset.ativaupdaterCommand;
+        if (button.dataset.confirm && !window.confirm(button.dataset.confirm)) return;
+        const form = new FormData();
+        if (command === 'check_now') {
+            form.append('action', 'check_now');
+        } else {
+            form.append('action', 'client_command');
+            form.append('command', command);
+            form.append('id', button.dataset.clientId);
+        }
+        button.disabled = true;
+        try {
+            const response = await fetch('action.php', {
+                method: 'POST',
+                body: form,
+                credentials: 'same-origin',
+                headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrfToken()},
+            });
+            const data = await response.json().catch(() => null);
+            if (!data) {
+                showMessage('A sessão pode ter expirado. Recarregue a página e tente novamente.', false);
+            } else {
+                showMessage(data.message, data.ok);
+            }
+        } catch (error) {
+            showMessage('Não foi possível enviar o comando: ' + error.message, false);
+        } finally {
+            button.disabled = false;
+            refresh(true);
+        }
+    };
+
+    card.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-ativaupdater-command]');
+        if (!button || button.disabled) return;
+        event.preventDefault();
+        sendCommand(button);
+    });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(true); });
+    window.setInterval(refresh, 3000);
 })();
 </script>
 HTML;

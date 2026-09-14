@@ -34,7 +34,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.6.0"
+CLIENT_VERSION = "1.6.1"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -981,11 +981,37 @@ def reusable_client_token(root: Path, server: str, logger: logging.Logger, api_f
             return None
         if normalize_server_url(str(existing.get("server", ""))) != server:
             return None
-        api_factory(server, token).get_config(None)
     except ClientError as exc:
         logger.info("Existing registration cannot be reused (%s); registering again", exc.code)
         return None
+    try:
+        api_factory(server, token).get_config(None)
+    except ClientError as exc:
+        if exc.retriable:
+            # Server unreachable or overloaded (timeout, 5xx): the token cannot be
+            # checked, but aborting would fail the whole unified installation.
+            # The client keeps using it and re-registers later if it is rejected.
+            logger.warning("Server unavailable (%s); keeping the existing registration", exc.code)
+            return token
+        logger.info("Existing registration cannot be reused (%s); registering again", exc.code)
+        return None
     return token
+
+
+def register_with_retries(
+    api: Any, secret: str, identity: dict[str, str], logger: logging.Logger,
+    delays: tuple[float, ...] = (5, 15, 30), sleep: Callable[[float], None] = time.sleep,
+) -> str:
+    """Register a new computer, retrying transient network failures."""
+    for attempt in range(len(delays) + 1):
+        try:
+            return api.register(secret, identity)
+        except ClientError as exc:
+            if not exc.retriable or attempt >= len(delays):
+                raise
+            logger.warning("Registration failed (%s); retrying in %s seconds", exc.code, delays[attempt])
+            sleep(delays[attempt])
+    raise ClientError("REGISTRATION_FAILED", "Registration failed")
 
 
 def replace_executable(staged: Path, destination: Path, attempts: int = 30, delay_seconds: float = 1.0) -> None:
@@ -1027,7 +1053,9 @@ def install_client(args: argparse.Namespace) -> None:
     if token is not None:
         logger.info("Existing client registration reused")
     else:
-        token = ApiClient(values["server"]).register(str(values["registration_secret"]), identity)
+        token = register_with_retries(
+            ApiClient(values["server"]), str(values["registration_secret"]), identity, logger
+        )
 
     destination = root / EXECUTABLE_NAME
     _safe_unlink(root / "uninstall.flag")

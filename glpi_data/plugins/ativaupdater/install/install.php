@@ -48,6 +48,17 @@ function plugin_ativaupdater_do_install(): bool
             if (!$DB->fieldExists($clientsTable, 'check_ack_seq')) {
                 $migration->addField($clientsTable, 'check_ack_seq', "int unsigned NOT NULL DEFAULT '0'");
             }
+            foreach ([
+                'command'         => 'varchar(32) NULL',
+                'diagnostics_log' => 'mediumtext NULL',
+                'diagnostics_at'  => 'datetime NULL',
+                'recovery_note'   => 'varchar(255) NULL',
+                'recovery_at'     => 'datetime NULL',
+            ] as $field => $definition) {
+                if (!$DB->fieldExists($clientsTable, $field)) {
+                    $migration->addField($clientsTable, $field, $definition);
+                }
+            }
             if (!$DB->fieldExists($clientsTable, 'install_started_at')) {
                 $migration->addField($clientsTable, 'install_started_at', 'datetime NULL');
             }

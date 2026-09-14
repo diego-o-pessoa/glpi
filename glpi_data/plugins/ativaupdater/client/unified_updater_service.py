@@ -5,6 +5,7 @@ import csv
 import ctypes
 from ctypes import wintypes
 import hashlib
+import http.client
 import io
 import json
 import logging
@@ -12,6 +13,7 @@ from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 import re
+import shutil
 import socket
 import ssl
 import subprocess
@@ -26,9 +28,34 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.4.0"
+UPDATER_VERSION = "1.5.0"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
+
+# check_once results.
+RESULT_OK = 0
+RESULT_RETRY = 2
+RESULT_SERVICE_STOPPING = 10
+RESULT_RESTART_NOW = 20
+
+# Commands sent from the dashboard (polled continuously, even during an installation).
+COMMAND_CHECK = "check"
+COMMAND_REINSTALL = "reinstall"
+COMMAND_RESTART_SERVICE = "restart_service"
+COMMAND_SEND_LOGS = "send_logs"
+COMMANDS = (COMMAND_CHECK, COMMAND_REINSTALL, COMMAND_RESTART_SERVICE, COMMAND_SEND_LOGS)
+
+# Transient network failures (timeouts, resets) are retried before a check fails.
+API_RETRY_DELAYS_SECONDS = (5, 15)
+DOWNLOAD_RETRY_DELAYS_SECONDS = (10, 30)
+DIAGNOSTICS_MAX_CHARS = 60000
+
+# Watchdog: a scheduled task that runs a separate copy of this executable.
+WATCHDOG_TASK_NAME = "Ativa Unified Updater Watchdog"
+WATCHDOG_INTERVAL_MINUTES = 15
+WATCHDOG_INSTALL_LIMIT_SECONDS = 2700
+WATCHDOG_HEARTBEAT_LIMIT_SECONDS = 1800
+WATCHDOG_MUTEX_NAME = r"Global\AtivaUnifiedUpdaterWatchdog"
 MAX_INSTALLER_BYTES = 2 * 1024 * 1024 * 1024
 VERSION_RE = re.compile(r"^\d{1,5}\.\d{1,5}\.\d{1,5}$")
 
@@ -81,6 +108,11 @@ WALLPAPER_CLIENT_PATH = PROGRAM_DATA / "AtivaLocacao" / "Wallpaper" / "AtivaWall
 WALLPAPER_LOG_DIR = PROGRAM_DATA / "AtivaLocacao" / "Wallpaper" / "logs"
 MSI_LOG_PATH = LOG_DIR / "glpi-agent-msi.log"
 INSTALL_FAILURE_LOG_PATH = LOG_DIR / "install-failure.log"
+SERVICE_EXE = PRODUCT_DIR / "AtivaUnifiedUpdater.exe"
+WATCHDOG_DIR = PRODUCT_DIR / "watchdog"
+WATCHDOG_EXE = WATCHDOG_DIR / "AtivaUnifiedUpdater.exe"
+HEARTBEAT_PATH = PRODUCT_DIR / "heartbeat.json"
+RECOVERY_MARKER_PATH = PRODUCT_DIR / "watchdog-recovery.json"
 MUTEX_NAME = r"Global\AtivaUnifiedUpdater"
 
 
@@ -90,6 +122,10 @@ class UpdaterError(RuntimeError):
 
 class NoReleaseError(UpdaterError):
     pass
+
+
+class OperationCancelled(UpdaterError):
+    """The dashboard asked to cancel the current work and start over."""
 
 
 class SingleInstance:
@@ -121,15 +157,16 @@ class NoRedirect(HTTPRedirectHandler):
         raise UpdaterError(f"Redirecionamento HTTP inesperado ({code}).")
 
 
-def configure_logging(debug: bool = False) -> logging.Logger:
+def configure_logging(debug: bool = False, filename: str = "service.log") -> logging.Logger:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    logger = logging.getLogger("AtivaUnifiedUpdater")
+    logger = logging.getLogger("AtivaUnifiedUpdater." + filename)
     for handler in logger.handlers[:]:
         handler.close()
         logger.removeHandler(handler)
     logger.setLevel(logging.DEBUG if debug else logging.INFO)
+    logger.propagate = False
     file_handler = RotatingFileHandler(
-        LOG_DIR / "service.log", maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+        LOG_DIR / filename, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
     )
     file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     logger.addHandler(file_handler)
@@ -400,11 +437,13 @@ def supervise_installer(
     timeout_seconds: float = INSTALL_TIMEOUT_SECONDS,
     poll_seconds: float = 2.0,
     clock: Callable[[], float] = time.monotonic,
+    cancel_requested: Callable[[], bool] = lambda: False,
 ) -> tuple[str, int | None]:
-    """Wait for the installer: ('exited', code), ('stopping', None) or ('timeout', None).
+    """Wait for the installer: ('exited', code), ('stopping'|'cancelled'|'timeout', None).
 
     'stopping' means the installer is restarting this service to switch to the
     new executable; the installer keeps running and must not be killed.
+    'cancelled' means the dashboard asked to start over.
     """
     deadline = clock() + timeout_seconds
     while True:
@@ -413,6 +452,8 @@ def supervise_installer(
             return "exited", int(code)
         if stop_requested():
             return "stopping", None
+        if cancel_requested():
+            return "cancelled", None
         if clock() >= deadline:
             return "timeout", None
         try:
@@ -441,7 +482,8 @@ def cleanup_downloads(keep: Path | None = None) -> None:
     except OSError:
         return
     for path in candidates:
-        if keep is not None and path.name.lower() == keep.name.lower():
+        # Keeps the current installer and its resumable partial download.
+        if keep is not None and path.name.lower().startswith(keep.name.lower()):
             continue
         try:
             path.unlink()
@@ -721,12 +763,24 @@ def glpi_agent_version() -> str:
     return ""
 
 
+def is_transient_network_error(exc: BaseException) -> bool:
+    """Connection problems worth retrying (timeouts, resets, gateway errors)."""
+    if isinstance(exc, HTTPError):
+        return exc.code in (408, 429, 502, 503, 504)
+    return isinstance(exc, (URLError, OSError))
+
+
 class ApiClient:
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: dict[str, Any], retry_sleep: Callable[[float], None] = time.sleep):
         self.base_url = str(config["api_url"])
         self.token = str(config["api_token"])
         self.origin = self._origin(self.base_url)
         self.opener = build_opener(NoRedirect(), HTTPSHandler(context=ssl.create_default_context()))
+        self.retry_sleep = retry_sleep
+        # Highest dashboard command received; sent with every report as acknowledgement.
+        self.command_seq: int | None = None
+        # Note left by the watchdog after repairing this computer.
+        self.recovery_note: str | None = None
 
     @staticmethod
     def _origin(url: str) -> tuple[str, str, int]:
@@ -734,29 +788,49 @@ class ApiClient:
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
         return parsed.scheme.lower(), (parsed.hostname or "").lower(), port
 
-    def _request(self, url: str, *, method: str = "GET", data: bytes | None = None, timeout: int = 60):
+    def _request(
+        self,
+        url: str,
+        *,
+        method: str = "GET",
+        data: bytes | None = None,
+        timeout: int = 60,
+        headers: dict[str, str] | None = None,
+        retry_delays: tuple[float, ...] = (),
+    ):
         if self._origin(url) != self.origin:
             raise UpdaterError("A API retornou um endereco de download fora da origem permitida.")
-        headers = {
+        request_headers = {
             "Authorization": f"Bearer {self.token}",
             "Accept": "application/json",
             "User-Agent": f"AtivaUnifiedUpdater/{UPDATER_VERSION}",
         }
         if data is not None:
-            headers["Content-Type"] = "application/json"
-        request = Request(url, data=data, headers=headers, method=method)
-        try:
-            return self.opener.open(request, timeout=timeout)
-        except HTTPError as exc:
-            body = exc.read(4096).decode("utf-8", errors="replace")
-            if exc.code == 404 and '"NO_RELEASE"' in body:
-                raise NoReleaseError("Nenhuma versao foi publicada.") from exc
-            raise UpdaterError(f"API respondeu HTTP {exc.code}: {body}") from exc
-        except (URLError, OSError) as exc:
-            raise UpdaterError(f"Falha de comunicacao com a API: {exc}") from exc
+            request_headers["Content-Type"] = "application/json"
+        request_headers.update(headers or {})
+        for attempt in range(len(retry_delays) + 1):
+            request = Request(url, data=data, headers=request_headers, method=method)
+            try:
+                return self.opener.open(request, timeout=timeout)
+            except HTTPError as exc:
+                body = exc.read(4096).decode("utf-8", errors="replace")
+                if exc.code == 404 and '"NO_RELEASE"' in body:
+                    raise NoReleaseError("Nenhuma versao foi publicada.") from exc
+                if attempt < len(retry_delays) and is_transient_network_error(exc):
+                    self.retry_sleep(retry_delays[attempt])
+                    continue
+                raise UpdaterError(f"API respondeu HTTP {exc.code}: {body}") from exc
+            except (URLError, OSError) as exc:
+                if attempt < len(retry_delays):
+                    self.retry_sleep(retry_delays[attempt])
+                    continue
+                raise UpdaterError(
+                    f"Falha de comunicacao com a API apos {attempt + 1} tentativa(s): {exc}"
+                ) from exc
+        raise UpdaterError("Falha de comunicacao com a API.")
 
     def latest(self) -> dict[str, Any]:
-        with self._request(self.base_url + "/latest") as response:
+        with self._request(self.base_url + "/latest", retry_delays=API_RETRY_DELAYS_SECONDS) as response:
             if "application/json" not in response.headers.get("Content-Type", ""):
                 raise UpdaterError("A API respondeu latest com tipo de conteudo invalido.")
             payload = json.loads(response.read(65537).decode("utf-8"))
@@ -797,11 +871,22 @@ class ApiClient:
         }
         if install_log is not None:
             payload["install_log"] = install_log[:INSTALL_LOG_MAX_CHARS]
+        if self.command_seq is not None:
+            payload["command_seq"] = int(self.command_seq)
+        recovery_note = self.recovery_note
+        if recovery_note:
+            payload["recovery_note"] = recovery_note[:255]
         data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-        with self._request(self.base_url + "/status", method="POST", data=data, timeout=30) as response:
+        with self._request(
+            self.base_url + "/status", method="POST", data=data, timeout=30, retry_delays=API_RETRY_DELAYS_SECONDS
+        ) as response:
             response.read(4096)
+        if recovery_note:
+            self.recovery_note = None
+            RECOVERY_MARKER_PATH.unlink(missing_ok=True)
 
-    def command_pending(self) -> bool:
+    def commands(self) -> dict[str, Any]:
+        """Pending dashboard command: {'pending': bool, 'seq': int, 'command': str | None}."""
         url = self.base_url + "/commands/" + quote(machine_guid(), safe="")
         with self._request(url, timeout=30) as response:
             if "application/json" not in response.headers.get("Content-Type", ""):
@@ -809,37 +894,120 @@ class ApiClient:
             payload = json.loads(response.read(65537).decode("utf-8"))
         if not isinstance(payload, dict) or not isinstance(payload.get("check_now"), bool):
             raise UpdaterError("Resposta de comandos invalida.")
-        return bool(payload["check_now"])
+        return parse_command_response(payload)
 
-    def download(self, release: dict[str, Any], destination: Path) -> None:
-        temporary = destination.with_suffix(".part")
-        temporary.unlink(missing_ok=True)
+    def send_diagnostics(self, diagnostics: str) -> None:
+        payload = {
+            "machine_guid": machine_guid(),
+            "hostname": socket.gethostname(),
+            "updater_version": UPDATER_VERSION,
+            "diagnostics": diagnostics[:DIAGNOSTICS_MAX_CHARS],
+        }
+        if self.command_seq is not None:
+            payload["command_seq"] = int(self.command_seq)
+        data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        with self._request(
+            self.base_url + "/diagnostics", method="POST", data=data, timeout=60, retry_delays=API_RETRY_DELAYS_SECONDS
+        ) as response:
+            response.read(4096)
+
+    def download(
+        self,
+        release: dict[str, Any],
+        destination: Path,
+        cancel_requested: Callable[[], bool] = lambda: False,
+    ) -> None:
+        """Download and validate the installer, resuming a previous partial download."""
+        size = int(release["size"])
+        expected_sha256 = str(release["sha256"])
+        partial = destination.with_name(f"{destination.name}.{expected_sha256[:16]}.part")
+        offset = partial.stat().st_size if partial.is_file() else 0
+        if offset > size:
+            partial.unlink(missing_ok=True)
+            offset = 0
         digest = hashlib.sha256()
-        received = 0
-        try:
-            with self._request(str(release["download_url"]), timeout=300) as response, temporary.open("wb") as stream:
+        if offset:
+            with partial.open("rb") as existing:
+                for block in iter(lambda: existing.read(1024 * 1024), b""):
+                    digest.update(block)
+        headers = {"Range": f"bytes={offset}-"} if 0 < offset < size else None
+        received = offset
+        if offset < size:
+            try:
+                response_context = self._request(str(release["download_url"]), timeout=300, headers=headers)
+            except UpdaterError as exc:
+                if "HTTP 416" in str(exc):
+                    partial.unlink(missing_ok=True)
+                raise
+            with response_context as response:
                 content_type = response.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
                 if content_type != "application/octet-stream":
                     raise UpdaterError(f"Tipo de conteudo inesperado: {content_type}")
-                while True:
-                    block = response.read(1024 * 1024)
-                    if not block:
-                        break
-                    received += len(block)
-                    if received > int(release["size"]) or received > MAX_INSTALLER_BYTES:
-                        raise UpdaterError("O download excedeu o tamanho publicado.")
-                    digest.update(block)
-                    stream.write(block)
-                stream.flush()
-                os.fsync(stream.fileno())
-            if received != int(release["size"]) or digest.hexdigest() != str(release["sha256"]):
-                raise UpdaterError("O tamanho ou SHA-256 do instalador nao confere.")
-            with temporary.open("rb") as stream:
-                if stream.read(2) != b"MZ":
-                    raise UpdaterError("O arquivo baixado nao e um executavel Windows.")
-            os.replace(temporary, destination)
-        finally:
-            temporary.unlink(missing_ok=True)
+                if headers and getattr(response, "status", 200) != 206:
+                    # The server ignored the range: start over.
+                    digest = hashlib.sha256()
+                    received = 0
+                with partial.open("ab" if received else "wb") as stream:
+                    while True:
+                        if cancel_requested():
+                            raise OperationCancelled("Download cancelado pelo dashboard.")
+                        block = response.read(1024 * 1024)
+                        if not block:
+                            break
+                        received += len(block)
+                        if received > size or received > MAX_INSTALLER_BYTES:
+                            partial.unlink(missing_ok=True)
+                            raise UpdaterError("O download excedeu o tamanho publicado.")
+                        digest.update(block)
+                        stream.write(block)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+        if received != size:
+            raise UpdaterError(f"Download incompleto: {received} de {size} bytes; sera retomado.")
+        if digest.hexdigest() != expected_sha256:
+            partial.unlink(missing_ok=True)
+            raise UpdaterError("O SHA-256 do instalador nao confere.")
+        with partial.open("rb") as stream:
+            if stream.read(2) != b"MZ":
+                partial.unlink(missing_ok=True)
+                raise UpdaterError("O arquivo baixado nao e um executavel Windows.")
+        os.replace(partial, destination)
+
+
+def parse_command_response(payload: dict[str, Any]) -> dict[str, Any]:
+    pending = payload.get("check_now") is True
+    seq = payload.get("request_seq")
+    seq = seq if isinstance(seq, int) and not isinstance(seq, bool) and seq >= 0 else 0
+    command = payload.get("command")
+    if command not in COMMANDS:
+        command = COMMAND_CHECK if pending else None
+    return {"pending": pending, "seq": seq, "command": command if pending else None}
+
+
+def download_with_retries(
+    api: ApiClient,
+    release: dict[str, Any],
+    destination: Path,
+    logger: logging.Logger,
+    cancel_requested: Callable[[], bool] = lambda: False,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    delays = DOWNLOAD_RETRY_DELAYS_SECONDS
+    for attempt in range(len(delays) + 1):
+        try:
+            api.download(release, destination, cancel_requested)
+            return
+        except OperationCancelled:
+            raise
+        except (UpdaterError, OSError, http.client.HTTPException) as exc:
+            if attempt >= len(delays):
+                if isinstance(exc, UpdaterError):
+                    raise
+                raise UpdaterError(f"Falha no download do instalador: {exc}") from exc
+            logger.warning("Download interrompido (%s); retomando em %s segundos.", exc, delays[attempt])
+            sleep(delays[attempt])
+            if cancel_requested():
+                raise OperationCancelled("Download cancelado pelo dashboard.") from exc
 
 
 def launch_installer(path: Path, logger: logging.Logger) -> tuple[Any, Path]:
@@ -904,16 +1072,45 @@ def report_install_failure(
     return 0 if exhausted else 2
 
 
+def read_recovery_note() -> str | None:
+    """Note left by the watchdog after it repaired this computer."""
+    if not RECOVERY_MARKER_PATH.is_file():
+        return None
+    try:
+        data = load_json(RECOVERY_MARKER_PATH)
+    except UpdaterError:
+        RECOVERY_MARKER_PATH.unlink(missing_ok=True)
+        return None
+    note = f"{data.get('at', '')} {data.get('note', '')}".strip()
+    return note[:255] or None
+
+
+def cancel_running_installation(state: dict[str, Any], logger: logging.Logger) -> bool:
+    """Kill any running unified installer and forget the pending installation and failures."""
+    setup_pids = running_setup_processes()
+    for pid in setup_pids:
+        kill_process_tree(pid)
+    had_pending = bool(state.get("pending_version"))
+    clear_pending_install(state)
+    clear_install_failures(state)
+    if setup_pids or had_pending:
+        logger.warning("Instalacao em andamento cancelada pelo dashboard (PIDs %s).", setup_pids)
+    return bool(setup_pids or had_pending)
+
+
 def check_once(
     logger: logging.Logger,
     manual: bool = False,
     stop_requested: Callable[[], bool] = lambda: False,
+    cancel_requested: Callable[[], bool] = lambda: False,
+    command: str | None = None,
+    command_seq: int | None = None,
 ) -> int:
     try:
         config = validate_config(load_json(CONFIG_PATH))
     except (UpdaterError, ValueError, TypeError) as exc:
         logger.error("Configuracao do servico invalida; nova tentativa em 5 minutos: %s", exc)
-        return 2
+        return RESULT_RETRY
     state = get_state()
     installed = str(state.get("installed_version", "0.0.0"))
     if not VERSION_RE.fullmatch(installed):
@@ -922,8 +1119,17 @@ def check_once(
         logger.warning("installed_version invalida no estado local (%r); considerando 0.0.0.", installed)
         installed = "0.0.0"
     api = ApiClient(config)
+    api.command_seq = command_seq
+    api.recovery_note = read_recovery_note()
+    # "Verificar agora" and "Reinstalar" abandon whatever was in progress and start over.
+    restart_requested = command in (COMMAND_CHECK, COMMAND_REINSTALL)
     try:
-        if manual and state.get("failed_attempts"):
+        cancelled_note = ""
+        if restart_requested:
+            if cancel_running_installation(state, logger):
+                cancelled_note = " A instalacao que estava em andamento foi cancelada."
+            atomic_json(STATE_PATH, state)
+        elif manual and state.get("failed_attempts"):
             clear_install_failures(state)
             atomic_json(STATE_PATH, state)
             logger.info("Verificacao manual: contador de falhas de instalacao zerado.")
@@ -946,12 +1152,16 @@ def check_once(
                         f"Instalacao de {pending_version} em andamento; aguardando o instalador terminar.",
                     )
                     logger.info("Instalador de %s ainda em execucao (PIDs %s).", pending_version, setup_pids)
-                    return 2
+                    return RESULT_RETRY
                 for pid in setup_pids:
                     kill_process_tree(pid)
                 return report_install_failure(api, state, logger, "timeout" if setup_pids else "missing")
 
-        api.report("checking", installed, message="Consultando a versao publicada.")
+        start_message = {
+            COMMAND_CHECK: "Verificacao reiniciada pelo dashboard.",
+            COMMAND_REINSTALL: "Reinstalacao solicitada pelo dashboard.",
+        }.get(command or "", "Consultando a versao publicada.")
+        api.report("checking", installed, message=start_message + cancelled_note)
         try:
             release = api.latest()
         except NoReleaseError:
@@ -966,13 +1176,17 @@ def check_once(
                 message="Computador registrado; aguardando a primeira versao publicada.",
             )
             logger.info("Nenhuma versao publicada; nova consulta no intervalo configurado.")
-            return 0
+            return RESULT_OK
         available = str(release["version"])
         interval = max(300, min(86400, int(release.get("check_interval_seconds", config["check_interval_seconds"]))))
         state["last_check"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
         state["last_available_version"] = available
         state["check_interval_seconds"] = interval
         action = decide_action(installed, available, bool(release["allow_downgrade"]))
+        reinstall = command == COMMAND_REINSTALL and action == ACTION_CURRENT
+        if reinstall:
+            # Repair: install the same published package again.
+            action = ACTION_UPGRADE
         if action in (ACTION_CURRENT, ACTION_BLOCKED_DOWNGRADE):
             status = "current"
             if action == ACTION_CURRENT:
@@ -990,12 +1204,14 @@ def check_once(
                     f"Versao instalada {installed} e superior a publicada {available}; "
                     "downgrade nao autorizado no dashboard."
                 )
+                if command == COMMAND_REINSTALL:
+                    message = "Reinstalacao nao aplicada: " + message
             state["last_result"] = "current"
             state["last_error"] = ""
             atomic_json(STATE_PATH, state)
             api.report(status, installed, available, message)
             logger.info("Versao atual %s; publicada %s (%s). Nenhuma acao necessaria.", installed, available, action)
-            return 0
+            return RESULT_OK
 
         blocked = install_block_reason(state, release, time.time())
         if blocked is not None:
@@ -1005,20 +1221,29 @@ def check_once(
             atomic_json(STATE_PATH, state)
             api.report(status, installed, available, message)
             logger.warning(message)
-            return 0 if status == STATUS_INSTALL_FAILED else 2
+            return RESULT_OK if status == STATUS_INSTALL_FAILED else RESULT_RETRY
 
+        if cancel_requested():
+            raise OperationCancelled("Verificacao cancelada pelo dashboard.")
         is_rollback = action == ACTION_DOWNGRADE
         attempt = attempt_number(state, available, release["sha256"])
         attempt_label = f"tentativa {attempt} de {TOTAL_INSTALL_ATTEMPTS}"
+        if reinstall:
+            download_message = f"Reinstalacao: baixando a versao {available} ({attempt_label})."
+            install_message = f"Reinstalacao da versao {available} iniciada ({attempt_label})."
+        elif is_rollback:
+            download_message = f"Rollback: baixando a versao {available} para substituir a {installed} ({attempt_label})."
+            install_message = f"Rollback: voltando de {installed} para {available}; instalacao silenciosa iniciada ({attempt_label})."
+        else:
+            download_message = f"Baixando e validando o instalador ({attempt_label})."
+            install_message = f"Instalacao silenciosa iniciada ({attempt_label})."
         DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
         destination = DOWNLOAD_DIR / f"Ativa-Unified-Agent-Setup-{available}.exe"
         cleanup_downloads(keep=destination)
-        api.report(
-            "downloading", installed, available,
-            f"Rollback: baixando a versao {available} para substituir a {installed} ({attempt_label})."
-            if is_rollback else f"Baixando e validando o instalador ({attempt_label}).",
-        )
-        api.download(release, destination)
+        api.report("downloading", installed, available, download_message)
+        download_with_retries(api, release, destination, logger, cancel_requested)
+        if cancel_requested():
+            raise OperationCancelled("Verificacao cancelada pelo dashboard.")
         state["last_result"] = "installing"
         state["pending_version"] = available
         state["pending_sha256"] = release["sha256"]
@@ -1026,18 +1251,23 @@ def check_once(
         state["pending_started_at"] = time.time()
         state["last_error"] = ""
         atomic_json(STATE_PATH, state)
-        api.report(
-            "installing", installed, available,
-            f"Rollback: voltando de {installed} para {available}; instalacao silenciosa iniciada ({attempt_label})."
-            if is_rollback else f"Instalacao silenciosa iniciada ({attempt_label}).",
-        )
+        api.report("installing", installed, available, install_message)
         process, installer_log = launch_installer(destination, logger)
-        outcome, exit_code = supervise_installer(process, stop_requested)
+        outcome, exit_code = supervise_installer(process, stop_requested, cancel_requested=cancel_requested)
         if outcome == "stopping":
             # Expected on success: the installer restarts the service to run the
             # new executable, and the new process reports the result.
             logger.info("Instalador reiniciando o servico para concluir a atualizacao para %s.", available)
-            return 10
+            return RESULT_SERVICE_STOPPING
+        if outcome == "cancelled":
+            kill_process_tree(process.pid)
+            for pid in running_setup_processes():
+                kill_process_tree(pid)
+            refreshed = get_state()
+            clear_pending_install(refreshed)
+            atomic_json(STATE_PATH, refreshed)
+            logger.warning("Instalacao de %s cancelada pelo dashboard; recomecando a verificacao.", available)
+            return RESULT_RESTART_NOW
 
         # Re-read the state: --configure rewrites it when the package is installed.
         refreshed = get_state()
@@ -1046,7 +1276,7 @@ def check_once(
             atomic_json(STATE_PATH, refreshed)
             api.report("updated", available, available, f"Versao {available} instalada com sucesso.")
             logger.info("Instalacao de %s concluida.", available)
-            return 0
+            return RESULT_OK
         if outcome == "timeout":
             kill_process_tree(process.pid)
             for pid in running_setup_processes():
@@ -1058,6 +1288,9 @@ def check_once(
             if key in state:
                 refreshed[key] = state[key]
         return report_install_failure(api, refreshed, logger, outcome, exit_code, installer_log)
+    except OperationCancelled:
+        logger.info("Verificacao cancelada pelo dashboard; recomecando.")
+        return RESULT_RESTART_NOW
     except Exception as exc:
         # Re-read before writing: the installer may have rewritten the state
         # (--configure) while this check was running.
@@ -1074,7 +1307,7 @@ def check_once(
         except Exception:
             logger.exception("Tambem falhou o envio do status de erro.")
         logger.exception("Falha ao verificar ou instalar atualizacao.")
-        return 2
+        return RESULT_RETRY
 
 
 def configure_service(config_source: Path, installed_version: str) -> int:
@@ -1089,21 +1322,27 @@ def configure_service(config_source: Path, installed_version: str) -> int:
         # inheritable (OI)(CI) grants only remained on the parent directory,
         # leaving the service executable with an empty ACL. Reset children
         # first, then protect only the root; children inherit SYSTEM/Admin.
-        subprocess.run(
-            ["icacls.exe", str(PRODUCT_DIR), "/reset", "/T", "/C"],
-            check=True,
-            capture_output=True,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        subprocess.run(
-            [
-                "icacls.exe", str(PRODUCT_DIR), "/inheritance:r",
-                "/grant:r", "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F",
-            ],
-            check=True,
-            capture_output=True,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
+        # A file icacls cannot process (e.g. locked by antivirus) must not abort
+        # the whole installation: the result is logged for diagnostics instead.
+        acl_log = []
+        for arguments in (
+            [str(PRODUCT_DIR), "/reset", "/T", "/C"],
+            [str(PRODUCT_DIR), "/inheritance:r", "/grant:r", "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F"],
+        ):
+            completed = subprocess.run(
+                ["icacls.exe", *arguments],
+                capture_output=True,
+                text=True,
+                errors="replace",
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            acl_log.append(f"icacls {' '.join(arguments)} -> {completed.returncode}\n{completed.stdout}{completed.stderr}")
+        try:
+            (LOG_DIR / "configure.log").write_text(
+                time.strftime("%Y-%m-%d %H:%M:%S") + "\n" + "\n".join(acl_log), encoding="utf-8"
+            )
+        except OSError:
+            pass
     atomic_json(CONFIG_PATH, config)
     previous = get_state()
     previous.update({
@@ -1118,44 +1357,494 @@ def configure_service(config_source: Path, installed_version: str) -> int:
     return 0
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def write_heartbeat() -> None:
+    """Proof of life read by the watchdog."""
+    try:
+        atomic_json(HEARTBEAT_PATH, {
+            "at": time.time(),
+            # PyInstaller onefile: the service PID known by Windows is the
+            # bootloader, i.e. the parent of this Python process.
+            "pids": [os.getpid(), os.getppid()],
+            "version": UPDATER_VERSION,
+        })
+    except OSError:
+        pass
+
+
+def heartbeat_age(now: float, service_pid: int | None = None) -> float | None:
+    """Seconds since the last heartbeat; None when unknown or written by another process."""
+    try:
+        heartbeat = load_json(HEARTBEAT_PATH)
+        value = float(heartbeat.get("at", 0) or 0)
+    except (UpdaterError, TypeError, ValueError):
+        return None
+    if service_pid is not None and service_pid not in heartbeat.get("pids", []):
+        # Services older than 1.5.0 write no heartbeat; a stale file from a
+        # previous version must not make the watchdog restart them.
+        return None
+    return now - value if value > 0 else None
+
+
+def running_executable() -> Path | None:
+    return Path(sys.executable) if getattr(sys, "frozen", False) else None
+
+
+def promote_known_good(logger: logging.Logger) -> bool:
+    """Keep a copy of a service executable that reached the API, used by the watchdog."""
+    source = running_executable()
+    if os.name != "nt" or source is None or not source.is_file():
+        return True
+    try:
+        WATCHDOG_DIR.mkdir(parents=True, exist_ok=True)
+        if WATCHDOG_EXE.is_file() and file_sha256(WATCHDOG_EXE) == file_sha256(source):
+            return True
+        staged = WATCHDOG_EXE.with_name(WATCHDOG_EXE.name + ".new")
+        shutil.copy2(source, staged)
+        os.replace(staged, WATCHDOG_EXE)
+        logger.info("Copia de seguranca do servico %s disponivel para o vigia.", UPDATER_VERSION)
+        return True
+    except OSError as exc:
+        # The watchdog may be running from that copy; try again on the next check.
+        logger.warning("Nao foi possivel atualizar a copia de seguranca do vigia: %s", exc)
+        return False
+
+
+def ensure_watchdog_task(logger: logging.Logger) -> None:
+    """Recreate the watchdog scheduled task if someone removed it."""
+    if os.name != "nt":
+        return
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        query = subprocess.run(
+            ["schtasks.exe", "/Query", "/TN", WATCHDOG_TASK_NAME], capture_output=True, timeout=60, creationflags=flags
+        )
+        if query.returncode == 0:
+            return
+        if not WATCHDOG_EXE.is_file():
+            promote_known_good(logger)
+        if not WATCHDOG_EXE.is_file():
+            return
+        created = subprocess.run(
+            [
+                "schtasks.exe", "/Create", "/F", "/TN", WATCHDOG_TASK_NAME, "/RU", "SYSTEM", "/RL", "HIGHEST",
+                "/SC", "MINUTE", "/MO", str(WATCHDOG_INTERVAL_MINUTES), "/TR", f'"{WATCHDOG_EXE}" --watchdog',
+            ],
+            capture_output=True, timeout=60, creationflags=flags,
+        )
+        logger.info("Tarefa do vigia recriada (codigo %s).", created.returncode)
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("Nao foi possivel verificar a tarefa do vigia: %s", exc)
+
+
+def schedule_service_restart(logger: logging.Logger) -> None:
+    """Start the service again a few seconds after this process stops it."""
+    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    subprocess.Popen(
+        f'cmd.exe /c "ping -n 9 127.0.0.1 >nul & sc.exe start {SERVICE_NAME}"',
+        close_fds=True,
+        creationflags=flags,
+    )
+    logger.warning("Reinicio do servico solicitado pelo dashboard.")
+
+
+def collect_diagnostics() -> str:
+    """Logs and state sent to the dashboard on request ("Enviar logs"). No secrets."""
+    now = time.time()
+    state = get_state()
+    try:
+        service = query_service()
+    except OSError as exc:
+        service = f"erro: {exc}"
+    try:
+        free_bytes = shutil.disk_usage(PROGRAM_DATA).free
+    except OSError:
+        free_bytes = -1
+    age = heartbeat_age(now)
+    lines = [
+        f"Ativa Unified Updater {UPDATER_VERSION} - diagnostico",
+        f"Data: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"Computador: {socket.gethostname()}",
+        f"Servico (estado, PID): {service}",
+        f"Heartbeat: {'ha ' + str(int(age)) + ' s' if age is not None else 'nenhum'}",
+        f"Instaladores em execucao (PIDs): {running_setup_processes()}",
+        f"Espaco livre em ProgramData: {free_bytes // (1024 * 1024) if free_bytes >= 0 else '?'} MB",
+        f"Copia do vigia: {'presente' if WATCHDOG_EXE.is_file() else 'ausente'}",
+        "Estado local: " + json.dumps(state, ensure_ascii=False, sort_keys=True),
+    ]
+    sections = [
+        ("Servico (service.log)", LOG_DIR / "service.log", 200),
+        ("Vigia (watchdog.log)", LOG_DIR / "watchdog.log", 60),
+        ("Ultima falha de instalacao", INSTALL_FAILURE_LOG_PATH, 80),
+        ("Configuracao (configure.log)", LOG_DIR / "configure.log", 30),
+    ]
+    installer_log = newest_file(LOG_DIR, "installer-*.log")
+    if installer_log:
+        sections.append((f"Instalador ({installer_log.name})", installer_log, 80))
+    wallpaper_log = newest_file(WALLPAPER_LOG_DIR, "client-*.log")
+    if wallpaper_log:
+        sections.append((f"Wallpaper Client ({wallpaper_log.name})", wallpaper_log, 40))
+    for title, path, max_lines in sections:
+        if path.is_file():
+            lines.append("")
+            lines.append(f"== {title} ==")
+            lines.extend(read_log_tail(path, max_lines))
+    text = "\n".join(lines)
+    if len(text) > DIAGNOSTICS_MAX_CHARS:
+        header = "\n".join(lines[:9])
+        text = header + "\n...\n" + text[-(DIAGNOSTICS_MAX_CHARS - len(header) - 5):]
+    return text
+
+
+# --- Watchdog -------------------------------------------------------------
+
+SC_MANAGER_CONNECT = 0x0001
+SERVICE_QUERY_STATUS_ACCESS = 0x0004
+SC_STATUS_PROCESS_INFO = 0
+ERROR_SERVICE_DOES_NOT_EXIST = 1060
+SERVICE_STATE_STOPPED = 1
+SERVICE_STATE_START_PENDING = 2
+SERVICE_STATE_STOP_PENDING = 3
+SERVICE_STATE_RUNNING = 4
+
+
+class SERVICE_STATUS_PROCESS(ctypes.Structure):
+    _fields_ = [
+        ("dwServiceType", wintypes.DWORD),
+        ("dwCurrentState", wintypes.DWORD),
+        ("dwControlsAccepted", wintypes.DWORD),
+        ("dwWin32ExitCode", wintypes.DWORD),
+        ("dwServiceSpecificExitCode", wintypes.DWORD),
+        ("dwCheckPoint", wintypes.DWORD),
+        ("dwWaitHint", wintypes.DWORD),
+        ("dwProcessId", wintypes.DWORD),
+        ("dwServiceFlags", wintypes.DWORD),
+    ]
+
+
+def query_service(name: str = SERVICE_NAME) -> tuple[int, int] | None:
+    """(state, pid) of a Windows service, or None when it is not installed."""
+    if os.name != "nt":
+        return None
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    advapi32.OpenSCManagerW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
+    advapi32.OpenSCManagerW.restype = wintypes.HANDLE
+    advapi32.OpenServiceW.argtypes = [wintypes.HANDLE, wintypes.LPCWSTR, wintypes.DWORD]
+    advapi32.OpenServiceW.restype = wintypes.HANDLE
+    advapi32.QueryServiceStatusEx.argtypes = [
+        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD),
+    ]
+    advapi32.QueryServiceStatusEx.restype = wintypes.BOOL
+    advapi32.CloseServiceHandle.argtypes = [wintypes.HANDLE]
+    manager = advapi32.OpenSCManagerW(None, None, SC_MANAGER_CONNECT)
+    if not manager:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        service = advapi32.OpenServiceW(manager, name, SERVICE_QUERY_STATUS_ACCESS)
+        if not service:
+            error = ctypes.get_last_error()
+            if error == ERROR_SERVICE_DOES_NOT_EXIST:
+                return None
+            raise ctypes.WinError(error)
+        try:
+            status = SERVICE_STATUS_PROCESS()
+            needed = wintypes.DWORD()
+            if not advapi32.QueryServiceStatusEx(
+                service, SC_STATUS_PROCESS_INFO, ctypes.byref(status), ctypes.sizeof(status), ctypes.byref(needed)
+            ):
+                raise ctypes.WinError(ctypes.get_last_error())
+            return int(status.dwCurrentState), int(status.dwProcessId)
+        finally:
+            advapi32.CloseServiceHandle(service)
+    finally:
+        advapi32.CloseServiceHandle(manager)
+
+
+def plan_watchdog(
+    service: tuple[int, int] | None,
+    setup_running: bool,
+    install_age: float | None,
+    heartbeat_seconds: float | None,
+    exe_healthy: Callable[[], bool],
+) -> list[str]:
+    """Repair actions for the current situation, in execution order.
+
+    install_age is how long an installer has been running (from the pending
+    installation or from when the watchdog first saw it).
+    """
+    actions: list[str] = []
+    if setup_running:
+        if install_age is None or install_age <= WATCHDOG_INSTALL_LIMIT_SECONDS:
+            return []  # A legitimate installation may have stopped the service.
+        actions.append("kill_setup")
+    if service is not None:
+        if service[0] == SERVICE_STATE_RUNNING:
+            if heartbeat_seconds is not None and heartbeat_seconds > WATCHDOG_HEARTBEAT_LIMIT_SECONDS:
+                actions.append("restart_service")
+            return actions
+        if service[0] == SERVICE_STATE_START_PENDING:
+            return actions
+    if not exe_healthy():
+        actions.append("restore_exe")
+    if service is None:
+        actions.append("create_service")
+    if service is not None and service[0] == SERVICE_STATE_STOP_PENDING:
+        actions.append("restart_service")
+    else:
+        actions.append("start_service")
+    return actions
+
+
+def setup_running_age(setup_running: bool, state: dict[str, Any], now: float) -> float | None:
+    """How long the installer has been running, remembering when the watchdog first saw it."""
+    watchdog_state_path = PRODUCT_DIR / "watchdog-state.json"
+    try:
+        watchdog_state = load_json(watchdog_state_path) if watchdog_state_path.is_file() else {}
+    except UpdaterError:
+        watchdog_state = {}
+    if not setup_running:
+        if watchdog_state.pop("setup_first_seen", None) is not None:
+            atomic_json(watchdog_state_path, watchdog_state)
+        return None
+    started_at = float(state.get("pending_started_at", 0) or 0) if state.get("pending_version") else 0.0
+    first_seen = float(watchdog_state.get("setup_first_seen", 0) or 0)
+    if not first_seen:
+        first_seen = now
+        watchdog_state["setup_first_seen"] = now
+        atomic_json(watchdog_state_path, watchdog_state)
+    # The youngest estimate wins: a stale pending installation must not get a
+    # freshly started (e.g. manual) installer killed.
+    return min(now - first_seen, now - started_at) if started_at else now - first_seen
+
+
+def service_exe_healthy() -> bool:
+    """The service executable exists and starts ("--version" works in every service version)."""
+    if not SERVICE_EXE.is_file():
+        return False
+    try:
+        completed = subprocess.run(
+            [str(SERVICE_EXE), "--version"],
+            capture_output=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        return completed.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def run_sc(*arguments: str, timeout: int = 60) -> int:
+    try:
+        return subprocess.run(
+            ["sc.exe", *arguments], capture_output=True, timeout=timeout,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        ).returncode
+    except (OSError, subprocess.SubprocessError):
+        return -1
+
+
+def wait_service_state(expected: int, timeout_seconds: float, sleep: Callable[[float], None] = time.sleep) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        current = query_service()
+        if current is not None and current[0] == expected:
+            return True
+        sleep(2)
+    return False
+
+
+def restore_service_executable(logger: logging.Logger) -> bool:
+    source = running_executable() or WATCHDOG_EXE
+    if not source.is_file() or source.resolve() == SERVICE_EXE.resolve():
+        logger.error("Copia de seguranca do servico indisponivel para restauracao.")
+        return False
+    try:
+        staged = SERVICE_EXE.with_name(SERVICE_EXE.name + ".restore")
+        shutil.copy2(source, staged)
+        os.replace(staged, SERVICE_EXE)
+        logger.warning("Executavel do servico restaurado a partir da copia do vigia.")
+        return True
+    except OSError as exc:
+        logger.error("Falha ao restaurar o executavel do servico: %s", exc)
+        return False
+
+
+def run_watchdog(logger: logging.Logger) -> int:
+    """Keep the updater service alive and repair it after a broken installation."""
+    if os.name != "nt":
+        return 0
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateMutexW.restype = wintypes.HANDLE
+    mutex = kernel32.CreateMutexW(None, False, WATCHDOG_MUTEX_NAME)
+    if not mutex or ctypes.get_last_error() == 183:
+        return 0
+    try:
+        now = time.time()
+        state = get_state()
+        setup_pids = running_setup_processes()
+        service = query_service()
+        actions = plan_watchdog(
+            service,
+            bool(setup_pids),
+            setup_running_age(bool(setup_pids), state, now),
+            heartbeat_age(now, service[1] if service else None),
+            service_exe_healthy,
+        )
+        if not actions:
+            return 0
+        logger.warning("Vigia: servico=%s instaladores=%s acoes=%s", service, setup_pids, actions)
+        notes: list[str] = []
+        for action in actions:
+            if action == "kill_setup":
+                for pid in setup_pids:
+                    kill_process_tree(pid)
+                notes.append("instalador travado encerrado")
+            elif action == "restore_exe":
+                run_sc("stop", SERVICE_NAME)
+                wait_service_state(SERVICE_STATE_STOPPED, 30)
+                if restore_service_executable(logger):
+                    notes.append("executavel do servico restaurado")
+            elif action == "create_service":
+                code = subprocess.run(
+                    f'sc.exe create {SERVICE_NAME} binPath= "{SERVICE_EXE} --service" start= auto '
+                    f'DisplayName= "{SERVICE_DISPLAY_NAME}"',
+                    capture_output=True, timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                ).returncode
+                run_sc("failure", SERVICE_NAME, "reset=", "86400", "actions=", "restart/60000/restart/60000/restart/60000")
+                notes.append(f"servico recriado (codigo {code})")
+            elif action == "restart_service":
+                run_sc("stop", SERVICE_NAME)
+                if not wait_service_state(SERVICE_STATE_STOPPED, 30):
+                    current = query_service()
+                    if current is not None and current[1]:
+                        kill_process_tree(current[1])
+                    wait_service_state(SERVICE_STATE_STOPPED, 15)
+                run_sc("start", SERVICE_NAME)
+                started = wait_service_state(SERVICE_STATE_RUNNING, 30)
+                notes.append("servico sem resposta reiniciado" + ("" if started else " (nao iniciou)"))
+            elif action == "start_service":
+                run_sc("start", SERVICE_NAME)
+                if wait_service_state(SERVICE_STATE_RUNNING, 30):
+                    notes.append("servico parado foi iniciado")
+                elif "restore_exe" not in actions and restore_service_executable(logger):
+                    run_sc("start", SERVICE_NAME)
+                    started = wait_service_state(SERVICE_STATE_RUNNING, 30)
+                    notes.append("servico nao iniciava; executavel restaurado" + ("" if started else " (ainda sem iniciar)"))
+                else:
+                    notes.append("servico nao conseguiu iniciar")
+        if notes:
+            note = "Vigia: " + "; ".join(notes)
+            logger.warning(note)
+            atomic_json(RECOVERY_MARKER_PATH, {"at": time.strftime("%Y-%m-%d %H:%M"), "note": note})
+        return 0
+    finally:
+        kernel32.CloseHandle(mutex)
+
+
 class ServiceRuntime:
+    """Main loop plus a thread that polls dashboard commands every 15 seconds.
+
+    Commands are received even while a check downloads or supervises an
+    installer: "Verificar agora" and "Reinstalar" cancel the current work and
+    start over immediately.
+    """
+
     def __init__(self):
         self.stop_event = threading.Event()
+        self.cancel_event = threading.Event()
+        self.wake_event = threading.Event()
+        self._lock = threading.Lock()
+        self._pending_command: tuple[str, int] | None = None
+        self.last_command_seq = 0
 
-    def run(self, logger: logging.Logger) -> None:
+    def submit_command(self, command: str, seq: int) -> None:
+        with self._lock:
+            self._pending_command = (command, seq)
+        self.cancel_event.set()
+        self.wake_event.set()
+
+    def take_command(self) -> tuple[str, int] | None:
+        with self._lock:
+            command, self._pending_command = self._pending_command, None
+        return command
+
+    def handle_command_response(self, response: dict[str, Any], api: ApiClient, logger: logging.Logger) -> None:
+        seq = int(response.get("seq", 0))
+        if not response.get("pending") or seq <= self.last_command_seq:
+            return
+        self.last_command_seq = seq
+        api.command_seq = seq
+        command = response.get("command") or COMMAND_CHECK
+        logger.info("Comando %s recebido do dashboard (#%s).", command, seq)
+        if command == COMMAND_SEND_LOGS:
+            api.send_diagnostics(collect_diagnostics())
+        elif command == COMMAND_RESTART_SERVICE:
+            api.send_diagnostics("Reinicio do servico solicitado pelo dashboard.\n\n" + collect_diagnostics())
+            schedule_service_restart(logger)
+            self.cancel_event.set()
+            self.stop_event.set()
+            self.wake_event.set()
+        else:
+            self.submit_command(command, seq)
+
+    def poll_commands(self, logger: logging.Logger) -> None:
+        while not self.stop_event.is_set():
+            write_heartbeat()
+            try:
+                api = ApiClient(validate_config(load_json(CONFIG_PATH)))
+                api.command_seq = self.last_command_seq
+                self.handle_command_response(api.commands(), api, logger)
+            except Exception as exc:
+                logger.warning("Nao foi possivel consultar comandos agora: %s", exc)
+            self.stop_event.wait(COMMAND_POLL_SECONDS)
+
+    def run(self, logger: logging.Logger, start_poller: bool = True) -> None:
         logger.info("Servico %s iniciado; primeira consulta imediata.", UPDATER_VERSION)
         cleanup_replaced_binaries()
+        write_heartbeat()
+        ensure_watchdog_task(logger)
+        if start_poller:
+            threading.Thread(target=self.poll_commands, args=(logger,), name="commands", daemon=True).start()
         next_full_check = 0.0
+        promoted = False
         while not self.stop_event.is_set():
-            now = time.monotonic()
-            manual_check = False
-            if now < next_full_check:
-                try:
-                    config = validate_config(load_json(CONFIG_PATH))
-                    manual_check = ApiClient(config).command_pending()
-                    if manual_check:
-                        logger.info("Verificacao imediata recebida do dashboard.")
-                except Exception as exc:
-                    logger.warning("Nao foi possivel consultar comandos agora: %s", exc)
-
-            if now >= next_full_check or manual_check:
-                try:
-                    result = check_once(logger, manual=manual_check, stop_requested=self.stop_event.is_set)
-                except Exception:
-                    # Never let an unexpected error end the service: Windows
-                    # only restarts it automatically after a crash, not after
-                    # a clean stop, and the machine would stop updating.
-                    logger.exception("Falha inesperada na verificacao; nova tentativa em 300 segundos.")
-                    result = 2
-                if self.stop_event.is_set():
-                    break
-                delay = next_check_delay(result, get_state(), time.time())
-                next_full_check = time.monotonic() + delay
-                if result != 0:
-                    logger.warning("Nova verificacao completa agendada em %s segundos.", delay)
-
-            wait_seconds = min(COMMAND_POLL_SECONDS, max(1.0, next_full_check - time.monotonic()))
-            self.stop_event.wait(wait_seconds)
+            command = self.take_command()
+            if command is None and time.monotonic() < next_full_check:
+                self.wake_event.wait(max(1.0, min(60.0, next_full_check - time.monotonic())))
+                self.wake_event.clear()
+                continue
+            self.cancel_event.clear()
+            try:
+                result = check_once(
+                    logger,
+                    manual=command is not None,
+                    stop_requested=self.stop_event.is_set,
+                    cancel_requested=self.cancel_event.is_set,
+                    command=command[0] if command else None,
+                    command_seq=self.last_command_seq,
+                )
+            except Exception:
+                # Never let an unexpected error end the service: Windows
+                # only restarts it automatically after a crash, not after
+                # a clean stop, and the machine would stop updating.
+                logger.exception("Falha inesperada na verificacao; nova tentativa em 300 segundos.")
+                result = RESULT_RETRY
+            if self.stop_event.is_set():
+                break
+            if result == RESULT_OK and not promoted:
+                promoted = promote_known_good(logger)
+            if result == RESULT_RESTART_NOW:
+                next_full_check = 0.0
+                continue
+            delay = next_check_delay(result, get_state(), time.time())
+            next_full_check = time.monotonic() + delay
+            if result != RESULT_OK:
+                logger.warning("Nova verificacao completa agendada em %s segundos.", delay)
 
 
 SERVICE_WIN32_OWN_PROCESS = 0x10
@@ -1250,6 +1939,10 @@ def main() -> int:
         "--start-wallpaper-clients", action="store_true",
         help="Inicia o cliente de wallpaper nas sessoes de usuario (uso pelo instalador como SYSTEM)",
     )
+    parser.add_argument(
+        "--watchdog", action="store_true",
+        help="Vigia: religa o servico, encerra instalador travado e restaura o executavel (tarefa agendada)",
+    )
     parser.add_argument("--config", type=Path)
     parser.add_argument("--installed-version", default="")
     parser.add_argument("--debug", action="store_true")
@@ -1258,6 +1951,8 @@ def main() -> int:
     if args.version:
         print(UPDATER_VERSION)
         return 0
+    if args.watchdog:
+        return run_watchdog(configure_logging(args.debug, "watchdog.log"))
     if args.configure:
         if args.config is None or not args.installed_version:
             parser.error("--configure exige --config e --installed-version")
@@ -1266,7 +1961,7 @@ def main() -> int:
         return start_wallpaper_clients(configure_logging(args.debug))
     if args.run_once:
         with SingleInstance():
-            return check_once(configure_logging(args.debug), manual=True)
+            return check_once(configure_logging(args.debug), manual=True, command=COMMAND_CHECK)
     if args.service:
         return run_service_dispatcher()
     parser.error("selecione --service, --run-once, --configure ou --version")

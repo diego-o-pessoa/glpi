@@ -159,6 +159,26 @@ begin
   StopUpdaterService();
 end;
 
+procedure SetupWatchdog(const UpdaterPath: String);
+var
+  WatchdogDir: String;
+  WatchdogExe: String;
+begin
+  { O vigia e uma copia separada do servico, executada por uma tarefa agendada como SYSTEM.
+    Ele religa o servico, encerra instalador travado e restaura o executavel se uma atualizacao
+    quebra-lo. O proprio servico substitui essa copia depois de conversar com a API. }
+  WatchdogDir := ExpandConstant('{commonappdata}\AtivaLocacao\UnifiedUpdater\watchdog');
+  WatchdogExe := WatchdogDir + '\AtivaUnifiedUpdater.exe';
+  ForceDirectories(WatchdogDir);
+  if not FileExists(WatchdogExe) then
+    RunOptional(ExpandConstant('{cmd}'), '/C copy /Y "' + UpdaterPath + '" "' + WatchdogExe + '"');
+  RunOptional(
+    ExpandConstant('{sys}\schtasks.exe'),
+    '/Create /F /TN "Ativa Unified Updater Watchdog" /RU SYSTEM /RL HIGHEST /SC MINUTE /MO 15 ' +
+    '/TR "\"' + WatchdogExe + '\" --watchdog"'
+  );
+end;
+
 procedure StartForInteractiveUser(const UpdaterPath: String);
 var
   ResultCode: Integer;
@@ -229,6 +249,7 @@ begin
 
   { Remove a tarefa do atualizador anterior para nao haver dois mecanismos concorrentes. }
   RunOptional(ExpandConstant('{sys}\schtasks.exe'), '/Delete /TN "Ativa Wallpaper Updater" /F');
+  SetupWatchdog(UpdaterPath);
 
   if not Exec(ExpandConstant('{sys}\sc.exe'), 'query AtivaUnifiedUpdater', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then begin
     RunRequired(
