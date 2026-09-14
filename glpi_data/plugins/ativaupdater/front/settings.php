@@ -73,7 +73,7 @@ $token = (string) ConfigService::get('api_token', '');
 $maskedToken = strlen($token) >= 8
     ? substr($token, 0, 4) . str_repeat('*', strlen($token) - 8) . substr($token, -4)
     : 'não configurado';
-$self = Html::clean($_SERVER['PHP_SELF']);
+$self = htmlescape((string) $_SERVER['PHP_SELF']);
 
 echo "<div class='container-fluid mt-3'>";
 echo "<h2>Configurações do Ativa Updater</h2>";
@@ -82,13 +82,13 @@ echo "<div class='card mb-4'><div class='card-header'><h3>API e serviço</h3></d
 echo "<form method='post' action='{$self}'>";
 echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
 echo "<div class='form-check form-switch mb-3'><input class='form-check-input' type='checkbox' name='api_enabled' id='api_enabled' " . ($enabled ? 'checked' : '') . "><label class='form-check-label' for='api_enabled'>API habilitada</label></div>";
-echo "<div class='mb-3'><label class='form-label' for='api_base_url'>URL pública da API</label><input class='form-control' type='url' name='api_base_url' id='api_base_url' value='" . Html::clean($apiUrl) . "' required></div>";
+echo "<div class='mb-3'><label class='form-label' for='api_base_url'>URL pública da API</label><input class='form-control' type='url' name='api_base_url' id='api_base_url' value='" . htmlescape($apiUrl) . "' required></div>";
 echo "<div class='row'><div class='col-md-6 mb-3'><label class='form-label' for='check_interval_seconds'>Intervalo de consulta (segundos)</label><input class='form-control' type='number' min='300' max='86400' name='check_interval_seconds' id='check_interval_seconds' value='{$interval}' required><div class='form-text'>3600 segundos = 1 hora.</div></div>";
 echo "<div class='col-md-6 mb-3'><label class='form-label' for='max_upload_mb'>Tamanho máximo do instalador (MB)</label><input class='form-control' type='number' min='50' max='2048' name='max_upload_mb' id='max_upload_mb' value='{$maxUpload}' required></div></div>";
 echo "<button type='submit' name='update' class='btn btn-primary'>Salvar</button></form>";
 
 echo "<hr><h4>Configuração protegida do serviço</h4>";
-echo "<p>Token atual: <code>" . Html::clean($maskedToken) . "</code></p>";
+echo "<p>Token atual: <code>" . htmlescape($maskedToken) . "</code></p>";
 echo "<p class='text-muted'>Baixe o JSON e entregue-o ao gerador do instalador. Ele contém o token da API e não deve ser enviado por canais públicos.</p>";
 echo "<div class='d-flex gap-2'>";
 echo "<form method='post' action='{$self}'>" . Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]) . "<button type='submit' name='download_service_config' class='btn btn-success'><i class='fas fa-download'></i> Baixar configuração do serviço</button></form>";

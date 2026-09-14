@@ -51,10 +51,10 @@ echo "<div class='card mb-4'>";
 echo "<div class='card-header'><h3>" . __('Versão Atual', 'ativaupdater') . "</h3></div>";
 echo "<div class='card-body'>";
 if ($activeRelease) {
-    echo "<p><strong>Versão:</strong> " . Html::clean($activeRelease['version']) . "</p>";
-    echo "<p><strong>Arquivo:</strong> " . Html::clean($activeRelease['original_filename']) . "</p>";
+    echo "<p><strong>Versão:</strong> " . htmlescape((string) $activeRelease['version']) . "</p>";
+    echo "<p><strong>Arquivo:</strong> " . htmlescape((string) $activeRelease['original_filename']) . "</p>";
     echo "<p><strong>Tamanho:</strong> " . Html::formatSize($activeRelease['file_size']) . "</p>";
-    echo "<p><strong>SHA-256:</strong> <code>" . Html::clean($activeRelease['sha256']) . "</code></p>";
+    echo "<p><strong>SHA-256:</strong> <code>" . htmlescape((string) $activeRelease['sha256']) . "</code></p>";
     echo "<p><strong>Publicado em:</strong> " . Html::convDateTime($activeRelease['created_at']) . "</p>";
 } else {
     echo "<p>" . __('Nenhuma versão ativa no momento.', 'ativaupdater') . "</p>";
@@ -107,8 +107,8 @@ if (count($releases) > 0) {
     foreach ($releases as $rel) {
         $status = $rel['active'] ? "<span class='badge bg-success'>" . __('Atual', 'ativaupdater') . "</span>" : "<span class='badge bg-secondary'>" . __('Anterior', 'ativaupdater') . "</span>";
         echo "<tr>";
-        echo "<td>" . Html::clean($rel['version']) . "</td>";
-        echo "<td>" . Html::clean($rel['original_filename']) . "</td>";
+        echo "<td>" . htmlescape((string) $rel['version']) . "</td>";
+        echo "<td>" . htmlescape((string) $rel['original_filename']) . "</td>";
         echo "<td>" . Html::formatSize($rel['file_size']) . "</td>";
         echo "<td>" . Html::convDateTime($rel['created_at']) . "</td>";
         echo "<td>" . $status . "</td>";
@@ -181,12 +181,12 @@ if ($totalClients === 0) {
         $lastCheck = (string) $client['last_check'];
         $offline = strtotime($lastCheck) < time() - 7200;
         echo '<tr>';
-        echo '<td><strong>' . Html::clean((string) $client['hostname']) . '</strong>' . ($offline ? " <span class='badge bg-secondary'>Sem contato há mais de 2 h</span>" : '') . '</td>';
-        echo '<td>' . Html::clean((string) $client['installed_version']) . '</td>';
-        echo '<td>' . Html::clean((string) $client['available_version']) . '</td>';
-        echo "<td><span class='badge {$statusClass}'>" . Html::clean($statusLabel) . '</span></td>';
+        echo '<td><strong>' . htmlescape((string) $client['hostname']) . '</strong>' . ($offline ? " <span class='badge bg-secondary'>Sem contato há mais de 2 h</span>" : '') . '</td>';
+        echo '<td>' . htmlescape((string) $client['installed_version']) . '</td>';
+        echo '<td>' . htmlescape((string) $client['available_version']) . '</td>';
+        echo "<td><span class='badge {$statusClass}'>" . htmlescape($statusLabel) . '</span></td>';
         echo '<td>' . Html::convDateTime($lastCheck) . '</td>';
-        echo '<td>' . Html::clean((string) ($client['message'] ?: '-')) . '</td>';
+        echo '<td>' . htmlescape((string) ($client['message'] ?: '-')) . '</td>';
         echo '</tr>';
     }
     echo '</tbody></table></div>';

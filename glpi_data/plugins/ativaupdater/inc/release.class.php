@@ -52,19 +52,19 @@ class PluginAtivaupdaterRelease extends CommonDBTM
         }
     }
     
-    public function canCreateItem()
+    public function canCreateItem(): bool
     {
         return Session::haveRight(PluginAtivaupdaterProfile::RIGHT_MANAGE, UPDATE)
             || Session::haveRight('config', UPDATE);
     }
 
-    public function canUpdateItem()
+    public function canUpdateItem(): bool
     {
         return Session::haveRight(PluginAtivaupdaterProfile::RIGHT_MANAGE, UPDATE)
             || Session::haveRight('config', UPDATE);
     }
 
-    public function canDeleteItem()
+    public function canDeleteItem(): bool
     {
         return Session::haveRight(PluginAtivaupdaterProfile::RIGHT_MANAGE, UPDATE)
             || Session::haveRight('config', UPDATE);
