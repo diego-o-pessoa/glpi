@@ -1,6 +1,7 @@
 <?php
 
 use GlpiPlugin\Ativaupdater\ConfigService;
+use GlpiPlugin\Ativaupdater\InstallStatus;
 use GlpiPlugin\Ativaupdater\ReleasePolicy;
 
 include('../../../inc/includes.php');
@@ -198,7 +199,11 @@ foreach ($clients as $client) {
         $updatedClients++;
     }
     $noReleaseYet = str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE');
-    if ((string) $client['status'] === 'error' && !$noReleaseYet) {
+    $clientStatus = (string) $client['status'];
+    if (($clientStatus === 'error' && !$noReleaseYet)
+        || $clientStatus === InstallStatus::STATUS_INSTALL_FAILED
+        || InstallStatus::isStuck($clientStatus, $client['install_started_at'] ?? null, (string) $client['last_check'], time())
+    ) {
         $errorClients++;
     }
 }
@@ -239,11 +244,15 @@ if ($totalClients === 0) {
         'current' => ['Atualizado', 'bg-success'],
         'downloading' => ['Baixando', 'bg-primary'],
         'installing' => ['Instalando', 'bg-warning text-dark'],
+        InstallStatus::STATUS_RETRYING => ['Nova tentativa', 'bg-warning text-dark'],
+        InstallStatus::STATUS_INSTALL_FAILED => ['Falha na Instalação', 'bg-danger'],
         'updated' => ['Atualizado', 'bg-success'],
         'error' => ['Erro', 'bg-danger'],
     ];
     foreach ($clients as $client) {
         $statusKey = (string) $client['status'];
+        $installLog = (string) ($client['install_log'] ?? '');
+        $stuck = InstallStatus::isStuck($statusKey, $client['install_started_at'] ?? null, (string) $client['last_check'], time());
         $lastCheck = (string) $client['last_check'];
         $lastCheckAt = strtotime($lastCheck) ?: 0;
         $requestedAt = strtotime((string) ($client['check_requested_at'] ?? '')) ?: 0;
@@ -259,7 +268,17 @@ if ($totalClients === 0) {
             && ($statusKey === 'waiting_release' || $noReleaseMessage || $releaseIsNewerThanReport);
         $displayMessage = (string) ($client['message'] ?: '-');
         $displayAvailable = (string) $client['available_version'];
-        if ($manualPending) {
+        if ($stuck) {
+            // Checked before the manual command: a computer that stopped
+            // reporting would otherwise show "Verificando agora" forever.
+            $statusKey = InstallStatus::STATUS_INSTALL_FAILED;
+            $startedAt = (string) ($client['install_started_at'] ?? '');
+            $displayMessage = 'A instalação não foi concluída'
+                . ($startedAt !== '' ? ' (iniciada em ' . Html::convDateTime($startedAt) . ')' : '')
+                . ' e o computador não informa progresso desde ' . Html::convDateTime($lastCheck) . '. '
+                . 'O serviço pode estar parado, com o instalador travado, ou em versão anterior à 1.4.0 (sem acompanhamento da instalação). '
+                . 'No computador, consulte C:\\ProgramData\\AtivaLocacao\\UnifiedUpdater\\logs.';
+        } elseif ($manualPending) {
             $supportsManualCheck = version_compare((string) $client['updater_version'], '1.2.0', '>=');
             $statusKey = $supportsManualCheck ? 'manual_check' : 'waiting_check';
             $displayAvailable = $activeVersion ?: $displayAvailable;
@@ -302,7 +321,14 @@ if ($totalClients === 0) {
         echo "<td><span class='badge {$statusClass}'>" . htmlescape($statusLabel) . '</span></td>';
         echo '<td>' . Html::convDateTime($lastCheck) . '</td>';
         echo '<td>' . htmlescape($nextCheckLabel) . '</td>';
-        echo '<td>' . htmlescape($displayMessage) . '</td>';
+        echo '<td>' . htmlescape($displayMessage);
+        if ($installLog !== '') {
+            echo "<details class='mt-2 install-log'><summary class='text-danger'>Ver log da instalação</summary>"
+                . "<pre class='mt-2 p-2 bg-light border small' style='max-height: 360px; overflow: auto; white-space: pre-wrap;'>"
+                . htmlescape($installLog)
+                . '</pre></details>';
+        }
+        echo '</td>';
         echo '</tr>';
     }
     echo '</tbody></table></div>';
@@ -317,6 +343,12 @@ echo <<<'HTML'
     let remaining = 15;
     const target = document.getElementById('refresh-countdown');
     window.setInterval(() => {
+        // Keep an opened installation log readable instead of reloading it away.
+        if (document.querySelector('details.install-log[open]')) {
+            remaining = 15;
+            if (target) target.textContent = 'Atualização pausada enquanto um log está aberto';
+            return;
+        }
         remaining -= 1;
         if (target) target.textContent = `Atualização da tela em ${remaining} s`;
         if (remaining <= 0) window.location.reload();

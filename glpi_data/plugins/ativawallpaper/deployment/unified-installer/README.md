@@ -66,12 +66,33 @@ Regras:
 - O rollback só é permitido para pacotes **1.6.0 ou superiores**. Pacotes anteriores registram o Wallpaper Client com o segredo de bootstrap embutido no build; se esse segredo já foi rotacionado, a instalação falharia no meio. A partir do 1.6.0, a reinstalação reaproveita o registro existente da máquina.
 - **Não exclua** do dashboard versões que possam ser necessárias como destino de rollback.
 - O MSI oficial do GLPI Agent aceita downgrade (`AllowDowngrades`) e preserva `etc/` e `var/`, então a máquina continua ligada ao mesmo computador no inventário.
-- Se a instalação não reconfigurar o serviço em 30 minutos, o serviço registra falha com o final do `installer-*.log` e tenta de novo após 5 min e 30 min. A partir da 3ª falha do mesmo pacote, tenta uma vez por dia; **Verificar agora** ou a publicação de outra versão libera uma tentativa imediata.
+- Rollbacks seguem as mesmas regras de tentativas e falha descritas abaixo.
 
 ## Como a atualização silenciosa acontece
 
 1. Na consulta (a cada hora ou por **Verificar agora**), o serviço compara a versão publicada com a instalada e decide entre atualizar, voltar (rollback autorizado) ou não fazer nada.
-2. Se precisar instalar, baixa o EXE, valida tamanho e SHA-256, remove instaladores de versões anteriores e executa o setup em modo `/VERYSILENT`.
-3. O setup para o serviço e espera ele terminar. Depois atualiza o GLPI Agent, repetindo por até 5 minutos se o Windows Installer estiver ocupado (código 1618), atualiza o Wallpaper Client e reconfigura e inicia o serviço.
-4. O Wallpaper Client é iniciado novamente em **cada sessão de usuário conectada**. Antes, quando o setup rodava como SYSTEM, o cliente só voltava no próximo logon.
-5. Ao reiniciar, o serviço reporta **Atualizado** ("Versão X instalada com sucesso") no dashboard.
+2. Se precisar instalar, baixa o EXE, valida tamanho e SHA-256, remove instaladores de versões anteriores e executa o setup em modo `/VERYSILENT /SUPERVISED=1`.
+3. O serviço **continua rodando e acompanha o processo do instalador**. O setup renomeia o executável do serviço em uso (`AtivaUnifiedUpdater.exe.old-*`), atualiza o GLPI Agent (repetindo por até 5 minutos se o Windows Installer estiver ocupado, código 1618), atualiza o Wallpaper Client e reconfigura o serviço.
+4. No fim, o setup reinicia o serviço para carregar o novo executável e inicia o Wallpaper Client em **cada sessão de usuário conectada**.
+5. O novo serviço reporta **Atualizado** ("Versão X instalada com sucesso") no dashboard.
+
+## Falhas, novas tentativas e log de erro
+
+| Situação | O que o serviço faz | Status no dashboard |
+|---|---|---|
+| Setup termina com código de erro | registra a falha na hora | **Nova tentativa** |
+| Setup passa de 20 minutos | finaliza o setup (e processos filhos) e registra a falha | **Nova tentativa** |
+| Serviço reinicia e o setup não existe mais sem ter configurado a nova versão | registra a falha na hora | **Nova tentativa** |
+| 1ª, 2ª e 3ª falha do mesmo pacote | novas tentativas após 1 min, 5 min e 15 min | **Nova tentativa** |
+| 4ª falha (tentativa inicial + 3 novas) | para de tentar e passa a tentar 1 vez por dia; **Verificar agora** ou outra versão publicada inicia um novo ciclo | **Falha na Instalação** |
+
+Toda falha envia ao dashboard um **log da instalação** (link **Ver log da instalação** na coluna Detalhes) com:
+
+- resultado (código de saída do setup, tempo limite etc.);
+- final do log do Inno Setup (`logs\installer-*.log`);
+- linhas de erro e final do log do GLPI Agent (`logs\glpi-agent-msi.log`);
+- final do log do Wallpaper Client.
+
+O mesmo conteúdo fica em `C:\ProgramData\AtivaLocacao\UnifiedUpdater\logs\install-failure.log`.
+
+O dashboard também marca **Falha na Instalação** quando o computador fica mais de 45 min sem informar progresso durante uma instalação, ou quando a instalação passa de 3 h sem concluir. Isso cobre serviço parado, setup travado e máquinas com serviço anterior ao 1.4.0 (pacotes até 1.6.0), que podiam ficar presas em "Instalando". Nesses casos não há log remoto: consulte a pasta `logs` no próprio computador.

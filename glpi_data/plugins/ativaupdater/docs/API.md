@@ -74,7 +74,14 @@ Content-Type: application/json
 }
 ```
 
-Status aceitos: `checking`, `waiting_release`, `current`, `downloading`, `installing`, `updated` e `error`. Durante um rollback, `downloading` e `installing` trazem mensagens iniciadas por "Rollback". Uma instalação que não termina em 30 minutos é reportada como `error`, com o final do log do instalador. Na primeira consulta depois de uma instalação concluída, o serviço envia `updated`; nas seguintes, `current`.
+Status aceitos: `checking`, `waiting_release`, `current`, `downloading`, `installing`, `retrying`, `install_failed`, `updated` e `error`.
+
+- Durante um rollback, `downloading` e `installing` trazem mensagens iniciadas por "Rollback".
+- `retrying`: uma tentativa falhou e outra está agendada (até 3 novas tentativas após a primeira falha).
+- `install_failed`: a tentativa inicial e as 3 novas falharam; o serviço tenta de novo uma vez por dia.
+- Na primeira consulta depois de uma instalação concluída, o serviço envia `updated`; nas seguintes, `current`.
+
+Relatórios de falha incluem o campo opcional `install_log` (texto, até ~24 KB), com o log coletado da instalação. O servidor guarda até 65.000 caracteres e apaga o log quando o computador informa `current`, `updated` ou `waiting_release`. O corpo aceito em `/status` vai até 128 KiB.
 
 ## Códigos principais
 

@@ -6,6 +6,7 @@ namespace GlpiPlugin\Ativaupdater\Controller;
 
 use Glpi\Controller\AbstractController;
 use GlpiPlugin\Ativaupdater\ConfigService;
+use GlpiPlugin\Ativaupdater\InstallStatus;
 use GlpiPlugin\Ativaupdater\ReleasePolicy;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -18,6 +19,7 @@ final class ApiController extends AbstractController
 {
     private const STATUS_VALUES = [
         'checking', 'waiting_release', 'current', 'downloading', 'installing', 'updated', 'error',
+        InstallStatus::STATUS_RETRYING, InstallStatus::STATUS_INSTALL_FAILED,
     ];
 
     private function checkAuth(Request $request): ?JsonResponse
@@ -182,7 +184,8 @@ final class ApiController extends AbstractController
             return $error;
         }
 
-        if (strlen($request->getContent()) > 16384) {
+        // Failure reports carry the installation log (up to ~24 KB of text).
+        if (strlen($request->getContent()) > 131072) {
             return $this->error('PAYLOAD_TOO_LARGE', 'Relatorio de status muito grande.', 413);
         }
 
@@ -217,6 +220,10 @@ final class ApiController extends AbstractController
         if ($agentVersion !== '' && !preg_match('/^\d{1,5}\.\d{1,5}(?:\.\d{1,5})?$/D', $agentVersion)) {
             return $this->error('INVALID_VERSION', 'Versao do GLPI Agent invalida.', 422);
         }
+        $installLog = $payload['install_log'] ?? null;
+        if ($installLog !== null && !is_string($installLog)) {
+            return $this->error('INVALID_PAYLOAD', 'Log de instalacao invalido.', 422);
+        }
 
         $data = [
             'hostname'          => $hostname,
@@ -230,6 +237,11 @@ final class ApiController extends AbstractController
             'last_ip'           => mb_substr((string) ($request->getClientIp() ?? ''), 0, 64),
             'last_check'        => date('Y-m-d H:i:s'),
         ];
+        if (in_array($status, InstallStatus::FINISHED, true)) {
+            $data['install_log'] = null;
+        } elseif ($installLog !== null) {
+            $data['install_log'] = mb_substr($installLog, 0, InstallStatus::LOG_MAX_CHARS);
+        }
 
         global $DB;
         $existing = $DB->request([
@@ -244,8 +256,18 @@ final class ApiController extends AbstractController
             if ($requestedAt > $acknowledgedAt) {
                 $data['check_acknowledged_at'] = date('Y-m-d H:i:s');
             }
+            $data['install_started_at'] = InstallStatus::installStartedAt(
+                $status,
+                $current['install_started_at'] ?? null,
+                (string) $current['available_version'],
+                $versions['available_version'],
+                $data['last_check']
+            );
             $ok = $DB->update('glpi_plugin_ativaupdater_clients', $data, ['machine_guid' => $guid]);
         } else {
+            $data['install_started_at'] = InstallStatus::installStartedAt(
+                $status, null, '', $versions['available_version'], $data['last_check']
+            );
             $ok = $DB->insert('glpi_plugin_ativaupdater_clients', ['machine_guid' => $guid] + $data);
         }
 

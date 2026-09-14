@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import ctypes
 from ctypes import wintypes
 import hashlib
+import io
 import json
 import logging
 from logging.handlers import RotatingFileHandler
@@ -16,7 +18,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Any
+from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHandler
@@ -24,7 +26,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.3.0"
+UPDATER_VERSION = "1.4.0"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 MAX_INSTALLER_BYTES = 2 * 1024 * 1024 * 1024
@@ -39,15 +41,34 @@ ACTION_DOWNGRADE = "downgrade"
 ACTION_CURRENT = "current"
 ACTION_BLOCKED_DOWNGRADE = "blocked_downgrade"
 
-# A silent installation that has not reconfigured the service after this long
-# is considered failed. Repeated failures of the same package back off; from
-# MAX_INSTALL_ATTEMPTS on, the package is retried once a day so transient
-# causes (e.g. Windows Installer busy) heal without an administrator.
-INSTALL_TIMEOUT_SECONDS = 1800
-MAX_INSTALL_ATTEMPTS = 3
-RETRY_BACKOFF_SECONDS = (300, 1800)
-SUSPENDED_RETRY_SECONDS = 86400
+# The service supervises the installer process. A run that exits with an error,
+# exceeds the timeout or disappears without configuring the service is a failed
+# attempt. After the first failure the same package is retried
+# MAX_INSTALL_RETRIES more times; when all of them fail the dashboard shows
+# "Falha na Instalacao" with the collected log, and one automatic attempt per
+# day follows (Verificar agora starts a new cycle immediately).
+INSTALL_TIMEOUT_SECONDS = 1200
+MAX_INSTALL_RETRIES = 3
+TOTAL_INSTALL_ATTEMPTS = MAX_INSTALL_RETRIES + 1
+RETRY_DELAYS_SECONDS = (60, 300, 900)
+FAILED_RETRY_SECONDS = 86400
+INSTALL_LOG_MAX_CHARS = 24000
+SETUP_IMAGE_PREFIX = "ativa-unified-agent-setup"
+STATUS_RETRYING = "retrying"
+STATUS_INSTALL_FAILED = "install_failed"
 NOT_SESSION_ZERO_EXIT_CODE = 3
+
+# Inno Setup exit codes (https://jrsoftware.org/ishelp/topic_setupexitcodes.htm).
+SETUP_EXIT_CODES = {
+    1: "o instalador nao conseguiu inicializar",
+    2: "instalacao cancelada antes de iniciar",
+    3: "erro fatal ao preparar a instalacao",
+    4: "erro fatal durante a instalacao",
+    5: "instalacao cancelada ou abortada durante a execucao",
+    6: "instalador encerrado a forca",
+    7: "a etapa de preparacao impediu a instalacao",
+    8: "a etapa de preparacao exige reiniciar o Windows",
+}
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "UnifiedUpdater"
@@ -57,6 +78,9 @@ DOWNLOAD_DIR = PRODUCT_DIR / "downloads"
 LOG_DIR = PRODUCT_DIR / "logs"
 WALLPAPER_VERSION_PATH = PROGRAM_DATA / "AtivaLocacao" / "Wallpaper" / "version.json"
 WALLPAPER_CLIENT_PATH = PROGRAM_DATA / "AtivaLocacao" / "Wallpaper" / "AtivaWallpaperClient.exe"
+WALLPAPER_LOG_DIR = PROGRAM_DATA / "AtivaLocacao" / "Wallpaper" / "logs"
+MSI_LOG_PATH = LOG_DIR / "glpi-agent-msi.log"
+INSTALL_FAILURE_LOG_PATH = LOG_DIR / "install-failure.log"
 MUTEX_NAME = r"Global\AtivaUnifiedUpdater"
 
 
@@ -166,17 +190,28 @@ def clear_pending_install(state: dict[str, Any]) -> None:
         state.pop(key, None)
 
 
-def register_install_failure(state: dict[str, Any], now: float) -> int:
-    """Turns the pending installation into a failed attempt; returns the retry delay."""
+def attempt_number(state: dict[str, Any], version: str, sha256: str) -> int:
+    """Number of the next installation attempt of this package (1 = first try)."""
+    if state.get("failed_version") == version and state.get("failed_sha256") == sha256:
+        return int(state.get("failed_attempts", 0) or 0) + 1
+    return 1
+
+
+def register_install_failure(state: dict[str, Any], now: float) -> tuple[int, int, bool]:
+    """Turn the pending installation into a failed attempt.
+
+    Returns (failed_attempts, retry_delay_seconds, exhausted); exhausted means
+    the first attempt and all MAX_INSTALL_RETRIES retries failed.
+    """
     version = str(state.get("pending_version", ""))
     sha256 = str(state.get("pending_sha256", ""))
+    attempts = attempt_number(state, version, sha256)
     clear_pending_install(state)
-    same_package = state.get("failed_version") == version and state.get("failed_sha256") == sha256
-    attempts = int(state.get("failed_attempts", 0) or 0) + 1 if same_package else 1
+    exhausted = attempts >= TOTAL_INSTALL_ATTEMPTS
     delay = (
-        SUSPENDED_RETRY_SECONDS
-        if attempts >= MAX_INSTALL_ATTEMPTS
-        else RETRY_BACKOFF_SECONDS[min(attempts, len(RETRY_BACKOFF_SECONDS)) - 1]
+        FAILED_RETRY_SECONDS
+        if exhausted
+        else RETRY_DELAYS_SECONDS[min(attempts, len(RETRY_DELAYS_SECONDS)) - 1]
     )
     state.update({
         "failed_version": version,
@@ -184,43 +219,219 @@ def register_install_failure(state: dict[str, Any], now: float) -> int:
         "failed_attempts": attempts,
         "retry_after": now + delay,
     })
-    return delay
+    return attempts, delay, exhausted
 
 
-def install_block_reason(state: dict[str, Any], release: dict[str, Any], now: float) -> tuple[str, bool] | None:
-    """Returns (message, permanent) while failed attempts forbid installing this release."""
+def install_block_reason(state: dict[str, Any], release: dict[str, Any], now: float) -> tuple[str, str] | None:
+    """(status, message) while this release must wait before the next attempt."""
     if state.get("failed_version") != release["version"] or state.get("failed_sha256") != release["sha256"]:
         return None
     attempts = int(state.get("failed_attempts", 0) or 0)
     remaining = int(float(state.get("retry_after", 0) or 0) - now)
     if remaining <= 0:
         return None
-    if attempts >= MAX_INSTALL_ATTEMPTS:
+    if attempts >= TOTAL_INSTALL_ATTEMPTS:
         return (
-            f"A instalacao de {release['version']} falhou {attempts} vezes e foi suspensa. "
+            STATUS_INSTALL_FAILED,
+            f"Falha na instalacao de {release['version']} apos {attempts} tentativas. "
             f"Nova tentativa automatica em {max(1, remaining // 3600)} h; "
             "use Verificar agora para tentar imediatamente.",
-            True,
         )
     return (
-        f"A instalacao de {release['version']} falhou ({attempts} de {MAX_INSTALL_ATTEMPTS}); "
-        f"nova tentativa em {remaining} segundos.",
-        False,
+        STATUS_RETRYING,
+        f"Falha na tentativa {attempts} de {TOTAL_INSTALL_ATTEMPTS} ao instalar {release['version']}; "
+        f"nova tentativa ({attempts} de {MAX_INSTALL_RETRIES}) em {remaining} segundos.",
     )
 
 
-def installer_log_tail(max_lines: int = 20, max_chars: int = 600) -> str:
+def next_check_delay(result: int, state: dict[str, Any], now: float) -> int:
+    """Seconds until the next full check, never missing a scheduled retry."""
+    delay = configured_interval(state) if result == 0 else 300
     try:
-        logs = sorted(LOG_DIR.glob("installer-*.log"), key=lambda path: path.stat().st_mtime)
-        if not logs:
-            return ""
-        with logs[-1].open("rb") as stream:
-            stream.seek(max(0, logs[-1].stat().st_size - 16384))
-            text = stream.read().decode("utf-8", errors="replace")
+        retry_after = float(state.get("retry_after", 0) or 0)
+    except (TypeError, ValueError):
+        retry_after = 0.0
+    if retry_after > now:
+        delay = min(delay, max(30, int(retry_after - now) + 1))
+    return delay
+
+
+def describe_outcome(outcome: str, exit_code: int | None) -> str:
+    if outcome == "timeout":
+        return f"o instalador excedeu {INSTALL_TIMEOUT_SECONDS // 60} minutos e foi finalizado"
+    if outcome == "missing":
+        return "o instalador foi encerrado sem concluir a configuracao do servico"
+    if outcome == "incomplete":
+        return "o instalador terminou sem registrar a nova versao"
+    detail = SETUP_EXIT_CODES.get(int(exit_code or 0), "erro no instalador")
+    return f"codigo de saida {exit_code} ({detail})"
+
+
+def decode_log(raw: bytes, utf16: bool) -> str:
+    if utf16:
+        return raw.decode("utf-16-le", errors="replace").lstrip("\ufeff")
+    try:
+        return raw.decode("utf-8").lstrip("\ufeff")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", errors="replace")
+
+
+def read_log_tail(path: Path, max_lines: int, max_bytes: int = 262144) -> list[str]:
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as stream:
+            head = stream.read(2)
+            # msiexec writes UTF-16 logs; keep the offset on a character boundary.
+            utf16 = head == b"\xff\xfe"
+            start = max(len(head) if utf16 else 0, size - max_bytes)
+            if utf16 and start % 2:
+                start += 1
+            stream.seek(start)
+            raw = stream.read()
     except OSError:
-        return ""
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    return " | ".join(lines[-max_lines:])[-max_chars:]
+        return []
+    lines = [line.rstrip() for line in decode_log(raw, utf16).splitlines() if line.strip()]
+    return lines[-max_lines:]
+
+
+def newest_file(directory: Path, pattern: str, not_before: float = 0.0) -> Path | None:
+    try:
+        candidates = [path for path in directory.glob(pattern) if path.stat().st_mtime >= not_before]
+    except OSError:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime, default=None)
+
+
+def collect_install_log(
+    version: str,
+    attempt: int,
+    outcome: str,
+    exit_code: int | None,
+    started_at: float,
+    installer_log: Path | None = None,
+) -> str:
+    """Build the diagnostic log sent to the dashboard for a failed attempt."""
+    not_before = started_at - 60 if started_at else 0.0
+    lines = [
+        f"Ativa Unified Updater {UPDATER_VERSION} - falha na instalacao",
+        f"Data: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"Computador: {socket.gethostname()}",
+        f"Versao: {version} | tentativa {attempt} de {TOTAL_INSTALL_ATTEMPTS}",
+        f"Resultado: {describe_outcome(outcome, exit_code)}",
+    ]
+
+    inno_log = installer_log if installer_log is not None and installer_log.is_file() else newest_file(
+        LOG_DIR, "installer-*.log", not_before
+    )
+    lines.append("")
+    lines.append(f"== Instalador (Inno Setup): {inno_log.name if inno_log else 'log nao encontrado'} ==")
+    if inno_log:
+        lines.extend(read_log_tail(inno_log, 150))
+
+    try:
+        msi_log_recent = MSI_LOG_PATH.is_file() and MSI_LOG_PATH.stat().st_mtime >= not_before
+    except OSError:
+        msi_log_recent = False
+    if msi_log_recent:
+        msi_lines = read_log_tail(MSI_LOG_PATH, 4000)
+        errors = [
+            line for line in msi_lines
+            if "return value 3" in line.lower() or re.search(r"\b(error|erro)\b", line, re.IGNORECASE)
+        ]
+        lines.append("")
+        lines.append("== GLPI Agent (msiexec): linhas de erro ==")
+        lines.extend(errors[-20:] or ["(nenhuma linha de erro encontrada)"])
+        lines.append("== GLPI Agent (msiexec): final do log ==")
+        lines.extend(msi_lines[-30:])
+
+    wallpaper_log = newest_file(WALLPAPER_LOG_DIR, "client-*.log", not_before)
+    if wallpaper_log:
+        lines.append("")
+        lines.append(f"== Wallpaper Client: {wallpaper_log.name} ==")
+        lines.extend(read_log_tail(wallpaper_log, 40))
+
+    text = "\n".join(lines)
+    if len(text) > INSTALL_LOG_MAX_CHARS:
+        header = "\n".join(lines[:5])
+        text = header + "\n...\n" + text[-(INSTALL_LOG_MAX_CHARS - len(header) - 5):]
+    return text
+
+
+def parse_setup_processes(tasklist_csv: str) -> list[int]:
+    """PIDs of the unified installer (setup EXE and Inno Setup's .tmp stub)."""
+    pids = []
+    for row in csv.reader(io.StringIO(tasklist_csv)):
+        if len(row) >= 2 and row[0].strip().lower().startswith(SETUP_IMAGE_PREFIX):
+            try:
+                pids.append(int(row[1]))
+            except ValueError:
+                continue
+    return pids
+
+
+def running_setup_processes() -> list[int]:
+    if os.name != "nt":
+        return []
+    try:
+        completed = subprocess.run(
+            ["tasklist.exe", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True, errors="replace", timeout=60,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return parse_setup_processes(completed.stdout)
+
+
+def kill_process_tree(pid: int) -> None:
+    try:
+        subprocess.run(
+            ["taskkill.exe", "/PID", str(pid), "/T", "/F"],
+            capture_output=True, timeout=60,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def supervise_installer(
+    process: Any,
+    stop_requested: Callable[[], bool],
+    timeout_seconds: float = INSTALL_TIMEOUT_SECONDS,
+    poll_seconds: float = 2.0,
+    clock: Callable[[], float] = time.monotonic,
+) -> tuple[str, int | None]:
+    """Wait for the installer: ('exited', code), ('stopping', None) or ('timeout', None).
+
+    'stopping' means the installer is restarting this service to switch to the
+    new executable; the installer keeps running and must not be killed.
+    """
+    deadline = clock() + timeout_seconds
+    while True:
+        code = process.poll()
+        if code is not None:
+            return "exited", int(code)
+        if stop_requested():
+            return "stopping", None
+        if clock() >= deadline:
+            return "timeout", None
+        try:
+            process.wait(timeout=poll_seconds)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def cleanup_replaced_binaries() -> None:
+    """Delete service executables renamed by a supervised installation."""
+    try:
+        candidates = list(PRODUCT_DIR.glob("AtivaUnifiedUpdater.exe.old*"))
+    except OSError:
+        return
+    for path in candidates:
+        try:
+            path.unlink()
+        except OSError:
+            continue
 
 
 def cleanup_downloads(keep: Path | None = None) -> None:
@@ -570,7 +781,9 @@ class ApiClient:
         payload["allow_downgrade"] = payload.get("allow_downgrade") is True
         return payload
 
-    def report(self, status: str, installed: str, available: str = "", message: str = "") -> None:
+    def report(
+        self, status: str, installed: str, available: str = "", message: str = "", install_log: str | None = None
+    ) -> None:
         payload = {
             "machine_guid": machine_guid(),
             "hostname": socket.gethostname(),
@@ -582,7 +795,9 @@ class ApiClient:
             "status": status,
             "message": message[:1000],
         }
-        data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        if install_log is not None:
+            payload["install_log"] = install_log[:INSTALL_LOG_MAX_CHARS]
+        data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         with self._request(self.base_url + "/status", method="POST", data=data, timeout=30) as response:
             response.read(4096)
 
@@ -627,7 +842,8 @@ class ApiClient:
             temporary.unlink(missing_ok=True)
 
 
-def launch_installer(path: Path, logger: logging.Logger) -> None:
+def launch_installer(path: Path, logger: logging.Logger) -> tuple[Any, Path]:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
     install_log = LOG_DIR / f"installer-{int(time.time())}.log"
     command = [
         str(path),
@@ -636,13 +852,63 @@ def launch_installer(path: Path, logger: logging.Logger) -> None:
         "/NORESTART",
         "/CLOSEAPPLICATIONS",
         f"/LOG={install_log}",
+        # Tells the installer that this service is supervising it: the service
+        # keeps running until the end instead of being stopped up front.
+        "/SUPERVISED=1",
     ]
     flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    subprocess.Popen(command, close_fds=True, creationflags=flags)
-    logger.info("Instalador %s iniciado silenciosamente.", path.name)
+    process = subprocess.Popen(command, close_fds=True, creationflags=flags)
+    logger.info("Instalador %s iniciado silenciosamente (PID %s).", path.name, process.pid)
+    return process, install_log
 
 
-def check_once(logger: logging.Logger, manual: bool = False) -> int:
+def report_install_failure(
+    api: ApiClient,
+    state: dict[str, Any],
+    logger: logging.Logger,
+    outcome: str,
+    exit_code: int | None = None,
+    installer_log: Path | None = None,
+) -> int:
+    """Record a failed attempt of the pending package and tell the dashboard."""
+    version = str(state.get("pending_version", ""))
+    started_at = float(state.get("pending_started_at", 0) or 0)
+    attempts, delay, exhausted = register_install_failure(state, time.time())
+    install_log = collect_install_log(version, attempts, outcome, exit_code, started_at, installer_log)
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        INSTALL_FAILURE_LOG_PATH.write_text(install_log, encoding="utf-8")
+    except OSError:
+        logger.warning("Nao foi possivel gravar %s.", INSTALL_FAILURE_LOG_PATH)
+
+    reason = describe_outcome(outcome, exit_code)
+    if exhausted:
+        status = STATUS_INSTALL_FAILED
+        message = (
+            f"Falha na instalacao de {version} apos {attempts} tentativas: {reason}. "
+            f"Nova tentativa automatica em {delay // 3600} h ou use Verificar agora."
+        )
+    else:
+        status = STATUS_RETRYING
+        message = (
+            f"Falha na tentativa {attempts} de {TOTAL_INSTALL_ATTEMPTS} ao instalar {version}: {reason}. "
+            f"Nova tentativa ({attempts} de {MAX_INSTALL_RETRIES}) em {delay} segundos."
+        )
+    installed = str(state.get("installed_version", "0.0.0"))
+    state["last_result"] = status
+    state["last_error"] = message[:1000]
+    state["last_check"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    atomic_json(STATE_PATH, state)
+    logger.error("%s\n%s", message, install_log)
+    api.report(status, installed, version, message, install_log=install_log)
+    return 0 if exhausted else 2
+
+
+def check_once(
+    logger: logging.Logger,
+    manual: bool = False,
+    stop_requested: Callable[[], bool] = lambda: False,
+) -> int:
     try:
         config = validate_config(load_json(CONFIG_PATH))
     except (UpdaterError, ValueError, TypeError) as exc:
@@ -664,44 +930,26 @@ def check_once(logger: logging.Logger, manual: bool = False) -> int:
 
         pending_version = str(state.get("pending_version", ""))
         if pending_version:
+            # A pending installation survives only when the service restarted
+            # before the installer finished: an installer that stopped the
+            # service, a reboot, or a crash. --configure clears it on success.
             pending_started_at = float(state.get("pending_started_at", 0) or 0)
-            is_rollback = state.get("pending_action") == ACTION_DOWNGRADE
             if pending_version == installed:
                 clear_pending_install(state)
                 clear_install_failures(state)
                 atomic_json(STATE_PATH, state)
-            elif time.time() - pending_started_at < INSTALL_TIMEOUT_SECONDS:
-                api.report(
-                    "installing", installed, pending_version,
-                    ("Rollback em andamento: " if is_rollback else "")
-                    + "aguardando a conclusao da instalacao silenciosa.",
-                )
-                logger.info("A instalacao de %s ainda esta na janela de espera.", pending_version)
-                return 0
             else:
-                delay = register_install_failure(state, time.time())
-                attempts = int(state["failed_attempts"])
-                message = (
-                    f"A instalacao de {pending_version} nao foi concluida em "
-                    f"{INSTALL_TIMEOUT_SECONDS // 60} minutos (tentativa {attempts} de {MAX_INSTALL_ATTEMPTS})."
-                )
-                if attempts < MAX_INSTALL_ATTEMPTS:
-                    message += f" Nova tentativa em {delay} segundos."
-                else:
-                    message += (
-                        f" Tentativas suspensas; nova tentativa automatica em {delay // 3600} h "
-                        "ou use Verificar agora."
+                setup_pids = running_setup_processes()
+                if setup_pids and time.time() - pending_started_at < INSTALL_TIMEOUT_SECONDS:
+                    api.report(
+                        "installing", installed, pending_version,
+                        f"Instalacao de {pending_version} em andamento; aguardando o instalador terminar.",
                     )
-                tail = installer_log_tail()
-                if tail:
-                    message += f" Log do instalador: {tail}"
-                state["last_result"] = "error"
-                state["last_error"] = message[:1000]
-                state["last_check"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-                atomic_json(STATE_PATH, state)
-                api.report("error", installed, pending_version, message)
-                logger.error(message)
-                return 2
+                    logger.info("Instalador de %s ainda em execucao (PIDs %s).", pending_version, setup_pids)
+                    return 2
+                for pid in setup_pids:
+                    kill_process_tree(pid)
+                return report_install_failure(api, state, logger, "timeout" if setup_pids else "missing")
 
         api.report("checking", installed, message="Consultando a versao publicada.")
         try:
@@ -751,22 +999,24 @@ def check_once(logger: logging.Logger, manual: bool = False) -> int:
 
         blocked = install_block_reason(state, release, time.time())
         if blocked is not None:
-            message, permanent = blocked
-            state["last_result"] = "error"
+            status, message = blocked
+            state["last_result"] = status
             state["last_error"] = message
             atomic_json(STATE_PATH, state)
-            api.report("error", installed, available, message)
+            api.report(status, installed, available, message)
             logger.warning(message)
-            return 0 if permanent else 2
+            return 0 if status == STATUS_INSTALL_FAILED else 2
 
         is_rollback = action == ACTION_DOWNGRADE
+        attempt = attempt_number(state, available, release["sha256"])
+        attempt_label = f"tentativa {attempt} de {TOTAL_INSTALL_ATTEMPTS}"
         DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
         destination = DOWNLOAD_DIR / f"Ativa-Unified-Agent-Setup-{available}.exe"
         cleanup_downloads(keep=destination)
         api.report(
             "downloading", installed, available,
-            f"Rollback: baixando a versao {available} para substituir a {installed}."
-            if is_rollback else "Baixando e validando o instalador.",
+            f"Rollback: baixando a versao {available} para substituir a {installed} ({attempt_label})."
+            if is_rollback else f"Baixando e validando o instalador ({attempt_label}).",
         )
         api.download(release, destination)
         state["last_result"] = "installing"
@@ -778,19 +1028,49 @@ def check_once(logger: logging.Logger, manual: bool = False) -> int:
         atomic_json(STATE_PATH, state)
         api.report(
             "installing", installed, available,
-            f"Rollback: voltando de {installed} para {available}; instalacao silenciosa iniciada."
-            if is_rollback else "Instalacao silenciosa iniciada.",
+            f"Rollback: voltando de {installed} para {available}; instalacao silenciosa iniciada ({attempt_label})."
+            if is_rollback else f"Instalacao silenciosa iniciada ({attempt_label}).",
         )
-        launch_installer(destination, logger)
-        logger.info("%s de %s para %s iniciado.", "Rollback" if is_rollback else "Atualizacao", installed, available)
-        return 10
+        process, installer_log = launch_installer(destination, logger)
+        outcome, exit_code = supervise_installer(process, stop_requested)
+        if outcome == "stopping":
+            # Expected on success: the installer restarts the service to run the
+            # new executable, and the new process reports the result.
+            logger.info("Instalador reiniciando o servico para concluir a atualizacao para %s.", available)
+            return 10
+
+        # Re-read the state: --configure rewrites it when the package is installed.
+        refreshed = get_state()
+        if refreshed.get("installed_version") == available and outcome == "exited" and exit_code == 0:
+            refreshed["last_result"] = "current"
+            atomic_json(STATE_PATH, refreshed)
+            api.report("updated", available, available, f"Versao {available} instalada com sucesso.")
+            logger.info("Instalacao de %s concluida.", available)
+            return 0
+        if outcome == "timeout":
+            kill_process_tree(process.pid)
+            for pid in running_setup_processes():
+                kill_process_tree(pid)
+        elif outcome == "exited" and exit_code == 0:
+            outcome = "incomplete"
+        for key in ("pending_version", "pending_sha256", "pending_action", "pending_started_at",
+                    "failed_version", "failed_sha256", "failed_attempts"):
+            if key in state:
+                refreshed[key] = state[key]
+        return report_install_failure(api, refreshed, logger, outcome, exit_code, installer_log)
     except Exception as exc:
-        state["last_result"] = "error"
-        state["last_error"] = str(exc)[:1000]
-        state["last_check"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-        atomic_json(STATE_PATH, state)
+        # Re-read before writing: the installer may have rewritten the state
+        # (--configure) while this check was running.
+        current_state = get_state()
+        current_state["last_result"] = "error"
+        current_state["last_error"] = str(exc)[:1000]
+        current_state["last_check"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        atomic_json(STATE_PATH, current_state)
         try:
-            api.report("error", installed, str(state.get("last_available_version", "")), str(exc))
+            api.report(
+                "error", str(current_state.get("installed_version", installed)),
+                str(state.get("last_available_version", "")), str(exc),
+            )
         except Exception:
             logger.exception("Tambem falhou o envio do status de erro.")
         logger.exception("Falha ao verificar ou instalar atualizacao.")
@@ -844,6 +1124,7 @@ class ServiceRuntime:
 
     def run(self, logger: logging.Logger) -> None:
         logger.info("Servico %s iniciado; primeira consulta imediata.", UPDATER_VERSION)
+        cleanup_replaced_binaries()
         next_full_check = 0.0
         while not self.stop_event.is_set():
             now = time.monotonic()
@@ -859,25 +1140,19 @@ class ServiceRuntime:
 
             if now >= next_full_check or manual_check:
                 try:
-                    result = check_once(logger, manual=manual_check)
+                    result = check_once(logger, manual=manual_check, stop_requested=self.stop_event.is_set)
                 except Exception:
                     # Never let an unexpected error end the service: Windows
                     # only restarts it automatically after a crash, not after
                     # a clean stop, and the machine would stop updating.
                     logger.exception("Falha inesperada na verificacao; nova tentativa em 300 segundos.")
                     result = 2
-                if result == 10:
-                    # Keep running: the installer stops this service before
-                    # replacing its executable and starts it again at the end.
-                    # If the installer dies before that, the next check detects
-                    # the timeout instead of leaving the machine unattended.
-                    next_full_check = time.monotonic() + INSTALL_TIMEOUT_SECONDS + 60
-                    logger.info("Instalador iniciado; aguardando o instalador reiniciar o servico.")
-                else:
-                    interval = 300 if result != 0 else configured_interval(get_state())
-                    next_full_check = time.monotonic() + interval
-                    if result != 0:
-                        logger.warning("Nova tentativa completa agendada em 300 segundos.")
+                if self.stop_event.is_set():
+                    break
+                delay = next_check_delay(result, get_state(), time.time())
+                next_full_check = time.monotonic() + delay
+                if result != 0:
+                    logger.warning("Nova verificacao completa agendada em %s segundos.", delay)
 
             wait_seconds = min(COMMAND_POLL_SECONDS, max(1.0, next_full_check - time.monotonic()))
             self.stop_event.wait(wait_seconds)

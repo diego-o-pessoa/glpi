@@ -134,6 +134,31 @@ begin
   Sleep(3000);
 end;
 
+function IsSupervisedByUpdater(): Boolean;
+begin
+  { O servico passa /SUPERVISED=1 quando acompanha este instalador ate o fim. }
+  Result := ExpandConstant('{param:SUPERVISED|0}') = '1';
+end;
+
+procedure PrepareUpdaterExecutable();
+var
+  UpdaterPath: String;
+  ReplacedPath: String;
+begin
+  UpdaterPath := ExpandConstant('{commonappdata}\AtivaLocacao\UnifiedUpdater\AtivaUnifiedUpdater.exe');
+  if IsSupervisedByUpdater() and FileExists(UpdaterPath) then begin
+    { O servico continua rodando para registrar falhas e tentar de novo. Um executavel em uso
+      pode ser renomeado, liberando o caminho para a nova versao; o servico e reiniciado no fim. }
+    ReplacedPath := UpdaterPath + '.old-' + GetDateTimeString('yyyymmddhhnnss', #0, #0);
+    if RenameFile(UpdaterPath, ReplacedPath) then begin
+      Log('Executavel do servico em uso renomeado para ' + ReplacedPath);
+      exit;
+    end;
+    Log('Nao foi possivel renomear o executavel do servico; o servico sera parado.');
+  end;
+  StopUpdaterService();
+end;
+
 procedure StartForInteractiveUser(const UpdaterPath: String);
 var
   ResultCode: Integer;
@@ -164,20 +189,25 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   UpdaterPath: String;
+  UpdaterLogDir: String;
   AgentMsi: String;
   AgentParameters: String;
   ResultCode: Integer;
 begin
   if CurStep = ssInstall then begin
-    StopUpdaterService();
+    PrepareUpdaterExecutable();
     exit;
   end;
 
   if CurStep <> ssPostInstall then
     exit;
 
+  { O log detalhado do msiexec e anexado pelo servico ao relatorio de falha no dashboard. }
+  UpdaterLogDir := ExpandConstant('{commonappdata}\AtivaLocacao\UnifiedUpdater\logs');
+  ForceDirectories(UpdaterLogDir);
   AgentMsi := ExpandConstant('{tmp}\GLPI-Agent-{#AgentVersion}-x64.msi');
   AgentParameters := '/i "' + AgentMsi + '" /qn /norestart ' +
+    '/L*V "' + UpdaterLogDir + '\glpi-agent-msi.log" ' +
     'SERVER="{#AgentServerUrl}" ' +
     'ADDLOCAL=ALL EXECMODE=1 RUNNOW=1 GLPI_VERSION=11 ' +
     'ADD_FIREWALL_EXCEPTION=1 NO_SSL_CHECK=0 NO_HTTPD=0 NO_P2P=0 ' +
@@ -216,6 +246,8 @@ begin
     ExpandConstant('{sys}\sc.exe'),
     'failure AtivaUnifiedUpdater reset= 86400 actions= restart/60000/restart/60000/restart/60000'
   );
+  { No modo acompanhado o servico antigo ainda esta rodando: pare-o para iniciar o novo executavel. }
+  StopUpdaterService();
   RunRequired(
     'Iniciando o servico de atualizacao...',
     ExpandConstant('{sys}\sc.exe'),
