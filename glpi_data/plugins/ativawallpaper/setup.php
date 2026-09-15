@@ -58,6 +58,7 @@ function plugin_init_ativawallpaper(): void
 
     if (Session::haveRight(PluginAtivawallpaperProfile::RIGHT_VIEW, READ)) {
         $PLUGIN_HOOKS['menu_toadd']['ativawallpaper']['admin'] = PluginAtivawallpaperMenu::class;
+        plugin_ativawallpaper_refresh_cached_menu();
     }
 
     if (Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, UPDATE)) {
@@ -66,6 +67,35 @@ function plugin_init_ativawallpaper(): void
 
     $PLUGIN_HOOKS[Hooks::ADD_CSS]['ativawallpaper'][] = 'css/ativawallpaper.css';
     $PLUGIN_HOOKS[Hooks::ADD_JAVASCRIPT]['ativawallpaper'][] = 'js/ativawallpaper.js';
+}
+
+/**
+ * GLPI builds the side menu once per login and keeps it in $_SESSION['glpimenu'];
+ * deploying and clearing the cache does not rebuild it. Sessions opened before a
+ * menu change kept the old link (Configuracoes) and title (Agent). When the cached
+ * Ativa Wallpaper entry differs from the current one, drop the cached menu so GLPI
+ * rebuilds it on this same request. Checked once per session.
+ */
+function plugin_ativawallpaper_refresh_cached_menu(): void
+{
+    global $CFG_GLPI;
+
+    $marker = PLUGIN_ATIVAWALLPAPER_VERSION . '|dashboard';
+    if (!isset($_SESSION['glpimenu']) || !is_array($_SESSION['glpimenu'])
+        || ($_SESSION['plugin_ativawallpaper_menu_checked'] ?? '') === $marker) {
+        return;
+    }
+    $_SESSION['plugin_ativawallpaper_menu_checked'] = $marker;
+
+    $expectedPage = $CFG_GLPI['root_doc'] . '/plugins/ativawallpaper/front/dashboard.php';
+    $expectedTitle = PluginAtivawallpaperMenu::getTypeName();
+    foreach ($_SESSION['glpimenu'] as $sector) {
+        $entry = is_array($sector) ? ($sector['content'][strtolower(PluginAtivawallpaperMenu::class)] ?? null) : null;
+        if (is_array($entry) && (($entry['page'] ?? '') !== $expectedPage || ($entry['title'] ?? '') !== $expectedTitle)) {
+            unset($_SESSION['glpimenu']);
+            return;
+        }
+    }
 }
 
 function plugin_ativawallpaper_check_prerequisites(): bool
