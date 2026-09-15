@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use GlpiPlugin\Ativaupdater\ConfigService;
+use GlpiPlugin\Ativaupdater\PageLayout;
 
 include('../../../inc/includes.php');
 
@@ -59,22 +60,22 @@ $maskedToken = strlen($token) >= 8
     : 'não configurado';
 $self = htmlescape((string) $_SERVER['PHP_SELF']);
 
-echo "<div class='container-fluid mt-3'>";
-echo "<h2>Configurações do Ativa Updater</h2>";
-echo "<div class='alert alert-info'>O serviço Windows consulta esta API no intervalo configurado. O padrão é 3600 segundos (1 hora).</div>";
-echo "<div class='card mb-4'><div class='card-header'><h3>API e serviço</h3></div><div class='card-body'>";
+echo PageLayout::header('settings');
+echo "<div class='aw-help'><i class='fas fa-info-circle me-2'></i>O serviço Windows consulta esta API no intervalo configurado. O padrão é 3600 segundos (1 hora).</div>";
+echo "<section class='aw-settings-grid'>";
+echo "<article class='aw-card'><header class='aw-card-header'><h2 class='aw-card-title'><i class='fas fa-sliders-h'></i>API e serviço</h2></header><div class='aw-card-body'>";
 echo "<form method='post' action='{$self}'>";
 echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
 echo "<div class='form-check form-switch mb-3'><input class='form-check-input' type='checkbox' name='api_enabled' id='api_enabled' " . ($enabled ? 'checked' : '') . "><label class='form-check-label' for='api_enabled'>API habilitada</label></div>";
 echo "<div class='mb-3'><label class='form-label' for='api_base_url'>URL pública da API</label><input class='form-control' type='url' name='api_base_url' id='api_base_url' value='" . htmlescape($apiUrl) . "' required></div>";
 echo "<div class='row'><div class='col-md-6 mb-3'><label class='form-label' for='check_interval_seconds'>Intervalo de consulta (segundos)</label><input class='form-control' type='number' min='300' max='86400' name='check_interval_seconds' id='check_interval_seconds' value='{$interval}' required><div class='form-text'>3600 segundos = 1 hora.</div></div>";
 echo "<div class='col-md-6 mb-3'><label class='form-label' for='max_upload_mb'>Tamanho máximo do instalador (MB)</label><input class='form-control' type='number' min='50' max='2048' name='max_upload_mb' id='max_upload_mb' value='{$maxUpload}' required></div></div>";
-echo "<button type='submit' name='update' class='btn btn-primary'>Salvar</button></form>";
+echo "<button type='submit' name='update' class='btn aw-submit-btn'><i class='fas fa-save me-2'></i>Salvar configurações</button></form></div></article>";
 
-echo "<hr><h4>Configuração protegida do serviço</h4>";
+echo "<article class='aw-card'><header class='aw-card-header'><h2 class='aw-card-title'><i class='fas fa-shield-alt'></i>Configuração protegida</h2></header><div class='aw-card-body'>";
 echo "<p>Token atual: <code>" . htmlescape($maskedToken) . "</code></p>";
 echo "<p class='text-muted'>Baixe o JSON e entregue-o ao gerador do instalador. Ele contém o token da API e não deve ser enviado por canais públicos.</p>";
-echo "<div class='d-flex gap-2'>";
+echo "<div class='d-flex gap-2 flex-wrap'>";
 echo "<form method='post' action='" . htmlescape($frontBase . '/download_service_config.php') . "'>";
 echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
 echo "<button type='submit' class='btn btn-success'><i class='fas fa-download'></i> Baixar configuração do serviço</button>";
@@ -83,6 +84,7 @@ echo "<form method='post' action='{$self}' onsubmit='return confirm(\"O token at
 echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
 echo "<button type='submit' name='generate_token' class='btn btn-outline-warning'>Gerar novo token</button>";
 echo "</form>";
-echo "</div></div></div></div>";
+echo "</div><hr><p class='small text-muted mb-0'><i class='fas fa-lock me-1'></i>Ao gerar um novo token, os instaladores existentes deixam de autenticar até receberem a nova configuração.</p></div></article></section>";
+echo PageLayout::footer();
 
 Html::footer();

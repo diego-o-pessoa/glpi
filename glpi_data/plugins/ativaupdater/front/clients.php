@@ -19,7 +19,11 @@ session_write_close();
 $now = time();
 $summary = ClientsView::load(false);
 $signature = ClientsView::signature($summary, $now);
-$payload = ['changed' => false, 'signature' => $signature];
+$payload = [
+    'changed'   => false,
+    'signature' => $signature,
+    'metrics'   => ClientsView::metrics($summary, $now),
+];
 if (!hash_equals($signature, (string) ($_GET['signature'] ?? ''))) {
     $payload['changed'] = true;
     $payload['html'] = ClientsView::render(ClientsView::load(true), $canManage, $now);

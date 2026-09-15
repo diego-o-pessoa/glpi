@@ -32,6 +32,7 @@ final class ClientsView
         'command_restart'    => ['Reiniciando serviço', 'bg-primary'],
         'manual_unsupported' => ['Serviço sem Verificar agora', 'bg-secondary'],
         'manual_no_response' => ['Sem resposta ao comando', 'bg-danger'],
+        'offline'            => ['Sem contato', 'bg-danger'],
         'current'            => ['Atualizado', 'bg-success'],
         'downloading'        => ['Baixando', 'bg-primary'],
         'installing'         => ['Instalando', 'bg-warning text-dark'],
@@ -74,6 +75,38 @@ final class ClientsView
         ], JSON_INVALID_UTF8_SUBSTITUTE));
     }
 
+    /** @return array{total: int, updated: int, errors: int, progress: int} */
+    public static function metrics(array $data, int $now): array
+    {
+        $clients = $data['clients'];
+        $activeRelease = $data['active'];
+        $activeVersion = $activeRelease ? (string) $activeRelease['version'] : '';
+        $allowDowngrade = $activeRelease !== null && (int) ($activeRelease['allow_downgrade'] ?? 0) === 1;
+        $updated = 0;
+        $errors = 0;
+        foreach ($clients as $client) {
+            $status = (string) $client['status'];
+            $hasError = ($status === 'error' && !str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE'))
+                || $status === InstallStatus::STATUS_INSTALL_FAILED
+                || InstallStatus::isStuck($status, $client['install_started_at'] ?? null, (string) $client['last_check'], $now)
+                || ManualCheck::state($client, $now) === ManualCheck::STATE_NO_RESPONSE
+                || ServerClock::toTimestamp((string) $client['last_check']) < $now - 7200;
+            if ($hasError) {
+                $errors++;
+            }
+            if (!$hasError && $activeVersion !== '' && ReleasePolicy::isOnTarget((string) $client['installed_version'], $activeVersion, $allowDowngrade)) {
+                $updated++;
+            }
+        }
+        $total = count($clients);
+        return [
+            'total' => $total,
+            'updated' => $updated,
+            'errors' => $errors,
+            'progress' => $total > 0 ? (int) round(($updated / $total) * 100) : 0,
+        ];
+    }
+
     public static function render(array $data, bool $canManage, int $now): string
     {
         $clients = $data['clients'];
@@ -85,40 +118,23 @@ final class ClientsView
             ? ServerClock::toTimestamp((string) (($activeRelease['activated_at'] ?? '') ?: $activeRelease['created_at']))
             : 0;
 
-        $totalClients = count($clients);
-        $updatedClients = 0;
-        $errorClients = 0;
-        foreach ($clients as $client) {
-            if ($activeVersion !== '' && ReleasePolicy::isOnTarget((string) $client['installed_version'], $activeVersion, $activeAllowsDowngrade)) {
-                $updatedClients++;
-            }
-            $clientStatus = (string) $client['status'];
-            if (($clientStatus === 'error' && !str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE'))
-                || $clientStatus === InstallStatus::STATUS_INSTALL_FAILED
-                || InstallStatus::isStuck($clientStatus, $client['install_started_at'] ?? null, (string) $client['last_check'], $now)
-            ) {
-                $errorClients++;
-            }
-        }
-        $progress = $totalClients > 0 ? (int) round(($updatedClients / $totalClients) * 100) : 0;
+        $metrics = self::metrics($data, $now);
+        $totalClients = $metrics['total'];
+        $errorClients = $metrics['errors'];
 
         $html = '';
         if ($activeVersion === '') {
-            $html .= "<div class='alert alert-info mb-3'>{$totalClients} computador(es) identificado(s). Publique o primeiro instalador unificado para iniciar a distribuição automática.</div>";
-        } else {
-            $html .= "<div class='d-flex justify-content-between mb-1'><span>{$updatedClients} de {$totalClients} computador(es) na versão atual</span><strong>{$progress}%</strong></div>";
-            $html .= "<div class='progress mb-3' style='height: 20px'><div class='progress-bar bg-success' role='progressbar' style='width: {$progress}%' aria-valuenow='{$progress}' aria-valuemin='0' aria-valuemax='100'>{$progress}%</div></div>";
+            $html .= "<div class='aw-alert aw-alert-info'>{$totalClients} computador(es) identificado(s). Publique o primeiro instalador unificado para iniciar a distribuição automática.</div>";
         }
         if ($errorClients > 0) {
-            $html .= "<div class='alert alert-danger'>{$errorClients} computador(es) informaram erro. Consulte o motivo e os logs na tabela.</div>";
+            $html .= "<div class='aw-alert aw-alert-danger'><i class='fas fa-exclamation-circle'></i> {$errorClients} computador(es) requer(em) atenção</div>";
         }
         if ($totalClients === 0) {
-            return $html . "<p class='text-muted mb-0'>Nenhum serviço se identificou ainda. Depois da instalação, a primeira consulta acontece imediatamente.</p>";
+            return $html . "<p class='aw-empty'>Nenhum serviço se identificou ainda. Depois da instalação, a primeira consulta acontece imediatamente.</p>";
         }
 
-        $html .= "<div class='table-responsive'><table class='table table-striped align-middle'><thead><tr>"
-            . '<th>Computador</th><th>Pacote unificado</th><th>Serviço</th><th>Wallpaper</th><th>GLPI Agent</th>'
-            . '<th>Disponível</th><th>Status</th><th>Última consulta</th><th>Próxima consulta</th><th>Detalhes</th>'
+        $html .= "<div class='table-responsive'><table class='aw-computers-table'><thead><tr>"
+            . '<th>Computador</th><th>Versões</th><th>Status</th><th>Última consulta</th><th>Próxima consulta</th><th>Ações</th>'
             . '</tr></thead><tbody>';
         foreach ($clients as $client) {
             $html .= self::renderRow($client, $canManage, $now, $activeVersion, $activeAllowsDowngrade, $activePublishedAt, $checkInterval);
@@ -218,49 +234,72 @@ final class ClientsView
             $displayMessage = 'Computador registrado; aguardando a primeira versão publicada.';
         }
 
-        [$statusLabel, $statusClass] = self::LABELS[$statusKey] ?? [$statusKey, 'bg-secondary'];
         $offline = $lastCheckAt < $now - 7200;
+        if ($offline && !in_array($statusKey, ['error', InstallStatus::STATUS_INSTALL_FAILED], true)) {
+            $statusKey = 'offline';
+            $displayMessage = 'O computador não entra em contato com o servidor há mais de 2 horas. Verifique se ele está ligado, conectado à rede e se o serviço Ativa Unified Updater está em execução.';
+        }
+        [$statusLabel, $statusClass] = self::LABELS[$statusKey] ?? [$statusKey, 'bg-secondary'];
         $nextCheckLabel = $manualState === ManualCheck::STATE_WAITING ? 'Em até 15 segundos' : ucfirst($nextRegularCheckLabel);
         $hostname = (string) $client['hostname'];
 
-        $html = '<tr>';
-        $html .= '<td><strong>' . htmlescape($hostname) . '</strong>'
-            . ($offline ? " <span class='badge bg-secondary'>Sem contato há mais de 2 h</span>" : '')
-            . ($canManage ? self::renderActions($id, $hostname, $serviceVersion) : '')
-            . '</td>';
-        $html .= '<td>' . htmlescape((string) $client['installed_version'])
-            . ($clientAction === ReleasePolicy::ACTION_BLOCKED_DOWNGRADE
-                ? " <span class='badge bg-secondary' title='Downgrade não autorizado para a versão publicada'>Acima da versão publicada</span>"
-                : '')
-            . ($clientAction === ReleasePolicy::ACTION_DOWNGRADE ? " <span class='badge bg-warning text-dark'>Rollback pendente</span>" : '')
-            . '</td>';
-        $html .= '<td>' . htmlescape($serviceVersion !== '' ? $serviceVersion : '-')
-            . ($serviceVersion !== '' && !ManualCheck::supports($serviceVersion, ManualCheck::COMMAND_REINSTALL)
-                ? " <span class='badge bg-secondary' title='Sem vigia e sem ações remotas (exige " . ManualCheck::REMOTE_ACTIONS_MIN_VERSION . ")'>desatualizado</span>"
-                : '')
-            . '</td>';
-        $html .= '<td>' . htmlescape((string) ($client['wallpaper_client_version'] ?: '-')) . '</td>';
-        $html .= '<td>' . htmlescape((string) ($client['glpi_agent_version'] ?: '-')) . '</td>';
-        $html .= '<td>' . htmlescape($displayAvailable ?: '-') . '</td>';
-        $html .= "<td><span class='badge {$statusClass}'>" . htmlescape($statusLabel) . '</span></td>';
+        $problem = in_array($statusKey, ['error', 'offline', 'manual_no_response', InstallStatus::STATUS_INSTALL_FAILED], true);
+        $html = "<tr class='" . ($problem ? 'aw-row-error' : '') . "'>";
+        $html .= "<td><div class='aw-computer'><i class='fas fa-desktop'></i><div><strong>" . htmlescape($hostname) . '</strong>'
+            . "<small class='" . ($offline ? 'text-danger' : '') . "'>"
+            . ($offline ? 'Sem contato há mais de 2 h' : 'Gerenciado pelo Ativa Updater')
+            . '</small></div></div></td>';
+
+        $packageExtra = $clientAction === ReleasePolicy::ACTION_BLOCKED_DOWNGRADE
+            ? "<span class='aw-mini-note' title='Downgrade não autorizado'>acima da publicada</span>"
+            : ($clientAction === ReleasePolicy::ACTION_DOWNGRADE ? "<span class='aw-mini-note text-warning'>rollback pendente</span>" : '');
+        $serviceExtra = $serviceVersion !== '' && !ManualCheck::supports($serviceVersion, ManualCheck::COMMAND_REINSTALL)
+            ? "<span class='aw-mini-note'>desatualizado</span>" : '';
+        $html .= "<td><div class='aw-versions'>"
+            . self::versionBlock('Pacote', (string) $client['installed_version'], $packageExtra)
+            . self::versionBlock('Updater', $serviceVersion ?: '-', $serviceExtra)
+            . self::versionBlock('Wallpaper', (string) ($client['wallpaper_client_version'] ?: '-'))
+            . self::versionBlock('Agent', (string) ($client['glpi_agent_version'] ?: '-'))
+            . '</div></td>';
+        $html .= "<td><span class='badge {$statusClass}'>" . htmlescape($statusLabel) . '</span>'
+            . "<small class='aw-status-message'>" . htmlescape($displayMessage) . '</small></td>';
         $html .= '<td>' . Html::convDateTime($lastCheck) . '</td>';
         $html .= '<td>' . htmlescape($nextCheckLabel) . '</td>';
-        $html .= '<td>' . htmlescape($displayMessage);
+        $html .= '<td>' . ($canManage ? self::renderActions($id, $hostname, $serviceVersion) : '-') . '</td></tr>';
 
         $recoveryAt = ServerClock::toTimestamp($client['recovery_at'] ?? null);
+        $details = '';
         if ($recoveryAt > $now - 86400 && trim((string) ($client['recovery_note'] ?? '')) !== '') {
-            $html .= "<div class='small text-warning mt-1'><i class='fas fa-shield-alt me-1'></i>"
+            $details .= "<div class='small text-warning mt-1'><i class='fas fa-shield-alt me-1'></i>"
                 . htmlescape((string) $client['recovery_note']) . '</div>';
         }
-        $html .= self::renderLog("install-{$id}", 'Ver log da instalação', (string) ($client['install_log'] ?? ''), 'text-danger');
+        $details .= self::renderLog("install-{$id}", 'Ver log da instalação', (string) ($client['install_log'] ?? ''), 'text-danger');
         $diagnosticsAt = (string) ($client['diagnostics_at'] ?? '');
-        $html .= self::renderLog(
+        $details .= self::renderLog(
             "diagnostics-{$id}",
             'Ver logs enviados' . ($diagnosticsAt !== '' ? ' em ' . Html::convDateTime($diagnosticsAt) : ''),
             (string) ($client['diagnostics_log'] ?? ''),
             'text-primary'
         );
-        return $html . '</td></tr>';
+
+        if ($problem) {
+            $logPath = 'C:\\ProgramData\\AtivaLocacao\\UnifiedUpdater\\logs';
+            $html .= "<tr class='aw-details-row'><td colspan='6'><div class='aw-problem'>"
+                . "<div><strong><i class='fas fa-exclamation-circle'></i> Detalhes do problema</strong><p>"
+                . htmlescape($displayMessage) . "</p><code>" . htmlescape($logPath) . "</code>{$details}</div>"
+                . "<div><strong><i class='fas fa-wrench'></i> Ações recomendadas</strong><ol>"
+                . '<li>Verifique se o serviço está em execução.</li><li>Tente reiniciar o serviço.</li><li>Consulte os logs para identificar o erro.</li></ol>'
+                . ($canManage ? "<button type='button' class='aw-button aw-button-light' data-ativaupdater-command='" . ManualCheck::COMMAND_RESTART_SERVICE
+                    . "' data-client-id='{$id}' data-confirm='Reiniciar o serviço Ativa Unified Updater em " . htmlescape($hostname)
+                    . "?'><i class='fas fa-power-off'></i> Reiniciar serviço</button>" : '')
+                . '</div></div></td></tr>';
+        }
+        return $html;
+    }
+
+    private static function versionBlock(string $label, string $version, string $extra = ''): string
+    {
+        return "<span><small>" . htmlescape($label) . '</small><strong>' . htmlescape($version) . "</strong>{$extra}</span>";
     }
 
     private static function renderActions(int $id, string $hostname, string $serviceVersion): string
@@ -271,15 +310,11 @@ final class ClientsView
                 'fas fa-redo', 'Reinstalar', 'Reinstalar o pacote publicado',
                 "Reinstalar o pacote publicado em {$hostname}? Uma instalação em andamento será cancelada.",
             ],
-            ManualCheck::COMMAND_RESTART_SERVICE => [
-                'fas fa-power-off', 'Reiniciar serviço', 'Reiniciar o serviço Ativa Unified Updater',
-                "Reiniciar o serviço Ativa Unified Updater em {$hostname}?",
-            ],
         ];
-        $html = "<div class='btn-group btn-group-sm mt-2 d-flex flex-wrap' role='group'>";
+        $html = "<div class='aw-actions' role='group'>";
         foreach ($actions as $command => [$icon, $label, $title, $confirm]) {
             $supported = ManualCheck::supports($serviceVersion, $command);
-            $html .= "<button type='button' class='btn btn-outline-secondary' data-ativaupdater-command='" . htmlescape($command) . "'"
+            $html .= "<button type='button' class='aw-button aw-button-light' data-ativaupdater-command='" . htmlescape($command) . "'"
                 . " data-client-id='{$id}'"
                 . ($confirm !== '' ? " data-confirm='" . htmlescape($confirm) . "'" : '')
                 . " title='" . htmlescape($supported ? $title : 'Exige o serviço ' . ManualCheck::REMOTE_ACTIONS_MIN_VERSION . ' ou superior') . "'"
