@@ -32,7 +32,7 @@ final class ClientRepository
         }
 
         $token = Security::randomToken(32);
-        $now = date('Y-m-d H:i:s');
+        $now = ServerClock::now();
         $existing = $this->findByMachineGuid($machineGuid);
         $computerId = $this->reconcileComputer($hostname);
 
@@ -101,11 +101,11 @@ final class ClientRepository
     private function recordRevokedContact(array $client): void
     {
         global $DB;
-        $updatedAt = strtotime((string) ($client['updated_at'] ?? ''));
-        if ($updatedAt !== false && $updatedAt > time() - 300 && ($client['last_error_code'] ?? '') === 'CLIENT_REVOKED') {
+        $updatedAt = ServerClock::toTimestamp((string) ($client['updated_at'] ?? ''));
+        if ($updatedAt > time() - 300 && ($client['last_error_code'] ?? '') === 'CLIENT_REVOKED') {
             return;
         }
-        $now = date('Y-m-d H:i:s');
+        $now = ServerClock::now();
         self::log(sprintf(
             'Cliente revogado continua ativo: %s (id %d, revogado em %s, IP %s).',
             (string) $client['hostname'], (int) $client['id'], (string) $client['revoked_at'], (string) ($_SERVER['REMOTE_ADDR'] ?? '?')
@@ -159,9 +159,9 @@ final class ClientRepository
     {
         global $DB;
         $DB->update(self::TABLE, [
-            'last_check' => date('Y-m-d H:i:s'),
+            'last_check' => ServerClock::now(),
             'last_ip'    => Security::cleanText($ipAddress ?? '', 45),
-            'updated_at' => date('Y-m-d H:i:s'),
+            'updated_at' => ServerClock::now(),
         ], ['id' => $clientId]);
     }
 
@@ -203,13 +203,13 @@ final class ClientRepository
             'username'               => Security::cleanText($payload['username'] ?? '', 255),
             'client_version'         => $clientVersion,
             'os_version'             => Security::cleanText($payload['os_version'] ?? '', 255),
-            'next_check_at'          => date('Y-m-d H:i:s', $now + $seconds),
+            'next_check_at'          => ServerClock::format($now + $seconds),
             'check_interval_seconds' => $seconds,
             'last_cycle_action'      => $action,
-            'last_cycle_at'          => date('Y-m-d H:i:s', $now),
-            'last_check'             => date('Y-m-d H:i:s', $now),
+            'last_cycle_at'          => ServerClock::format($now),
+            'last_check'             => ServerClock::format($now),
             'last_ip'                => Security::cleanText($ipAddress ?? '', 45),
-            'updated_at'             => date('Y-m-d H:i:s', $now),
+            'updated_at'             => ServerClock::format($now),
         ], ['id' => (int) $client['id']]);
     }
 
@@ -260,7 +260,7 @@ final class ClientRepository
             }
         }
 
-        $now = date('Y-m-d H:i:s');
+        $now = ServerClock::now();
         $reportedRolloutId = Security::cleanText($payload['rollout_id'] ?? '', 64);
         $activeRolloutId = (string) ($client['rollout_id'] ?? '');
         $matchesActiveRollout = $reportedRolloutId === ''
@@ -306,7 +306,7 @@ final class ClientRepository
         }
         $DB->update(self::TABLE, [
             'force_reapply' => 1,
-            'updated_at'    => date('Y-m-d H:i:s'),
+            'updated_at'    => ServerClock::now(),
         ], ['id' => $id]);
         Audit::record('force_reapply', 'client', $id, false, true);
     }
@@ -323,7 +323,7 @@ final class ClientRepository
         }
 
         $rolloutId = date('YmdHis') . '-' . bin2hex(random_bytes(12));
-        $startedAt = date('Y-m-d H:i:s');
+        $startedAt = ServerClock::now();
         $DB->update(self::TABLE, [
             'force_reapply'      => 1,
             'rollout_id'         => $rolloutId,
@@ -349,7 +349,7 @@ final class ClientRepository
         $DB->update(self::TABLE, [
             'rollout_status'      => 'applying',
             'rollout_finished_at' => null,
-            'updated_at'          => date('Y-m-d H:i:s'),
+            'updated_at'          => ServerClock::now(),
         ], [
             'id'             => $clientId,
             'rollout_id'     => $rolloutId,
@@ -367,9 +367,9 @@ final class ClientRepository
         // The token hash is kept on purpose: authenticate() still rejects it, but can
         // now tell "revoked client still calling" apart from an unknown token.
         $DB->update(self::TABLE, [
-            'revoked_at' => date('Y-m-d H:i:s'),
+            'revoked_at' => ServerClock::now(),
             'status'     => 'revoked',
-            'updated_at' => date('Y-m-d H:i:s'),
+            'updated_at' => ServerClock::now(),
         ], ['id' => $id]);
         Audit::record('revoke_client', 'client', $id, null, 'revoked');
         self::log(sprintf(
@@ -403,7 +403,7 @@ final class ClientRepository
             if ($computerId !== null) {
                 $DB->update(self::TABLE, [
                     'computers_id' => $computerId,
-                    'updated_at'   => date('Y-m-d H:i:s'),
+                    'updated_at'   => ServerClock::now(),
                 ], ['id' => (int) $client['id']]);
                 $updated++;
             }

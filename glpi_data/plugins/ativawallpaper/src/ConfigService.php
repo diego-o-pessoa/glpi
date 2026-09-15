@@ -30,6 +30,11 @@ final class ConfigService
             'active_rollout_id'          => '',
             'active_rollout_started_at'  => '',
             'active_rollout_version'     => '',
+            // Verification cycle of the dashboard progress bar (see MonitorCycle).
+            'monitor_phase'              => '',
+            'monitor_started_at'         => '0',
+            'monitor_completed_at'       => '0',
+            'monitor_total'              => '0',
             'bootstrap_configured'       => '0',
             'setup_completed'            => '0',
             'preserve_data_on_uninstall' => '1',

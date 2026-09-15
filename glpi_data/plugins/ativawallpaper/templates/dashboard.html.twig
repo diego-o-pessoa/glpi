@@ -2,7 +2,8 @@
 <div class="container-fluid ativa-wallpaper awp-shell"
      data-awp-overview
      data-endpoint="{{ urls.overview }}"
-     data-action-url="{{ urls.action }}">
+     data-action-url="{{ urls.action }}"
+     data-server-epoch="{{ server_epoch }}">
   {{ include('@ativawallpaper/partials/header.html.twig', {active: 'overview', urls: urls, show_settings: rights.config_view, live: true}) }}
 
   {% if not enabled %}
@@ -62,12 +63,9 @@
             <form method="post" action="{{ urls.action }}" data-awp-force-all>
               <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="action" value="force_all">
-              <button class="btn awp-btn-success" type="submit" {{ rollout and rollout.active ? 'disabled' : '' }}>
-                {% if rollout and rollout.active %}
-                  <i class="ti ti-loader-2 ativa-spin"></i>Aplicação em andamento
-                {% else %}
-                  <i class="ti ti-device-desktop-check"></i>{{ enabled ? 'Aplicar novamente' : 'Ativar e aplicar' }}
-                {% endif %}
+              {# Always available: it cancels the current cycle and starts a new one. #}
+              <button class="btn awp-btn-success" type="submit">
+                <i class="ti ti-device-desktop-check"></i>{{ enabled ? 'Aplicar novamente' : 'Ativar e aplicar' }}
               </button>
             </form>
           {% endif %}

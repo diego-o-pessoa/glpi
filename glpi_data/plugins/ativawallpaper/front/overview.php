@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Glpi\Application\View\TemplateRenderer;
 use GlpiPlugin\Ativawallpaper\OverviewPage;
+use GlpiPlugin\Ativawallpaper\ServerClock;
 
 include '../../../inc/includes.php';
 
@@ -25,9 +26,10 @@ header('Cache-Control: no-store, no-cache, must-revalidate');
 header('X-Content-Type-Options: nosniff');
 echo json_encode(
     [
-        'time'     => date('H:i:s'),
-        'sections' => $sections,
-        'rollout'  => $context['rollout'] === null ? null : ['active' => $context['rollout']['active']],
+        'time'         => substr(ServerClock::now(), 11, 8),
+        // Lets the browser count down against the server clock.
+        'server_epoch' => $context['server_epoch'],
+        'sections'     => $sections,
     ],
     JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
 );

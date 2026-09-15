@@ -63,6 +63,8 @@ final class OverviewPage
             'summary'        => $summary,
             'error_percentage' => $summary['managed'] > 0 ? round(($summary['errors'] / $summary['managed']) * 100, 1) : 0.0,
             'rollout'        => $rollout,
+            'cycle'          => MonitorCycle::current(),
+            'server_epoch'   => time(),
             'activity'       => $dashboard->activity($rollout),
             'last_check_age' => DashboardService::describeAge($lastCheckAge),
             'clients'        => $dashboard->clients($filters, $current, (int) ($query['page'] ?? 1), self::PAGE_SIZE),

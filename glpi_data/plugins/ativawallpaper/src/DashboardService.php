@@ -15,8 +15,11 @@ final class DashboardService
         global $DB;
         $offline = max(120, ConfigService::getInt('offline_after_seconds'));
         $currentVersion = $DB->quoteValue((string) ($current['version'] ?? ''));
-        $online = "last_check IS NOT NULL AND last_check >= DATE_SUB(NOW(), INTERVAL {$offline} SECOND)";
-        $offlineSql = "last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL {$offline} SECOND)";
+        // Compared with a server-clock string, not NOW(): the database session timezone
+        // follows the GLPI user and differs from the clock used to store the dates.
+        $threshold = $DB->quoteValue(ServerClock::format(time() - $offline));
+        $online = "last_check IS NOT NULL AND last_check >= {$threshold}";
+        $offlineSql = "last_check IS NULL OR last_check < {$threshold}";
 
         $iterator = $DB->request([
             'SELECT' => [
@@ -128,12 +131,7 @@ final class DashboardService
         if ($guids === [] || !$DB->tableExists('glpi_plugin_ativaupdater_clients')) {
             return [];
         }
-        // Ativa Updater stores its dates in the php.ini timezone (see its ServerClock).
-        try {
-            $zone = new \DateTimeZone((string) ini_get('date.timezone') ?: 'UTC');
-        } catch (\Throwable) {
-            $zone = new \DateTimeZone('UTC');
-        }
+        // Ativa Updater stores its dates with the same php.ini-timezone clock.
         $contacts = [];
         $iterator = $DB->request([
             'SELECT' => ['machine_guid', 'last_check'],
@@ -141,11 +139,8 @@ final class DashboardService
             'WHERE'  => ['machine_guid' => $guids],
         ]);
         foreach ($iterator as $row) {
-            $age = null;
-            try {
-                $age = max(0, time() - (new \DateTimeImmutable((string) $row['last_check'], $zone))->getTimestamp());
-            } catch (\Throwable) {
-            }
+            $timestamp = ServerClock::toTimestamp((string) $row['last_check']);
+            $age = $timestamp > 0 ? max(0, time() - $timestamp) : null;
             $contacts[strtolower((string) $row['machine_guid'])] = [
                 'last_check'  => (string) $row['last_check'],
                 'age_seconds' => $age,
@@ -161,8 +156,8 @@ final class DashboardService
         if (!empty($client['revoked_at'])) {
             return 'revoked';
         }
-        $lastCheck = !empty($client['last_check']) ? strtotime((string) $client['last_check']) : false;
-        if ($lastCheck === false || $lastCheck < time() - max(120, ConfigService::getInt('offline_after_seconds'))) {
+        $lastCheck = ServerClock::toTimestamp((string) ($client['last_check'] ?? ''));
+        if ($lastCheck === 0 || $lastCheck < time() - max(120, ConfigService::getInt('offline_after_seconds'))) {
             return 'offline';
         }
         if (($client['status'] ?? '') === 'error') {
@@ -230,18 +225,17 @@ final class DashboardService
             }
             $counts[$status]++;
             $cycleSeconds = max(5, (int) ($row['check_interval_seconds'] ?? $defaultCycleSeconds));
-            $nextCheckTimestamp = !empty($row['next_check_at']) ? strtotime((string) $row['next_check_at']) : false;
-            if ($nextCheckTimestamp === false && !empty($row['last_check'])) {
-                $lastCheckTimestamp = strtotime((string) $row['last_check']);
-                $nextCheckTimestamp = $lastCheckTimestamp === false ? false : $lastCheckTimestamp + $cycleSeconds;
+            $nextCheckTimestamp = ServerClock::toTimestamp((string) ($row['next_check_at'] ?? '')) ?: false;
+            $lastCheckTimestamp = ServerClock::toTimestamp((string) ($row['last_check'] ?? '')) ?: false;
+            if ($nextCheckTimestamp === false && $lastCheckTimestamp !== false) {
+                $nextCheckTimestamp = $lastCheckTimestamp + $cycleSeconds;
             }
-            $lastCheckTimestamp = !empty($row['last_check']) ? strtotime((string) $row['last_check']) : false;
             $machines[] = [
                 'hostname'   => (string) $row['hostname'],
                 'status'     => $status,
                 'last_error' => $status === 'error' ? (string) ($row['last_error'] ?? '') : '',
                 'last_check' => (string) ($row['last_check'] ?? ''),
-                'next_check_at' => $nextCheckTimestamp === false ? '' : date('Y-m-d H:i:s', $nextCheckTimestamp),
+                'next_check_at' => $nextCheckTimestamp === false ? '' : ServerClock::format($nextCheckTimestamp),
                 'seconds_until_check' => $nextCheckTimestamp === false ? null : max(0, $nextCheckTimestamp - $now),
                 'cycle_seconds' => $cycleSeconds,
                 'online' => $lastCheckTimestamp !== false && $lastCheckTimestamp >= $now - $offlineAfter,
@@ -285,8 +279,8 @@ final class DashboardService
         }
         $recentApplication = false;
         if ($latestCycle !== null) {
-            $latestTimestamp = strtotime($latestCycle['last_cycle_at']);
-            $recentApplication = $latestTimestamp !== false
+            $latestTimestamp = ServerClock::toTimestamp($latestCycle['last_cycle_at']);
+            $recentApplication = $latestTimestamp > 0
                 && $latestTimestamp >= $now - 5
                 && in_array($latestCycle['last_cycle_action'], [
                     'initial_applied', 'configuration_applied', 'forced_applied', 'drift_corrected',
@@ -336,11 +330,12 @@ final class DashboardService
     {
         global $DB;
         $row = $DB->request([
-            'SELECT' => [new QueryExpression('TIMESTAMPDIFF(SECOND, MAX(last_check), NOW()) AS age')],
+            'SELECT' => [new QueryExpression('MAX(last_check) AS last_check')],
             'FROM'   => self::TABLE,
             'WHERE'  => ['revoked_at' => null],
         ])->current();
-        return is_array($row) && $row['age'] !== null ? max(0, (int) $row['age']) : null;
+        $timestamp = is_array($row) ? ServerClock::toTimestamp((string) ($row['last_check'] ?? '')) : 0;
+        return $timestamp > 0 ? max(0, time() - $timestamp) : null;
     }
 
     public static function describeAge(?int $seconds): string
@@ -442,10 +437,10 @@ final class DashboardService
 
     private function activityItem(string $at, string $message, string $tone): array
     {
-        $timestamp = strtotime($at);
-        $time = $timestamp === false
-            ? $at
-            : (date('Y-m-d', $timestamp) === date('Y-m-d') ? date('H:i:s', $timestamp) : date('d/m H:i', $timestamp));
+        // Plugin dates are server-clock strings: format them without timezone conversion.
+        $time = substr($at, 0, 10) === substr(ServerClock::now(), 0, 10)
+            ? substr($at, 11, 8)
+            : substr($at, 8, 2) . '/' . substr($at, 5, 2) . ' ' . substr($at, 11, 5);
         return ['at' => $at, 'time' => $time, 'message' => $message, 'tone' => $tone];
     }
 
@@ -456,8 +451,9 @@ final class DashboardService
             return null;
         }
         $seconds = max(120, ConfigService::getInt('offline_after_seconds'));
-        $online = "last_check IS NOT NULL AND last_check >= DATE_SUB(NOW(), INTERVAL {$seconds} SECOND)";
-        $offline = "(last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL {$seconds} SECOND))";
+        $threshold = $DB->quoteValue(ServerClock::format(time() - $seconds));
+        $online = "last_check IS NOT NULL AND last_check >= {$threshold}";
+        $offline = "(last_check IS NULL OR last_check < {$threshold})";
         $version = $DB->quoteValue((string) ($current['version'] ?? ''));
         return match ($status) {
             'offline' => $offline,

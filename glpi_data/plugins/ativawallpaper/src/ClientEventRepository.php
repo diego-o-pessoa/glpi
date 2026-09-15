@@ -47,7 +47,7 @@ final class ClientEventRepository
             'lock_requested'    => !empty($payload['lock_change']) ? 1 : 0,
             'policy_enforced'   => !empty($payload['policy_enforced']) ? 1 : 0,
             'ip_address'        => Security::cleanText($ipAddress ?? '', 45),
-            'occurred_at'       => date('Y-m-d H:i:s'),
+            'occurred_at'       => ServerClock::now(),
         ]);
     }
 

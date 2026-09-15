@@ -33,7 +33,7 @@ final class Audit
             'old_value'  => $encode($oldValue),
             'new_value'  => $encode($newValue),
             'ip_address' => Security::cleanText($_SERVER['REMOTE_ADDR'] ?? '', 45),
-            'created_at' => date('Y-m-d H:i:s'),
+            'created_at' => ServerClock::now(),
         ]);
     }
 }

@@ -133,6 +133,12 @@
 .awp-progress { height: 11px; background: #e5e9f1; border-radius: 8px; overflow: hidden; }
 .awp-progress span { display: block; height: 100%; background: linear-gradient(90deg, #35c15f, #2fb35a); border-radius: 8px; transition: width .45s ease; }
 .awp-progress span.is-running { background: linear-gradient(90deg, #3776df, #35bd62); }
+/* Verification cycle: yellow while analyzing, green when every computer was analyzed. */
+.awp-progress.is-analyzing span { background: linear-gradient(90deg, #ffd35c, #f5b51e); }
+.awp-progress.is-complete span { background: linear-gradient(90deg, #35c15f, #2fb35a); }
+.awp-progress-value.is-analyzing { color: #b17a07; }
+.awp-progress-value [data-awp-countdown] { font-variant-numeric: tabular-nums; }
+.awp-rollout-line.is-complete { color: #1f7c3f; }
 .awp-rollout-line { display: flex; align-items: center; gap: 7px; margin-top: 9px; font-size: 12px; font-weight: 600; color: #2856ab; }
 .awp-mini-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 14px 0; }
 .awp-mini { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 6px; align-items: center; border: 1px solid #e3e9f3; border-radius: 8px; padding: 8px; background: #fbfcff; min-width: 0; }

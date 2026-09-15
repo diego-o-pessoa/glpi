@@ -245,17 +245,23 @@ document.addEventListener('DOMContentLoaded', () => {
     messageTimer = window.setTimeout(() => box.classList.add('d-none'), 7000);
   };
 
-  const forceAllButton = () => overview.querySelector('[data-awp-force-all] button[type="submit"]');
-  const renderForceAllButton = (active) => {
-    const button = forceAllButton();
-    if (!button || button.dataset.busy === '1') return;
-    const state = active ? 'active' : 'idle';
-    if (button.dataset.state === state) return;
-    button.dataset.state = state;
-    button.disabled = active;
-    button.innerHTML = active
-      ? '<i class="ti ti-loader-2 ativa-spin"></i>Aplicação em andamento'
-      : '<i class="ti ti-device-desktop-check"></i>Aplicar novamente';
+  // Countdowns of the verification cycle ("00:50 para começar", "00:12 para o próximo")
+  // run against the server clock, corrected by the offset of this browser.
+  let clockOffsetMs = Number(overview.dataset.serverEpoch || 0) * 1000 - Date.now();
+  const expiredCountdowns = new Set();
+  const pad = (value) => String(value).padStart(2, '0');
+  const tickCountdowns = () => {
+    const nowMs = Date.now() + clockOffsetMs;
+    overview.querySelectorAll('[data-awp-countdown]').forEach((element) => {
+      const until = Number(element.dataset.awpCountdown || 0);
+      const remaining = Math.max(0, Math.ceil((until * 1000 - nowMs) / 1000));
+      element.textContent = `${pad(Math.floor(remaining / 60))}:${pad(remaining % 60)}`;
+      if (remaining === 0 && until > 0 && !expiredCountdowns.has(until)) {
+        // The cycle moves on now: ask the server instead of waiting for the next poll.
+        expiredCountdowns.add(until);
+        window.setTimeout(refreshNow, 800);
+      }
+    });
   };
 
   const applySections = (sections) => {
@@ -266,6 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
       lastSections.set(name, html);
       container.innerHTML = html;
     });
+    tickCountdowns();
   };
 
   const schedule = (delay) => {
@@ -283,8 +290,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
+      if (data.server_epoch) clockOffsetMs = Number(data.server_epoch) * 1000 - Date.now();
       applySections(data.sections);
-      renderForceAllButton(Boolean(data.rollout && data.rollout.active));
       liveBadge?.classList.remove('is-offline');
       if (liveText) liveText.textContent = `Ao vivo • ${data.time}`;
     } catch (error) {
@@ -359,20 +366,20 @@ document.addEventListener('DOMContentLoaded', () => {
   overview.querySelectorAll('[data-awp-force-all]').forEach((form) => {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const button = forceAllButton();
+      const button = form.querySelector('button[type="submit"]');
       if (!button || button.disabled) return;
-      button.dataset.busy = '1';
-      button.dataset.state = '';
+      const label = button.innerHTML;
       button.disabled = true;
-      button.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Enviando...';
+      button.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Reiniciando...';
       try {
         const payload = await postAction({ action: 'force_all' });
-        showMessage(payload.message || 'Aplicação iniciada.');
+        showMessage(payload.message || 'Nova análise iniciada em todos os computadores.');
       } catch (error) {
         showMessage(error.message, 'error');
       } finally {
-        button.dataset.busy = '0';
-        renderForceAllButton(false);
+        // Stays available: another click cancels this cycle and starts over again.
+        button.disabled = false;
+        button.innerHTML = label;
         refreshNow();
       }
     });
@@ -397,5 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) refreshNow();
   });
+  tickCountdowns();
+  window.setInterval(tickCountdowns, 1000);
   schedule(REFRESH_MS);
 });

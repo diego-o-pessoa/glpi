@@ -6,6 +6,7 @@ use GlpiPlugin\Ativawallpaper\Audit;
 use GlpiPlugin\Ativawallpaper\ClientRepository;
 use GlpiPlugin\Ativawallpaper\ConfigService;
 use GlpiPlugin\Ativawallpaper\DashboardService;
+use GlpiPlugin\Ativawallpaper\MonitorCycle;
 use GlpiPlugin\Ativawallpaper\Security;
 use GlpiPlugin\Ativawallpaper\UpdateManager;
 use GlpiPlugin\Ativawallpaper\WallpaperManager;
@@ -95,6 +96,8 @@ try {
                 'active_rollout_started_at' => $rollout['started_at'],
                 'active_rollout_version'    => (string) (new WallpaperManager())->current()['version'],
             ]);
+            // Cancel the current cycle (including its waiting time) and analyze everything again.
+            MonitorCycle::restart();
             $message = sprintf(
                 'Aplicacao iniciada em %d computador(es). Acompanhe o andamento na barra de progresso.',
                 $rollout['count']

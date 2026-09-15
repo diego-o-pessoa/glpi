@@ -169,7 +169,7 @@ final class WallpaperManager
                 // Custom names such as "20260915-natal" must not reset the daily sequence.
                 $version = Version::next(Version::latestInSequence($versions, $today), $today);
             }
-            $now = date('Y-m-d H:i:s');
+            $now = ServerClock::now();
 
             $DB->beginTransaction();
             $transactionStarted = true;

@@ -2,6 +2,14 @@
 
 ## Em desenvolvimento
 
+- Barra de **Distribuição e monitoramento** em ciclos: verde em 100% com "MM:SS para começar"
+  (intervalo de Polling das Configurações), depois amarela com "Analisando X de N
+  computadores" e o tempo até o próximo computador. **Aplicar novamente** cancela o ciclo
+  e recomeça a análise na hora, sem a espera. Computadores que pararam de reportar ficam
+  fora da contagem.
+- Datas do plugin passam a usar um relógio único (fuso do php.ini), como no Ativa Updater:
+  o fuso padrão do PHP muda conforme o contexto do GLPI e deixava contagens e comparações erradas.
+
 - Plugin 1.5.0: o menu **Administracao > Agent** passa a se chamar **Ativa Wallpaper**.
   As abas **Atualizacoes** e **GLPI Agent** foram removidas (distribuicao pelo Ativa
   Updater) e **Gerenciar Wallpaper** virou **Visao geral**.
