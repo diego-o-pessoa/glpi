@@ -245,10 +245,6 @@ document.addEventListener('DOMContentLoaded', () => {
     messageTimer = window.setTimeout(() => box.classList.add('d-none'), 7000);
   };
 
-  const setRefreshing = (active) => {
-    overview.querySelectorAll('[data-awp-refresh] i').forEach((icon) => icon.classList.toggle('ativa-spin', active));
-  };
-
   const forceAllButton = () => overview.querySelector('[data-awp-force-all] button[type="submit"]');
   const renderForceAllButton = (active) => {
     const button = forceAllButton();
@@ -296,13 +292,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (liveText) liveText.textContent = 'Reconectando...';
     } finally {
       polling = false;
-      setRefreshing(false);
       schedule();
     }
   }
 
+  // Refresh right after an action (Aplicar novamente, reaplicar, revogar).
   const refreshNow = () => {
-    setRefreshing(true);
     window.clearTimeout(pollTimer);
     if (polling) {
       schedule(300);
@@ -326,11 +321,6 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   overview.addEventListener('click', async (event) => {
-    if (event.target.closest('[data-awp-refresh]')) {
-      refreshNow();
-      return;
-    }
-
     const copy = event.target.closest('[data-awp-copy]');
     if (copy) {
       const value = copy.dataset.awpCopy || '';
@@ -347,16 +337,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const publish = document.getElementById('awp-publish');
       publish?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       publish?.querySelector('[data-ativa-image-input]')?.click();
-      return;
-    }
-
-    const scroll = event.target.closest('[data-awp-scroll]');
-    if (scroll) {
-      const target = document.getElementById(scroll.dataset.awpScroll);
-      if (target) {
-        event.preventDefault();
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
       return;
     }
 

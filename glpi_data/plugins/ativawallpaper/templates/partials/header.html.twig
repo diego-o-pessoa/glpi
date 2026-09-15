@@ -15,15 +15,11 @@
       <span class="awp-live" data-awp-live>
         <i class="ti ti-circle-filled"></i><span data-awp-live-text>Ao vivo</span>
       </span>
-      <button type="button" class="btn awp-btn-primary" data-awp-refresh title="Consultar agora o status de todos os computadores">
-        <i class="ti ti-refresh"></i>Verificar agora
-      </button>
     </div>
   {% endif %}
 </header>
 <nav class="awp-tabs" aria-label="Navegação Ativa Wallpaper">
   <a class="awp-tab {{ active == 'overview' ? 'is-active' : '' }}" href="{{ urls.dashboard }}"><i class="ti ti-home"></i>Visão geral</a>
-  <a class="awp-tab" href="{{ urls.dashboard }}#awp-computers" {{ active == 'overview' ? 'data-awp-scroll=awp-computers' : '' }}><i class="ti ti-device-desktop"></i>Computadores</a>
   <a class="awp-tab {{ active == 'history' ? 'is-active' : '' }}" href="{{ urls.history }}"><i class="ti ti-history"></i>Histórico</a>
   <a class="awp-tab {{ active == 'events' ? 'is-active' : '' }}" href="{{ urls.events }}"><i class="ti ti-shield-check"></i>Alterações</a>
   {% if show_settings|default(false) %}

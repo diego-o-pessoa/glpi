@@ -2,8 +2,6 @@
 
 declare(strict_types=1);
 
-use GlpiPlugin\Ativawallpaper\ConfigService;
-
 class PluginAtivawallpaperMenu extends CommonGLPI
 {
     public static function getTypeName($nb = 0): string
@@ -31,10 +29,8 @@ class PluginAtivawallpaperMenu extends CommonGLPI
         global $CFG_GLPI;
 
         $base = $CFG_GLPI['root_doc'] . '/plugins/ativawallpaper/front';
-        $landingPage = !ConfigService::getBool('setup_completed')
-            && Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, READ)
-            ? $base . '/settings.php'
-            : $base . '/dashboard.php';
+        // Always open "Visao geral"; Configuracoes stays one tab away.
+        $landingPage = $base . '/dashboard.php';
         $menu = [
             'title' => self::getTypeName(),
             'page'  => $landingPage,
