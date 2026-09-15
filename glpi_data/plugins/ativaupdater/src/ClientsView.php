@@ -289,9 +289,7 @@ final class ClientsView
                 . htmlescape($displayMessage) . "</p><code>" . htmlescape($logPath) . "</code>{$details}</div>"
                 . "<div><strong><i class='fas fa-wrench'></i> Ações recomendadas</strong><ol>"
                 . '<li>Verifique se o serviço está em execução.</li><li>Tente reiniciar o serviço.</li><li>Consulte os logs para identificar o erro.</li></ol>'
-                . ($canManage ? "<button type='button' class='aw-button aw-button-light' data-ativaupdater-command='" . ManualCheck::COMMAND_RESTART_SERVICE
-                    . "' data-client-id='{$id}' data-confirm='Reiniciar o serviço Ativa Unified Updater em " . htmlescape($hostname)
-                    . "?'><i class='fas fa-power-off'></i> Reiniciar serviço</button>" : '')
+                . ($canManage ? self::restartButton($id, $hostname, $serviceVersion) : '')
                 . '</div></div></td></tr>';
         }
         return $html;
@@ -304,24 +302,29 @@ final class ClientsView
 
     private static function renderActions(int $id, string $hostname, string $serviceVersion): string
     {
-        $actions = [
-            ManualCheck::COMMAND_SEND_LOGS => ['fas fa-file-alt', 'Logs', 'Coletar e enviar os logs deste computador', ''],
-            ManualCheck::COMMAND_REINSTALL => [
-                'fas fa-redo', 'Reinstalar', 'Reinstalar o pacote publicado',
-                "Reinstalar o pacote publicado em {$hostname}? Uma instalação em andamento será cancelada.",
-            ],
-        ];
         $html = "<div class='aw-actions' role='group'>";
-        foreach ($actions as $command => [$icon, $label, $title, $confirm]) {
-            $supported = ManualCheck::supports($serviceVersion, $command);
-            $html .= "<button type='button' class='aw-button aw-button-light' data-ativaupdater-command='" . htmlescape($command) . "'"
-                . " data-client-id='{$id}'"
-                . ($confirm !== '' ? " data-confirm='" . htmlescape($confirm) . "'" : '')
-                . " title='" . htmlescape($supported ? $title : 'Exige o serviço ' . ManualCheck::REMOTE_ACTIONS_MIN_VERSION . ' ou superior') . "'"
-                . ($supported ? '' : ' disabled')
-                . "><i class='{$icon} me-1'></i>" . htmlescape($label) . '</button>';
-        }
+        $logsSupported = ManualCheck::supports($serviceVersion, ManualCheck::COMMAND_SEND_LOGS);
+        $html .= "<button type='button' class='aw-button aw-button-light' data-aw-open-logs data-client-id='{$id}' data-hostname='"
+            . htmlescape($hostname) . "' title='"
+            . htmlescape($logsSupported ? 'Abrir e atualizar os logs deste computador' : 'Abrir os últimos logs; a coleta atualizada exige o serviço ' . ManualCheck::REMOTE_ACTIONS_MIN_VERSION . ' ou superior')
+            . "'><i class='fas fa-file-alt'></i>Logs</button>";
+        $html .= self::restartButton($id, $hostname, $serviceVersion);
+        $reinstallSupported = ManualCheck::supports($serviceVersion, ManualCheck::COMMAND_REINSTALL);
+        $html .= "<button type='button' class='aw-button aw-button-light' data-ativaupdater-command='" . ManualCheck::COMMAND_REINSTALL
+            . "' data-client-id='{$id}' data-confirm='Reinstalar o pacote publicado em " . htmlescape($hostname)
+            . "? Uma instalação em andamento será cancelada.' title='"
+            . htmlescape($reinstallSupported ? 'Reinstalar o pacote publicado' : 'Clique para consultar o requisito; exige o serviço ' . ManualCheck::REMOTE_ACTIONS_MIN_VERSION . ' ou superior')
+            . "'><i class='fas fa-redo'></i>Reinstalar</button>";
         return $html . '</div>';
+    }
+
+    private static function restartButton(int $id, string $hostname, string $serviceVersion): string
+    {
+        $supported = ManualCheck::supports($serviceVersion, ManualCheck::COMMAND_RESTART_SERVICE);
+        return "<button type='button' class='aw-button aw-button-light' data-aw-restart-service data-client-id='{$id}' data-hostname='"
+            . htmlescape($hostname) . "' title='"
+            . htmlescape($supported ? 'Reiniciar o serviço Ativa Unified Updater' : 'Clique para consultar o requisito; exige o serviço ' . ManualCheck::REMOTE_ACTIONS_MIN_VERSION . ' ou superior')
+            . "'><i class='fas fa-sync-alt'></i>Reiniciar</button>";
     }
 
     private static function renderLog(string $key, string $summary, string $content, string $summaryClass): string

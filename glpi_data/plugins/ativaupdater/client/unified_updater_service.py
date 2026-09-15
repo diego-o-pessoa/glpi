@@ -28,7 +28,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.5.0"
+UPDATER_VERSION = "1.5.1"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -332,11 +332,19 @@ def read_log_tail(path: Path, max_lines: int, max_bytes: int = 262144) -> list[s
 
 
 def newest_file(directory: Path, pattern: str, not_before: float = 0.0) -> Path | None:
+    candidates = newest_files(directory, pattern, not_before, 1)
+    return candidates[0] if candidates else None
+
+
+def newest_files(directory: Path, pattern: str, not_before: float = 0.0, limit: int = 20) -> list[Path]:
     try:
         candidates = [path for path in directory.glob(pattern) if path.stat().st_mtime >= not_before]
     except OSError:
-        return None
-    return max(candidates, key=lambda path: path.stat().st_mtime, default=None)
+        return []
+    try:
+        return sorted(candidates, key=lambda path: path.stat().st_mtime, reverse=True)[:max(0, limit)]
+    except OSError:
+        return []
 
 
 def collect_install_log(
@@ -1487,8 +1495,9 @@ def collect_diagnostics() -> str:
         ("Ultima falha de instalacao", INSTALL_FAILURE_LOG_PATH, 80),
         ("Configuracao (configure.log)", LOG_DIR / "configure.log", 30),
     ]
-    installer_log = newest_file(LOG_DIR, "installer-*.log")
-    if installer_log:
+    # Keep the newest execution at the end so it survives the diagnostics
+    # tail limit even when the computer has a long installation history.
+    for installer_log in reversed(newest_files(LOG_DIR, "installer-*.log")):
         sections.append((f"Instalador ({installer_log.name})", installer_log, 80))
     wallpaper_log = newest_file(WALLPAPER_LOG_DIR, "client-*.log")
     if wallpaper_log:

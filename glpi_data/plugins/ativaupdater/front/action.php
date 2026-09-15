@@ -59,11 +59,11 @@ if ($action === '' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 
 $expectsJson = strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
-$respond = static function (bool $ok, string $message) use ($expectsJson): never {
+$respond = static function (bool $ok, string $message, array $data = []) use ($expectsJson): never {
     if ($expectsJson) {
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
-        echo json_encode(['ok' => $ok, 'message' => $message], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo json_encode(['ok' => $ok, 'message' => $message] + $data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }
     Session::addMessageAfterRedirect($message, false, $ok ? INFO : ERROR);
@@ -145,7 +145,8 @@ if ($action === 'client_command') {
     }
     $client = $iterator->current();
     $hostname = (string) $client['hostname'];
-    if ($requestCommand($client, $command, ServerClock::now()) === null) {
+    $requestedAt = ServerClock::now();
+    if ($requestCommand($client, $command, $requestedAt) === null) {
         $respond(false, sprintf(
             '%s: o serviço (versão %s) não aceita este comando; é necessário o serviço %s ou superior.',
             $hostname,
@@ -158,7 +159,12 @@ if ($action === 'client_command') {
         ManualCheck::COMMAND_RESTART_SERVICE => $hostname . ': o serviço será reiniciado em até 15 segundos.',
         ManualCheck::COMMAND_SEND_LOGS => $hostname . ': coleta de logs solicitada; aparecerão na tabela em até 15 segundos.',
         default => $hostname . ': verificação reiniciada; começa em até 15 segundos.',
-    });
+    }, [
+        'client_id'     => $id,
+        'hostname'      => $hostname,
+        'request_seq'   => (int) ($client['check_request_seq'] ?? 0) + 1,
+        'requested_at'  => $requestedAt,
+    ]);
 }
 
 if ($action === 'upload') {
