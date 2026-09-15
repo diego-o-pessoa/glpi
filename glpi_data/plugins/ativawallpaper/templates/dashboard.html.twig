@@ -175,4 +175,25 @@
       {{ include('@ativawallpaper/overview/computers.html.twig') }}
     </div>
   </section>
+
+  {# Logs of one computer (outside the live sections, so the periodic refresh keeps it open). #}
+  <div class="awp-modal-layer" hidden data-awp-logs-modal data-endpoint="{{ urls.client_logs }}">
+    <div class="awp-modal" role="dialog" aria-modal="true" aria-labelledby="awp-logs-title">
+      <div class="awp-modal-header">
+        <div class="awp-modal-heading">
+          <span class="awp-modal-icon"><i class="ti ti-file-text"></i></span>
+          <div>
+            <h2 id="awp-logs-title">Logs do computador</h2>
+            <p data-awp-logs-host></p>
+          </div>
+        </div>
+        <button type="button" class="awp-modal-close" data-awp-logs-close aria-label="Fechar"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="awp-alert d-none" role="status" data-awp-logs-status></div>
+      <div class="awp-log-layout">
+        <nav class="awp-log-menu" aria-label="Seções do log" data-awp-logs-menu></nav>
+        <pre class="awp-log-content" data-awp-logs-content>Carregando...</pre>
+      </div>
+    </div>
+  </div>
 </div>

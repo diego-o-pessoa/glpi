@@ -28,7 +28,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.6.0"
+UPDATER_VERSION = "1.6.1"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -1733,6 +1733,20 @@ def schedule_service_restart(logger: logging.Logger) -> None:
     logger.warning("Reinicio do servico solicitado pelo dashboard.")
 
 
+WALLPAPER_ERROR_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:,\d{3})? (?:ERROR|CRITICAL)\b")
+
+
+def wallpaper_error_lines(paths: list[Path], max_lines: int = 80, max_bytes: int = 1024 * 1024) -> list[str]:
+    """ERROR lines of every user's Wallpaper Client log, oldest first (without tracebacks)."""
+    found: list[tuple[str, str]] = []
+    for path in paths:
+        for line in read_log_tail(path, 100000, max_bytes=max_bytes):
+            if WALLPAPER_ERROR_RE.match(line):
+                found.append((line[:19], f"{line}  [{path.name}]"))
+    found.sort(key=lambda item: item[0])
+    return [text for _, text in found[-max_lines:]]
+
+
 def collect_diagnostics() -> str:
     """Logs and state sent to the dashboard on request ("Enviar logs"). No secrets."""
     now = time.time()
@@ -1771,12 +1785,20 @@ def collect_diagnostics() -> str:
         sections.append((f"Instalador ({installer_log.name})", installer_log, 80))
     wallpaper_log = newest_file(WALLPAPER_LOG_DIR, "client-*.log")
     if wallpaper_log:
-        sections.append((f"Wallpaper Client ({wallpaper_log.name})", wallpaper_log, 40))
+        sections.append((f"Wallpaper Client ({wallpaper_log.name})", wallpaper_log, 120))
     for title, path, max_lines in sections:
         if path.is_file():
             lines.append("")
             lines.append(f"== {title} ==")
             lines.extend(read_log_tail(path, max_lines))
+    # Last on purpose: the diagnostics limit keeps the end of the text. Communication
+    # errors (e.g. HTTP 404 while the plugin was being updated) never reach the server,
+    # so the Ativa Wallpaper dashboard reads them from here.
+    wallpaper_errors = wallpaper_error_lines(newest_files(WALLPAPER_LOG_DIR, "client-*.log"))
+    if wallpaper_log or wallpaper_errors:
+        lines.append("")
+        lines.append("== Wallpaper Client: erros recentes ==")
+        lines.extend(wallpaper_errors or ["(nenhum erro registrado nos logs recentes do Wallpaper Client)"])
     text = "\n".join(lines)
     if len(text) > DIAGNOSTICS_MAX_CHARS:
         header = "\n".join(lines[:9])

@@ -28,7 +28,13 @@
     {% for client in clients.rows %}
       {% set badge = badges[client.computed_status] %}
       <tr class="{{ client.computed_status in ['error', 'revoked'] ? 'is-error' : '' }}">
-        <td><strong>{{ client.hostname }}</strong></td>
+        <td>
+          {% if client.computers_id %}
+            <a class="awp-host-link" href="{{ urls.computer }}?id={{ client.computers_id }}" title="Abrir o computador no inventário do GLPI"><strong>{{ client.hostname }}</strong></a>
+          {% else %}
+            <strong>{{ client.hostname }}</strong>
+          {% endif %}
+        </td>
         <td>{{ client.username ?: '—' }}</td>
         <td>{% if client.wallpaper_version %}<code class="awp-pill">{{ client.wallpaper_version }}</code>{% else %}—{% endif %}</td>
         <td>{{ client.client_version }}</td>
@@ -50,11 +56,8 @@
         </td>
         <td class="text-end">
           <span class="awp-row-actions">
-            {% if client.computers_id %}
-              <a class="awp-icon-btn" href="{{ urls.computer }}?id={{ client.computers_id }}" title="Abrir o computador no inventário do GLPI"><i class="ti ti-file-text"></i></a>
-            {% else %}
-              <span class="awp-icon-btn is-disabled" title="Aguardando vínculo com o inventário do GLPI"><i class="ti ti-file-text"></i></span>
-            {% endif %}
+            <button type="button" class="awp-icon-btn" data-awp-client-logs data-id="{{ client.id }}" data-hostname="{{ client.hostname }}"
+                    title="Ver os logs deste computador (erros como HTTP 404)"><i class="ti ti-file-text"></i></button>
             {% if rights.clients and client.computed_status != 'revoked' %}
               <button type="button" class="awp-icon-btn" data-awp-client-action="force" data-id="{{ client.id }}" title="Forçar nova aplicação neste computador"><i class="ti ti-refresh"></i></button>
               <button type="button" class="awp-icon-btn is-danger" data-awp-client-action="revoke" data-id="{{ client.id }}"

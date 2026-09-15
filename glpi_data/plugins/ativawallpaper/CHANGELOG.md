@@ -2,6 +2,10 @@
 
 ## Em desenvolvimento
 
+- Tabela de computadores: a primeira ação abre os **logs do computador** (resumo, último erro,
+  eventos do servidor e o log do Wallpaper Client coletado na máquina pelo Ativa Updater,
+  com o histórico de erros como HTTP 404). O nome do computador passa a abrir o inventário.
+
 - Barra de **Distribuição e monitoramento** em ciclos: verde em 100% com "MM:SS para começar"
   (intervalo de Polling das Configurações), depois amarela com "Analisando X de N
   computadores" e o tempo até o próximo computador. **Aplicar novamente** cancela o ciclo

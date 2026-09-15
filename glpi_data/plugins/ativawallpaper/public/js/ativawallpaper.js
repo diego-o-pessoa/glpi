@@ -327,6 +327,112 @@ document.addEventListener('DOMContentLoaded', () => {
     return payload;
   };
 
+  // Logs of one computer: server data plus the computer's own log, collected on demand
+  // by the Ativa Updater service (communication errors such as HTTP 404 only exist there).
+  const logsModal = overview.querySelector('[data-awp-logs-modal]');
+  let logsOperation = 0;
+  let activeLogTitle = '';
+  const delay = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+  const setLogsStatus = (text, tone = 'info') => {
+    const box = logsModal?.querySelector('[data-awp-logs-status]');
+    if (!box) return;
+    box.className = text ? `awp-alert is-${tone}` : 'awp-alert d-none';
+    box.textContent = text;
+  };
+  const fetchLogs = async (id) => {
+    const response = await fetch(`${logsModal.dataset.endpoint}?id=${encodeURIComponent(id)}`, {
+      credentials: 'same-origin', cache: 'no-store',
+      headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data || !data.ok) throw new Error((data && data.message) || 'Não foi possível carregar os logs.');
+    return data;
+  };
+  const renderLogs = (data) => {
+    const menu = logsModal.querySelector('[data-awp-logs-menu]');
+    const content = logsModal.querySelector('[data-awp-logs-content]');
+    menu.replaceChildren();
+    const sections = Array.isArray(data.sections) ? data.sections : [];
+    const select = (section, button) => {
+      activeLogTitle = section.title;
+      menu.querySelectorAll('button').forEach((item) => item.classList.toggle('is-active', item === button));
+      content.textContent = section.content;
+      content.scrollTop = 0;
+    };
+    let selected = null;
+    sections.forEach((section, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = section.title;
+      if (section.title.includes('erros') && !section.content.startsWith('(nenhum erro')) button.classList.add('has-errors');
+      button.addEventListener('click', () => select(section, button));
+      menu.append(button);
+      if (section.title === activeLogTitle || (selected === null && index === 0)) selected = [section, button];
+    });
+    if (selected) select(...selected);
+  };
+  const closeLogs = () => {
+    if (!logsModal) return;
+    logsOperation += 1;
+    logsModal.hidden = true;
+    document.body.classList.remove('awp-modal-open');
+  };
+  const openLogs = async (id, hostname) => {
+    if (!logsModal) return;
+    const operation = ++logsOperation;
+    activeLogTitle = '';
+    logsModal.querySelector('[data-awp-logs-host]').textContent = hostname;
+    logsModal.querySelector('[data-awp-logs-menu]').replaceChildren();
+    logsModal.querySelector('[data-awp-logs-content]').textContent = 'Carregando...';
+    setLogsStatus('');
+    logsModal.hidden = false;
+    document.body.classList.add('awp-modal-open');
+    try {
+      let data = await fetchLogs(id);
+      if (operation !== logsOperation) return;
+      renderLogs(data);
+      const updater = data.updater || {};
+      if (!updater.can_collect) {
+        setLogsStatus(updater.reason || 'Exibindo os últimos logs recebidos.', updater.available ? 'warning' : 'info');
+        return;
+      }
+      setLogsStatus('Pedindo ao computador uma coleta atualizada dos logs (até 1 minuto)...');
+      const body = new FormData();
+      body.append('action', 'client_command');
+      body.append('command', 'send_logs');
+      body.append('id', String(updater.id));
+      const response = await fetch(updater.collect_url, {
+        method: 'POST', body, credentials: 'same-origin', cache: 'no-store',
+        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrfToken() },
+      });
+      const command = await response.json().catch(() => null);
+      if (!response.ok || !command || !command.ok) {
+        throw new Error((command && command.message) || 'O Ativa Updater recusou o pedido de coleta.');
+      }
+      const requestSeq = Number(command.request_seq || 0);
+      for (let attempt = 0; attempt < 45 && operation === logsOperation; attempt += 1) {
+        await delay(1500);
+        data = await fetchLogs(id);
+        if (operation !== logsOperation) return;
+        if (Number(data.updater?.ack_seq || 0) >= requestSeq) {
+          renderLogs(data);
+          const note = data.updater?.reason ? ` ${data.updater.reason}` : '';
+          setLogsStatus(`Logs coletados agora do computador (${data.updater?.diagnostics_at || 'agora'}).${note}`, 'success');
+          return;
+        }
+      }
+      if (operation === logsOperation) {
+        renderLogs(data);
+        setLogsStatus('O computador não respondeu à coleta (desligado ou sem o serviço Ativa Updater). Exibindo os últimos logs recebidos.', 'warning');
+      }
+    } catch (error) {
+      if (operation === logsOperation) setLogsStatus(error.message, 'error');
+    }
+  };
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && logsModal && !logsModal.hidden) closeLogs();
+  });
+
   overview.addEventListener('click', async (event) => {
     const copy = event.target.closest('[data-awp-copy]');
     if (copy) {
@@ -344,6 +450,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const publish = document.getElementById('awp-publish');
       publish?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       publish?.querySelector('[data-ativa-image-input]')?.click();
+      return;
+    }
+
+    const logsButton = event.target.closest('[data-awp-client-logs]');
+    if (logsButton) {
+      openLogs(logsButton.dataset.id, logsButton.dataset.hostname || '');
+      return;
+    }
+    if (event.target.closest('[data-awp-logs-close]') || event.target === logsModal) {
+      closeLogs();
       return;
     }
 

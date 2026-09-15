@@ -32,8 +32,8 @@ def quiet_logger(name: str) -> logging.Logger:
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.6.0")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 6, 0))
+        self.assertEqual(updater.UPDATER_VERSION, "1.6.1")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 6, 1))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -1160,6 +1160,48 @@ class WatchdogTests(unittest.TestCase):
         self.assertIn("instalacao mais recente", text)
         self.assertIn('"installed_version": "1.6.1"', text)
         self.assertNotIn("SECRET", text)
+
+    def test_wallpaper_errors_of_every_user_are_collected_in_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            logs = Path(directory)
+            (logs / "client-aaa.log").write_text(
+                "2026-09-15 13:41:55 ERROR HTTP_404 HTTP 404\n"
+                "Traceback (most recent call last):\n"
+                "2026-09-15 13:42:00 WARNING Wallpaper policy fallback\n"
+                "2026-09-15 14:10:00 INFO Configuration unchanged (HTTP 304)\n",
+                encoding="utf-8",
+            )
+            (logs / "client-bbb.log").write_text(
+                "2026-09-15 13:59:12 ERROR HTTP_401 Token ausente ou invalido\n", encoding="utf-8",
+            )
+            lines = updater.wallpaper_error_lines([logs / "client-bbb.log", logs / "client-aaa.log"])
+        self.assertEqual(lines, [
+            "2026-09-15 13:41:55 ERROR HTTP_404 HTTP 404  [client-aaa.log]",
+            "2026-09-15 13:59:12 ERROR HTTP_401 Token ausente ou invalido  [client-bbb.log]",
+        ])
+        self.assertEqual(updater.wallpaper_error_lines([logs / "missing.log"]), [])
+
+    def test_diagnostics_end_with_the_wallpaper_error_history(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "logs").mkdir()
+            wallpaper = root / "wallpaper"
+            wallpaper.mkdir()
+            (wallpaper / "client-aaa.log").write_text("2026-09-15 13:41:55 ERROR HTTP_404 HTTP 404\n", encoding="utf-8")
+            with mock.patch.object(updater, "PRODUCT_DIR", root), \
+                    mock.patch.object(updater, "LOG_DIR", root / "logs"), \
+                    mock.patch.object(updater, "STATE_PATH", root / "state.json"), \
+                    mock.patch.object(updater, "HEARTBEAT_PATH", root / "heartbeat.json"), \
+                    mock.patch.object(updater, "INSTALL_FAILURE_LOG_PATH", root / "logs" / "install-failure.log"), \
+                    mock.patch.object(updater, "INSTALL_RESULT_PATH", root / "install-result.json"), \
+                    mock.patch.object(updater, "WALLPAPER_LOG_DIR", wallpaper), \
+                    mock.patch.object(updater, "WATCHDOG_EXE", root / "watchdog" / "x.exe"), \
+                    mock.patch.object(updater, "query_service", return_value=self.RUNNING), \
+                    mock.patch.object(updater, "running_setup_processes", return_value=[]):
+                text = updater.collect_diagnostics()
+        self.assertTrue(text.rstrip().endswith("ERROR HTTP_404 HTTP 404  [client-aaa.log]"))
+        self.assertIn("== Wallpaper Client (client-aaa.log) ==", text)
+        self.assertIn("== Wallpaper Client: erros recentes ==", text)
 
 
 class ConfigTests(unittest.TestCase):

@@ -77,6 +77,7 @@ final class OverviewPage
                 'action'    => $base . '/front/action.php',
                 'dashboard' => $base . '/front/dashboard.php',
                 'overview'  => $base . '/front/overview.php',
+                'client_logs' => $base . '/front/client_logs.php',
                 'history'   => $base . '/front/history.php',
                 'events'    => $base . '/front/events.php',
                 'settings'  => $base . '/front/settings.php',
