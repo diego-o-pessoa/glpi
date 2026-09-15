@@ -337,8 +337,9 @@ echo <<<'HTML'
         const id = button.dataset.clientId;
         const token = openModal('Logs do computador', button.dataset.hostname || '', 'fa-file-alt', false);
         modalBody.innerHTML = "<div class='aw-operation'><div class='aw-operation-icon is-running'><i class='fas fa-sync-alt'></i></div><h3>Carregando logs…</h3></div>";
+        let details = {install_log: '', diagnostics_log: ''};
         try {
-            let details = await fetchClientDetails(id);
+            details = await fetchClientDetails(id);
             if (token !== operationToken) return;
             renderLogs(details, true);
             const command = await requestClientCommand(id, 'send_logs');
@@ -352,7 +353,7 @@ echo <<<'HTML'
             }
             if (token === operationToken) renderLogs(details, false, 'O computador não respondeu à nova coleta. Os últimos logs recebidos continuam disponíveis abaixo.');
         } catch (error) {
-            if (token === operationToken) renderLogs({install_log: '', diagnostics_log: ''}, false, error.message);
+            if (token === operationToken) renderLogs(details, false, error.message);
         }
     };
 
