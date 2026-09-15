@@ -32,8 +32,8 @@ def quiet_logger(name: str) -> logging.Logger:
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.5.0")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 5, 0))
+        self.assertEqual(updater.UPDATER_VERSION, "1.5.1")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 5, 1))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -964,6 +964,8 @@ class WatchdogTests(unittest.TestCase):
             logs.mkdir()
             (logs / "service.log").write_text("ERROR Falha de comunicacao com a API: WinError 10060\n", encoding="utf-8")
             (logs / "watchdog.log").write_text("Vigia: servico parado foi iniciado\n", encoding="utf-8")
+            (logs / "installer-100.log").write_text("instalacao anterior\n", encoding="utf-8")
+            (logs / "installer-200.log").write_text("instalacao mais recente\n", encoding="utf-8")
             (root / "service-config.json").write_text(json.dumps({"api_token": "SECRET" * 10}), encoding="utf-8")
             (root / "state.json").write_text(json.dumps({"installed_version": "1.6.1"}), encoding="utf-8")
             with mock.patch.object(updater, "PRODUCT_DIR", root), \
@@ -978,6 +980,10 @@ class WatchdogTests(unittest.TestCase):
                 text = updater.collect_diagnostics()
         self.assertIn("WinError 10060", text)
         self.assertIn("Vigia: servico parado foi iniciado", text)
+        self.assertIn("Instalador (installer-100.log)", text)
+        self.assertIn("Instalador (installer-200.log)", text)
+        self.assertIn("instalacao anterior", text)
+        self.assertIn("instalacao mais recente", text)
         self.assertIn('"installed_version": "1.6.1"', text)
         self.assertNotIn("SECRET", text)
 

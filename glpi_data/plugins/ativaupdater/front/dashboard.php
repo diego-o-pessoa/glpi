@@ -134,7 +134,25 @@ if ($releases) {
 } else {
     echo "<p class='aw-empty p-3'>Nenhum histórico disponível.</p>";
 }
-echo '</div></details>' . PageLayout::footer();
+echo '</div></details>';
+echo <<<'HTML'
+<div class="aw-modal-layer" id="ativaupdater-operation-modal" role="dialog" aria-modal="true" aria-labelledby="ativaupdater-modal-title" hidden>
+    <section class="aw-modal">
+        <header class="aw-modal-header">
+            <div class="aw-modal-heading">
+                <i id="ativaupdater-modal-icon" class="fas fa-file-alt"></i>
+                <div><h2 id="ativaupdater-modal-title">Ativa Updater</h2><p id="ativaupdater-modal-subtitle"></p></div>
+            </div>
+            <button type="button" class="aw-modal-close" id="ativaupdater-modal-close" aria-label="Fechar"><i class="fas fa-times"></i></button>
+        </header>
+        <div class="aw-modal-body" id="ativaupdater-modal-body"></div>
+        <footer class="aw-modal-footer" id="ativaupdater-modal-footer" hidden>
+            <button type="button" class="btn btn-primary" id="ativaupdater-modal-done">Fechar</button>
+        </footer>
+    </section>
+</div>
+HTML;
+echo PageLayout::footer();
 
 echo <<<'HTML'
 <script>
@@ -144,10 +162,20 @@ echo <<<'HTML'
     const body = document.getElementById('ativaupdater-clients-body');
     const indicator = document.getElementById('ativaupdater-live-indicator');
     const messageBox = document.getElementById('ativaupdater-live-message');
+    const modalLayer = document.getElementById('ativaupdater-operation-modal');
+    const modalTitle = document.getElementById('ativaupdater-modal-title');
+    const modalSubtitle = document.getElementById('ativaupdater-modal-subtitle');
+    const modalIcon = document.getElementById('ativaupdater-modal-icon');
+    const modalBody = document.getElementById('ativaupdater-modal-body');
+    const modalClose = document.getElementById('ativaupdater-modal-close');
+    const modalFooter = document.getElementById('ativaupdater-modal-footer');
+    const modalDone = document.getElementById('ativaupdater-modal-done');
     const csrfToken = () => document.querySelector('meta[property="glpi:csrf_token"]')?.getAttribute('content') || '';
     let signature = card.dataset.signature || '';
     let refreshing = false;
     let failures = 0;
+    let modalLocked = false;
+    let operationToken = 0;
 
     const setIndicator = (text, ok) => {
         if (!indicator) return;
@@ -202,21 +230,189 @@ echo <<<'HTML'
             setIndicator(failures > 2 ? 'Sem conexão; tentando novamente' : 'Atualizando...', failures <= 2);
         } finally { refreshing = false; }
     };
+    const delay = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+    const openModal = (title, subtitle, icon, locked) => {
+        operationToken += 1;
+        modalLocked = locked;
+        modalTitle.textContent = title;
+        modalSubtitle.textContent = subtitle;
+        modalIcon.className = 'fas ' + icon;
+        modalBody.innerHTML = '';
+        modalClose.hidden = locked;
+        modalFooter.hidden = true;
+        modalLayer.hidden = false;
+        document.body.classList.add('aw-modal-open');
+        return operationToken;
+    };
+    const unlockModal = () => {
+        modalLocked = false;
+        modalClose.hidden = false;
+        modalFooter.hidden = false;
+    };
+    const closeModal = () => {
+        if (modalLocked) return;
+        operationToken += 1;
+        modalLayer.hidden = true;
+        document.body.classList.remove('aw-modal-open');
+    };
+    const requestAction = async (fields) => {
+        const form = new FormData();
+        Object.entries(fields).forEach(([key, value]) => form.append(key, value));
+        const response = await fetch('action.php', {method: 'POST', body: form, credentials: 'same-origin', headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrfToken()}});
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.ok) throw new Error(data?.message || 'A sessão pode ter expirado. Recarregue a página.');
+        return data;
+    };
+    const requestClientCommand = (id, command) => requestAction({action: 'client_command', command, id});
+    const fetchClientDetails = async (id) => {
+        const response = await fetch('client_details.php?id=' + encodeURIComponent(id), {credentials: 'same-origin', cache: 'no-store', headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}});
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.ok) throw new Error(data?.message || 'Não foi possível consultar o computador.');
+        return data;
+    };
     const sendCommand = async (button) => {
         const command = button.dataset.ativaupdaterCommand;
         if (button.dataset.confirm && !window.confirm(button.dataset.confirm)) return;
-        const form = new FormData();
-        if (command === 'check_now') form.append('action', 'check_now');
-        else { form.append('action', 'client_command'); form.append('command', command); form.append('id', button.dataset.clientId); }
         button.disabled = true;
         try {
-            const response = await fetch('action.php', {method: 'POST', body: form, credentials: 'same-origin', headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrfToken()}});
-            const data = await response.json().catch(() => null);
-            showMessage(data?.message || 'A sessão pode ter expirado. Recarregue a página.', Boolean(data?.ok));
+            const data = command === 'check_now'
+                ? await requestAction({action: 'check_now'})
+                : await requestClientCommand(button.dataset.clientId, command);
+            showMessage(data.message, true);
         } catch (error) { showMessage('Não foi possível enviar o comando: ' + error.message, false); }
         finally { button.disabled = false; refresh(true); }
     };
+
+    const logSections = (data) => {
+        const sections = [];
+        if ((data.install_log || '').trim()) sections.push({title: 'Log da instalação', content: data.install_log.trim()});
+        const diagnostic = (data.diagnostics_log || '').trim();
+        if (diagnostic) {
+            const headings = Array.from(diagnostic.matchAll(/^== (.+?) ==$/gm));
+            if (!headings.length) sections.push({title: 'Diagnóstico completo', content: diagnostic});
+            else {
+                const introduction = diagnostic.slice(0, headings[0].index).trim();
+                if (introduction) sections.push({title: 'Resumo do computador', content: introduction});
+                headings.forEach((heading, index) => {
+                    const start = heading.index + heading[0].length;
+                    const end = index + 1 < headings.length ? headings[index + 1].index : diagnostic.length;
+                    sections.push({title: heading[1], content: diagnostic.slice(start, end).trim() || 'Sem conteúdo.'});
+                });
+            }
+        }
+        if (!sections.length) sections.push({title: 'Logs', content: 'Nenhum log foi enviado por este computador ainda.'});
+        const installerSections = sections.filter((section) => section.title.startsWith('Instalador (')).reverse();
+        return sections.filter((section) => !section.title.startsWith('Instalador (')).concat(installerSections);
+    };
+    const renderLogs = (data, updating, notice = '') => {
+        modalBody.innerHTML = '';
+        const alert = document.createElement('div');
+        alert.className = 'aw-alert ' + (notice ? 'aw-alert-danger' : 'aw-alert-info');
+        alert.textContent = notice || (updating ? 'Solicitando uma coleta atualizada ao computador…' : 'Logs atualizados pelo serviço.');
+        modalBody.append(alert);
+        const layout = document.createElement('div');
+        layout.className = 'aw-log-layout';
+        const menu = document.createElement('nav');
+        menu.className = 'aw-log-menu';
+        const content = document.createElement('pre');
+        content.className = 'aw-log-content';
+        const sections = logSections(data);
+        const select = (selected, button) => {
+            menu.querySelectorAll('button').forEach((item) => item.classList.remove('is-active'));
+            button.classList.add('is-active');
+            content.textContent = selected.content;
+        };
+        sections.forEach((section, index) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = section.title;
+            button.addEventListener('click', () => select(section, button));
+            menu.append(button);
+            if (index === 0) select(section, button);
+        });
+        layout.append(menu, content);
+        modalBody.append(layout);
+    };
+    const openLogs = async (button) => {
+        const id = button.dataset.clientId;
+        const token = openModal('Logs do computador', button.dataset.hostname || '', 'fa-file-alt', false);
+        modalBody.innerHTML = "<div class='aw-operation'><div class='aw-operation-icon is-running'><i class='fas fa-sync-alt'></i></div><h3>Carregando logs…</h3></div>";
+        try {
+            let details = await fetchClientDetails(id);
+            if (token !== operationToken) return;
+            renderLogs(details, true);
+            const command = await requestClientCommand(id, 'send_logs');
+            for (let attempt = 0; attempt < 40 && token === operationToken; attempt += 1) {
+                details = await fetchClientDetails(id);
+                if (details.ack_seq >= command.request_seq) {
+                    renderLogs(details, false);
+                    return;
+                }
+                await delay(1500);
+            }
+            if (token === operationToken) renderLogs(details, false, 'O computador não respondeu à nova coleta. Os últimos logs recebidos continuam disponíveis abaixo.');
+        } catch (error) {
+            if (token === operationToken) renderLogs({install_log: '', diagnostics_log: ''}, false, error.message);
+        }
+    };
+
+    const renderRestart = (percent, title, note, state = 'running') => {
+        modalBody.innerHTML = "<div class='aw-operation'><div class='aw-operation-icon is-" + state + "'><i class='fas "
+            + (state === 'done' ? 'fa-check' : state === 'error' ? 'fa-exclamation' : 'fa-sync-alt')
+            + "'></i></div><h3></h3><p></p><div class='aw-operation-progress'><span></span></div><div class='aw-operation-note'>Não feche esta janela enquanto o serviço estiver reiniciando.</div></div>";
+        modalBody.querySelector('h3').textContent = title;
+        modalBody.querySelector('p').textContent = note;
+        const bar = modalBody.querySelector('.aw-operation-progress span');
+        bar.style.width = percent + '%';
+        bar.textContent = percent + '%';
+    };
+    const restartService = async (button) => {
+        const id = button.dataset.clientId;
+        const token = openModal('Reiniciando Ativa Updater', button.dataset.hostname || '', 'fa-sync-alt', true);
+        renderRestart(5, 'Preparando reinício', 'Registrando o comando no servidor…');
+        try {
+            const command = await requestClientCommand(id, 'restart_service');
+            const started = Date.now();
+            for (let attempt = 0; attempt < 180 && token === operationToken; attempt += 1) {
+                const details = await fetchClientDetails(id);
+                const acknowledged = details.ack_seq >= command.request_seq;
+                if (acknowledged && details.acknowledged_at_ts > 0 && details.last_check_ts > details.acknowledged_at_ts) {
+                    renderRestart(100, 'Serviço reiniciado', 'O computador voltou a se comunicar com o servidor.', 'done');
+                    unlockModal();
+                    refresh(true);
+                    return;
+                }
+                if (acknowledged) {
+                    const elapsedAfterAck = Math.max(0, details.server_time_ts - details.acknowledged_at_ts);
+                    const progress = Math.min(95, 65 + Math.floor(elapsedAfterAck * 3));
+                    renderRestart(progress, 'Iniciando novamente', 'Comando confirmado. Aguardando o novo contato do serviço…');
+                } else {
+                    const progress = Math.min(55, 10 + Math.floor((Date.now() - started) / 500));
+                    renderRestart(progress, 'Enviando comando', 'Aguardando o computador receber a solicitação…');
+                }
+                await delay(1000);
+            }
+            if (token === operationToken) {
+                renderRestart(95, 'O serviço não confirmou o retorno', 'Verifique se o computador está ligado e se o serviço consegue acessar o GLPI.', 'error');
+                unlockModal();
+            }
+        } catch (error) {
+            if (token === operationToken) {
+                renderRestart(0, 'Não foi possível reiniciar', error.message, 'error');
+                unlockModal();
+            }
+        }
+    };
+
+    modalClose.addEventListener('click', closeModal);
+    modalDone.addEventListener('click', closeModal);
+    modalLayer.addEventListener('click', (event) => { if (event.target === modalLayer) closeModal(); });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !modalLayer.hidden) closeModal(); });
     document.addEventListener('click', (event) => {
+        const logsButton = event.target.closest('[data-aw-open-logs]');
+        if (logsButton && !logsButton.disabled) { event.preventDefault(); openLogs(logsButton); return; }
+        const restartButton = event.target.closest('[data-aw-restart-service]');
+        if (restartButton && !restartButton.disabled) { event.preventDefault(); restartService(restartButton); return; }
         const commandButton = event.target.closest('[data-ativaupdater-command]');
         if (commandButton && !commandButton.disabled) { event.preventDefault(); sendCommand(commandButton); return; }
         const copyButton = event.target.closest('[data-copy-value]');
