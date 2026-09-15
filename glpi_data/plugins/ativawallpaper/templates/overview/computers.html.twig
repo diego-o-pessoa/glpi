@@ -1,0 +1,86 @@
+{% set badges = {'updated': ['Atualizado', 'is-green'], 'pending': ['Pendente', 'is-yellow'], 'offline': ['Offline', 'is-gray'], 'error': ['Erro', 'is-red']} %}
+{% set query = {q: filters.q, status: filters.status, sort: filters.sort, direction: filters.direction} %}
+<div class="table-responsive">
+  <table class="awp-table">
+    <thead>
+      <tr>
+        <th>Computador</th>
+        <th>Usuário</th>
+        <th>Wallpaper</th>
+        <th>Cliente</th>
+        <th>Último contato</th>
+        <th>Última aplicação</th>
+        <th>Status</th>
+        <th class="text-end">Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for client in clients.rows %}
+      {% set badge = badges[client.computed_status] %}
+      <tr class="{{ client.computed_status == 'error' ? 'is-error' : '' }}">
+        <td><strong>{{ client.hostname }}</strong></td>
+        <td>{{ client.username ?: '—' }}</td>
+        <td>{% if client.wallpaper_version %}<code class="awp-pill">{{ client.wallpaper_version }}</code>{% else %}—{% endif %}</td>
+        <td>{{ client.client_version }}</td>
+        <td>{{ client.last_check ? client.last_check|formatted_datetime : '—' }}</td>
+        <td>{{ client.last_apply ? client.last_apply|formatted_datetime : '—' }}</td>
+        <td>
+          <span class="awp-badge {{ badge[1] }}">{{ badge[0] }}</span>
+          {% if client.force_reapply %}<small class="awp-row-note">Reaplicação solicitada</small>{% endif %}
+          {% if client.computed_status == 'error' and client.last_error %}<small class="awp-row-note is-error" title="{{ client.last_error }}">{{ client.last_error }}</small>{% endif %}
+        </td>
+        <td class="text-end">
+          <span class="awp-row-actions">
+            {% if client.computers_id %}
+              <a class="awp-icon-btn" href="{{ urls.computer }}?id={{ client.computers_id }}" title="Abrir o computador no inventário do GLPI"><i class="ti ti-file-text"></i></a>
+            {% else %}
+              <span class="awp-icon-btn is-disabled" title="Aguardando vínculo com o inventário do GLPI"><i class="ti ti-file-text"></i></span>
+            {% endif %}
+            {% if rights.clients %}
+              <button type="button" class="awp-icon-btn" data-awp-client-action="force" data-id="{{ client.id }}" title="Forçar nova aplicação neste computador"><i class="ti ti-refresh"></i></button>
+              <button type="button" class="awp-icon-btn is-danger" data-awp-client-action="revoke" data-id="{{ client.id }}"
+                      data-confirm="Revogar {{ client.hostname }}? O cliente precisará ser registrado novamente." title="Revogar cliente"><i class="ti ti-ban"></i></button>
+            {% endif %}
+          </span>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="awp-table-empty">
+        {% if summary.managed == 0 %}
+          Nenhum computador registrado. Os computadores aparecem aqui depois que o AtivaWallpaperClient é instalado.
+        {% else %}
+          Nenhum computador encontrado com esses filtros.
+        {% endif %}
+      </td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="awp-table-footer">
+  <span class="text-muted">Mostrando {{ clients.total }} registro(s)</span>
+  {% if clients.pages > 1 %}
+    <nav class="awp-pagination" aria-label="Páginas de computadores">
+      {% if clients.page > 1 %}
+        <a href="{{ urls.dashboard }}?{{ query|merge({page: clients.page - 1})|url_encode }}#awp-computers">Anterior</a>
+      {% else %}
+        <span class="is-disabled">Anterior</span>
+      {% endif %}
+      {% for number in max(1, clients.page - 2)..min(clients.pages, clients.page + 2) %}
+        {% if number == clients.page %}
+          <span class="is-current" aria-current="page">{{ number }}</span>
+        {% else %}
+          <a href="{{ urls.dashboard }}?{{ query|merge({page: number})|url_encode }}#awp-computers">{{ number }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if clients.page < clients.pages %}
+        <a href="{{ urls.dashboard }}?{{ query|merge({page: clients.page + 1})|url_encode }}#awp-computers">Próxima</a>
+      {% else %}
+        <span class="is-disabled">Próxima</span>
+      {% endif %}
+    </nav>
+  {% else %}
+    <nav class="awp-pagination" aria-label="Páginas de computadores">
+      <span class="is-disabled">Anterior</span><span class="is-current" aria-current="page">1</span><span class="is-disabled">Próxima</span>
+    </nav>
+  {% endif %}
+</div>

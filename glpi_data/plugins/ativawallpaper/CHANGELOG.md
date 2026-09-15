@@ -2,6 +2,14 @@
 
 ## Em desenvolvimento
 
+- Plugin 1.5.0: o menu **Administracao > Agent** passa a se chamar **Ativa Wallpaper**.
+  As abas **Atualizacoes** e **GLPI Agent** foram removidas (distribuicao pelo Ativa
+  Updater) e **Gerenciar Wallpaper** virou **Visao geral**.
+- Nova **Visao geral**: indicadores, wallpaper atual, publicacao direta (arrastar e
+  soltar, nome/versao opcional, modo de exibicao e bloqueio), distribuicao e
+  monitoramento, atividade recente e tabela de computadores atualizados ao vivo a
+  cada 3 segundos, sem recarregar a pagina.
+
 - Plugin e cliente 1.4.1 simplificam a aba **Atualizacoes** e adicionam um painel principal
   com progresso automatico, resultado geral e motivos por computador.
 - Computadores que ja possuem a versao solicitada passam a contar como

@@ -222,284 +222,200 @@ document.addEventListener('DOMContentLoaded', () => {
     window.setTimeout(refreshUpdates, 500);
   }
 
-  const rollout = document.querySelector('[data-ativa-rollout]');
-  if (!rollout) return;
+  const overview = document.querySelector('[data-awp-overview]');
+  if (!overview) return;
 
-  const forceForms = Array.from(document.querySelectorAll('[data-ativa-force-all]'));
-  const machineStates = new Map();
-  const machineCycles = new Map();
-  const completedRollouts = new Set();
-  let currentRolloutId = '';
+  const REFRESH_MS = 3000;
+  const HIDDEN_REFRESH_MS = 15000;
+  const lastSections = new Map();
   let pollTimer = null;
-  let requestRunning = false;
+  let polling = false;
+  let messageTimer = null;
 
-  const statuses = {
-    pending: { icon: 'ti-clock text-warning', label: 'aguardando consulta da API' },
-    applying: { icon: 'ti-loader-2 text-primary ativa-spin', label: 'aplicando agora' },
-    success: { icon: 'ti-circle-check text-success', label: 'atualizado' },
-    error: { icon: 'ti-alert-circle text-danger', label: 'erro' },
-  };
-  const cycleActions = {
-    already_current: { message: 'verificado; wallpaper ja estava correto, nenhuma aplicacao foi necessaria', className: 'text-muted' },
-    initial_applied: { message: 'wallpaper aplicado pela primeira vez', className: 'text-success' },
-    configuration_applied: { message: 'nova configuracao aplicada', className: 'text-success' },
-    forced_applied: { message: 'reaplicacao solicitada concluida', className: 'text-success' },
-    drift_corrected: { message: 'alteracao detectada e wallpaper corporativo restaurado', className: 'text-warning' },
-    disabled: { message: 'distribuicao desativada; nenhuma aplicacao realizada', className: 'text-muted' },
-    error: { message: 'falha durante a verificacao', className: 'text-danger' },
+  const csrfToken = () => document.querySelector('meta[property="glpi:csrf_token"]')?.getAttribute('content') || '';
+  const liveBadge = overview.querySelector('[data-awp-live]');
+  const liveText = overview.querySelector('[data-awp-live-text]');
+
+  const showMessage = (text, tone = 'success') => {
+    const box = overview.querySelector('[data-awp-message]');
+    if (!box || !text) return;
+    box.className = `awp-alert is-${tone}`;
+    box.textContent = text;
+    window.clearTimeout(messageTimer);
+    messageTimer = window.setTimeout(() => box.classList.add('d-none'), 7000);
   };
 
-  const setText = (selector, value) => {
-    const element = rollout.querySelector(selector);
-    if (element) element.textContent = String(value);
-  };
-  const timestamp = () => new Intl.DateTimeFormat('pt-BR', {
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-  }).format(new Date());
-  const formatDuration = (value) => {
-    const seconds = Math.max(0, Math.round(Number(value) || 0));
-    const minutes = Math.floor(seconds / 60);
-    return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-  };
-  const appendActivity = (message, className = '') => {
-    const list = rollout.querySelector('[data-rollout-events]');
-    if (!list) return;
-    const item = document.createElement('li');
-    if (className) item.className = className;
-    item.textContent = `${timestamp()} — ${message}`;
-    list.prepend(item);
-    while (list.children.length > 100) list.lastElementChild?.remove();
+  const setRefreshing = (active) => {
+    overview.querySelectorAll('[data-awp-refresh] i').forEach((icon) => icon.classList.toggle('ativa-spin', active));
   };
 
-  const setForceButtons = (active) => {
-    forceForms.forEach((form) => {
-      const button = form.querySelector('button[type="submit"]');
-      if (!button) return;
-      button.disabled = active;
-      button.innerHTML = active
-        ? '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Aplicacao em andamento'
-        : '<i class="ti ti-device-desktop-check me-1"></i>Aplicar novamente';
+  const forceAllButton = () => overview.querySelector('[data-awp-force-all] button[type="submit"]');
+  const renderForceAllButton = (active) => {
+    const button = forceAllButton();
+    if (!button || button.dataset.busy === '1') return;
+    const state = active ? 'active' : 'idle';
+    if (button.dataset.state === state) return;
+    button.dataset.state = state;
+    button.disabled = active;
+    button.innerHTML = active
+      ? '<i class="ti ti-loader-2 ativa-spin"></i>Aplicação em andamento'
+      : '<i class="ti ti-device-desktop-check"></i>Aplicar novamente';
+  };
+
+  const applySections = (sections) => {
+    Object.entries(sections || {}).forEach(([name, html]) => {
+      if (lastSections.get(name) === html) return;
+      const container = overview.querySelector(`[data-awp-section="${name}"]`);
+      if (!container) return;
+      lastSections.set(name, html);
+      container.innerHTML = html;
     });
   };
 
-  const renderCycleActivity = (machines) => {
-    machines.forEach((machine) => {
-      if (!machine.last_cycle_at || !machine.last_cycle_action) return;
-      const key = `${machine.last_cycle_at}|${machine.last_cycle_action}`;
-      if (machineCycles.get(machine.hostname) === key) return;
-      machineCycles.set(machine.hostname, key);
-      const cycle = cycleActions[machine.last_cycle_action];
-      if (cycle) appendActivity(`${machine.hostname}: ${cycle.message}`, cycle.className);
-    });
+  const schedule = (delay) => {
+    window.clearTimeout(pollTimer);
+    pollTimer = window.setTimeout(poll, delay ?? (document.hidden ? HIDDEN_REFRESH_MS : REFRESH_MS));
   };
 
-  const renderMachines = (machines) => {
-    const list = rollout.querySelector('[data-rollout-machines]');
-    if (!list) return;
-    list.replaceChildren();
-    machines.forEach((machine) => {
-      const status = statuses[machine.status] || statuses.pending;
-      const previous = machineStates.get(machine.hostname);
-      if (previous !== machine.status) {
-        appendActivity(`${machine.hostname}: ${status.label}`, machine.status === 'error' ? 'text-danger' : '');
-        machineStates.set(machine.hostname, machine.status);
-      }
-      const item = document.createElement('li');
-      item.className = 'ativa-rollout-machine';
-      item.dataset.status = machine.status;
-      const line = document.createElement('div');
-      const icon = document.createElement('i');
-      icon.className = `ti ${status.icon}`;
-      const name = document.createElement('strong');
-      name.textContent = machine.hostname;
-      const label = document.createElement('span');
-      label.className = 'text-muted';
-      label.textContent = ` — ${status.label}`;
-      line.append(icon, document.createTextNode(' '), name, label);
-      item.append(line);
-      if (machine.last_error) {
-        const error = document.createElement('div');
-        error.className = 'small text-danger ms-4';
-        error.textContent = machine.last_error;
-        item.append(error);
-      }
-      list.append(item);
-    });
-    renderCycleActivity(machines);
-  };
-
-  const renderCurrentMachine = (data) => {
-    const machines = Array.isArray(data.machines) ? data.machines : [];
-    const applying = machines.find((machine) => machine.status === 'applying');
-    const current = rollout.querySelector('[data-rollout-current]');
-    if (!current) return;
-    current.replaceChildren();
-    const icon = document.createElement('i');
-    const countdown = formatDuration(data.countdown_seconds);
-    if (data.phase === 'applying' || applying) {
-      icon.className = 'ti ti-loader-2 text-primary ativa-spin fs-3';
-      current.append(icon, document.createTextNode(` Aplicando agora em ${(applying && applying.hostname) || data.last_cycle_hostname || 'um computador'}`));
-    } else if (data.phase === 'waiting') {
-      icon.className = 'ti ti-clock text-warning fs-3';
-      const text = data.countdown_seconds === null
-        ? ' Aguardando o cliente informar sua proxima execucao'
-        : ` ${data.next_hostname || 'Cliente'} executara em ${countdown}`;
-      current.append(icon, document.createTextNode(text));
-    } else if (data.phase === 'cycle_complete') {
-      icon.className = 'ti ti-circle-check text-success fs-3';
-      current.append(icon, document.createTextNode(` Aplicacao concluida em ${data.last_cycle_hostname || 'todos os computadores'} — 100%`));
-    } else {
-      icon.className = data.error > 0 ? 'ti ti-alert-circle text-danger fs-3' : 'ti ti-radar text-primary fs-3';
-      const text = data.countdown_seconds === null
-        ? ' Monitoramento continuo ativo; aguardando horario informado pelos clientes'
-        : ` Monitoramento continuo: ${data.next_hostname || 'cliente'} verifica novamente em ${countdown}`;
-      current.append(icon, document.createTextNode(text));
-    }
-  };
-
-  const renderProgress = (data) => {
-    const countdownPhase = data.phase === 'waiting' || data.phase === 'monitoring';
-    const value = Number(data.percentage || 0);
-    if (countdownPhase) {
-      setText('[data-rollout-label]', data.next_hostname
-        ? `Proxima verificacao: ${data.next_hostname}`
-        : 'Aguardando o horario da proxima verificacao');
-      setText('[data-rollout-percentage]', data.countdown_seconds === null ? '--:--' : formatDuration(data.countdown_seconds));
-    } else {
-      setText('[data-rollout-label]', `${data.processed} de ${data.total} computador(es) processado(s)`);
-      setText('[data-rollout-percentage]', `${Number(data.percentage || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`);
-    }
-    const bar = rollout.querySelector('[data-rollout-bar]');
-    if (!bar) return;
-    bar.style.width = `${value}%`;
-    bar.classList.toggle('progress-bar-animated', data.phase === 'applying');
-    bar.classList.toggle('bg-primary', countdownPhase);
-    bar.classList.toggle('bg-warning', !countdownPhase && Boolean(data.completed_with_error));
-    bar.classList.toggle('bg-success', !countdownPhase && !data.completed_with_error);
-    bar.closest('[role="progressbar"]')?.setAttribute('aria-valuenow', String(value));
-  };
-
-  const renderRollout = (data) => {
-    if (!data || !data.id) return false;
-    if (currentRolloutId !== String(data.id)) {
-      currentRolloutId = String(data.id);
-      machineStates.clear();
-      completedRollouts.delete(currentRolloutId);
-    }
-    rollout.classList.remove('d-none');
-    rollout.dataset.active = data.active ? '1' : '0';
-    rollout.dataset.monitoring = data.monitoring ? '1' : '0';
-    setText('[data-rollout-version]', `Versao ${data.version || '-'} · iniciada em ${data.started_at || '-'}`);
-    setText('[data-rollout-pending]', data.pending);
-    setText('[data-rollout-applying]', data.applying);
-    setText('[data-rollout-success]', data.success);
-    setText('[data-rollout-error]', data.error);
-    setText('[data-rollout-last-update]', `Dados recebidos do servidor em ${timestamp()}; proxima atualizacao em 1 segundo.`);
-    renderProgress(data);
-
-    const state = rollout.querySelector('[data-rollout-state]');
-    if (state) {
-      if (data.phase === 'waiting') {
-        state.textContent = 'Aguardando cliente';
-        state.className = 'badge bg-warning';
-      } else if (data.phase === 'applying') {
-        state.textContent = 'Aplicando';
-        state.className = 'badge bg-primary';
-      } else if (data.phase === 'cycle_complete') {
-        state.textContent = 'Aplicado';
-        state.className = 'badge bg-success';
-      } else {
-        state.textContent = data.error > 0 ? 'Monitorando com erros' : 'Monitorando';
-        state.className = `badge ${data.error > 0 ? 'bg-danger' : 'bg-primary'}`;
-      }
-    }
-    const machines = Array.isArray(data.machines) ? data.machines : [];
-    renderMachines(machines);
-    renderCurrentMachine(data);
-    setForceButtons(Boolean(data.active));
-    if (data.complete && !completedRollouts.has(currentRolloutId)) {
-      completedRollouts.add(currentRolloutId);
-      appendActivity(
-        data.error > 0
-          ? 'Aplicacao encerrada com erros; o monitoramento continua ativo.'
-          : 'Aplicacao concluida em todos os computadores; o monitoramento continua ativo.',
-        data.error > 0 ? 'text-danger' : 'text-success',
-      );
-    }
-    return true;
-  };
-
-  const schedulePoll = (delay = 1000) => {
-    if (pollTimer !== null) window.clearTimeout(pollTimer);
-    pollTimer = window.setTimeout(poll, delay);
-  };
-  const poll = async () => {
-    if (requestRunning) return;
-    requestRunning = true;
+  async function poll() {
+    if (polling) return;
+    polling = true;
     try {
-      const response = await fetch(rollout.dataset.progressUrl, {
-        credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' },
+      const response = await fetch(overview.dataset.endpoint + window.location.search, {
+        credentials: 'same-origin', cache: 'no-store',
+        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      if (!renderRollout(data)) throw new Error('O servidor nao retornou dados do ciclo.');
-      if (data.active || data.monitoring) schedulePoll(1000);
+      applySections(data.sections);
+      renderForceAllButton(Boolean(data.rollout && data.rollout.active));
+      liveBadge?.classList.remove('is-offline');
+      if (liveText) liveText.textContent = `Ao vivo • ${data.time}`;
     } catch (error) {
-      setText('[data-rollout-last-update]', `Falha temporaria ao consultar: ${error.message}. Nova tentativa em 5 segundos.`);
-      schedulePoll(5000);
+      liveBadge?.classList.add('is-offline');
+      if (liveText) liveText.textContent = 'Reconectando...';
     } finally {
-      requestRunning = false;
+      polling = false;
+      setRefreshing(false);
+      schedule();
+    }
+  }
+
+  const refreshNow = () => {
+    setRefreshing(true);
+    window.clearTimeout(pollTimer);
+    if (polling) {
+      schedule(300);
+    } else {
+      poll();
     }
   };
 
-  forceForms.forEach((form) => {
+  const postAction = async (fields) => {
+    const body = new FormData();
+    Object.entries(fields).forEach(([key, value]) => body.append(key, value));
+    const response = await fetch(overview.dataset.actionUrl, {
+      method: 'POST', body, credentials: 'same-origin', cache: 'no-store',
+      headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrfToken() },
+    });
+    const contentType = response.headers.get('Content-Type') || '';
+    if (!contentType.includes('application/json')) throw new Error(`Resposta inesperada do servidor (HTTP ${response.status}).`);
+    const payload = await response.json();
+    if (!response.ok || payload.ok === false) throw new Error(payload.message || `HTTP ${response.status}`);
+    return payload;
+  };
+
+  overview.addEventListener('click', async (event) => {
+    if (event.target.closest('[data-awp-refresh]')) {
+      refreshNow();
+      return;
+    }
+
+    const copy = event.target.closest('[data-awp-copy]');
+    if (copy) {
+      const value = copy.dataset.awpCopy || '';
+      try {
+        await navigator.clipboard.writeText(value);
+        showMessage('SHA-256 copiado.');
+      } catch (error) {
+        window.prompt('Copie o SHA-256:', value);
+      }
+      return;
+    }
+
+    if (event.target.closest('[data-awp-change-wallpaper]')) {
+      const publish = document.getElementById('awp-publish');
+      publish?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      publish?.querySelector('[data-ativa-image-input]')?.click();
+      return;
+    }
+
+    const scroll = event.target.closest('[data-awp-scroll]');
+    if (scroll) {
+      const target = document.getElementById(scroll.dataset.awpScroll);
+      if (target) {
+        event.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      return;
+    }
+
+    const clientAction = event.target.closest('[data-awp-client-action]');
+    if (clientAction) {
+      if (clientAction.dataset.confirm && !window.confirm(clientAction.dataset.confirm)) return;
+      clientAction.disabled = true;
+      try {
+        const payload = await postAction({ action: clientAction.dataset.awpClientAction, id: clientAction.dataset.id });
+        showMessage(payload.message || 'Solicitação enviada.');
+      } catch (error) {
+        showMessage(error.message, 'error');
+      } finally {
+        clientAction.disabled = false;
+        refreshNow();
+      }
+    }
+  });
+
+  overview.querySelectorAll('[data-awp-force-all]').forEach((form) => {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
-      if (requestRunning) return;
-      requestRunning = true;
-      if (pollTimer !== null) window.clearTimeout(pollTimer);
-      machineStates.clear();
-      rollout.querySelector('[data-rollout-events]')?.replaceChildren();
-      rollout.classList.remove('d-none');
-      rollout.dataset.active = '1';
-      rollout.dataset.monitoring = '0';
-      setForceButtons(true);
-      setText('[data-rollout-state]', 'Iniciando');
-      setText('[data-rollout-label]', 'Enviando solicitacao ao servidor...');
-      setText('[data-rollout-percentage]', '0%');
-      setText('[data-rollout-last-update]', `Solicitacao enviada: ${timestamp()}`);
-      const bar = rollout.querySelector('[data-rollout-bar]');
-      if (bar) bar.style.width = '0%';
-      renderCurrentMachine({ machines: [], phase: 'applying' });
-      appendActivity('Solicitacao de aplicacao enviada ao servidor.');
-
+      const button = forceAllButton();
+      if (!button || button.disabled) return;
+      button.dataset.busy = '1';
+      button.dataset.state = '';
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Enviando...';
       try {
-        const response = await fetch(form.action, {
-          method: 'POST', body: new FormData(form), credentials: 'same-origin', cache: 'no-store',
-          headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        });
-        const contentType = response.headers.get('Content-Type') || '';
-        if (!contentType.includes('application/json')) throw new Error(`Resposta inesperada do servidor (HTTP ${response.status}).`);
-        const payload = await response.json();
-        if (!response.ok || !payload.ok) throw new Error(payload.message || `HTTP ${response.status}`);
-        renderRollout(payload.rollout);
-        appendActivity(payload.message || 'Aplicacao iniciada.');
-        if (payload.rollout?.active || payload.rollout?.monitoring) schedulePoll(500);
+        const payload = await postAction({ action: 'force_all' });
+        showMessage(payload.message || 'Aplicação iniciada.');
       } catch (error) {
-        rollout.dataset.active = '0';
-        setForceButtons(false);
-        const state = rollout.querySelector('[data-rollout-state]');
-        if (state) {
-          state.textContent = 'Falha ao iniciar';
-          state.className = 'badge bg-danger';
-        }
-        setText('[data-rollout-last-update]', error.message);
-        appendActivity(`Falha: ${error.message}`, 'text-danger');
+        showMessage(error.message, 'error');
       } finally {
-        requestRunning = false;
+        button.dataset.busy = '0';
+        renderForceAllButton(false);
+        refreshNow();
       }
     });
   });
 
-  if (rollout.dataset.active === '1' || rollout.dataset.monitoring === '1') schedulePoll(300);
+  overview.querySelectorAll('[data-awp-dropzone]').forEach((zone) => {
+    const input = zone.querySelector('input[type="file"]');
+    if (!input) return;
+    ['dragenter', 'dragover'].forEach((type) => zone.addEventListener(type, (event) => {
+      event.preventDefault();
+      zone.classList.add('is-dragging');
+    }));
+    ['dragleave', 'dragend', 'drop'].forEach((type) => zone.addEventListener(type, () => zone.classList.remove('is-dragging')));
+    zone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      if (!event.dataTransfer || !event.dataTransfer.files.length) return;
+      input.files = event.dataTransfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshNow();
+  });
+  schedule(REFRESH_MS);
 });

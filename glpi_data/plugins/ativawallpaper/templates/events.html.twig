@@ -10,21 +10,9 @@
   'forced_applied':'ti-player-play text-primary',
   'drift_corrected':'ti-shield-check text-success'
 } %}
-<div class="container-fluid ativa-wallpaper">
-  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
-    <div>
-      <h1 class="mb-1"><i class="ti ti-shield-check me-2 text-primary"></i>Alteracoes detectadas</h1>
-      <div class="text-muted">Aplicacoes e restauracoes automaticas informadas pelos clientes</div>
-    </div>
-    <nav class="btn-group" aria-label="Navegacao Ativa Wallpaper">
-      <a class="btn btn-outline-secondary" href="{{ urls.dashboard }}">Gerenciar Wallpaper</a>
-      <a class="btn btn-outline-secondary" href="{{ urls.glpi_agent }}">GLPI Agent</a>
-      <a class="btn btn-outline-secondary" href="{{ urls.history }}">Historico</a>
-      <a class="btn btn-primary" href="{{ urls.events }}">Alteracoes</a>
-      {% if can_config %}<a class="btn btn-outline-secondary" href="{{ urls.updates }}">Atualizacoes</a>{% endif %}
-      {% if can_config %}<a class="btn btn-outline-secondary" href="{{ urls.settings }}">Configuracoes</a>{% endif %}
-    </nav>
-  </div>
+<div class="container-fluid ativa-wallpaper awp-shell">
+  {{ include('@ativawallpaper/partials/header.html.twig', {active: 'events', urls: urls, show_settings: can_config}) }}
+  <div class="text-muted mb-3">Aplicações e restaurações automáticas informadas pelos clientes</div>
 
   <div class="alert alert-info d-flex align-items-start" role="alert">
     <i class="ti ti-info-circle me-2 fs-2"></i>

@@ -71,12 +71,18 @@ final class WallpaperManager
         return countElementsInTable('glpi_plugin_ativawallpaper_wallpapers');
     }
 
-    public function publishUploaded(array $upload, string $style, bool $lockChange, int $userId): array
+    public function publishUploaded(array $upload, string $style, bool $lockChange, int $userId, string $requestedVersion = ''): array
     {
         global $DB;
 
         if (!in_array($style, self::STYLES, true)) {
             throw new RuntimeException('Modo de ajuste invalido.');
+        }
+        $requestedVersion = trim($requestedVersion);
+        if ($requestedVersion !== '' && !Version::isValidCustom($requestedVersion)) {
+            throw new RuntimeException(
+                'Nome / Versao invalido: use ate 32 letras, numeros, ponto, hifen ou sublinhado (nao apenas numeros).'
+            );
         }
         if (($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             throw new RuntimeException($this->uploadError((int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE)));
@@ -144,19 +150,25 @@ final class WallpaperManager
             if (!$lockAcquired) {
                 throw new RuntimeException('Outra publicacao esta em andamento. Tente novamente.');
             }
-            $latest = null;
-            $today = date('Ymd');
-            $iterator = $DB->request([
-                'SELECT' => ['version'],
-                'FROM'   => 'glpi_plugin_ativawallpaper_wallpapers',
-                'WHERE'  => ['version' => ['LIKE', $today . '-%']],
-                'ORDER'  => ['version DESC'],
-                'LIMIT'  => 1,
-            ]);
-            if (is_array($iterator->current())) {
-                $latest = (string) $iterator->current()['version'];
+            if ($requestedVersion !== '') {
+                if (countElementsInTable('glpi_plugin_ativawallpaper_wallpapers', ['version' => $requestedVersion]) > 0) {
+                    throw new RuntimeException(sprintf('Ja existe um wallpaper com o nome / versao %s.', $requestedVersion));
+                }
+                $version = $requestedVersion;
+            } else {
+                $today = date('Ymd');
+                $versions = [];
+                $iterator = $DB->request([
+                    'SELECT' => ['version'],
+                    'FROM'   => 'glpi_plugin_ativawallpaper_wallpapers',
+                    'WHERE'  => ['version' => ['LIKE', $today . '-%']],
+                ]);
+                foreach ($iterator as $row) {
+                    $versions[] = (string) $row['version'];
+                }
+                // Custom names such as "20260915-natal" must not reset the daily sequence.
+                $version = Version::next(Version::latestInSequence($versions, $today), $today);
             }
-            $version = Version::next($latest, $today);
             $now = date('Y-m-d H:i:s');
 
             $DB->beginTransaction();

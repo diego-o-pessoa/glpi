@@ -1,0 +1,44 @@
+{% set applying = rollout and rollout.active %}
+{% set percentage = applying ? rollout.percentage : summary.percentage %}
+<div class="awp-card-header">
+  <h2 class="awp-card-title"><i class="ti ti-chart-bar"></i>Distribuição e monitoramento</h2>
+  {% if applying %}<span class="awp-badge is-blue"><i class="ti ti-loader-2 ativa-spin"></i>Aplicando</span>{% endif %}
+</div>
+<div class="awp-card-body">
+  <div class="awp-progress-head">
+    <strong>
+      {% if applying %}
+        {{ rollout.processed }} de {{ rollout.total }} computadores processados
+      {% else %}
+        {{ summary.updated }} de {{ summary.managed }} computadores atualizados
+      {% endif %}
+    </strong>
+    <span class="awp-progress-value">{{ percentage|number_format(0, ',', '.') }}%</span>
+  </div>
+  <div class="awp-progress" role="progressbar" aria-valuenow="{{ percentage }}" aria-valuemin="0" aria-valuemax="100">
+    <span class="{{ applying ? 'is-running' : '' }}" style="width: {{ percentage }}%"></span>
+  </div>
+  {% if applying %}
+    <div class="awp-rollout-line">
+      {% if rollout.phase == 'applying' %}
+        <i class="ti ti-loader-2 ativa-spin"></i>Aplicando o wallpaper agora
+      {% elseif rollout.countdown_seconds is not null and rollout.next_hostname %}
+        <i class="ti ti-clock"></i>Aguardando {{ rollout.next_hostname }} consultar em {{ '%02d:%02d'|format((rollout.countdown_seconds / 60)|round(0, 'floor'), rollout.countdown_seconds % 60) }}
+      {% else %}
+        <i class="ti ti-clock"></i>Aguardando o próximo contato dos computadores
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <div class="awp-mini-stats">
+    <div class="awp-mini is-green"><i class="ti ti-circle-check-filled"></i><span>Atualizados</span><strong>{{ summary.updated }}</strong></div>
+    <div class="awp-mini is-yellow"><i class="ti ti-clock-filled"></i><span>Pendentes</span><strong>{{ summary.pending }}</strong></div>
+    <div class="awp-mini is-gray"><i class="ti ti-wifi-off"></i><span>Offline</span><strong>{{ summary.offline }}</strong></div>
+    <div class="awp-mini is-red"><i class="ti ti-alert-circle-filled"></i><span>Erros</span><strong>{{ summary.errors }}</strong></div>
+  </div>
+
+  <div class="awp-distribution-footer">
+    <span class="text-muted"><i class="ti ti-clock me-1"></i>{{ last_check_age }}</span>
+    <button type="button" class="btn awp-btn-light" data-awp-refresh><i class="ti ti-refresh"></i>Verificar agora</button>
+  </div>
+</div>

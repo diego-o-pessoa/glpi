@@ -8,7 +8,7 @@ class PluginAtivawallpaperMenu extends CommonGLPI
 {
     public static function getTypeName($nb = 0): string
     {
-        return 'Agent';
+        return 'Ativa Wallpaper';
     }
 
     public static function getIcon(): string
@@ -45,28 +45,24 @@ class PluginAtivawallpaperMenu extends CommonGLPI
         ];
 
         $menu['options']['dashboard'] = [
-            'title' => 'Dashboard',
+            'title' => 'Visão geral',
             'page'  => $base . '/dashboard.php',
-            'icon'  => 'ti ti-dashboard',
+            'icon'  => 'ti ti-home',
         ];
         $menu['options']['history'] = [
-            'title' => 'Historico',
+            'title' => 'Histórico',
             'page'  => $base . '/history.php',
             'icon'  => 'ti ti-history',
         ];
         $menu['options']['events'] = [
-            'title' => 'Alteracoes detectadas',
+            'title' => 'Alterações detectadas',
             'page'  => $base . '/events.php',
             'icon'  => 'ti ti-shield-check',
         ];
+        // GLPI Agent and client updates are distributed by the Ativa Updater plugin.
         if (Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, READ)) {
-            $menu['options']['updates'] = [
-                'title' => 'Atualizacoes',
-                'page'  => $base . '/updates.php',
-                'icon'  => 'ti ti-cloud-download',
-            ];
             $menu['options']['settings'] = [
-                'title' => 'Configuracoes',
+                'title' => 'Configurações',
                 'page'  => $base . '/settings.php',
                 'icon'  => 'ti ti-settings',
             ];

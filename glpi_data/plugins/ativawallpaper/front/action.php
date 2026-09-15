@@ -28,6 +28,8 @@ $redirect = $base . '/dashboard.php';
 $expectsJson = str_contains(strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json')
     || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
 $jsonPayload = null;
+// Message of actions that can also be called from the live overview (fetch).
+$notice = null;
 
 try {
     switch ($action) {
@@ -41,8 +43,10 @@ try {
             $wallpaper = (new WallpaperManager())->publishUploaded(
                 $upload,
                 (string) ($_POST['style'] ?? 'fill'),
-                isset($_POST['lock_change']),
-                (int) Session::getLoginUserID()
+                // "1" from the "Aplicar bloqueio" select (or the former checkbox).
+                ($_POST['lock_change'] ?? '') === '1',
+                (int) Session::getLoginUserID(),
+                Security::cleanText($_POST['version_name'] ?? '', 64)
             );
             Session::addMessageAfterRedirect('Wallpaper ' . $wallpaper['version'] . ' publicado.', true, INFO);
             break;
@@ -67,7 +71,7 @@ try {
         case 'force':
             Session::checkRight(PluginAtivawallpaperProfile::RIGHT_CLIENTS, UPDATE);
             (new ClientRepository())->setForceReapply((int) ($_POST['id'] ?? 0));
-            Session::addMessageAfterRedirect('Nova aplicacao marcada para a proxima checagem do cliente.', true, INFO);
+            $notice = 'Nova aplicacao marcada para a proxima checagem do cliente.';
             break;
 
         case 'force_all':
@@ -109,7 +113,7 @@ try {
         case 'revoke':
             Session::checkRight(PluginAtivawallpaperProfile::RIGHT_CLIENTS, UPDATE);
             (new ClientRepository())->revoke((int) ($_POST['id'] ?? 0));
-            Session::addMessageAfterRedirect('Cliente revogado. Um novo registro sera necessario.', true, INFO);
+            $notice = 'Cliente revogado. Um novo registro sera necessario.';
             break;
 
         case 'settings':
@@ -232,10 +236,13 @@ if ($expectsJson) {
     header('Cache-Control: no-store, no-cache, must-revalidate');
     header('X-Content-Type-Options: nosniff');
     echo json_encode(
-        $jsonPayload ?? ['ok' => true],
+        $jsonPayload ?? ['ok' => true, 'message' => $notice],
         JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
     );
     exit;
 }
 
+if ($notice !== null) {
+    Session::addMessageAfterRedirect($notice, true, INFO);
+}
 Html::redirect($redirect);

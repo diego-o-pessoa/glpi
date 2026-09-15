@@ -20,6 +20,17 @@ $tests['wallpaper version sequence'] = static function (): void {
     assert(Version::next(null, '20260908') === '20260908-001');
     assert(Version::next('20260908-009', '20260908') === '20260908-010');
     assert(Version::next('20260907-099', '20260908') === '20260908-001');
+    assert(Version::latestInSequence(['20260908-002', '20260908-natal', '20260908-010'], '20260908') === '20260908-010');
+    assert(Version::latestInSequence(['20260908-natal'], '20260908') === null);
+};
+
+$tests['custom wallpaper names'] = static function (): void {
+    assert(Version::isValidCustom('20260915-001'));
+    assert(Version::isValidCustom('Natal.2026_v2'));
+    assert(!Version::isValidCustom('12345'), 'digits only would be read as an id');
+    assert(!Version::isValidCustom('-inicio'));
+    assert(!Version::isValidCustom('com espaco'));
+    assert(!Version::isValidCustom(str_repeat('a', 33)));
 };
 
 $tests['token hashing and constant-time verification'] = static function (): void {

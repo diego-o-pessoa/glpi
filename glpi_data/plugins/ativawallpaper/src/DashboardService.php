@@ -266,6 +266,124 @@ final class DashboardService
         ];
     }
 
+    /** Seconds since the most recent client contact (computed by the database), or null. */
+    public function lastCheckAgeSeconds(): ?int
+    {
+        global $DB;
+        $row = $DB->request([
+            'SELECT' => [new QueryExpression('TIMESTAMPDIFF(SECOND, MAX(last_check), NOW()) AS age')],
+            'FROM'   => self::TABLE,
+            'WHERE'  => ['revoked_at' => null],
+        ])->current();
+        return is_array($row) && $row['age'] !== null ? max(0, (int) $row['age']) : null;
+    }
+
+    public static function describeAge(?int $seconds): string
+    {
+        if ($seconds === null) {
+            return 'Nenhum computador fez contato ainda';
+        }
+        if ($seconds < 60) {
+            return 'Última verificação agora mesmo';
+        }
+        if ($seconds < 3600) {
+            $minutes = intdiv($seconds, 60);
+            return sprintf('Última verificação há %d %s', $minutes, $minutes === 1 ? 'minuto' : 'minutos');
+        }
+        if ($seconds < 86400) {
+            $hours = intdiv($seconds, 3600);
+            return sprintf('Última verificação há %d %s', $hours, $hours === 1 ? 'hora' : 'horas');
+        }
+        $days = intdiv($seconds, 86400);
+        return sprintf('Última verificação há %d %s', $days, $days === 1 ? 'dia' : 'dias');
+    }
+
+    /**
+     * Recent activity for the overview: administrative actions and what the clients applied.
+     *
+     * @return list<array{at:string,time:string,message:string,tone:string}>
+     */
+    public function activity(?array $rollout, int $limit = 6): array
+    {
+        global $DB;
+        $items = [];
+
+        $auditMessages = [
+            'rollback'                   => 'Versão %s definida como atual',
+            'enable'                     => 'Distribuição ativada',
+            'disable'                    => 'Distribuição desativada',
+            'settings_update'            => 'Configurações atualizadas',
+            'registration_secret_rotate' => 'Segredo de registro renovado',
+        ];
+        $audits = $DB->request([
+            'SELECT' => ['action', 'new_value', 'created_at'],
+            'FROM'   => 'glpi_plugin_ativawallpaper_audits',
+            'WHERE'  => ['action' => array_merge(['publish'], array_keys($auditMessages))],
+            'ORDER'  => ['created_at DESC', 'id DESC'],
+            'LIMIT'  => $limit,
+        ]);
+        foreach ($audits as $audit) {
+            $value = json_decode((string) ($audit['new_value'] ?? ''), true);
+            if ($audit['action'] === 'publish') {
+                $message = sprintf('Novo wallpaper publicado (%s)', is_array($value) ? (string) ($value['version'] ?? '') : '');
+            } else {
+                $message = sprintf($auditMessages[$audit['action']], is_string($value) ? $value : '');
+            }
+            $items[] = $this->activityItem((string) $audit['created_at'], $message, 'primary');
+        }
+
+        if ($DB->tableExists('glpi_plugin_ativawallpaper_client_events')) {
+            $eventMessages = [
+                'initial_applied'       => ['atualizado', 'primary'],
+                'configuration_applied' => ['atualizado', 'primary'],
+                'forced_applied'        => ['reaplicação concluída', 'primary'],
+                'drift_corrected'       => ['alteração detectada e wallpaper restaurado', 'warning'],
+            ];
+            $events = $DB->request([
+                'SELECT' => ['hostname', 'event_type', 'occurred_at'],
+                'FROM'   => 'glpi_plugin_ativawallpaper_client_events',
+                'ORDER'  => ['occurred_at DESC', 'id DESC'],
+                'LIMIT'  => $limit,
+            ]);
+            foreach ($events as $event) {
+                [$label, $tone] = $eventMessages[$event['event_type']] ?? ['wallpaper aplicado', 'primary'];
+                $items[] = $this->activityItem((string) $event['occurred_at'], $event['hostname'] . ': ' . $label, $tone);
+            }
+
+            if ($rollout !== null && $rollout['complete']) {
+                $finished = $DB->request([
+                    'SELECT' => [new QueryExpression('MAX(occurred_at) AS finished_at')],
+                    'FROM'   => 'glpi_plugin_ativawallpaper_client_events',
+                    'WHERE'  => ['rollout_id' => $rollout['id']],
+                ])->current();
+                if (is_array($finished) && !empty($finished['finished_at'])) {
+                    $items[] = $this->activityItem(
+                        (string) $finished['finished_at'],
+                        $rollout['error'] > 0
+                            ? sprintf('Aplicação encerrada com %d erro(s)', $rollout['error'])
+                            : 'Aplicação concluída em todos os computadores',
+                        $rollout['error'] > 0 ? 'danger' : 'success'
+                    );
+                }
+            }
+        }
+
+        // Newest first; on the same second the rollout summary comes before the hosts.
+        $order = ['success' => 0, 'danger' => 0, 'warning' => 1, 'primary' => 2];
+        usort($items, static fn(array $left, array $right): int =>
+            strcmp($right['at'], $left['at']) ?: ($order[$left['tone']] <=> $order[$right['tone']]));
+        return array_slice($items, 0, $limit);
+    }
+
+    private function activityItem(string $at, string $message, string $tone): array
+    {
+        $timestamp = strtotime($at);
+        $time = $timestamp === false
+            ? $at
+            : (date('Y-m-d', $timestamp) === date('Y-m-d') ? date('H:i:s', $timestamp) : date('d/m H:i', $timestamp));
+        return ['at' => $at, 'time' => $time, 'message' => $message, 'tone' => $tone];
+    }
+
     private function statusExpression(string $status, ?array $current): ?string
     {
         global $DB;

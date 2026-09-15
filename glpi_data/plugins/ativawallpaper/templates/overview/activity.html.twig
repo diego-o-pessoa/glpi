@@ -1,0 +1,19 @@
+<div class="awp-card-header">
+  <h2 class="awp-card-title"><i class="ti ti-clock-hour-4"></i>Atividade recente</h2>
+  <a class="btn btn-sm awp-btn-light" href="{{ urls.events }}">Ver todos</a>
+</div>
+<div class="awp-card-body awp-activity-body">
+  {% if activity is empty %}
+    <p class="text-muted mb-0">Nenhuma atividade registrada ainda.</p>
+  {% else %}
+    <ul class="awp-activity">
+      {% for item in activity %}
+        <li class="is-{{ item.tone }}">
+          <span class="awp-activity-dot"></span>
+          <time datetime="{{ item.at }}">{{ item.time }}</time>
+          <span class="awp-activity-message" title="{{ item.message }}">{{ item.message }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</div>

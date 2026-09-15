@@ -81,6 +81,12 @@ wallpaper atual. O cliente remove somente bloqueios que ele proprio criou.
 
 ## Atualizacoes automaticas
 
+> A partir do plugin 1.5.0 as abas **Atualizacoes** e **GLPI Agent** foram
+> removidas: o GLPI Agent, o Wallpaper Client e o servico de atualizacao sao
+> distribuidos pelo plugin **Ativa Updater** (instalador unificado). A secao abaixo
+> descreve o mecanismo antigo, que a API continua atendendo para pacotes ja
+> liberados.
+
 Em **Atualizacoes**, envie o `AtivaWallpaperClient-<versao>.exe` ou o MSI
 oficial do GLPI Agent. O servidor valida tipo, tamanho e cabecalho binario do
 formato, calcula SHA-256 e cria o pacote como **Rascunho**. O envio nunca libera

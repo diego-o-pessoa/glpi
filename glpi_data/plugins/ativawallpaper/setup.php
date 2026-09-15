@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Glpi\Http\SessionManager;
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_ATIVAWALLPAPER_VERSION', '1.4.3');
+define('PLUGIN_ATIVAWALLPAPER_VERSION', '1.5.0');
 define('PLUGIN_ATIVAWALLPAPER_API_VERSION', 'v1');
 define('PLUGIN_ATIVAWALLPAPER_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVAWALLPAPER_MAX_GLPI', '11.1.0');
@@ -14,7 +14,7 @@ define('PLUGIN_ATIVAWALLPAPER_DIR', __DIR__);
 function plugin_version_ativawallpaper(): array
 {
     return [
-        'name'         => 'Agent',
+        'name'         => 'Ativa Wallpaper',
         'version'      => PLUGIN_ATIVAWALLPAPER_VERSION,
         'author'       => 'Ativa Locacao',
         'license'      => 'GPLv3+',

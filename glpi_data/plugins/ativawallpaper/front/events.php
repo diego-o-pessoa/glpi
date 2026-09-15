@@ -27,10 +27,8 @@ TemplateRenderer::getInstance()->display('@ativawallpaper/events.html.twig', [
     'can_config' => Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, READ),
     'urls'       => [
         'dashboard' => $base . '/front/dashboard.php',
-        'glpi_agent' => $base . '/front/glpi_agent.php',
         'history'   => $base . '/front/history.php',
         'events'    => $base . '/front/events.php',
-        'updates'   => $base . '/front/updates.php',
         'settings'  => $base . '/front/settings.php',
     ],
 ]);

@@ -1,0 +1,35 @@
+<a class="awp-kpi" href="{{ urls.history }}">
+  <span class="awp-kpi-icon"><i class="ti ti-photo"></i></span>
+  <span class="awp-kpi-text">
+    <span class="awp-kpi-label">Wallpaper ativo</span>
+    <span class="awp-kpi-value awp-kpi-version">{{ current ? current.version : '—' }}</span>
+    <span class="awp-kpi-note">{{ current ? 'Publicado em ' ~ (current.published_at|formatted_datetime|split(' ')|first) : 'Nenhum wallpaper publicado' }}</span>
+  </span>
+  <i class="ti ti-chevron-right awp-kpi-arrow"></i>
+</a>
+<a class="awp-kpi" href="{{ urls.dashboard }}?status=all#awp-computers">
+  <span class="awp-kpi-icon"><i class="ti ti-device-desktop"></i></span>
+  <span class="awp-kpi-text">
+    <span class="awp-kpi-label">Computadores gerenciados</span>
+    <span class="awp-kpi-value">{{ summary.managed }}</span>
+  </span>
+  <i class="ti ti-chevron-right awp-kpi-arrow"></i>
+</a>
+<a class="awp-kpi is-green" href="{{ urls.dashboard }}?status=updated#awp-computers">
+  <span class="awp-kpi-icon"><i class="ti ti-circle-check-filled"></i></span>
+  <span class="awp-kpi-text">
+    <span class="awp-kpi-label">Atualizados</span>
+    <span class="awp-kpi-value">{{ summary.updated }}</span>
+  </span>
+  <span class="awp-kpi-percent">{{ summary.percentage|number_format(0, ',', '.') }}%</span>
+  <i class="ti ti-chevron-right awp-kpi-arrow"></i>
+</a>
+<a class="awp-kpi is-red" href="{{ urls.dashboard }}?status=error#awp-computers">
+  <span class="awp-kpi-icon"><i class="ti ti-alert-circle-filled"></i></span>
+  <span class="awp-kpi-text">
+    <span class="awp-kpi-label">Com erro</span>
+    <span class="awp-kpi-value">{{ summary.errors }}</span>
+  </span>
+  <span class="awp-kpi-percent">{{ error_percentage|number_format(0, ',', '.') }}%</span>
+  <i class="ti ti-chevron-right awp-kpi-arrow"></i>
+</a>
