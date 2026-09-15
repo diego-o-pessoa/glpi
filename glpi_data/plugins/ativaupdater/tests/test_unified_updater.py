@@ -32,8 +32,8 @@ def quiet_logger(name: str) -> logging.Logger:
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.5.1")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 5, 1))
+        self.assertEqual(updater.UPDATER_VERSION, "1.6.0")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 6, 0))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -144,10 +144,16 @@ class FailureTrackingTests(unittest.TestCase):
         state["retry_after"] = 1000.0 + updater.FAILED_RETRY_SECONDS
         self.assertEqual(updater.next_check_delay(0, state, 1000.0), 3600)
 
+    def test_pending_installation_is_checked_again_soon(self) -> None:
+        # The setup restarts the service a moment before the runner writes the result.
+        state = {"check_interval_seconds": 3600, "pending_version": "1.6.3"}
+        self.assertEqual(updater.next_check_delay(2, state, 1000.0), updater.PENDING_RECHECK_SECONDS)
+
     def test_outcome_descriptions(self) -> None:
         self.assertIn("erro fatal durante a instalacao", updater.describe_outcome("exited", 4))
         self.assertIn("20 minutos", updater.describe_outcome("timeout", None))
         self.assertIn("sem concluir", updater.describe_outcome("missing", None))
+        self.assertIn("SHA-256", updater.describe_outcome("error", None, "nao confere com o SHA-256"))
 
 
 class ProcessAndLogTests(unittest.TestCase):
@@ -226,18 +232,35 @@ class FakeProcess:
 
 
 class LaunchInstallerTests(unittest.TestCase):
-    def test_restart_manager_is_not_asked_to_close_the_service(self) -> None:
-        # Seen on TI-01-000013: /CLOSEAPPLICATIONS made Inno try to stop this
+    def test_setup_command_matches_the_deploy_script(self) -> None:
+        # Seen on TI-01-000013: /CLOSEAPPLICATIONS made Inno try to stop the
         # service for 90 s and abort the installation.
-        with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.object(updater, "LOG_DIR", Path(directory)), \
-                mock.patch.object(updater.subprocess, "Popen") as popen:
-            popen.return_value.pid = 1
-            updater.launch_installer(Path(directory) / "setup.exe", quiet_logger("launch"))
-        command = popen.call_args.args[0]
-        self.assertIn("/NOCLOSEAPPLICATIONS", command)
+        command = updater.installer_command(Path("C:/x/setup.exe"), Path("C:/x/installer.log"))
+        for switch in ("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOCLOSEAPPLICATIONS", "/SP-"):
+            self.assertIn(switch, command)
         self.assertNotIn("/CLOSEAPPLICATIONS", command)
-        self.assertIn("/SUPERVISED=1", command)
+        self.assertFalse(any(part.startswith("/SUPERVISED") for part in command))
+        self.assertTrue(command[-1].startswith("/LOG="))
+
+    def test_service_hands_the_installation_to_the_runner(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = root / "install-result.json"
+            result.write_text("{}", encoding="utf-8")
+            with mock.patch.object(updater, "LOG_DIR", root / "logs"), \
+                    mock.patch.object(updater, "INSTALL_RESULT_PATH", result), \
+                    mock.patch.object(updater, "prepare_runner_executable", return_value=["runner.exe"]), \
+                    mock.patch.object(updater, "start_detached") as start:
+                start.return_value.pid = 7
+                process, installer_log = updater.launch_installer(root / "setup.exe", quiet_logger("launch"), "1.6.3", SHA)
+            self.assertFalse(result.exists(), "an old result must not be mistaken for this attempt")
+        command = start.call_args.args[0]
+        self.assertEqual(command[0], "runner.exe")
+        self.assertEqual(
+            command[1:7], ["--install-package", str(root / "setup.exe"), "--package-version", "1.6.3", "--package-sha256", SHA],
+        )
+        self.assertEqual(command[-1], str(installer_log))
+        self.assertEqual(process.pid, 7)
 
     def test_service_is_built_as_console_application(self) -> None:
         # Windowed PyInstaller builds show blocking message boxes that nobody
@@ -267,6 +290,104 @@ class SuperviseInstallerTests(unittest.TestCase):
             ("timeout", None),
         )
         self.assertGreater(process.waits, 0)
+
+
+class InstallRunnerTests(unittest.TestCase):
+    """--install-package: the steps of Deploy-AtivaUnifiedAgent.ps1, run by the service."""
+
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.package = self.root / "Ativa-Unified-Agent-Setup-1.6.3.exe"
+        self.package.write_bytes(b"MZ setup")
+        self.sha256 = updater.file_sha256(self.package)
+        self.steps: list[str] = []
+        self.started: list[list[str]] = []
+        self.supervision = ("exited", 0)
+        for name, value in {
+            "INSTALL_RESULT_PATH": self.root / "install-result.json",
+            "SingleInstance": mock.MagicMock(),
+            "stop_updater_service": lambda _logger: self.steps.append("stop_service"),
+            "kill_leftover_processes": lambda _logger: self.steps.append("kill_leftovers"),
+            "start_detached": self.fake_start,
+            "supervise_installer": lambda *_args, **_kwargs: self.supervision,
+            "running_setup_processes": lambda: [4243],
+            "kill_process_tree": lambda pid: self.steps.append(f"kill {pid}"),
+            "ensure_service_running": lambda _logger: self.steps.append("ensure_service") or True,
+        }.items():
+            patcher = mock.patch.object(updater, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.logger = quiet_logger("ativaupdater-runner-tests")
+
+    def fake_start(self, command: list[str]):
+        self.steps.append("setup")
+        self.started.append(command)
+        return FakeProcess(None, pid=4242)
+
+    def run_package(self, sha256: str | None = None) -> int:
+        return updater.run_install_package(
+            self.logger, self.package, "1.6.3", sha256 or self.sha256, self.root / "installer-1.log",
+        )
+
+    def result(self) -> dict:
+        return json.loads(updater.INSTALL_RESULT_PATH.read_text(encoding="utf-8"))
+
+    def test_same_order_as_the_deploy_script(self) -> None:
+        self.assertEqual(self.run_package(), 0)
+        self.assertEqual(self.steps, ["stop_service", "kill_leftovers", "setup", "ensure_service"])
+        self.assertIn("/NOCLOSEAPPLICATIONS", self.started[0])
+        self.assertEqual(self.started[0][0], str(self.package))
+        result = self.result()
+        self.assertEqual((result["version"], result["outcome"], result["exit_code"]), ("1.6.3", "exited", 0))
+
+    def test_setup_error_code_is_recorded_and_service_started(self) -> None:
+        self.supervision = ("exited", 5)
+        self.assertEqual(self.run_package(), 5)
+        self.assertEqual((self.result()["outcome"], self.result()["exit_code"]), ("exited", 5))
+        self.assertEqual(self.steps[-1], "ensure_service")
+
+    def test_hung_setup_is_killed(self) -> None:
+        self.supervision = ("timeout", None)
+        self.assertEqual(self.run_package(), updater.RUNNER_TIMEOUT_EXIT_CODE)
+        self.assertIn("kill 4242", self.steps)
+        self.assertIn("kill 4243", self.steps)
+        self.assertEqual(self.result()["outcome"], "timeout")
+        self.assertEqual(self.steps[-1], "ensure_service")
+
+    def test_package_with_another_hash_is_not_installed(self) -> None:
+        self.assertEqual(self.run_package("c" * 64), 1)
+        self.assertEqual(self.steps, ["ensure_service"], "nothing is stopped or run, the service stays up")
+        self.assertEqual(self.result()["outcome"], "error")
+        self.assertIn("SHA-256", self.result()["message"])
+
+    def test_second_runner_does_nothing(self) -> None:
+        updater.SingleInstance.return_value.__enter__.side_effect = updater.UpdaterError("em uso")
+        self.assertEqual(self.run_package(), 0)
+        self.assertEqual(self.steps, [])
+        self.assertFalse(updater.INSTALL_RESULT_PATH.exists())
+
+    def test_runner_outcome_mapping(self) -> None:
+        self.assertEqual(updater.runner_outcome(None, 4), ("exited", 4, ""))
+        self.assertEqual(updater.runner_outcome({"outcome": "timeout"}, 1460), ("timeout", None, ""))
+        self.assertEqual(updater.runner_outcome({"outcome": "error", "message": "x"}, 1), ("error", None, "x"))
+        self.assertEqual(updater.runner_outcome({"outcome": "exited", "exit_code": 0}, 1), ("exited", 0, ""))
+
+
+class ProcessDiscoveryTests(unittest.TestCase):
+    def test_running_setup_processes_include_runners_but_never_itself(self) -> None:
+        own = updater.own_process_ids()
+        tasklist = subprocess.CompletedProcess([], 0, stdout='"Ativa-Unified-Agent-Setup-1.6.3.exe","4242","Services","0","3 K"\n')
+        with mock.patch.object(updater.os, "name", "nt"), \
+                mock.patch.object(updater.subprocess, "run", return_value=tasklist), \
+                mock.patch.object(updater, "process_ids_by_image", return_value=[5000, *own]):
+            self.assertEqual(updater.running_setup_processes(), [4242, 5000])
+
+    @unittest.skipUnless(updater.os.name == "nt", "Windows process APIs")
+    def test_process_ids_by_image_finds_this_interpreter(self) -> None:
+        self.assertIn(updater.os.getpid(), updater.process_ids_by_image(Path(updater.sys.executable)))
+        self.assertEqual(updater.process_ids_by_image(Path("C:/nao/existe.exe")), [])
 
 
 class ComponentDetectionTests(unittest.TestCase):
@@ -380,6 +501,7 @@ class CheckOnceFixture(unittest.TestCase):
             "WALLPAPER_LOG_DIR": root / "wallpaper-logs",
             "INSTALL_FAILURE_LOG_PATH": self.log_dir / "install-failure.log",
             "RECOVERY_MARKER_PATH": root / "watchdog-recovery.json",
+            "INSTALL_RESULT_PATH": root / "install-result.json",
             "ApiClient": FakeApi,
             "launch_installer": self.fake_launch,
             "running_setup_processes": lambda: list(self.setup_processes),
@@ -390,8 +512,9 @@ class CheckOnceFixture(unittest.TestCase):
             self.addCleanup(patcher.stop)
         self.logger = quiet_logger("ativaupdater-tests")
 
-    def fake_launch(self, path: Path, _logger: logging.Logger):
+    def fake_launch(self, path: Path, _logger: logging.Logger, version: str = "", sha256: str = ""):
         self.launched.append(path)
+        self.launch_arguments = (version, sha256)
         installer_log = self.log_dir / f"installer-{len(self.launched)}.log"
         installer_log.write_text("Instalando o GLPI Agent\nA instalacao do GLPI Agent falhou. Codigo de saida: 1603\n", encoding="utf-8")
         if self.installer_configures:
@@ -435,6 +558,7 @@ class CheckOnceTests(CheckOnceFixture):
         self.publish("1.6.0")
         self.assertEqual(updater.check_once(self.logger), 0)
         self.assertEqual(len(self.launched), 1)
+        self.assertEqual(self.launch_arguments, ("1.6.0", SHA))
         report = self.last_report()
         self.assertEqual((report["status"], report["installed"]), ("updated", "1.6.0"))
         self.assertIn("tentativa 1 de 4", FakeApi.instances[-1].reports[-2]["message"])
@@ -565,12 +689,61 @@ class CheckOnceTests(CheckOnceFixture):
 
     def test_pending_installation_running_past_timeout_is_killed(self) -> None:
         self.write_state(installed_version="1.5.1", pending_version="1.6.0", pending_sha256=SHA,
-                         pending_started_at=time.time() - updater.INSTALL_TIMEOUT_SECONDS - 5)
+                         pending_started_at=time.time() - updater.INSTALL_SUPERVISION_SECONDS - 5)
         self.publish("1.6.0")
         self.setup_processes = [4242]
         self.assertEqual(updater.check_once(self.logger), 2)
         self.assertEqual(self.killed, [4242])
         self.assertIn("excedeu", self.last_report()["message"])
+
+    def test_runner_result_explains_the_failure_after_the_service_restarts(self) -> None:
+        self.write_state(installed_version="1.5.1", pending_version="1.6.0", pending_sha256=SHA,
+                         pending_action=updater.ACTION_UPGRADE, pending_started_at=time.time() - 120)
+        installer_log = self.log_dir / "installer-9.log"
+        installer_log.write_text("Setup was unable to automatically close all applications.\n", encoding="utf-8")
+        updater.INSTALL_RESULT_PATH.write_text(json.dumps({
+            "version": "1.6.0", "sha256": SHA, "outcome": "exited", "exit_code": 5, "installer_log": str(installer_log),
+        }), encoding="utf-8")
+        self.publish("1.6.0")
+        self.assertEqual(updater.check_once(self.logger), 2)
+        report = self.last_report()
+        self.assertIn("codigo de saida 5", report["message"])
+        self.assertIn("unable to automatically close", report["install_log"])
+
+    def test_runner_error_is_reported_with_its_message(self) -> None:
+        self.write_state(installed_version="1.5.1", pending_version="1.6.0", pending_sha256=SHA,
+                         pending_started_at=time.time() - 120)
+        updater.INSTALL_RESULT_PATH.write_text(json.dumps({
+            "version": "1.6.0", "sha256": SHA, "outcome": "error", "message": "o instalador baixado nao confere com o SHA-256 publicado",
+        }), encoding="utf-8")
+        self.publish("1.6.0")
+        self.assertEqual(updater.check_once(self.logger), 2)
+        self.assertIn("nao confere com o SHA-256", self.last_report()["message"])
+
+    def test_result_of_another_package_is_ignored(self) -> None:
+        self.write_state(installed_version="1.5.1", pending_version="1.6.0", pending_sha256=SHA,
+                         pending_started_at=time.time() - 120)
+        updater.INSTALL_RESULT_PATH.write_text(json.dumps({"version": "1.5.9", "sha256": SHA, "outcome": "exited", "exit_code": 5}), encoding="utf-8")
+        self.publish("1.6.0")
+        self.assertEqual(updater.check_once(self.logger), 2)
+        self.assertIn("encerrado sem concluir", self.last_report()["message"])
+
+    def test_runner_that_exits_early_reports_its_result(self) -> None:
+        self.write_state(installed_version="1.5.1")
+        self.publish("1.6.0")
+        self.fail_installer(1)
+        original = self.fake_launch
+
+        def launch_with_result(path, logger, version="", sha256=""):
+            launched = original(path, logger, version, sha256)
+            updater.INSTALL_RESULT_PATH.write_text(json.dumps({
+                "version": version, "sha256": sha256, "outcome": "error", "message": "servico nao pode ser parado",
+            }), encoding="utf-8")
+            return launched
+
+        with mock.patch.object(updater, "launch_installer", side_effect=launch_with_result):
+            self.assertEqual(updater.check_once(self.logger), 2)
+        self.assertIn("falha ao preparar a instalacao: servico nao pode ser parado", self.last_report()["message"])
 
     # Other behaviour -----------------------------------------------------
 
@@ -973,6 +1146,7 @@ class WatchdogTests(unittest.TestCase):
                     mock.patch.object(updater, "STATE_PATH", root / "state.json"), \
                     mock.patch.object(updater, "HEARTBEAT_PATH", root / "heartbeat.json"), \
                     mock.patch.object(updater, "INSTALL_FAILURE_LOG_PATH", logs / "install-failure.log"), \
+                    mock.patch.object(updater, "INSTALL_RESULT_PATH", root / "install-result.json"), \
                     mock.patch.object(updater, "WALLPAPER_LOG_DIR", root / "wallpaper"), \
                     mock.patch.object(updater, "WATCHDOG_EXE", root / "watchdog" / "x.exe"), \
                     mock.patch.object(updater, "query_service", return_value=self.RUNNING), \

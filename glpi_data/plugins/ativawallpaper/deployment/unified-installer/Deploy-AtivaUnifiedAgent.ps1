@@ -1,55 +1,76 @@
 ﻿<#
 .SYNOPSIS
-    Instala o Ativa Unified Agent em computadores remotos, em modo silencioso.
+    Instala o Ativa Unified Agent em modo silencioso, sem perguntas.
 
 .DESCRIPTION
-    Para cada computador: copia o instalador pelo PowerShell Remoting, confere o SHA-256,
-    executa o setup (Inno Setup) sem interface e com tempo limite, confere o serviço e a
-    versão instalada, traz o log da instalação e apaga o instalador copiado.
+    Basta executar (duplo clique em Instalar-Ativa-Agent.cmd). O script:
+      - pede elevação ao Windows se não estiver como administrador;
+      - usa o instalador de maior versão encontrado ao lado do script ou na pasta dist;
+      - instala neste computador ou, se existir computadores.txt ao lado do script,
+        em cada computador listado (PowerShell Remoting);
+      - para o serviço do updater e encerra instaladores travados antes de começar;
+      - executa o setup silencioso com tempo limite, confere serviço e versão,
+        salva logs em deploy-logs e apaga a cópia do instalador (contém o segredo
+        de bootstrap).
 
-    O instalador contém o segredo de bootstrap: ele é apagado da máquina ao final,
-    com ou sem sucesso.
+    Os parâmetros são opcionais e servem apenas para RMM ou uso avançado.
 
 .EXAMPLE
-    .\Deploy-AtivaUnifiedAgent.ps1 -ComputerName TI-01-000013, DESKTOP-R1C8ICN `
-        -InstallerPath .\dist\Ativa-Unified-Agent-Setup-1.6.2.exe
+    .\Deploy-AtivaUnifiedAgent.ps1
 
 .EXAMPLE
-    .\Deploy-AtivaUnifiedAgent.ps1 -ComputerName (Get-Content .\computadores.txt) `
-        -InstallerPath .\dist\Ativa-Unified-Agent-Setup-1.6.2.exe -Credential (Get-Credential)
+    .\Deploy-AtivaUnifiedAgent.ps1 -ComputerName PC01, PC02 -InstallerPath D:\Ativa-Unified-Agent-Setup-1.6.2.exe -NoPause
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)]
     [string[]]$ComputerName,
-
-    [Parameter(Mandatory)]
     [string]$InstallerPath,
-
-    [pscredential]$Credential,
-
     [ValidateRange(5, 120)]
     [int]$TimeoutMinutes = 20,
-
-    [string]$ReportDirectory = ".\deploy-logs"
+    [switch]$NoPause
 )
 
 $ErrorActionPreference = "Stop"
+$ScriptDirectory = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+$ReportDirectory = Join-Path $ScriptDirectory "deploy-logs"
+$RemoteDirectory = "C:\ProgramData\AtivaLocacao\Deploy"
 
-$installer = Get-Item -LiteralPath $InstallerPath
-if ($installer.Name -notmatch '^Ativa-Unified-Agent-Setup-(\d+\.\d+\.\d+)\.exe$') {
-    throw "Nome inesperado: $($installer.Name). Use o arquivo gerado em dist (Ativa-Unified-Agent-Setup-X.Y.Z.exe)."
+function Wait-BeforeClose {
+    if ($NoPause) { return }
+    Write-Host ""
+    Write-Host "Esta janela fecha sozinha em 30 segundos."
+    Start-Sleep -Seconds 30
 }
-$expectedVersion = $Matches[1]
-$expectedHash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash
-New-Item -ItemType Directory -Force -Path $ReportDirectory | Out-Null
-$remoteDirectory = "C:\ProgramData\AtivaLocacao\Deploy"
 
-$remoteInstall = {
-    param($RemoteDirectory, $FileName, $ExpectedHash, $ExpectedVersion, $TimeoutMinutes)
+# --- Elevação ---------------------------------------------------------------
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    $relaunch = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"", "-TimeoutMinutes", $TimeoutMinutes)
+    if ($ComputerName) { $relaunch += @("-ComputerName", (($ComputerName | ForEach-Object { "`"$_`"" }) -join ",")) }
+    if ($InstallerPath) { $relaunch += @("-InstallerPath", "`"$((Resolve-Path -LiteralPath $InstallerPath).Path)`"") }
+    if ($NoPause) { $relaunch += "-NoPause" }
+    try {
+        Start-Process -FilePath "powershell.exe" -ArgumentList $relaunch -Verb RunAs | Out-Null
+    }
+    catch {
+        Write-Host "É preciso permitir a execução como administrador para instalar." -ForegroundColor Red
+        Wait-BeforeClose
+        exit 1
+    }
+    exit 0
+}
+
+New-Item -ItemType Directory -Force -Path $ReportDirectory | Out-Null
+$transcript = Join-Path $ReportDirectory ("execucao-{0:yyyyMMdd-HHmmss}.txt" -f (Get-Date))
+Start-Transcript -LiteralPath $transcript | Out-Null
+
+# --- Instalação em um computador (roda localmente ou via Invoke-Command) ----
+$InstallBlock = {
+    param($RemoteDirectory, $SetupPath, $ExpectedHash, $ExpectedVersion, $TimeoutMinutes)
 
     $ErrorActionPreference = "Stop"
-    $setup = Join-Path $RemoteDirectory $FileName
+    $serviceName = "AtivaUnifiedUpdater"
+    $updaterExe = "C:\ProgramData\AtivaLocacao\UnifiedUpdater\AtivaUnifiedUpdater.exe"
     $log = Join-Path $RemoteDirectory ("install-{0:yyyyMMdd-HHmmss}.log" -f (Get-Date))
     $result = [ordered]@{
         Computer         = $env:COMPUTERNAME
@@ -61,57 +82,73 @@ $remoteInstall = {
         LogText          = ""
     }
 
-    # Códigos de saída documentados do Inno Setup.
+    function Stop-Tree([int]$ProcessId) {
+        # taskkill encerra também processos do SYSTEM; erros (processo já saiu) são ignorados.
+        $ErrorActionPreference = "Continue"
+        $null = & taskkill.exe /PID $ProcessId /T /F 2>&1
+    }
+
     $exitMessages = @{
         1 = "o setup não conseguiu inicializar"
         2 = "cancelado antes de começar a instalação"
         3 = "erro fatal na preparação da instalação"
-        4 = "erro fatal durante a instalação (veja o log)"
-        5 = "instalação cancelada ou abortada (ex.: Restart Manager não conseguiu fechar programas)"
+        4 = "erro fatal durante a instalação"
+        5 = "instalação cancelada ou abortada"
         6 = "o setup foi encerrado à força"
         7 = "a etapa de preparação falhou"
         8 = "a etapa de preparação falhou e o Windows precisa reiniciar"
     }
 
     try {
-        if ((Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash -ne $ExpectedHash) {
+        if ((Get-FileHash -LiteralPath $SetupPath -Algorithm SHA256).Hash -ne $ExpectedHash) {
             throw "SHA-256 do instalador copiado não confere; a cópia pode estar corrompida."
         }
 
-        $running = @(Get-Process -Name "Ativa-Unified-Agent-Setup*" -ErrorAction SilentlyContinue)
-        if ($running.Count -gt 0) {
-            throw "Já existe um instalador em execução (PID $($running.Id -join ', ')). Aguarde ou encerre-o antes."
+        # 1. Para o serviço, para ele não iniciar outro instalador ao mesmo tempo.
+        $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+        if ($service -and $service.Status -ne "Stopped") {
+            Write-Output "Parando o serviço $serviceName..."
+            $ErrorActionPreference = "Continue"
+            $null = & sc.exe stop $serviceName 2>&1
+            $ErrorActionPreference = "Stop"
+            try { $service.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(60)) } catch { }
         }
 
-        # /NOCLOSEAPPLICATIONS: o Restart Manager não pode tentar parar o serviço do updater.
+        # 2. Encerra instaladores travados e processos do updater que sobraram (ex.: --configure preso).
+        $leftovers = @(Get-CimInstance Win32_Process | Where-Object {
+            $_.Name -like "Ativa-Unified-Agent-Setup*" -or $_.ExecutablePath -eq $updaterExe
+        })
+        foreach ($process in $leftovers) {
+            Write-Output "Encerrando processo travado: $($process.Name) (PID $($process.ProcessId))"
+            Stop-Tree $process.ProcessId
+        }
+        if ($leftovers.Count -gt 0) { Start-Sleep -Seconds 3 }
+
+        # 3. Instalação silenciosa.
+        Write-Output "Executando o instalador $ExpectedVersion (limite de $TimeoutMinutes min)..."
         $arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOCLOSEAPPLICATIONS /SP- /LOG=`"$log`""
-        $process = Start-Process -FilePath $setup -ArgumentList $arguments -PassThru -WindowStyle Hidden
-        $null = $process.Handle  # Sem isso, ExitCode pode voltar vazio.
+        $setup = Start-Process -FilePath $SetupPath -ArgumentList $arguments -PassThru -WindowStyle Hidden
+        $null = $setup.Handle  # Sem isso, ExitCode pode voltar vazio.
 
-        if (-not $process.WaitForExit($TimeoutMinutes * 60 * 1000)) {
-            # Encerra o setup e tudo o que ele iniciou (msiexec, --configure etc.).
-            & taskkill.exe /PID $process.Id /T /F | Out-Null
-            throw "O instalador passou de $TimeoutMinutes minutos e foi encerrado. Veja o passo em que o log parou."
+        if (-not $setup.WaitForExit($TimeoutMinutes * 60 * 1000)) {
+            Stop-Tree $setup.Id
+            throw "O instalador passou de $TimeoutMinutes minutos e foi encerrado. Veja em que passo o log parou."
         }
 
-        $result.ExitCode = $process.ExitCode
-        if ($process.ExitCode -ne 0) {
-            $detail = $exitMessages[[int]$process.ExitCode]
+        $result.ExitCode = $setup.ExitCode
+        if ($setup.ExitCode -ne 0) {
+            $detail = $exitMessages[[int]$setup.ExitCode]
             if (-not $detail) { $detail = "código desconhecido" }
-            throw "O instalador terminou com código $($process.ExitCode): $detail."
+            throw "O instalador terminou com código $($setup.ExitCode): $detail."
         }
 
-        $service = Get-Service -Name "AtivaUnifiedUpdater" -ErrorAction SilentlyContinue
+        # 4. Conferência.
+        $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
         if (-not $service) {
-            throw "Instalador terminou, mas o serviço AtivaUnifiedUpdater não existe."
+            throw "O instalador terminou, mas o serviço $serviceName não existe."
         }
         if ($service.Status -ne "Running") {
-            try {
-                $service.WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
-            }
-            catch {
-                # O estado final é conferido logo abaixo.
-            }
+            try { $service.WaitForStatus("Running", [TimeSpan]::FromSeconds(30)) } catch { }
             $service.Refresh()
         }
         $result.Service = [string]$service.Status
@@ -120,7 +157,6 @@ $remoteInstall = {
         if (Test-Path -LiteralPath $statePath) {
             $result.InstalledVersion = [string](Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json).installed_version
         }
-
         if ($result.Service -ne "Running") {
             throw "Instalação concluída, mas o serviço está '$($result.Service)'."
         }
@@ -133,65 +169,130 @@ $remoteInstall = {
     }
     catch {
         $result.Message = $_.Exception.Message
+        # Nunca deixe o computador sem o serviço rodando.
+        $ErrorActionPreference = "Continue"
+        if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
+            $null = & sc.exe start $serviceName 2>&1
+        }
     }
     finally {
         if (Test-Path -LiteralPath $log) {
-            $result.LogText = (Get-Content -LiteralPath $log -Tail 120) -join [Environment]::NewLine
+            $result.LogText = (Get-Content -LiteralPath $log -Tail 150) -join [Environment]::NewLine
         }
         # O instalador contém o segredo de bootstrap: não deixe cópias na máquina.
-        Remove-Item -LiteralPath $setup -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $SetupPath -Force -ErrorAction SilentlyContinue
     }
 
     [pscustomobject]$result
 }
 
-$results = foreach ($computer in $ComputerName) {
-    Write-Host "[$computer] Instalando $($installer.Name)..."
-    $session = $null
-    try {
-        $sessionParameters = @{ ComputerName = $computer }
-        if ($Credential) { $sessionParameters.Credential = $Credential }
-        $session = New-PSSession @sessionParameters
-
-        Invoke-Command -Session $session -ScriptBlock {
-            param($Directory)
-            New-Item -ItemType Directory -Force -Path $Directory | Out-Null
-        } -ArgumentList $remoteDirectory
-        Copy-Item -LiteralPath $installer.FullName -Destination $remoteDirectory -ToSession $session -Force
-
-        $result = Invoke-Command -Session $session -ScriptBlock $remoteInstall `
-            -ArgumentList $remoteDirectory, $installer.Name, $expectedHash, $expectedVersion, $TimeoutMinutes
+$exitCode = 0
+try {
+    # --- Instalador ---------------------------------------------------------
+    if ($InstallerPath) {
+        $installer = Get-Item -LiteralPath $InstallerPath
     }
-    catch {
-        $result = [pscustomobject]@{
-            Computer         = $computer
-            Status           = "Falha"
-            ExitCode         = $null
-            InstalledVersion = ""
-            Service          = ""
-            Message          = "Não foi possível executar remotamente: $($_.Exception.Message)"
-            LogText          = ""
+    else {
+        $installer = @(
+            Get-ChildItem -LiteralPath $ScriptDirectory -Filter "Ativa-Unified-Agent-Setup-*.exe" -File -ErrorAction SilentlyContinue
+            Get-ChildItem -LiteralPath (Join-Path $ScriptDirectory "dist") -Filter "Ativa-Unified-Agent-Setup-*.exe" -File -ErrorAction SilentlyContinue
+        ) | Where-Object { $_.Name -match '(\d+\.\d+\.\d+)' } |
+            Sort-Object { [version]([regex]::Match($_.Name, '\d+\.\d+\.\d+').Value) }, LastWriteTime |
+            Select-Object -Last 1
+        if (-not $installer) {
+            throw "Nenhum Ativa-Unified-Agent-Setup-X.Y.Z.exe encontrado em $ScriptDirectory ou na pasta dist. Coloque o instalador ao lado deste script."
         }
     }
-    finally {
-        if ($session) { Remove-PSSession $session }
+    $versionText = "$($installer.VersionInfo.ProductVersion) $($installer.Name)"
+    $versionMatch = [regex]::Match($versionText, '\d+\.\d+\.\d+')
+    if (-not $versionMatch.Success) {
+        throw "Não foi possível identificar a versão de $($installer.FullName)."
+    }
+    $expectedVersion = $versionMatch.Value
+    $expectedHash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash
+
+    # --- Computadores -------------------------------------------------------
+    if (-not $ComputerName) {
+        $listFile = Join-Path $ScriptDirectory "computadores.txt"
+        if (Test-Path -LiteralPath $listFile) {
+            $ComputerName = @(Get-Content -LiteralPath $listFile | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith("#") })
+        }
+        if (-not $ComputerName) { $ComputerName = @($env:COMPUTERNAME) }
+    }
+    $ComputerName = @($ComputerName | ForEach-Object { $_ -split "," } | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+
+    Write-Host "Instalador: $($installer.FullName) (versão $expectedVersion)"
+    Write-Host "Computadores: $($ComputerName -join ', ')"
+    Write-Host ""
+
+    $results = foreach ($computer in $ComputerName) {
+        Write-Host "[$computer] Iniciando..." -ForegroundColor Cyan
+        $isLocal = @($env:COMPUTERNAME, "localhost", ".", "127.0.0.1") -contains $computer
+        $session = $null
+        try {
+            if ($isLocal) {
+                New-Item -ItemType Directory -Force -Path $RemoteDirectory | Out-Null
+                $setupCopy = Join-Path $RemoteDirectory $installer.Name
+                Copy-Item -LiteralPath $installer.FullName -Destination $setupCopy -Force
+                $output = & $InstallBlock $RemoteDirectory $setupCopy $expectedHash $expectedVersion $TimeoutMinutes
+            }
+            else {
+                try {
+                    $session = New-PSSession -ComputerName $computer
+                }
+                catch {
+                    throw "Sem acesso remoto (WinRM). Na máquina $computer, rode como administrador 'Enable-PSRemoting -Force', ou copie este script e o instalador para ela e execute lá. Detalhe: $($_.Exception.Message)"
+                }
+                Invoke-Command -Session $session -ScriptBlock {
+                    param($Directory)
+                    New-Item -ItemType Directory -Force -Path $Directory | Out-Null
+                } -ArgumentList $RemoteDirectory
+                $setupCopy = Join-Path $RemoteDirectory $installer.Name
+                Copy-Item -LiteralPath $installer.FullName -Destination $setupCopy -ToSession $session -Force
+                $output = Invoke-Command -Session $session -ScriptBlock $InstallBlock `
+                    -ArgumentList $RemoteDirectory, $setupCopy, $expectedHash, $expectedVersion, $TimeoutMinutes
+            }
+            $result = $null
+            foreach ($item in @($output)) {
+                if ($item -is [string]) { Write-Host "[$computer] $item" }
+                elseif ($item.PSObject.Properties["Status"]) { $result = $item }
+            }
+            if (-not $result) { throw "A instalação não retornou resultado." }
+        }
+        catch {
+            $result = [pscustomobject]@{
+                Computer = $computer; Status = "Falha"; ExitCode = $null; InstalledVersion = ""
+                Service = ""; Message = $_.Exception.Message; LogText = ""
+            }
+        }
+        finally {
+            if ($session) { Remove-PSSession $session }
+        }
+
+        if ($result.LogText) {
+            $result.LogText | Set-Content -LiteralPath (Join-Path $ReportDirectory "$computer-instalador.log") -Encoding UTF8
+        }
+        $color = if ($result.Status -eq "Sucesso") { "Green" } else { "Red" }
+        Write-Host "[$computer] $($result.Status): $($result.Message)" -ForegroundColor $color
+        Write-Host ""
+
+        $result | Select-Object Computer, Status, ExitCode, InstalledVersion, Service, Message
     }
 
-    if ($result.LogText) {
-        $result.LogText | Set-Content -LiteralPath (Join-Path $ReportDirectory "$computer.log") -Encoding UTF8
-    }
-    $color = if ($result.Status -eq "Sucesso") { "Green" } else { "Red" }
-    Write-Host "[$computer] $($result.Status): $($result.Message)" -ForegroundColor $color
+    $results | Format-Table -AutoSize -Wrap | Out-String | Write-Host
+    $reportCsv = Join-Path $ReportDirectory ("resultado-{0:yyyyMMdd-HHmmss}.csv" -f (Get-Date))
+    $results | Export-Csv -LiteralPath $reportCsv -NoTypeInformation -Encoding UTF8
+    Write-Host "Relatório e logs: $ReportDirectory"
 
-    $result | Select-Object Computer, Status, ExitCode, InstalledVersion, Service, Message
+    if (@($results | Where-Object Status -ne "Sucesso").Count -gt 0) { $exitCode = 1 }
+}
+catch {
+    Write-Host "ERRO: $($_.Exception.Message)" -ForegroundColor Red
+    $exitCode = 1
+}
+finally {
+    Stop-Transcript | Out-Null
 }
 
-$results | Format-Table -AutoSize -Wrap
-$reportCsv = Join-Path $ReportDirectory ("resultado-{0:yyyyMMdd-HHmmss}.csv" -f (Get-Date))
-$results | Export-Csv -LiteralPath $reportCsv -NoTypeInformation -Encoding UTF8
-Write-Host "Relatório: $reportCsv | Logs: $ReportDirectory"
-
-if (@($results | Where-Object Status -ne "Sucesso").Count -gt 0) {
-    exit 1
-}
-exit 0
+Wait-BeforeClose
+exit $exitCode

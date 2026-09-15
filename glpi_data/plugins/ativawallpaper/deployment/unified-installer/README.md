@@ -71,10 +71,19 @@ Regras:
 ## Como a atualização silenciosa acontece
 
 1. Na consulta (a cada hora ou por **Verificar agora**), o serviço compara a versão publicada com a instalada e decide entre atualizar, voltar (rollback autorizado) ou não fazer nada.
-2. Se precisar instalar, baixa o EXE (retomando downloads interrompidos), valida tamanho e SHA-256, remove instaladores de versões anteriores e executa o setup com `/VERYSILENT /SUPERVISED=1 /NOCLOSEAPPLICATIONS`. Falhas de rede momentâneas (timeout, conexão recusada) são repetidas antes de desistir.
-3. O serviço **continua rodando e acompanha o processo do instalador**. O setup renomeia o executável do serviço em uso (`AtivaUnifiedUpdater.exe.old-*`), atualiza o GLPI Agent (repetindo por até 5 minutos se o Windows Installer estiver ocupado, código 1618), atualiza o Wallpaper Client (mantendo o registro existente se o servidor não responder) e reconfigura o serviço. Se a instalação for abortada, o executável renomeado é devolvido.
-4. No fim, o setup reinicia o serviço para carregar o novo executável, cria ou atualiza o **vigia** e inicia o Wallpaper Client em **cada sessão de usuário conectada**.
-5. O novo serviço reporta **Atualizado** ("Versão X instalada com sucesso") no dashboard.
+2. Se precisar instalar, baixa o EXE (retomando downloads interrompidos), valida tamanho e SHA-256 e remove instaladores de versões anteriores. Falhas de rede momentâneas (timeout, conexão recusada) são repetidas antes de desistir.
+3. O serviço (1.6.0+) entrega a instalação ao **executor**: uma cópia do serviço em `UnifiedUpdater\runner`, iniciada fora do processo do serviço. O executor repete os passos de `Deploy-AtivaUnifiedAgent.ps1` (`Instalar-Ativa-Agent.cmd`):
+   1. confere de novo o SHA-256;
+   2. para o serviço;
+   3. encerra instaladores anteriores e processos `AtivaUnifiedUpdater.exe` que ficaram presos;
+   4. executa `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOCLOSEAPPLICATIONS /SP- /LOG=...` com limite de 20 minutos (se passar, encerra o setup e tudo o que ele abriu);
+   5. grava `install-result.json` e garante que o serviço volte a rodar.
+4. O setup atualiza o GLPI Agent (repetindo por até 5 minutos se o Windows Installer estiver ocupado, código 1618), atualiza o Wallpaper Client (mantendo o registro existente se o servidor não responder), reconfigura e reinicia o serviço, cria ou atualiza o **vigia** e inicia o Wallpaper Client em **cada sessão de usuário conectada**.
+5. O novo serviço reporta **Atualizado** ("Versão X instalada com sucesso") no dashboard. Em caso de falha, lê o `install-result.json` e envia o motivo (código de saída, tempo limite ou erro do executor) com o log.
+
+Durante a instalação (normalmente 1 a 3 minutos) o serviço fica parado: comandos do dashboard enviados nesse intervalo são atendidos quando ele voltar. O executor grava `logs\install-runner.log`, incluído em **Logs** e no log de falha.
+
+> Serviços anteriores a 1.6.0 continuam instalando o próximo pacote pelo fluxo antigo (acompanhado ou não). O executor passa a valer a partir da atualização seguinte.
 
 > O serviço é gerado como aplicativo de **console** (`build-service.ps1`). Na versão sem console, o PyInstaller mostrava avisos em uma caixa de mensagem que ninguém consegue fechar quando o programa roda como SYSTEM, e o passo `--configure` travava o instalador indefinidamente.
 
@@ -82,7 +91,7 @@ Regras:
 
 O dashboard atualiza a seção **Computadores** sozinho, a cada 3 s, sem recarregar a página.
 
-- **Verificar agora** (todos): o serviço 1.5.0+ recebe o comando em até 15 s mesmo durante downloads e instalações, **cancela o que estiver fazendo** (inclusive o instalador em andamento) e recomeça a verificação. Serviços 1.2.0 a 1.4.x só verificam depois de terminar a instalação atual; anteriores a 1.2.0 não recebem comandos.
+- **Verificar agora** (todos): o serviço 1.5.0+ recebe o comando em até 15 s mesmo durante downloads, **cancela o que estiver fazendo** (inclusive um instalador em andamento) e recomeça a verificação. No serviço 1.6.0+, durante os minutos em que o executor instala o pacote, o serviço está parado e atende o comando ao voltar. Serviços 1.2.0 a 1.4.x só verificam depois de terminar a instalação atual; anteriores a 1.2.0 não recebem comandos.
 - **Logs** (por computador): coleta `service.log`, `watchdog.log`, a última falha de instalação, o log do instalador e o do Wallpaper Client e mostra tudo em **Ver logs enviados**.
 - **Reinstalar**: cancela o que estiver em andamento e instala de novo o pacote publicado, mesmo que a versão já esteja instalada. Não faz downgrade sem rollback autorizado.
 - **Reiniciar serviço**: envia os logs e reinicia o serviço "Ativa Unified Updater".

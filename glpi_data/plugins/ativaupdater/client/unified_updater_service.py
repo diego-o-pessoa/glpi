@@ -28,7 +28,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.5.1"
+UPDATER_VERSION = "1.6.0"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -75,6 +75,13 @@ ACTION_BLOCKED_DOWNGRADE = "blocked_downgrade"
 # "Falha na Instalacao" with the collected log, and one automatic attempt per
 # day follows (Verificar agora starts a new cycle immediately).
 INSTALL_TIMEOUT_SECONDS = 1200
+# The install runner enforces INSTALL_TIMEOUT_SECONDS on the setup itself; the
+# service gives it extra time to stop the service, clean up and write the result.
+INSTALL_SUPERVISION_SECONDS = INSTALL_TIMEOUT_SECONDS + 300
+PENDING_RECHECK_SECONDS = 30
+SERVICE_STOP_TIMEOUT_SECONDS = 60
+RUNNER_TIMEOUT_EXIT_CODE = 1460
+RUNNER_MUTEX_NAME = r"Global\AtivaUnifiedUpdaterInstall"
 MAX_INSTALL_RETRIES = 3
 TOTAL_INSTALL_ATTEMPTS = MAX_INSTALL_RETRIES + 1
 RETRY_DELAYS_SECONDS = (60, 300, 900)
@@ -111,6 +118,12 @@ INSTALL_FAILURE_LOG_PATH = LOG_DIR / "install-failure.log"
 SERVICE_EXE = PRODUCT_DIR / "AtivaUnifiedUpdater.exe"
 WATCHDOG_DIR = PRODUCT_DIR / "watchdog"
 WATCHDOG_EXE = WATCHDOG_DIR / "AtivaUnifiedUpdater.exe"
+# Separate copy that runs the installation, so the setup can stop the service and
+# replace SERVICE_EXE (the same steps as Deploy-AtivaUnifiedAgent.ps1).
+RUNNER_DIR = PRODUCT_DIR / "runner"
+RUNNER_EXE = RUNNER_DIR / "AtivaUnifiedUpdater.exe"
+INSTALL_RESULT_PATH = PRODUCT_DIR / "install-result.json"
+RUNNER_LOG_NAME = "install-runner.log"
 HEARTBEAT_PATH = PRODUCT_DIR / "heartbeat.json"
 RECOVERY_MARKER_PATH = PRODUCT_DIR / "watchdog-recovery.json"
 MUTEX_NAME = r"Global\AtivaUnifiedUpdater"
@@ -129,7 +142,8 @@ class OperationCancelled(UpdaterError):
 
 
 class SingleInstance:
-    def __init__(self) -> None:
+    def __init__(self, name: str = MUTEX_NAME) -> None:
+        self.name = name
         self.handle = None
 
     def __enter__(self):
@@ -137,7 +151,7 @@ class SingleInstance:
             return self
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel32.CreateMutexW.restype = wintypes.HANDLE
-        self.handle = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+        self.handle = kernel32.CreateMutexW(None, False, self.name)
         if not self.handle:
             raise ctypes.WinError(ctypes.get_last_error())
         if ctypes.get_last_error() == 183:
@@ -284,6 +298,10 @@ def install_block_reason(state: dict[str, Any], release: dict[str, Any], now: fl
 def next_check_delay(result: int, state: dict[str, Any], now: float) -> int:
     """Seconds until the next full check, never missing a scheduled retry."""
     delay = configured_interval(state) if result == 0 else 300
+    if state.get("pending_version"):
+        # An installation is finishing (e.g. the setup already restarted the
+        # service): report its result soon instead of in five minutes.
+        delay = min(delay, PENDING_RECHECK_SECONDS)
     try:
         retry_after = float(state.get("retry_after", 0) or 0)
     except (TypeError, ValueError):
@@ -293,9 +311,11 @@ def next_check_delay(result: int, state: dict[str, Any], now: float) -> int:
     return delay
 
 
-def describe_outcome(outcome: str, exit_code: int | None) -> str:
+def describe_outcome(outcome: str, exit_code: int | None, detail: str = "") -> str:
     if outcome == "timeout":
         return f"o instalador excedeu {INSTALL_TIMEOUT_SECONDS // 60} minutos e foi finalizado"
+    if outcome == "error":
+        return f"falha ao preparar a instalacao: {detail or 'erro desconhecido'}"
     if outcome == "missing":
         return "o instalador foi encerrado sem concluir a configuracao do servico"
     if outcome == "incomplete":
@@ -354,6 +374,7 @@ def collect_install_log(
     exit_code: int | None,
     started_at: float,
     installer_log: Path | None = None,
+    detail: str = "",
 ) -> str:
     """Build the diagnostic log sent to the dashboard for a failed attempt."""
     not_before = started_at - 60 if started_at else 0.0
@@ -362,8 +383,18 @@ def collect_install_log(
         f"Data: {time.strftime('%Y-%m-%d %H:%M:%S')}",
         f"Computador: {socket.gethostname()}",
         f"Versao: {version} | tentativa {attempt} de {TOTAL_INSTALL_ATTEMPTS}",
-        f"Resultado: {describe_outcome(outcome, exit_code)}",
+        f"Resultado: {describe_outcome(outcome, exit_code, detail)}",
     ]
+
+    runner_log = LOG_DIR / RUNNER_LOG_NAME
+    try:
+        runner_log_recent = runner_log.is_file() and runner_log.stat().st_mtime >= not_before
+    except OSError:
+        runner_log_recent = False
+    if runner_log_recent:
+        lines.append("")
+        lines.append(f"== Executor da instalacao ({RUNNER_LOG_NAME}) ==")
+        lines.extend(read_log_tail(runner_log, 30))
 
     inno_log = installer_log if installer_log is not None and installer_log.is_file() else newest_file(
         LOG_DIR, "installer-*.log", not_before
@@ -414,7 +445,53 @@ def parse_setup_processes(tasklist_csv: str) -> list[int]:
     return pids
 
 
+def process_ids_by_image(image: Path) -> list[int]:
+    """PIDs of the processes running this executable file (compared by full path)."""
+    if os.name != "nt":
+        return []
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.K32EnumProcesses.argtypes = [ctypes.POINTER(wintypes.DWORD), wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.QueryFullProcessImageNameW.argtypes = [
+        wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
+    ]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    capacity = 4096
+    while True:
+        pids = (wintypes.DWORD * capacity)()
+        needed = wintypes.DWORD()
+        if not kernel32.K32EnumProcesses(pids, ctypes.sizeof(pids), ctypes.byref(needed)):
+            return []
+        if needed.value < ctypes.sizeof(pids):
+            break
+        capacity *= 2
+    target = os.path.normcase(os.path.abspath(str(image)))
+    matches = []
+    for pid in pids[: needed.value // ctypes.sizeof(wintypes.DWORD)]:
+        if not pid:
+            continue
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            continue
+        try:
+            buffer = ctypes.create_unicode_buffer(32768)
+            size = wintypes.DWORD(len(buffer))
+            if kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
+                if os.path.normcase(buffer.value) == target:
+                    matches.append(int(pid))
+        finally:
+            kernel32.CloseHandle(handle)
+    return matches
+
+
+def own_process_ids() -> set[int]:
+    # PyInstaller onefile: the bootloader (parent) runs the same executable.
+    return {os.getpid(), os.getppid()}
+
+
 def running_setup_processes() -> list[int]:
+    """Unified installers and install runners in progress (never this process)."""
     if os.name != "nt":
         return []
     try:
@@ -423,9 +500,15 @@ def running_setup_processes() -> list[int]:
             capture_output=True, text=True, errors="replace", timeout=60,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
+        setups = parse_setup_processes(completed.stdout)
     except (OSError, subprocess.SubprocessError):
-        return []
-    return parse_setup_processes(completed.stdout)
+        setups = []
+    try:
+        runners = process_ids_by_image(RUNNER_EXE)
+    except OSError:
+        runners = []
+    own = own_process_ids()
+    return [pid for pid in setups + runners if pid not in own]
 
 
 def kill_process_tree(pid: int) -> None:
@@ -476,8 +559,14 @@ def cleanup_replaced_binaries() -> None:
         candidates = list(PRODUCT_DIR.glob("AtivaUnifiedUpdater.exe.old*"))
     except OSError:
         return
+    own = own_process_ids()
     for path in candidates:
         try:
+            # Services up to 1.4.0 (windowed builds) could stay alive after
+            # stopping, hidden behind a message box in session 0.
+            for pid in process_ids_by_image(path):
+                if pid not in own:
+                    kill_process_tree(pid)
             path.unlink()
         except OSError:
             continue
@@ -1018,26 +1107,189 @@ def download_with_retries(
                 raise OperationCancelled("Download cancelado pelo dashboard.") from exc
 
 
-def launch_installer(path: Path, logger: logging.Logger) -> tuple[Any, Path]:
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    install_log = LOG_DIR / f"installer-{int(time.time())}.log"
-    command = [
+def installer_command(path: Path, install_log: Path) -> list[str]:
+    """Silent Inno Setup command, the same used by Deploy-AtivaUnifiedAgent.ps1."""
+    return [
         str(path),
         "/VERYSILENT",
         "/SUPPRESSMSGBOXES",
         "/NORESTART",
-        # /CLOSEAPPLICATIONS made the Restart Manager try to stop this very
+        # /CLOSEAPPLICATIONS made the Restart Manager try to stop the updater
         # service for 90 s and then abort the whole installation.
         "/NOCLOSEAPPLICATIONS",
+        "/SP-",
         f"/LOG={install_log}",
-        # Tells the installer that this service is supervising it: the service
-        # keeps running until the end instead of being stopped up front.
-        "/SUPERVISED=1",
+        # No /SUPERVISED=1: the setup stops the (already stopped) service and
+        # replaces its executable, like a manual installation.
     ]
-    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    process = subprocess.Popen(command, close_fds=True, creationflags=flags)
-    logger.info("Instalador %s iniciado silenciosamente (PID %s).", path.name, process.pid)
+
+
+def start_detached(command: list[str]) -> Any:
+    """Start a process that outlives the service (no console window, own process group)."""
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    breakaway = 0x01000000  # CREATE_BREAKAWAY_FROM_JOB
+    if os.name == "nt":
+        try:
+            return subprocess.Popen(command, close_fds=True, creationflags=flags | breakaway)
+        except OSError:
+            # Not in a job, or the job forbids breakaway: start normally.
+            pass
+    return subprocess.Popen(command, close_fds=True, creationflags=flags)
+
+
+def prepare_runner_executable() -> list[str]:
+    """Command prefix of the install runner: a copy of this executable outside SERVICE_EXE."""
+    source = running_executable()
+    if source is None:
+        # Development (python unified_updater_service.py).
+        return [sys.executable, str(Path(__file__).resolve())]
+    RUNNER_DIR.mkdir(parents=True, exist_ok=True)
+    if not (RUNNER_EXE.is_file() and file_sha256(RUNNER_EXE) == file_sha256(source)):
+        staged = RUNNER_EXE.with_name(RUNNER_EXE.name + ".new")
+        try:
+            shutil.copy2(source, staged)
+            os.replace(staged, RUNNER_EXE)
+        except OSError as exc:
+            raise UpdaterError(f"nao foi possivel preparar o executor da instalacao: {exc}") from exc
+    return [str(RUNNER_EXE)]
+
+
+def launch_installer(path: Path, logger: logging.Logger, version: str = "", sha256: str = "") -> tuple[Any, Path]:
+    """Hand the installation over to the install runner and return (runner process, setup log)."""
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    install_log = LOG_DIR / f"installer-{int(time.time())}.log"
+    INSTALL_RESULT_PATH.unlink(missing_ok=True)
+    command = prepare_runner_executable() + [
+        "--install-package", str(path),
+        "--package-version", version,
+        "--package-sha256", sha256,
+        "--installer-log", str(install_log),
+    ]
+    process = start_detached(command)
+    logger.info("Executor da instalacao de %s iniciado (PID %s).", path.name, process.pid)
     return process, install_log
+
+
+def read_install_result(version: str, sha256: str) -> dict[str, Any] | None:
+    """Result written by the install runner for this package, if any."""
+    try:
+        result = load_json(INSTALL_RESULT_PATH)
+    except UpdaterError:
+        return None
+    if result.get("version") != version or str(result.get("sha256", "")).lower() != sha256.lower():
+        return None
+    return result
+
+
+def runner_outcome(result: dict[str, Any] | None, exit_code: int | None) -> tuple[str, int | None, str]:
+    """(outcome, exit_code, detail) of an installation, preferring the runner result."""
+    if result is None:
+        return "exited", exit_code, ""
+    outcome = result.get("outcome")
+    if outcome == "timeout":
+        return "timeout", None, ""
+    if outcome == "error":
+        return "error", None, str(result.get("message", ""))[:500]
+    try:
+        return "exited", int(result.get("exit_code")), ""
+    except (TypeError, ValueError):
+        return "exited", exit_code, ""
+
+
+def stop_updater_service(logger: logging.Logger) -> None:
+    service = query_service()
+    if service is None or service[0] == SERVICE_STATE_STOPPED:
+        return
+    logger.info("Parando o servico %s para a instalacao.", SERVICE_NAME)
+    run_sc("stop", SERVICE_NAME)
+    if not wait_service_state(SERVICE_STATE_STOPPED, SERVICE_STOP_TIMEOUT_SECONDS):
+        current = query_service()
+        if current is not None and current[1]:
+            logger.warning("Servico nao parou em %s s; encerrando o processo %s.", SERVICE_STOP_TIMEOUT_SECONDS, current[1])
+            kill_process_tree(current[1])
+            wait_service_state(SERVICE_STATE_STOPPED, 15)
+
+
+def kill_leftover_processes(logger: logging.Logger) -> None:
+    """Installers from earlier attempts and service executables that did not exit.
+
+    Old windowed builds could stay alive after the service stopped (a message box
+    nobody sees in session 0), keeping SERVICE_EXE locked for the setup.
+    """
+    own = own_process_ids()
+    leftovers = [pid for pid in running_setup_processes() + process_ids_by_image(SERVICE_EXE) if pid not in own]
+    for pid in leftovers:
+        kill_process_tree(pid)
+    if leftovers:
+        logger.warning("Processos restantes encerrados antes da instalacao: %s", leftovers)
+        time.sleep(3)
+
+
+def ensure_service_running(logger: logging.Logger) -> bool:
+    service = query_service()
+    if service is not None and service[0] in (SERVICE_STATE_RUNNING, SERVICE_STATE_START_PENDING):
+        return True
+    if not service_exe_healthy():
+        restore_service_executable(logger)
+    run_sc("start", SERVICE_NAME)
+    started = wait_service_state(SERVICE_STATE_RUNNING, 60)
+    if started:
+        logger.info("Servico %s em execucao.", SERVICE_NAME)
+    else:
+        logger.error("O servico %s nao iniciou; o vigia tentara novamente.", SERVICE_NAME)
+    return started
+
+
+def run_install_package(logger: logging.Logger, package: Path, version: str, sha256: str, install_log: Path) -> int:
+    """Install runner: the steps of Deploy-AtivaUnifiedAgent.ps1, started by the service.
+
+    Stops the service, removes leftovers, runs the setup silently with a timeout,
+    writes INSTALL_RESULT_PATH for the service and makes sure the service runs again.
+    """
+    try:
+        lock = SingleInstance(RUNNER_MUTEX_NAME)
+        lock.__enter__()
+    except UpdaterError:
+        logger.warning("Outra instalacao ja esta em andamento; nada a fazer.")
+        return 0
+    result: dict[str, Any] = {
+        "version": version, "sha256": sha256.lower(), "started_at": time.time(), "installer_log": str(install_log),
+    }
+    exit_code = 1
+    try:
+        logger.info("Instalacao de %s iniciada pelo servico.", version)
+        if not package.is_file() or file_sha256(package) != sha256.lower():
+            raise UpdaterError("o instalador baixado nao confere com o SHA-256 publicado")
+        stop_updater_service(logger)
+        kill_leftover_processes(logger)
+        process = start_detached(installer_command(package, install_log))
+        logger.info("Instalador %s iniciado silenciosamente (PID %s).", package.name, process.pid)
+        outcome, code = supervise_installer(process, lambda: False)
+        if outcome == "timeout":
+            kill_process_tree(process.pid)
+            for pid in running_setup_processes():
+                kill_process_tree(pid)
+            logger.error("Instalador excedeu %s minutos e foi encerrado.", INSTALL_TIMEOUT_SECONDS // 60)
+            result.update(outcome="timeout")
+            exit_code = RUNNER_TIMEOUT_EXIT_CODE
+        else:
+            logger.info("Instalador terminou com codigo %s.", code)
+            result.update(outcome="exited", exit_code=code)
+            exit_code = int(code or 0)
+    except Exception as exc:
+        logger.exception("Falha no executor da instalacao.")
+        result.update(outcome="error", message=str(exc)[:500])
+    finally:
+        result["finished_at"] = time.time()
+        try:
+            atomic_json(INSTALL_RESULT_PATH, result)
+        except OSError:
+            logger.exception("Nao foi possivel gravar %s.", INSTALL_RESULT_PATH)
+        try:
+            ensure_service_running(logger)
+        finally:
+            lock.__exit__()
+    return exit_code
 
 
 def report_install_failure(
@@ -1047,19 +1299,20 @@ def report_install_failure(
     outcome: str,
     exit_code: int | None = None,
     installer_log: Path | None = None,
+    detail: str = "",
 ) -> int:
     """Record a failed attempt of the pending package and tell the dashboard."""
     version = str(state.get("pending_version", ""))
     started_at = float(state.get("pending_started_at", 0) or 0)
     attempts, delay, exhausted = register_install_failure(state, time.time())
-    install_log = collect_install_log(version, attempts, outcome, exit_code, started_at, installer_log)
+    install_log = collect_install_log(version, attempts, outcome, exit_code, started_at, installer_log, detail)
     try:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         INSTALL_FAILURE_LOG_PATH.write_text(install_log, encoding="utf-8")
     except OSError:
         logger.warning("Nao foi possivel gravar %s.", INSTALL_FAILURE_LOG_PATH)
 
-    reason = describe_outcome(outcome, exit_code)
+    reason = describe_outcome(outcome, exit_code, detail)
     if exhausted:
         status = STATUS_INSTALL_FAILED
         message = (
@@ -1156,7 +1409,7 @@ def check_once(
                 atomic_json(STATE_PATH, state)
             else:
                 setup_pids = running_setup_processes()
-                if setup_pids and time.time() - pending_started_at < INSTALL_TIMEOUT_SECONDS:
+                if setup_pids and time.time() - pending_started_at < INSTALL_SUPERVISION_SECONDS:
                     api.report(
                         "installing", installed, pending_version,
                         f"Instalacao de {pending_version} em andamento; aguardando o instalador terminar.",
@@ -1165,7 +1418,16 @@ def check_once(
                     return RESULT_RETRY
                 for pid in setup_pids:
                     kill_process_tree(pid)
-                return report_install_failure(api, state, logger, "timeout" if setup_pids else "missing")
+                if setup_pids:
+                    return report_install_failure(api, state, logger, "timeout")
+                result = read_install_result(pending_version, str(state.get("pending_sha256", "")))
+                if result is None:
+                    return report_install_failure(api, state, logger, "missing")
+                outcome, exit_code, detail = runner_outcome(result, None)
+                if outcome == "exited" and exit_code == 0:
+                    outcome = "incomplete"
+                installer_log = Path(str(result.get("installer_log", ""))) if result.get("installer_log") else None
+                return report_install_failure(api, state, logger, outcome, exit_code, installer_log, detail)
 
         start_message = {
             COMMAND_CHECK: "Verificacao reiniciada pelo dashboard.",
@@ -1262,12 +1524,14 @@ def check_once(
         state["last_error"] = ""
         atomic_json(STATE_PATH, state)
         api.report("installing", installed, available, install_message)
-        process, installer_log = launch_installer(destination, logger)
-        outcome, exit_code = supervise_installer(process, stop_requested, cancel_requested=cancel_requested)
+        process, installer_log = launch_installer(destination, logger, available, release["sha256"])
+        outcome, exit_code = supervise_installer(
+            process, stop_requested, timeout_seconds=INSTALL_SUPERVISION_SECONDS, cancel_requested=cancel_requested,
+        )
         if outcome == "stopping":
-            # Expected on success: the installer restarts the service to run the
-            # new executable, and the new process reports the result.
-            logger.info("Instalador reiniciando o servico para concluir a atualizacao para %s.", available)
+            # Expected: the install runner stops the service before running the
+            # setup; the service started at the end reports the result.
+            logger.info("Executor da instalacao parando o servico para instalar %s.", available)
             return RESULT_SERVICE_STOPPING
         if outcome == "cancelled":
             kill_process_tree(process.pid)
@@ -1279,6 +1543,10 @@ def check_once(
             logger.warning("Instalacao de %s cancelada pelo dashboard; recomecando a verificacao.", available)
             return RESULT_RESTART_NOW
 
+        # The runner finished without stopping the service (e.g. it failed early).
+        detail = ""
+        if outcome == "exited":
+            outcome, exit_code, detail = runner_outcome(read_install_result(available, release["sha256"]), exit_code)
         # Re-read the state: --configure rewrites it when the package is installed.
         refreshed = get_state()
         if refreshed.get("installed_version") == available and outcome == "exited" and exit_code == 0:
@@ -1297,7 +1565,7 @@ def check_once(
                     "failed_version", "failed_sha256", "failed_attempts"):
             if key in state:
                 refreshed[key] = state[key]
-        return report_install_failure(api, refreshed, logger, outcome, exit_code, installer_log)
+        return report_install_failure(api, refreshed, logger, outcome, exit_code, installer_log, detail)
     except OperationCancelled:
         logger.info("Verificacao cancelada pelo dashboard; recomecando.")
         return RESULT_RESTART_NOW
@@ -1492,6 +1760,8 @@ def collect_diagnostics() -> str:
     sections = [
         ("Servico (service.log)", LOG_DIR / "service.log", 200),
         ("Vigia (watchdog.log)", LOG_DIR / "watchdog.log", 60),
+        (f"Executor da instalacao ({RUNNER_LOG_NAME})", LOG_DIR / RUNNER_LOG_NAME, 60),
+        ("Resultado da ultima instalacao", INSTALL_RESULT_PATH, 20),
         ("Ultima falha de instalacao", INSTALL_FAILURE_LOG_PATH, 80),
         ("Configuracao (configure.log)", LOG_DIR / "configure.log", 30),
     ]
@@ -1954,6 +2224,13 @@ def main() -> int:
         "--watchdog", action="store_true",
         help="Vigia: religa o servico, encerra instalador travado e restaura o executavel (tarefa agendada)",
     )
+    parser.add_argument(
+        "--install-package", type=Path,
+        help="Executor: para o servico, instala o pacote em silencio e religa o servico (uso interno do servico)",
+    )
+    parser.add_argument("--package-version", default="")
+    parser.add_argument("--package-sha256", default="")
+    parser.add_argument("--installer-log", type=Path)
     parser.add_argument("--config", type=Path)
     parser.add_argument("--installed-version", default="")
     parser.add_argument("--debug", action="store_true")
@@ -1962,6 +2239,15 @@ def main() -> int:
     if args.version:
         print(UPDATER_VERSION)
         return 0
+    if args.install_package is not None:
+        version_tuple(args.package_version)
+        if not re.fullmatch(r"[a-fA-F0-9]{64}", args.package_sha256):
+            parser.error("--install-package exige --package-sha256 valido")
+        installer_log = args.installer_log or LOG_DIR / f"installer-{int(time.time())}.log"
+        return run_install_package(
+            configure_logging(args.debug, RUNNER_LOG_NAME),
+            args.install_package, args.package_version, args.package_sha256, installer_log,
+        )
     if args.watchdog:
         return run_watchdog(configure_logging(args.debug, "watchdog.log"))
     if args.configure:
