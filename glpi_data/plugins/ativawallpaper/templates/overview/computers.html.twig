@@ -1,5 +1,15 @@
-{% set badges = {'updated': ['Atualizado', 'is-green'], 'pending': ['Pendente', 'is-yellow'], 'offline': ['Offline', 'is-gray'], 'error': ['Erro', 'is-red']} %}
+{% set badges = {'updated': ['Atualizado', 'is-green'], 'pending': ['Pendente', 'is-yellow'], 'offline': ['Offline', 'is-gray'], 'error': ['Erro', 'is-red'], 'revoked': ['Revogado', 'is-red']} %}
 {% set query = {q: filters.q, status: filters.status, sort: filters.sort, direction: filters.direction} %}
+{% if revoked_count > 0 and filters.status != 'revoked' %}
+  <div class="awp-alert is-warning awp-table-alert" role="status">
+    <i class="ti ti-ban"></i>
+    <span>
+      {{ revoked_count }} computador(es) revogado(s) no Ativa Wallpaper: não recebem wallpaper nem aparecem nos indicadores até serem registrados de novo
+      (<strong>Reinstalar</strong> no Ativa Updater).
+      <a href="{{ urls.dashboard }}?status=revoked#awp-computers">Ver revogados</a>
+    </span>
+  </div>
+{% endif %}
 <div class="table-responsive">
   <table class="awp-table">
     <thead>
@@ -17,7 +27,7 @@
     <tbody>
     {% for client in clients.rows %}
       {% set badge = badges[client.computed_status] %}
-      <tr class="{{ client.computed_status == 'error' ? 'is-error' : '' }}">
+      <tr class="{{ client.computed_status in ['error', 'revoked'] ? 'is-error' : '' }}">
         <td><strong>{{ client.hostname }}</strong></td>
         <td>{{ client.username ?: '—' }}</td>
         <td>{% if client.wallpaper_version %}<code class="awp-pill">{{ client.wallpaper_version }}</code>{% else %}—{% endif %}</td>
@@ -27,7 +37,16 @@
         <td>
           <span class="awp-badge {{ badge[1] }}">{{ badge[0] }}</span>
           {% if client.force_reapply %}<small class="awp-row-note">Reaplicação solicitada</small>{% endif %}
-          {% if client.computed_status == 'error' and client.last_error %}<small class="awp-row-note is-error" title="{{ client.last_error }}">{{ client.last_error }}</small>{% endif %}
+          {% if client.computed_status == 'revoked' %}
+            <small class="awp-row-note is-error" title="{{ client.last_error ?: 'Revogado no painel' }}">Revogado em {{ client.revoked_at|formatted_datetime }}</small>
+          {% elseif client.computed_status == 'error' and client.last_error %}
+            <small class="awp-row-note is-error" title="{{ client.last_error }}">{{ client.last_error }}</small>
+          {% endif %}
+          {% if client.computed_status in ['offline', 'revoked'] and client.updater and client.updater.online %}
+            <small class="awp-row-note" title="O serviço Ativa Unified Updater deste computador fez contato há {{ (client.updater.age_seconds / 60)|round(0, 'floor') }} min">
+              Computador online no Ativa Updater — o Wallpaper Client não está reportando
+            </small>
+          {% endif %}
         </td>
         <td class="text-end">
           <span class="awp-row-actions">
@@ -36,10 +55,11 @@
             {% else %}
               <span class="awp-icon-btn is-disabled" title="Aguardando vínculo com o inventário do GLPI"><i class="ti ti-file-text"></i></span>
             {% endif %}
-            {% if rights.clients %}
+            {% if rights.clients and client.computed_status != 'revoked' %}
               <button type="button" class="awp-icon-btn" data-awp-client-action="force" data-id="{{ client.id }}" title="Forçar nova aplicação neste computador"><i class="ti ti-refresh"></i></button>
               <button type="button" class="awp-icon-btn is-danger" data-awp-client-action="revoke" data-id="{{ client.id }}"
-                      data-confirm="Revogar {{ client.hostname }}? O cliente precisará ser registrado novamente." title="Revogar cliente"><i class="ti ti-ban"></i></button>
+                      data-confirm="REVOGAR {{ client.hostname }}?&#10;&#10;O computador para de receber o wallpaper e passa a aparecer como Revogado. Para voltar, será preciso reinstalar o agente (Reinstalar no Ativa Updater).&#10;&#10;Use apenas para computadores desativados ou comprometidos."
+                      title="Revogar cliente (bloqueia o computador até ser reinstalado)"><i class="ti ti-ban"></i></button>
             {% endif %}
           </span>
         </td>

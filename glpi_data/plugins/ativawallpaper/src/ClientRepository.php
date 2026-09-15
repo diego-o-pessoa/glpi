@@ -87,9 +87,35 @@ final class ClientRepository
             throw new ApiException('Token ausente ou invalido', 401, 'UNAUTHORIZED');
         }
         if (!empty($client['revoked_at'])) {
+            $this->recordRevokedContact($client);
             throw new ApiException('Cliente revogado', 401, 'CLIENT_REVOKED');
         }
         return $client;
+    }
+
+    /**
+     * A revoked computer keeps its client running and calling the API. Leave a
+     * trace for the dashboard (at most every 5 minutes) without marking it online:
+     * last_check is not touched.
+     */
+    private function recordRevokedContact(array $client): void
+    {
+        global $DB;
+        $updatedAt = strtotime((string) ($client['updated_at'] ?? ''));
+        if ($updatedAt !== false && $updatedAt > time() - 300 && ($client['last_error_code'] ?? '') === 'CLIENT_REVOKED') {
+            return;
+        }
+        $now = date('Y-m-d H:i:s');
+        self::log(sprintf(
+            'Cliente revogado continua ativo: %s (id %d, revogado em %s, IP %s).',
+            (string) $client['hostname'], (int) $client['id'], (string) $client['revoked_at'], (string) ($_SERVER['REMOTE_ADDR'] ?? '?')
+        ));
+        $DB->update(self::TABLE, [
+            'last_error_code' => 'CLIENT_REVOKED',
+            'last_error'      => 'Cliente revogado continua tentando contato (ultima tentativa ' . $now . '). '
+                . 'Reinstale o agente para registrar o computador novamente.',
+            'updated_at'      => $now,
+        ], ['id' => (int) $client['id']]);
     }
 
     public function findById(int $id): ?array
@@ -334,16 +360,32 @@ final class ClientRepository
     public function revoke(int $id): void
     {
         global $DB;
-        if ($this->findById($id) === null) {
+        $client = $this->findById($id);
+        if ($client === null) {
             throw new RuntimeException('Cliente nao encontrado.');
         }
+        // The token hash is kept on purpose: authenticate() still rejects it, but can
+        // now tell "revoked client still calling" apart from an unknown token.
         $DB->update(self::TABLE, [
             'revoked_at' => date('Y-m-d H:i:s'),
-            'token_hash' => null,
             'status'     => 'revoked',
             'updated_at' => date('Y-m-d H:i:s'),
         ], ['id' => $id]);
         Audit::record('revoke_client', 'client', $id, null, 'revoked');
+        self::log(sprintf(
+            'Cliente %s (id %d) revogado pelo usuario %d; ele deixa de sincronizar ate ser reinstalado.',
+            (string) $client['hostname'], $id, (int) \Session::getLoginUserID()
+        ));
+    }
+
+    /** files/_log/ativawallpaper.log */
+    private static function log(string $message): void
+    {
+        try {
+            \Toolbox::logInFile('ativawallpaper', $message . "\n", true);
+        } catch (\Throwable) {
+            // Logging must never break the API or the dashboard.
+        }
     }
 
     public function reconcileUnmatched(int $limit = 500): int

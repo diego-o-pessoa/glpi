@@ -46,7 +46,14 @@ final class DashboardService
         global $DB;
         $page = max(1, $page);
         $limit = max(10, min(100, $limit));
-        $where = ['revoked_at' => null];
+        $status = (string) ($filters['status'] ?? 'all');
+        // "Todos" also lists revoked computers: hiding them made a revocation look
+        // like computers that silently stopped reporting.
+        $where = match ($status) {
+            'all'     => [],
+            'revoked' => ['NOT' => ['revoked_at' => null]],
+            default   => ['revoked_at' => null],
+        };
 
         $query = Security::cleanText($filters['q'] ?? '', 255);
         if ($query !== '') {
@@ -58,7 +65,6 @@ final class DashboardService
             ];
         }
 
-        $status = (string) ($filters['status'] ?? 'all');
         $statusExpression = $this->statusExpression($status, $current);
         if ($statusExpression !== null) {
             $where[] = new QueryExpression($statusExpression);
@@ -82,7 +88,8 @@ final class DashboardService
         $iterator = $DB->request([
             'FROM'  => self::TABLE,
             'WHERE' => $where,
-            'ORDER' => [sprintf('%s %s', $sort, $direction), 'id DESC'],
+            // Active computers first (NULL sorts first in MySQL).
+            'ORDER' => ['revoked_at ASC', sprintf('%s %s', $sort, $direction), 'id DESC'],
             'START' => ($page - 1) * $limit,
             'LIMIT' => $limit,
         ]);
@@ -90,12 +97,70 @@ final class DashboardService
             $row['computed_status'] = $this->computeStatus($row, $current);
             $rows[] = $row;
         }
+        $updater = $this->updaterContacts(array_column($rows, 'machine_guid'));
+        foreach ($rows as &$row) {
+            $row['updater'] = $updater[strtolower((string) $row['machine_guid'])] ?? null;
+        }
+        unset($row);
 
         return compact('rows', 'total', 'page', 'pages', 'limit');
     }
 
+    public function revokedCount(): int
+    {
+        return (int) countElementsInTable(self::TABLE, ['NOT' => ['revoked_at' => null]]);
+    }
+
+    /**
+     * Last contact of the same computers in the Ativa Updater (SYSTEM service), keyed by
+     * lowercase MachineGuid. Lets the dashboard tell "computer online, wallpaper client
+     * not reporting" apart from "computer off".
+     *
+     * @return array<string, array{last_check:string, age_seconds:int|null, online:bool}>
+     */
+    public function updaterContacts(array $machineGuids): array
+    {
+        global $DB;
+        $guids = array_values(array_unique(array_filter(array_map(
+            static fn($guid): string => strtolower(trim((string) $guid)),
+            $machineGuids
+        ))));
+        if ($guids === [] || !$DB->tableExists('glpi_plugin_ativaupdater_clients')) {
+            return [];
+        }
+        // Ativa Updater stores its dates in the php.ini timezone (see its ServerClock).
+        try {
+            $zone = new \DateTimeZone((string) ini_get('date.timezone') ?: 'UTC');
+        } catch (\Throwable) {
+            $zone = new \DateTimeZone('UTC');
+        }
+        $contacts = [];
+        $iterator = $DB->request([
+            'SELECT' => ['machine_guid', 'last_check'],
+            'FROM'   => 'glpi_plugin_ativaupdater_clients',
+            'WHERE'  => ['machine_guid' => $guids],
+        ]);
+        foreach ($iterator as $row) {
+            $age = null;
+            try {
+                $age = max(0, time() - (new \DateTimeImmutable((string) $row['last_check'], $zone))->getTimestamp());
+            } catch (\Throwable) {
+            }
+            $contacts[strtolower((string) $row['machine_guid'])] = [
+                'last_check'  => (string) $row['last_check'],
+                'age_seconds' => $age,
+                // Same rule as the Ativa Updater dashboard: offline after 2 h without contact.
+                'online'      => $age !== null && $age < 7200,
+            ];
+        }
+        return $contacts;
+    }
+
     public function computeStatus(array $client, ?array $current): string
     {
+        if (!empty($client['revoked_at'])) {
+            return 'revoked';
+        }
         $lastCheck = !empty($client['last_check']) ? strtotime((string) $client['last_check']) : false;
         if ($lastCheck === false || $lastCheck < time() - max(120, ConfigService::getInt('offline_after_seconds'))) {
             return 'offline';

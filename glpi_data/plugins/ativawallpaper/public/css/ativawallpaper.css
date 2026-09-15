@@ -169,6 +169,8 @@
 .awp-table-empty { text-align: center; color: var(--awp-muted); padding: 34px 17px !important; }
 .awp-row-note { display: block; font-size: 11px; color: #2856ab; margin-top: 3px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .awp-row-note.is-error { color: #c22f3a; }
+.awp-table-alert { margin: 12px 17px; }
+.awp-table-alert a { font-weight: 650; margin-left: 4px; }
 .awp-row-actions { display: inline-flex; gap: 6px; }
 .awp-icon-btn { display: inline-grid; place-items: center; width: 32px; height: 30px; border: 1px solid #d3dceb; border-radius: 6px; background: #fff; color: #3f5783; font-size: 16px; text-decoration: none; cursor: pointer; }
 .awp-icon-btn:hover { border-color: #96acd0; background: #f5f8fd; color: #1f3f78; }

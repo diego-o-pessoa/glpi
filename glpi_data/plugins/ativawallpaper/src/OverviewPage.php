@@ -27,6 +27,7 @@ final class OverviewPage
         'pending' => 'Pendentes',
         'offline' => 'Offline',
         'error'   => 'Com erro',
+        'revoked' => 'Revogados',
     ];
 
     public static function filters(array $query): array
@@ -65,6 +66,7 @@ final class OverviewPage
             'activity'       => $dashboard->activity($rollout),
             'last_check_age' => DashboardService::describeAge($lastCheckAge),
             'clients'        => $dashboard->clients($filters, $current, (int) ($query['page'] ?? 1), self::PAGE_SIZE),
+            'revoked_count'  => $dashboard->revokedCount(),
             'filters'        => $filters,
             'sorts'          => self::SORTS,
             'statuses'       => self::STATUSES,
