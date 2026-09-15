@@ -11,7 +11,9 @@ param(
     [string]$AgentServerUrl = "https://chamados.ativalocacao.com.br:8443/marketplace/glpiinventory/",
     [switch]$AllComputers,
     [switch]$InstallInnoSetup,
-    [switch]$InstallBuildTools
+    [switch]$InstallBuildTools,
+    # Rebuild a bundle version that already exists in dist (only for packages never distributed).
+    [switch]$AllowOverwrite
 )
 
 $ErrorActionPreference = "Stop"
@@ -230,12 +232,23 @@ if ([string]::IsNullOrWhiteSpace($BundleVersion)) {
 if ($BundleVersion -notmatch '^\d+\.\d+\.\d+$') {
     throw "Versao do instalador unificado invalida: $BundleVersion"
 }
+$UnifiedInstaller = Join-Path $OutputPath "Ativa-Unified-Agent-Setup-$BundleVersion.exe"
+if ((Test-Path -LiteralPath $UnifiedInstaller) -and -not $AllowOverwrite) {
+    # Two different files named 1.6.1 existed: one of them carried Wallpaper Client
+    # 1.6.0, and computers installed with it kept the older client.
+    throw "Ativa-Unified-Agent-Setup-$BundleVersion.exe ja existe em $OutputPath. Aumente unified-version.txt para gerar um pacote novo (use -AllowOverwrite somente se esta versao nunca foi distribuida)."
+}
 $Bootstrap.client_version = $ClientVersion
 
 Write-Host "Compilando o servico AtivaUnifiedUpdater.exe..."
 & $UnifiedUpdaterBuildScript -Python $PythonExecutable
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $UnifiedUpdaterExe)) {
     throw "Falha ao compilar o servico Ativa Unified Updater."
+}
+$UnifiedUpdaterVersion = ((& $UnifiedUpdaterExe --version) | Select-Object -First 1)
+$UnifiedUpdaterVersion = if ($UnifiedUpdaterVersion) { $UnifiedUpdaterVersion.ToString().Trim() } else { "" }
+if ($UnifiedUpdaterVersion -notmatch '^\d+\.\d+\.\d+$') {
+    throw "Nao foi possivel identificar a versao do servico Ativa Unified Updater compilado."
 }
 
 $Iscc = Find-InnoSetupCompiler
@@ -255,8 +268,6 @@ if (-not $Iscc) {
 $TemporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $WorkingDirectory = Join-Path $TemporaryRoot ("AtivaUnifiedInstaller-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $WorkingDirectory | Out-Null
-
-$UnifiedInstaller = Join-Path $OutputPath "Ativa-Unified-Agent-Setup-$BundleVersion.exe"
 
 try {
     $PreparedBootstrap = Join-Path $WorkingDirectory "bootstrap-config.json"
@@ -286,6 +297,8 @@ try {
         "/DBootstrapConfigPath=$PreparedBootstrap" `
         "/DBuildOutputDir=$CompilerOutput" `
         "/DBundleVersion=$BundleVersion" `
+        "/DClientVersion=$ClientVersion" `
+        "/DUpdaterVersion=$UnifiedUpdaterVersion" `
         $ClientIssFile
     if ($LASTEXITCODE -ne 0) {
         throw "O compilador do Inno Setup retornou codigo $LASTEXITCODE ao compilar o instalador unificado."
@@ -309,6 +322,8 @@ if (-not (Test-Path -LiteralPath $UnifiedInstaller)) {
 }
 $Manifest = [ordered]@{
     bundle_version = $BundleVersion
+    wallpaper_client_version = $ClientVersion
+    unified_updater_version = $UnifiedUpdaterVersion
     glpi_agent_version = $AgentVersion
     glpi_agent_server = $AgentServerUrl
     glpi_agent_sha256 = (Get-FileHash -LiteralPath $AgentMsi -Algorithm SHA256).Hash
@@ -325,5 +340,6 @@ $ManifestPath = Join-Path $OutputPath "Ativa-Unified-Agent-Setup-$BundleVersion.
 [IO.File]::WriteAllText($ManifestPath, ($Manifest | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
 
 Write-Host "Instalador unificado: $UnifiedInstaller"
+Write-Host "Conteudo do pacote $BundleVersion`: Wallpaper Client $ClientVersion | Ativa Unified Updater $UnifiedUpdaterVersion | GLPI Agent $AgentVersion"
 Write-Host "Manifesto e hashes: $ManifestPath"
 Write-Warning "O instalador contem o segredo de bootstrap. Distribua-o somente por canal protegido e rotacione o segredo apos o rollout."

@@ -25,12 +25,21 @@
 #ifndef BundleVersion
   #define BundleVersion "1.5.0"
 #endif
+#ifndef ClientVersion
+  #define ClientVersion "?"
+#endif
+#ifndef UpdaterVersion
+  #define UpdaterVersion "?"
+#endif
 
 [Setup]
 AppId={{9F8B7C6D-E5D4-4C32-8A1A-B445015310C1}
 AppName=Ativa Unified Agent
 AppVersion={#BundleVersion}
 VersionInfoVersion={#BundleVersion}
+; Shown in the file properties: the bundle number alone does not tell which components it carries.
+; Inno Setup keeps this field short (about 60 characters).
+VersionInfoDescription=Ativa Agent: Wallpaper {#ClientVersion}, Updater {#UpdaterVersion}
 AppPublisher=Ativa Locacao
 AppPublisherURL=https://chamados.ativalocacao.com.br:8443/
 CreateAppDir=no

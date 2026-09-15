@@ -33,6 +33,8 @@ cd C:\Github\glpi\glpi_data\plugins\ativawallpaper\deployment\unified-installer
 
 O arquivo final e seu manifesto SHA-256 são gerados em `dist`.
 
+O número do pacote (`unified-version.txt`) é independente das versões dos componentes. O build informa o que foi incluído ("Conteúdo do pacote X: Wallpaper Client Y | Ativa Unified Updater Z | GLPI Agent W"), grava essas versões no manifesto (`wallpaper_client_version`, `unified_updater_version`) e na descrição do EXE (Propriedades > Detalhes). O build recusa gerar de novo uma versão que já existe em `dist`: dois arquivos diferentes com o mesmo número deixam máquinas com componentes antigos. Use `-AllowOverwrite` apenas para uma versão que nunca foi distribuída.
+
 ## Primeira instalação e atualizações
 
 Instale uma única vez:
