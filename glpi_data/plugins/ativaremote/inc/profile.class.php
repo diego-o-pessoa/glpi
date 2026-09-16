@@ -25,10 +25,16 @@ class PluginAtivaremoteProfile extends ProfileRight
         // Adiciona direitos na inicializacao se nao existirem
         $count = countElementsInTable('glpi_profilerights', ['name' => self::$rightname]);
         if ($count == 0) {
-            ProfileRight::addProfileRights([
-                'super-admin' => [self::$rightname => READ | UPDATE],
-                'admin'       => [self::$rightname => READ | UPDATE],
+            ProfileRight::addProfileRights([self::$rightname]);
+        }
+
+        if (isset($_SESSION['glpiactiveprofile']['id'])) {
+            $profileId = (int) $_SESSION['glpiactiveprofile']['id'];
+            $DB->update('glpi_profilerights', ['rights' => READ | UPDATE], [
+                'profiles_id' => $profileId,
+                'name'        => self::$rightname,
             ]);
+            $_SESSION['glpiactiveprofile'][self::$rightname] = READ | UPDATE;
         }
     }
 }
