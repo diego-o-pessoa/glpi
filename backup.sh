@@ -36,10 +36,34 @@ fi
 mv -- "$dump_partial" "$dump_file"
 
 echo "Criando backup dos arquivos persistentes do GLPI..."
-tar -czf "$files_file" -C "$project_dir" glpi_data
+if ! tar -czf "$files_file" -C "$project_dir" glpi_data; then
+    tar_status=$?
+    if [[ $tar_status -eq 1 ]]; then
+        echo "Aviso: Alguns arquivos foram alterados durante o backup (tar exit code 1). Isso e esperado em pastas de cache/sessao."
+    else
+        echo "ERRO: falha ao criar o backup dos arquivos (codigo $tar_status)." >&2
+        exit $tar_status
+    fi
+fi
 
 sha256sum "$dump_file" "$files_file" > "${backup_dir}/checksums_${timestamp}.sha256"
 
 echo "Backup concluido:"
 echo "  Banco:    ${dump_file}"
 echo "  Arquivos: ${files_file}"
+
+echo "Limpando backups antigos (mantendo os 2 mais recentes)..."
+for pattern in "glpidb_*.sql" "glpi_files_*.tar.gz" "checksums_*.sha256"; do
+    # Utilizamos bash arrays com shopt nullglob para evitar problemas com espaços ou ls -t
+    (
+        shopt -s nullglob
+        files=("${backup_dir}"/$pattern)
+        if [[ ${#files[@]} -gt 2 ]]; then
+            # Ordena por tempo de modificação usando ls, pega do terceiro em diante e remove
+            ls -t "${files[@]}" | tail -n +3 | while IFS= read -r f; do
+                rm -f -- "$f"
+                echo "Removido: $f"
+            done
+        fi
+    )
+done
