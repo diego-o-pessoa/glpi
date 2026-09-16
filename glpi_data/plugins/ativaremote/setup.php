@@ -14,7 +14,7 @@ function plugin_init_ativaremote(): void
     global $PLUGIN_HOOKS;
 
     $PLUGIN_HOOKS['csrf_compliant']['ativaremote'] = true;
-    $PLUGIN_HOOKS['menu_toadd']['ativaremote'] = ['plugins' => 'PluginAtivaremoteMenu'];
+    $PLUGIN_HOOKS['menu_toadd']['ativaremote'] = ['admin' => 'PluginAtivaremoteMenu'];
 
     // For GLPI API
     $PLUGIN_HOOKS['item_get_events_and_emails_hooks']['ativaremote'] = true;
