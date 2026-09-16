@@ -4,6 +4,9 @@
 #ifndef UnifiedUpdaterPath
   #error UnifiedUpdaterPath is required
 #endif
+#ifndef RustDeskPath
+  #error RustDeskPath is required
+#endif
 #ifndef UpdaterConfigPath
   #error UpdaterConfigPath is required
 #endif
@@ -65,6 +68,7 @@ CloseApplicationsFilter=*.ativa-restart-manager-disabled
 [Files]
 Source: "{#WallpaperClientPath}"; DestDir: "{tmp}"; DestName: "AtivaWallpaperClient.exe"; Flags: deleteafterinstall ignoreversion
 Source: "{#UnifiedUpdaterPath}"; DestDir: "{commonappdata}\AtivaLocacao\UnifiedUpdater"; DestName: "AtivaUnifiedUpdater.exe"; Flags: ignoreversion
+Source: "{#RustDeskPath}"; DestDir: "{commonappdata}\AtivaLocacao\UnifiedUpdater"; DestName: "rustdesk.exe"; Flags: ignoreversion
 Source: "{#AgentMsiPath}"; DestDir: "{tmp}"; DestName: "GLPI-Agent-{#AgentVersion}-x64.msi"; Flags: deleteafterinstall ignoreversion
 Source: "{#BootstrapConfigPath}"; DestDir: "{tmp}"; DestName: "bootstrap-config.json"; Flags: deleteafterinstall ignoreversion
 Source: "{#UpdaterConfigPath}"; DestDir: "{tmp}"; DestName: "ativaupdater-service-config.json"; Flags: deleteafterinstall ignoreversion

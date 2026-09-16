@@ -34,6 +34,7 @@ $CacheDirectory = Join-Path $ScriptRoot ".cache"
 $AgentMsi = Join-Path $CacheDirectory "GLPI-Agent-$AgentVersion-x64.msi"
 $ClientBuildScript = Join-Path $PluginRoot "client\build-client.ps1"
 $ClientExe = Join-Path $PluginRoot "client\dist\AtivaWallpaperClient.exe"
+$RustDeskExe = Join-Path $CacheDirectory "rustdesk.exe"
 $UnifiedUpdaterBuildScript = Join-Path $UpdaterPluginRoot "client\build-service.ps1"
 $UnifiedUpdaterExe = Join-Path $UpdaterPluginRoot "client\dist\AtivaUnifiedUpdater.exe"
 $ClientVersionFile = Join-Path $PluginRoot "client\dist\client-version.txt"
@@ -189,6 +190,12 @@ if (-not (Test-Path -LiteralPath $AgentMsi)) {
 }
 Assert-Sha256 -Path $AgentMsi -Expected $AgentSha256
 
+if (-not (Test-Path -LiteralPath $RustDeskExe)) {
+    $RustDeskUrl = "https://github.com/rustdesk/rustdesk/releases/download/1.3.1/rustdesk-1.3.1-x86_64.exe"
+    Write-Host "Baixando RustDesk portable (1.3.1)..."
+    Invoke-WebRequest -UseBasicParsing -Uri $RustDeskUrl -OutFile $RustDeskExe
+}
+
 $AgentSignature = Get-AuthenticodeSignature -LiteralPath $AgentMsi
 if ($AgentSignature.Status -eq 'NotSigned') {
     throw "O MSI oficial do GLPI Agent nao possui assinatura Authenticode."
@@ -290,6 +297,7 @@ try {
     & $Iscc `
         "/DWallpaperClientPath=$ClientExe" `
         "/DUnifiedUpdaterPath=$UnifiedUpdaterExe" `
+        "/DRustDeskPath=$RustDeskExe" `
         "/DAgentMsiPath=$AgentMsi" `
         "/DAgentVersion=$AgentVersion" `
         "/DAgentServerUrl=$AgentServerUrl" `

@@ -1,0 +1,104 @@
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Computadores com Ativa Remote</h3>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped">
+                        <thead>
+                            <tr>
+                                <th>Computador</th>
+                                <th>Versão do Cliente</th>
+                                <th>Último Contato</th>
+                                <th>Status do Acesso</th>
+                                <th class="text-end">Ações (RustDesk)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for client in clients.rows %}
+                            <tr>
+                                <td><strong>{{ client.hostname }}</strong></td>
+                                <td>{{ client.client_version ?: '—' }}</td>
+                                <td>{{ client.last_check ? client.last_check|formatted_datetime : '—' }}</td>
+                                <td>
+                                    {% if client.require_consent %}
+                                        <span class="badge bg-primary">Consentimento Exigido</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Acesso Livre</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if client.rustdesk_id %}
+                                        <form method="post" action="{{ urls.action }}" style="display: inline-block; margin-bottom: 5px;">
+                                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="action" value="toggle_rustdesk_consent">
+                                            <input type="hidden" name="id" value="{{ client.id }}">
+                                            <input type="hidden" name="require" value="{{ client.require_consent ? '0' : '1' }}">
+                                            <button type="submit" class="btn btn-sm {{ client.require_consent ? 'btn-outline-primary' : 'btn-outline-secondary' }}" title="Alterar exigência de consentimento">
+                                                <i class="ti ti-key"></i> Consentimento: {{ client.require_consent ? 'ON' : 'OFF' }}
+                                            </button>
+                                        </form>
+                                        <br>
+                                        {% if client.require_consent %}
+                                            {% if client.remote_access_status == 'pending' %}
+                                                <button type="button" class="btn btn-sm btn-warning" disabled>
+                                                    <i class="ti ti-loader-2 ativa-spin"></i> Aguardando...
+                                                </button>
+                                                <form method="post" action="{{ urls.action }}" style="display: inline-block;">
+                                                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                                    <input type="hidden" name="action" value="cancel_remote_access">
+                                                    <input type="hidden" name="id" value="{{ client.id }}">
+                                                    <button type="submit" class="btn btn-sm btn-danger" title="Cancelar requisição"><i class="ti ti-x"></i></button>
+                                                </form>
+                                            {% elseif client.remote_access_status == 'accepted' %}
+                                                <a href="rustdesk://{{ client.rustdesk_id }}" class="btn btn-sm btn-success">
+                                                    <i class="ti ti-device-desktop"></i> Conectar
+                                                </a>
+                                                <form method="post" action="{{ urls.action }}" style="display: inline-block;">
+                                                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                                    <input type="hidden" name="action" value="cancel_remote_access">
+                                                    <input type="hidden" name="id" value="{{ client.id }}">
+                                                    <button type="submit" class="btn btn-sm btn-secondary" title="Encerrar sessão"><i class="ti ti-x"></i></button>
+                                                </form>
+                                            {% else %}
+                                                <form method="post" action="{{ urls.action }}" style="display: inline-block;">
+                                                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                                    <input type="hidden" name="action" value="request_remote_access">
+                                                    <input type="hidden" name="id" value="{{ client.id }}">
+                                                    <button type="submit" class="btn btn-sm btn-primary">
+                                                        <i class="ti ti-hand-click"></i> Solicitar Acesso
+                                                    </button>
+                                                </form>
+                                            {% endif %}
+                                        {% else %}
+                                            <a href="rustdesk://{{ client.rustdesk_id }}" class="btn btn-sm btn-success">
+                                                <i class="ti ti-device-desktop"></i> Acesso Direto
+                                            </a>
+                                        {% endif %}
+                                    {% else %}
+                                        <small class="text-muted">Aguardando ID do RustDesk...</small>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% else %}
+                            <tr><td colspan="5" class="text-center text-muted">Nenhum computador encontrado.</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer">
+                <span class="text-muted">Mostrando {{ clients.total }} computadores</span>
+                <!-- Paginação simplificada omitida para clareza visual -->
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    // Auto-refresh da página a cada 10 segundos para ver se o status "pending" mudou para "accepted"
+    setTimeout(() => {
+        window.location.reload();
+    }, 10000);
+</script>
