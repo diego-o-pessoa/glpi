@@ -1,0 +1,23 @@
+CREATE TABLE `glpi_plugin_ativaremote_clients` (
+    `id` int unsigned NOT NULL AUTO_INCREMENT,
+    `computers_id` int unsigned DEFAULT NULL,
+    `hostname` varchar(255) NOT NULL,
+    `machine_guid` varchar(128) NOT NULL,
+    `rustdesk_id` varchar(64) DEFAULT NULL,
+    `rustdesk_password` varchar(64) DEFAULT NULL,
+    `require_consent` tinyint(1) NOT NULL DEFAULT '1',
+    `remote_access_status` varchar(16) DEFAULT NULL,
+    `client_version` varchar(32) DEFAULT NULL,
+    `last_check` datetime DEFAULT NULL,
+    `last_ip` varchar(45) DEFAULT NULL,
+    `registered_at` datetime NOT NULL,
+    `updated_at` datetime NOT NULL,
+    `token_hash` char(64) DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `machine_guid` (`machine_guid`),
+    UNIQUE KEY `token_hash` (`token_hash`),
+    KEY `computers_id` (`computers_id`),
+    KEY `hostname` (`hostname`),
+    KEY `last_check` (`last_check`),
+    KEY `updated_at` (`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
