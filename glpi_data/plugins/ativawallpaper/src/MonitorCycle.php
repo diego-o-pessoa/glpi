@@ -127,7 +127,7 @@ final class MonitorCycle
         $settings = ConfigService::all();
         $waitSeconds = max(60, (int) $settings['poll_interval_seconds']);
         // Time a computer may be late (jitter, download, network) before it is left out.
-        $graceSeconds = max(90, (int) $settings['poll_jitter_seconds'] + 90);
+        $graceSeconds = max(120, ConfigService::getInt('offline_after_seconds'), (int) $settings['poll_jitter_seconds'] + 90);
 
         $clients = [];
         $iterator = $DB->request([
