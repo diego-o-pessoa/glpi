@@ -3,7 +3,8 @@
      data-awp-overview
      data-endpoint="{{ urls.overview }}"
      data-action-url="{{ urls.action }}"
-     data-server-epoch="{{ server_epoch }}">
+     data-server-epoch="{{ server_epoch }}"
+     data-poll="1">
   {{ include('@ativawallpaper/partials/header.html.twig', {active: 'overview', urls: urls, show_settings: rights.config_view, live: true}) }}
 
   {% if not enabled %}

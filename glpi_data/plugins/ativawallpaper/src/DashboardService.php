@@ -345,7 +345,8 @@ final class DashboardService
             return 'Nenhum computador fez contato ainda';
         }
         if ($seconds < 60) {
-            return 'Última verificação agora mesmo';
+            $at = ServerClock::format(time() - $seconds);
+            return 'Última verificação às ' . substr($at, 11, 8);
         }
         if ($seconds < 3600) {
             $minutes = intdiv($seconds, 60);
