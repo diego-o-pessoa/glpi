@@ -43,6 +43,7 @@ function plugin_ativaremote_install(): bool
     }
 
     $migration->executeMigration();
+    require_once __DIR__ . '/inc/profile.class.php';
     PluginAtivaremoteProfile::createAdminAccess();
     return true;
 }
