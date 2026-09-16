@@ -313,6 +313,7 @@ final class DashboardService
             'countdown_seconds' => $countdownSeconds,
             'countdown_total_seconds' => $countdownTotal,
             'countdown_percentage' => $countdownPercentage,
+            'countdown_until'   => $countdownSeconds === null ? null : $now + $countdownSeconds,
             'next_hostname'     => $nextMachine['hostname'] ?? '',
             'last_cycle_action' => $latestCycle['last_cycle_action'] ?? '',
             'last_cycle_at'     => $latestCycle['last_cycle_at'] ?? '',

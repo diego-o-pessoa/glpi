@@ -34,7 +34,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.6.1"
+CLIENT_VERSION = "1.6.2"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -328,7 +328,7 @@ class ApiClient:
         except ClientError:
             raise
         except (error.URLError, TimeoutError, OSError) as exc:
-            raise ClientError("SERVER_UNAVAILABLE", f"Server unavailable: {exc}") from exc
+            raise ClientError("SERVER_UNAVAILABLE", f"Servidor inacessivel (verifique se o PC esta sem rede, VPN ou suspenso): {exc}") from exc
 
     def register(self, secret: str, identity: dict[str, str]) -> str:
         payload = dict(identity)

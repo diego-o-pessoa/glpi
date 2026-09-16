@@ -198,7 +198,7 @@ final class ClientRepository
         }
 
         $now = time();
-        $DB->update(self::TABLE, [
+        $updates = [
             'hostname'               => $hostname,
             'username'               => Security::cleanText($payload['username'] ?? '', 255),
             'client_version'         => $clientVersion,
@@ -210,7 +210,18 @@ final class ClientRepository
             'last_check'             => ServerClock::format($now),
             'last_ip'                => Security::cleanText($ipAddress ?? '', 45),
             'updated_at'             => ServerClock::format($now),
-        ], ['id' => (int) $client['id']]);
+        ];
+
+        if (in_array($action, ['already_current', 'initial_applied', 'configuration_applied', 'forced_applied', 'drift_corrected'], true)) {
+            $updates['last_error'] = null;
+            $updates['last_error_code'] = null;
+            if (($client['rollout_status'] ?? '') === 'error') {
+                $updates['rollout_status'] = 'success';
+                $updates['rollout_finished_at'] = ServerClock::format($now);
+            }
+        }
+
+        $DB->update(self::TABLE, $updates, ['id' => (int) $client['id']]);
     }
 
     public function reportStatus(array $client, array $payload, ?string $ipAddress): array

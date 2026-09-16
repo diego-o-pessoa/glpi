@@ -254,6 +254,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const nowMs = Date.now() + clockOffsetMs;
     overview.querySelectorAll('[data-awp-countdown]').forEach((element) => {
       const until = Number(element.dataset.awpCountdown || 0);
+      if (until <= 0) {
+        element.textContent = '--:--';
+        return;
+      }
       const remaining = Math.max(0, Math.ceil((until * 1000 - nowMs) / 1000));
       element.textContent = `${pad(Math.floor(remaining / 60))}:${pad(remaining % 60)}`;
       if (remaining === 0 && until > 0 && !expiredCountdowns.has(until)) {
@@ -263,6 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   };
+  window.setInterval(tickCountdowns, 1000);
 
   const applySections = (sections) => {
     Object.entries(sections || {}).forEach(([name, html]) => {
