@@ -102,7 +102,7 @@ As três ações por computador exigem o serviço 1.5.0 (pacote 1.6.2) ou superi
 
 ## Acesso remoto (Ativa Remote + RustDesk)
 
-A partir do pacote 1.6.7 (serviço 1.7.0), o pacote leva o RustDesk 1.3.1 oficial (SHA-256 conferido no build) em `UnifiedUpdater\rustdesk.exe`. O serviço, que já roda como SYSTEM:
+A partir do pacote 1.6.8 (serviço 1.7.1), o pacote leva o RustDesk 1.3.1 oficial (SHA-256 conferido no build) em `UnifiedUpdater\rustdesk.exe`. O serviço, que já roda como SYSTEM:
 
 1. instala o RustDesk (`--silent-install`) se ele não estiver em `Program Files\RustDesk` e mantém o serviço **RustDesk** ligado;
 2. lê o ID (`--get-id`) e informa a cada 10 s em `/plugins/ativaremote/api/v1/report`, com o mesmo token da API do Ativa Updater;

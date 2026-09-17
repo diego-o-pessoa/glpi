@@ -32,8 +32,8 @@ def quiet_logger(name: str) -> logging.Logger:
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.7.0")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 0))
+        self.assertEqual(updater.UPDATER_VERSION, "1.7.1")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 1))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -1291,6 +1291,18 @@ class RemoteAccessTests(unittest.TestCase):
         self.assertEqual(updater.parse_rustdesk_id("123 456 789\r\n123456789\r\n"), "123456789")
         self.assertEqual(updater.parse_rustdesk_id("Installation and administrative privileges required!"), "")
         self.assertEqual(updater.parse_rustdesk_id(""), "")
+
+    def test_rustdesk_output_does_not_wait_for_processes_it_leaves_running(self) -> None:
+        import sys
+        script = (
+            "import subprocess, sys; "
+            "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(15)']); "
+            "print('123456789')"
+        )
+        started = time.monotonic()
+        output = updater.run_rustdesk(Path(sys.executable), "-c", script, timeout=10)
+        self.assertLess(time.monotonic() - started, 8)
+        self.assertEqual(updater.parse_rustdesk_id(output), "123456789")
 
     def test_session_passwords_are_random_and_unambiguous(self) -> None:
         first = updater.generate_session_password()

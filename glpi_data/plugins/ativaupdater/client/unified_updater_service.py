@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.0"
+UPDATER_VERSION = "1.7.1"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -2105,13 +2105,25 @@ def parse_rustdesk_id(output: str) -> str:
 
 
 def run_rustdesk(executable: Path, *arguments: str, timeout: int = 30) -> str:
-    completed = subprocess.run(
-        [str(executable), *arguments], capture_output=True, timeout=timeout,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
-    return (completed.stdout or b"").decode("utf-8", errors="replace") + (
-        completed.stderr or b""
-    ).decode("utf-8", errors="replace")
+    """Run RustDesk and return its output.
+
+    The output goes to a temporary file, not a pipe: --silent-install leaves the RustDesk
+    service and tray running with the inherited handles, and on Windows subprocess waits
+    for a pipe to close without any time limit, even after the timeout.
+    """
+    import tempfile
+
+    with tempfile.TemporaryFile() as output:
+        try:
+            subprocess.run(
+                [str(executable), *arguments],
+                stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
+                timeout=timeout, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        finally:
+            output.seek(0)
+            text = output.read(65536).decode("utf-8", errors="replace")
+    return text
 
 
 def rustdesk_installed_version() -> str:
