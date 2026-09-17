@@ -1,0 +1,37 @@
+<div class="row justify-content-center">
+    <div class="col-12 col-md-6 col-xl-4">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title"><i class="ti ti-lock me-2"></i>Configurações do Ativa Remote</h3>
+            </div>
+            <form method="post" action="{{ urls.config }}" autocomplete="off">
+                <div class="card-body">
+                    <p class="text-muted">
+                        Esta tela define quais computadores são protegidos e a senha do T.I.
+                        Informe a senha do T.I. para abrir.
+                    </p>
+                    {% if default_password %}
+                        <div class="alert alert-warning">
+                            <i class="ti ti-alert-triangle"></i>
+                            A senha ainda é a padrão (<code>mudar123</code>). Troque-a assim que entrar.
+                        </div>
+                    {% endif %}
+                    <label class="form-label" for="ativaremote-unlock">Senha do T.I.</label>
+                    <input class="form-control" type="password" id="ativaremote-unlock" name="ti_password"
+                           required autocomplete="off" autofocus>
+                    <div class="form-hint mt-1">
+                        Depois de aberta, a tela fica liberada por {{ minutes }} minutos nesta sessão.
+                    </div>
+                </div>
+                <div class="card-footer d-flex justify-content-between">
+                    <a href="{{ urls.dashboard }}" class="btn btn-outline-secondary">Voltar</a>
+                    <div>
+                        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="unlock">
+                        <button type="submit" class="btn btn-primary"><i class="ti ti-lock-open"></i> Abrir</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

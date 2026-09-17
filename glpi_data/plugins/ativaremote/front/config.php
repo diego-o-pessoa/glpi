@@ -6,6 +6,7 @@ use Glpi\Application\View\TemplateRenderer;
 use GlpiPlugin\Ativaremote\ClientRepository;
 use GlpiPlugin\Ativaremote\ProtectionPolicy;
 use GlpiPlugin\Ativaremote\Settings;
+use GlpiPlugin\Ativaremote\TiPasswordGate;
 
 include '../../../inc/includes.php';
 
@@ -17,9 +18,34 @@ global $CFG_GLPI, $DB;
 $base = $CFG_GLPI['root_doc'] . '/plugins/ativaremote';
 $repo = new ClientRepository();
 
+$settings = ['hostname' => 'configurações do Ativa Remote'];
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $user = getUserName((int) Session::getLoginUserID());
-    switch ((string) ($_POST['action'] ?? '')) {
+    $action = (string) ($_POST['action'] ?? '');
+
+    // The page itself is behind the T.I. password, so nobody changes the protection
+    // (or the password) with only the GLPI rights.
+    if ($action === 'unlock') {
+        try {
+            TiPasswordGate::check((string) ($_POST['ti_password'] ?? ''), $settings, 'abrir as configurações');
+            TiPasswordGate::unlockConfig();
+            TiPasswordGate::log('Configuracoes abertas', $settings);
+        } catch (RuntimeException $e) {
+            Session::addMessageAfterRedirect($e->getMessage(), false, ERROR);
+        }
+        Html::redirect($base . '/front/config.php');
+    }
+    if ($action === 'lock') {
+        TiPasswordGate::lockConfig();
+        Html::redirect($base . '/front/config.php');
+    }
+    if (!TiPasswordGate::isConfigUnlocked()) {
+        Session::addMessageAfterRedirect('Informe a senha do T.I. para alterar as configurações.', false, ERROR);
+        Html::redirect($base . '/front/config.php');
+    }
+
+    switch ($action) {
         case 'save_groups':
             $groups = is_array($_POST['groups'] ?? null) ? $_POST['groups'] : [];
             Settings::setProtectedGroupIds($groups);
@@ -67,6 +93,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 
 Settings::ensureDefaults();
+
+if (!TiPasswordGate::isConfigUnlocked()) {
+    Html::header('Ativa Remote', '', 'admin', 'pluginativaremotemenu', 'config');
+    TemplateRenderer::getInstance()->display('@ativaremote/config-unlock.html.twig', [
+        'default_password' => Settings::isDefaultTiPassword(),
+        'minutes'          => (int) (TiPasswordGate::CONFIG_UNLOCK_SECONDS / 60),
+        'urls'             => ['config' => $base . '/front/config.php', 'dashboard' => $base . '/front/dashboard.php'],
+    ]);
+    Html::footer();
+    return;
+}
+
 $selected = Settings::protectedGroupIds();
 $groups = [];
 foreach ($DB->request([
@@ -146,6 +184,7 @@ TemplateRenderer::getInstance()->display('@ativaremote/config.html.twig', [
     'computers'           => $computers,
     'default_password'    => Settings::isDefaultTiPassword(),
     'min_password_length' => Settings::MIN_PASSWORD_LENGTH,
+    'unlock_minutes'      => (int) (TiPasswordGate::CONFIG_UNLOCK_SECONDS / 60),
     'urls'                => [
         'config'    => $base . '/front/config.php',
         'dashboard' => $base . '/front/dashboard.php',

@@ -21,6 +21,9 @@ final class TiPasswordGate
     private const LOCK_SECONDS = 300;
     private const FAILURES_KEY = 'plugin_ativaremote_ti_failures';
     private const VERIFIED_KEY = 'plugin_ativaremote_ti_verified';
+    private const CONFIG_KEY = 'plugin_ativaremote_config_unlocked_at';
+    /** The settings page locks itself again after 30 minutes. */
+    public const CONFIG_UNLOCK_SECONDS = 1800;
 
     /**
      * @throws RuntimeException with the message for the technician; the code is the HTTP status
@@ -60,6 +63,21 @@ final class TiPasswordGate
     {
         return ($client['request_action'] ?? null) === ClientRepository::ACTION_OPEN
             && ($_SESSION[self::VERIFIED_KEY][(int) $client['id']] ?? -1) === (int) $client['request_seq'];
+    }
+
+    public static function unlockConfig(): void
+    {
+        $_SESSION[self::CONFIG_KEY] = time();
+    }
+
+    public static function isConfigUnlocked(): bool
+    {
+        return time() - (int) ($_SESSION[self::CONFIG_KEY] ?? 0) < self::CONFIG_UNLOCK_SECONDS;
+    }
+
+    public static function lockConfig(): void
+    {
+        unset($_SESSION[self::CONFIG_KEY]);
     }
 
     public static function log(string $event, array $client): void
