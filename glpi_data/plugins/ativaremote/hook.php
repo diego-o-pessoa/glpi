@@ -29,6 +29,8 @@ function plugin_ativaremote_install(): bool
             'session_password'   => ['text DEFAULT NULL', 'requested_at'],
             'session_started_at' => ['datetime DEFAULT NULL', 'session_password'],
             'status_message'     => ['varchar(255) DEFAULT NULL', 'session_started_at'],
+            // 1.2.1: computers protected by hand in the settings.
+            'protected_manual'   => ["tinyint(1) NOT NULL DEFAULT '0'", 'require_consent'],
         ];
         foreach ($fields as $field => [$definition, $after]) {
             if (!$DB->fieldExists($clientsTable, $field)) {

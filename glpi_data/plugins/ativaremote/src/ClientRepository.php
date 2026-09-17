@@ -196,15 +196,15 @@ final class ClientRepository
         }
     }
 
-    public function requestAccess(int $id, int $userId): void
+    /** @return array The computer after the request (with its current request_seq). */
+    public function requestAccess(int $id, int $userId): array
     {
         global $DB;
 
-        $client = $this->require($id);
         $this->expire($id);
         $client = $this->require($id);
         if (in_array($client['remote_access_status'], [self::STATUS_PENDING, self::STATUS_ACCEPTED], true)) {
-            return;
+            return $client;
         }
         if (!self::isOnline($client)) {
             throw new Exception('O computador esta offline.');
@@ -226,6 +226,7 @@ final class ClientRepository
                 : 'Aguardando o computador liberar o acesso.',
             'updated_at'           => $now,
         ], ['id' => $id]);
+        return $this->require($id);
     }
 
     public function closeAccess(int $id): void
@@ -295,10 +296,12 @@ final class ClientRepository
             $this->expire((int) $row['id']);
             $rows[] = $this->findById((int) $row['id']) ?? $row;
         }
-        $protected = ProtectionPolicy::protectedComputers(array_column($rows, 'computers_id'));
+        $reasons = ProtectionPolicy::evaluate($rows);
 
         foreach ($rows as &$row) {
-            $row['protected'] = isset($protected[(int) $row['computers_id']]);
+            $row['protected'] = isset($reasons[(int) $row['id']]);
+            $row['protection_reason'] = $reasons[(int) $row['id']] ?? null;
+            $row['ti_verified'] = $row['protected'] && TiPasswordGate::isVerified($row);
             $row['require_consent'] = $row['protected'] || (bool) $row['require_consent'];
             $row['online'] = self::isOnline($row);
             $connection = null;
@@ -344,6 +347,31 @@ final class ClientRepository
             'password'    => $password,
             'connect_url' => 'rustdesk://connection/new/' . rawurlencode($id) . '?password=' . rawurlencode($password),
         ];
+    }
+
+    /**
+     * Computers protected by hand in the settings (for machines the inventory cannot identify).
+     *
+     * @param int[] $ids
+     */
+    public function setManualProtection(array $ids): void
+    {
+        global $DB;
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        $now = ServerClock::now();
+        $DB->update(self::TABLE, ['protected_manual' => 0, 'updated_at' => $now], [
+            'protected_manual' => 1,
+        ] + ($ids !== [] ? ['NOT' => ['id' => $ids]] : []));
+        if ($ids !== []) {
+            $DB->update(self::TABLE, ['protected_manual' => 1, 'updated_at' => $now], ['id' => $ids]);
+        }
+    }
+
+    /** @return array[] Every computer, for the settings page. */
+    public function all(): array
+    {
+        global $DB;
+        return iterator_to_array($DB->request(['FROM' => self::TABLE, 'ORDER' => ['hostname ASC']]), false);
     }
 
     /** Protected computers always ask the user, whatever the per-computer setting says. */

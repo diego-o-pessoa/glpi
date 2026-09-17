@@ -13,8 +13,10 @@
             <form method="post" action="{{ urls.config }}">
                 <div class="card-body">
                     <p class="text-muted">
-                        Computadores destes grupos (campo <strong>Grupo</strong> ou <strong>Grupo técnico</strong> no inventário, incluindo subgrupos)
-                        <strong>sempre pedem autorização do usuário</strong>, e o botão <strong>Conectar</strong> exige a senha do T.I.
+                        Um computador fica protegido quando, no inventário, o seu <strong>Grupo</strong> ou <strong>Grupo técnico</strong>
+                        é um destes grupos (ou subgrupo), ou quando o seu <strong>Usuário</strong> pertence a um deles.
+                        Computadores protegidos <strong>sempre pedem autorização do usuário</strong>, e
+                        <strong>Solicitar acesso</strong> e <strong>Conectar</strong> exigem a senha do T.I.
                     </p>
                     <label class="form-label" for="ativaremote-groups">Grupos (ex.: Diretoria e T.I.)</label>
                     <select class="form-select" id="ativaremote-groups" name="groups[]" multiple size="12">
@@ -25,8 +27,8 @@
                     <div class="form-hint mt-1">Use Ctrl + clique para marcar mais de um grupo.</div>
                     <div class="alert alert-info mt-3 mb-0">
                         <i class="ti ti-info-circle"></i>
-                        A proteção vale para computadores que o Ativa Remote conseguiu ligar ao inventário (nome do computador igual ao do GLPI).
-                        Os que não estiverem ligados aparecem na lista com o aviso "Sem vínculo com o inventário".
+                        A regra por grupo vale para computadores ligados ao inventário (nome igual ao do GLPI).
+                        Confira o resultado em <strong>Computadores protegidos</strong>, abaixo; os que não forem identificados podem ser marcados à mão.
                     </div>
                 </div>
                 <div class="card-footer text-end">
@@ -52,7 +54,8 @@
                         </div>
                     {% endif %}
                     <p class="text-muted">
-                        Pedida ao clicar em <strong>Conectar</strong> nos computadores protegidos. Fica guardada somente como hash.
+                        Pedida em <strong>Solicitar acesso</strong> e em <strong>Conectar</strong> nos computadores protegidos
+                        (quem digitou ao solicitar não precisa digitar de novo para conectar na mesma sessão). Fica guardada somente como hash.
                         Cinco tentativas erradas bloqueiam novas tentativas do técnico por 5 minutos, e cada tentativa fica registrada no log <code>ativaremote.log</code>.
                     </p>
                     <label class="form-label" for="ativaremote-new-password">Nova senha</label>
@@ -67,6 +70,78 @@
                     <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="action" value="change_ti_password">
                     <button type="submit" class="btn btn-primary"><i class="ti ti-lock"></i> Alterar senha</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-12 mb-3">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title"><i class="ti ti-list-check me-2"></i>Computadores protegidos</h3>
+            </div>
+            <form method="post" action="{{ urls.config }}">
+                <div class="card-body">
+                    <p class="text-muted">
+                        Mostra se cada computador do Ativa Remote está protegido e por quê. Marque <strong>Proteger sempre</strong>
+                        para computadores que o inventário não identifica (sem vínculo, sem grupo ou sem usuário).
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Computador</th>
+                                    <th>Inventário</th>
+                                    <th>Grupos do computador</th>
+                                    <th>Usuário (grupos)</th>
+                                    <th>Situação</th>
+                                    <th class="text-center">Proteger sempre</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for computer in computers %}
+                                <tr>
+                                    <td><strong>{{ computer.hostname }}</strong></td>
+                                    <td>
+                                        {% if computer.computer %}
+                                            <a href="{{ urls.computer }}?id={{ computer.computers_id }}">{{ computer.computer.name }}</a>
+                                        {% else %}
+                                            <span class="text-warning">Sem vínculo</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ computer.computer and computer.computer.groups ? computer.computer.groups|join(', ') : '—' }}</td>
+                                    <td>
+                                        {% if computer.computer and computer.computer.user %}
+                                            {{ computer.computer.user }}
+                                            <div class="small text-muted">{{ computer.computer.user_groups ? computer.computer.user_groups|join(', ') : 'sem grupos' }}</div>
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if computer.reason %}
+                                            <span class="badge bg-purple-lt"><i class="ti ti-shield-lock"></i> Protegido</span>
+                                            <div class="small text-muted">{{ computer.reason }}</div>
+                                        {% else %}
+                                            <span class="badge bg-secondary-lt">Não protegido</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <input class="form-check-input" type="checkbox" name="manual[]" value="{{ computer.id }}"
+                                               {{ computer.manual ? 'checked' : '' }} aria-label="Proteger sempre {{ computer.hostname }}">
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="6" class="text-center text-muted">Nenhum computador registrado.</td></tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer text-end">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="save_manual">
+                    <button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy"></i> Salvar proteção manual</button>
                 </div>
             </form>
         </div>

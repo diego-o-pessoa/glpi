@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativaremote_clients` (
     `rustdesk_ready` tinyint(1) NOT NULL DEFAULT '0',
     `rustdesk_message` varchar(255) DEFAULT NULL,
     `require_consent` tinyint(1) NOT NULL DEFAULT '1',
+    `protected_manual` tinyint(1) NOT NULL DEFAULT '0',
     `remote_access_status` varchar(16) DEFAULT NULL,
     `request_seq` int unsigned NOT NULL DEFAULT '0',
     `request_action` varchar(16) DEFAULT NULL,

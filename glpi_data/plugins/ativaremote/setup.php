@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Glpi\Http\SessionManager;
 
-define('PLUGIN_ATIVAREMOTE_VERSION', '1.2.0');
+define('PLUGIN_ATIVAREMOTE_VERSION', '1.2.1');
 define('PLUGIN_ATIVAREMOTE_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVAREMOTE_MAX_GLPI', '12.0.0');
 

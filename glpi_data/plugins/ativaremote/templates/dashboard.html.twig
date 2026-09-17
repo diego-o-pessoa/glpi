@@ -48,7 +48,7 @@
                                         <strong>{{ client.hostname }}</strong>
                                     {% endif %}
                                     {% if client.protected %}
-                                        <span class="badge bg-purple-lt ms-1" title="Grupo protegido: sempre pede autorização e o Conectar exige a senha do T.I.">
+                                        <span class="badge bg-purple-lt ms-1" title="{{ client.protection_reason }}: sempre pede autorização e exige a senha do T.I.">
                                             <i class="ti ti-shield-lock"></i> Protegido
                                         </span>
                                     {% endif %}
@@ -107,7 +107,8 @@
                                     {% if can_manage %}
                                         {% if client.can_connect and client.protected %}
                                             <button type="button" class="btn btn-sm btn-success" data-ativa-protected-connect
-                                                    data-id="{{ client.id }}" data-hostname="{{ client.hostname }}" title="Exige a senha do T.I.">
+                                                    data-id="{{ client.id }}" data-hostname="{{ client.hostname }}" data-verified="{{ client.ti_verified ? '1' : '0' }}"
+                                                    title="{{ client.ti_verified ? 'Senha do T.I. já conferida para esta sessão' : 'Exige a senha do T.I.' }}">
                                                 <i class="ti ti-lock"></i> Conectar
                                             </button>
                                         {% elseif client.can_connect and client.connect_url %}
@@ -125,6 +126,13 @@
                                                     <i class="ti ti-x"></i> {{ status == 'pending' ? 'Cancelar' : 'Encerrar' }}
                                                 </button>
                                             </form>
+                                        {% elseif status != 'closing' and client.protected %}
+                                            <button type="button" class="btn btn-sm btn-primary" data-ativa-protected-request
+                                                    data-id="{{ client.id }}" data-hostname="{{ client.hostname }}"
+                                                    {{ client.online and client.rustdesk_id ? '' : 'disabled' }}
+                                                    title="{{ client.online ? (client.rustdesk_id ? 'Exige a senha do T.I.' : 'RustDesk ainda não está pronto') : 'Computador offline' }}">
+                                                <i class="ti ti-lock"></i> Solicitar acesso
+                                            </button>
                                         {% elseif status != 'closing' %}
                                             <form method="post" action="{{ urls.action }}" class="d-inline-block">
                                                 <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
@@ -191,6 +199,12 @@
         </div>
     </div>
 </div>
+<form method="post" action="{{ urls.action }}" class="d-none" data-ti-request-form>
+    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="request_remote_access">
+    <input type="hidden" name="id" value="">
+    <input type="hidden" name="ti_password" value="">
+</form>
 <div class="modal fade" id="ativa-remote-ti-password" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <form class="modal-content" data-ti-password-form data-endpoint="{{ urls.connect }}" autocomplete="off">
@@ -199,7 +213,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
             </div>
             <div class="modal-body">
-                <p class="mb-2">Informe a senha do T.I. para conectar em <strong data-ti-hostname></strong>.</p>
+                <p class="mb-2">Informe a senha do T.I. para <span data-ti-purpose>conectar em</span> <strong data-ti-hostname></strong>.</p>
                 <input type="hidden" name="id" data-ti-id>
                 <input class="form-control" type="password" name="ti_password" required autocomplete="off"
                        placeholder="Senha do T.I." data-ti-password>
@@ -207,7 +221,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="submit" class="btn btn-success" data-ti-submit><i class="ti ti-device-desktop"></i> Conectar</button>
+                <button type="submit" class="btn btn-success" data-ti-submit><i class="ti ti-check"></i> Continuar</button>
             </div>
         </form>
     </div>
@@ -287,33 +301,73 @@
         const tiError = tiDialog.querySelector('[data-ti-error]');
         const tiSubmit = tiDialog.querySelector('[data-ti-submit]');
         const tiPassword = tiDialog.querySelector('[data-ti-password]');
+        const requestForm = document.querySelector('[data-ti-request-form]');
+        const askPassword = (button, mode, message = '') => {
+            tiForm.dataset.mode = mode;
+            tiDialog.querySelector('[data-ti-id]').value = button.dataset.id;
+            tiDialog.querySelector('[data-ti-hostname]').textContent = button.dataset.hostname;
+            tiDialog.querySelector('[data-ti-purpose]').textContent = mode === 'request' ? 'solicitar acesso a' : 'conectar em';
+            tiPassword.value = '';
+            tiError.textContent = message;
+            tiError.classList.toggle('d-none', message === '');
+            bootstrap.Modal.getOrCreateInstance(tiDialog).show();
+        };
+        document.querySelectorAll('[data-ativa-protected-request]').forEach((button) => {
+            button.addEventListener('click', () => askPassword(button, 'request'));
+        });
+        const connectProtected = async (id, password) => {
+            const body = new FormData();
+            body.append('id', id);
+            body.append('ti_password', password);
+            const response = await fetch(tiForm.dataset.endpoint, {
+                method: 'POST',
+                body,
+                credentials: 'same-origin',
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-Glpi-Csrf-Token': document.querySelector('meta[property="glpi:csrf_token"]')?.getAttribute('content') || '',
+                },
+            });
+            return response.json().catch(() => ({ ok: false, message: `Erro ${response.status} ao liberar a conexão.` }));
+        };
         document.querySelectorAll('[data-ativa-protected-connect]').forEach((button) => {
-            button.addEventListener('click', () => {
-                tiDialog.querySelector('[data-ti-id]').value = button.dataset.id;
-                tiDialog.querySelector('[data-ti-hostname]').textContent = button.dataset.hostname;
-                tiPassword.value = '';
-                tiError.classList.add('d-none');
-                bootstrap.Modal.getOrCreateInstance(tiDialog).show();
+            button.addEventListener('click', async () => {
+                if (button.dataset.verified !== '1') {
+                    askPassword(button, 'connect');
+                    return;
+                }
+                button.disabled = true;
+                try {
+                    const result = await connectProtected(button.dataset.id, '');
+                    if (result.ok) {
+                        showConnection(result.rustdesk_id, result.password, result.connect_url);
+                    } else {
+                        askPassword(button, 'connect', result.password_required ? '' : (result.message || ''));
+                    }
+                } catch (error) {
+                    askPassword(button, 'connect', 'Falha de comunicação com o GLPI. Tente novamente.');
+                } finally {
+                    button.disabled = false;
+                }
             });
         });
         tiDialog.addEventListener('shown.bs.modal', () => tiPassword.focus());
         tiDialog.addEventListener('hidden.bs.modal', () => { tiPassword.value = ''; });
         tiForm.addEventListener('submit', async (event) => {
             event.preventDefault();
+            if (tiForm.dataset.mode === 'request') {
+                // Regular POST: the page reloads with the result of the request.
+                requestForm.querySelector('[name="id"]').value = tiDialog.querySelector('[data-ti-id]').value;
+                requestForm.querySelector('[name="ti_password"]').value = tiPassword.value;
+                tiSubmit.disabled = true;
+                requestForm.submit();
+                return;
+            }
             tiSubmit.disabled = true;
             tiError.classList.add('d-none');
             try {
-                const response = await fetch(tiForm.dataset.endpoint, {
-                    method: 'POST',
-                    body: new FormData(tiForm),
-                    credentials: 'same-origin',
-                    headers: {
-                        Accept: 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-Glpi-Csrf-Token': document.querySelector('meta[property="glpi:csrf_token"]')?.getAttribute('content') || '',
-                    },
-                });
-                const result = await response.json().catch(() => ({ ok: false, message: `Erro ${response.status} ao validar a senha.` }));
+                const result = await connectProtected(tiDialog.querySelector('[data-ti-id]').value, tiPassword.value);
                 if (!result.ok) {
                     tiError.textContent = result.message || 'Não foi possível liberar a conexão.';
                     tiError.classList.remove('d-none');

@@ -110,9 +110,15 @@ A partir do pacote 1.6.8 (serviço 1.7.1), o pacote leva o RustDesk 1.3.1 oficia
 
 Em **Administração > Ativa Remote**, **Solicitar acesso** envia o pedido ao computador. Com **Autorização: ON**, o usuário responde Sim/Não em até 60 s. Com a autorização, o serviço gera uma senha nova e a envia só ao GLPI, onde ela fica criptografada e aparece para quem tem direito de gerenciar, junto com o botão **Conectar** (`rustdesk://`). **Encerrar**, ou 4 horas de sessão, faz o computador trocar a senha de novo. Pedidos sem resposta em 3 minutos viram **Falhou**.
 
-**Computadores protegidos** (plugin Ativa Remote 1.2.0): em **Ativa Remote > Configurações**, que só administradores do GLPI acessam, escolha os grupos do inventário, por exemplo Diretoria e T.I. Nesses grupos, a regra também vale para subgrupos, pelo campo Grupo ou Grupo técnico do computador:
+**Computadores protegidos** (plugin Ativa Remote 1.2.1): em **Ativa Remote > Configurações**, que só administradores do GLPI acessam, escolha os grupos, por exemplo Diretoria e T.I. Um computador fica protegido quando:
+- o **Grupo** ou o **Grupo técnico** dele é um desses grupos ou um subgrupo;
+- o **Usuário** dele pertence a um desses grupos;
+- ou ele foi marcado em **Proteger sempre**.
+
+A lista **Computadores protegidos** mostra o motivo de cada um. Nesses computadores:
 - a autorização do usuário é sempre exigida e não pode ser desligada na aba;
-- **Conectar** pede a **senha do T.I.**, que começa como `mudar123` e deve ser trocada na mesma tela;
+- **Solicitar acesso** e **Conectar** pedem a **senha do T.I.**, que começa como `mudar123` e deve ser trocada na mesma tela;
+- quem digitou a senha ao solicitar não digita de novo para conectar na mesma sessão;
 - a senha da sessão só é enviada ao navegador depois que a senha do T.I. confere;
 - 5 erros bloqueiam novas tentativas por 5 minutos;
 - tentativas e conexões ficam em `files/_log/ativaremote.log`.
