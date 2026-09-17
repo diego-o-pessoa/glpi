@@ -14,10 +14,44 @@ function plugin_init_ativaremote(): void
     global $PLUGIN_HOOKS;
 
     $PLUGIN_HOOKS['csrf_compliant']['ativaremote'] = true;
-    $PLUGIN_HOOKS['menu_toadd']['ativaremote'] = ['admin' => 'PluginAtivaremoteMenu'];
+    
+    Plugin::registerClass('PluginAtivaremoteMenu');
+    if (Session::haveRight('plugin_ativaremote', READ)) {
+        $PLUGIN_HOOKS['menu_toadd']['ativaremote']['admin'] = 'PluginAtivaremoteMenu';
+    }
 
     // For GLPI API
     $PLUGIN_HOOKS['item_get_events_and_emails_hooks']['ativaremote'] = true;
+
+    plugin_ativaremote_refresh_cached_menu();
+}
+
+/**
+ * GLPI builds the side menu once per login and keeps it in $_SESSION['glpimenu'];
+ * deploying and clearing the cache does not rebuild it. Sessions opened before a
+ * menu change kept the old link. When the cached Ativa Remote entry differs from
+ * the current one, drop the cached menu so GLPI rebuilds it on this same request.
+ */
+function plugin_ativaremote_refresh_cached_menu(): void
+{
+    global $CFG_GLPI;
+
+    $marker = PLUGIN_ATIVAREMOTE_VERSION . '|dashboard';
+    if (!isset($_SESSION['glpimenu']) || !is_array($_SESSION['glpimenu'])
+        || ($_SESSION['plugin_ativaremote_menu_checked'] ?? '') === $marker) {
+        return;
+    }
+    $_SESSION['plugin_ativaremote_menu_checked'] = $marker;
+
+    $expectedPage = $CFG_GLPI['root_doc'] . '/plugins/ativaremote/front/dashboard.php';
+    $expectedTitle = PluginAtivaremoteMenu::getMenuName();
+    foreach ($_SESSION['glpimenu'] as $sector) {
+        $entry = is_array($sector) ? ($sector['content'][strtolower(PluginAtivaremoteMenu::class)] ?? null) : null;
+        if (is_array($entry) && (($entry['page'] ?? '') !== $expectedPage || ($entry['title'] ?? '') !== $expectedTitle)) {
+            unset($_SESSION['glpimenu']);
+            return;
+        }
+    }
 }
 
 /**

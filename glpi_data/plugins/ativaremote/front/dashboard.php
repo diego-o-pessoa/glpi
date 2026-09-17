@@ -6,7 +6,7 @@ include '../../../inc/includes.php';
 
 Session::checkRight('plugin_ativaremote', READ);
 
-Html::header('Ativa Remote', $_SERVER['PHP_SELF'], 'plugins', 'ativaremote');
+Html::header('Ativa Remote', $_SERVER['PHP_SELF'], 'admin', 'pluginativaremotemenu', 'dashboard');
 
 global $DB, $CFG_GLPI;
 
