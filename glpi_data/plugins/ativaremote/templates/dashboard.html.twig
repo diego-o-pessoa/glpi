@@ -86,7 +86,8 @@
                                 <td class="text-end text-nowrap">
                                     {% if can_manage %}
                                         {% if status == 'accepted' and client.connect_url %}
-                                            <a href="{{ client.connect_url }}" class="btn btn-sm btn-success">
+                                            <a href="{{ client.connect_url }}" class="btn btn-sm btn-success" data-ativa-connect
+                                               data-rustdesk-id="{{ client.rustdesk_id }}" data-password="{{ client.password }}">
                                                 <i class="ti ti-device-desktop"></i> Conectar
                                             </a>
                                         {% endif %}
@@ -161,17 +162,87 @@
         </div>
     </div>
 </div>
+<div class="modal fade" id="ativa-remote-connect" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="ti ti-device-desktop me-2"></i>Conectar pelo RustDesk</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">
+                    O navegador deve perguntar se pode abrir o <strong>RustDesk</strong>; confirme para conectar.
+                    Se nada abrir, abra o RustDesk neste computador e informe os dados abaixo.
+                </p>
+                <label class="form-label mb-1">ID</label>
+                <div class="input-group mb-2">
+                    <input class="form-control font-monospace" readonly data-connect-field="id">
+                    <button class="btn btn-outline-secondary" type="button" data-copy-field="id"><i class="ti ti-copy"></i> Copiar</button>
+                </div>
+                <label class="form-label mb-1">Senha</label>
+                <div class="input-group">
+                    <input class="form-control font-monospace" readonly data-connect-field="password">
+                    <button class="btn btn-outline-secondary" type="button" data-copy-field="password"><i class="ti ti-copy"></i> Copiar</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-success" data-connect-retry href="#"><i class="ti ti-external-link"></i> Abrir o RustDesk novamente</a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
 <script>
     (() => {
         // Faster while waiting for a computer; otherwise refresh the online status every 30 s.
-        const delay = {{ waiting ? 5000 : 30000 }};
-        setTimeout(() => {
-            if (document.visibilityState === 'visible') {
+        // A reload closes the browser's "Open RustDesk?" prompt, so it waits while a connection is being opened.
+        let pausedUntil = 0;
+        const reload = () => {
+            if (Date.now() < pausedUntil || document.querySelector('#ativa-remote-connect.show')) {
+                setTimeout(reload, 5000);
+            } else if (document.visibilityState === 'visible') {
                 window.location.reload();
             } else {
-                document.addEventListener('visibilitychange', () => window.location.reload(), { once: true });
+                document.addEventListener('visibilitychange', reload, { once: true });
             }
-        }, delay);
+        };
+        setTimeout(reload, {{ waiting ? 5000 : 30000 }});
+
+        const dialog = document.getElementById('ativa-remote-connect');
+        const openRustdesk = (url) => {
+            pausedUntil = Date.now() + 60000;
+            window.location.href = url;
+        };
+        document.querySelectorAll('[data-ativa-connect]').forEach((link) => {
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                dialog.querySelector('[data-connect-field="id"]').value = link.dataset.rustdeskId;
+                dialog.querySelector('[data-connect-field="password"]').value = link.dataset.password;
+                dialog.querySelector('[data-connect-retry]').setAttribute('href', link.getAttribute('href'));
+                bootstrap.Modal.getOrCreateInstance(dialog).show();
+                openRustdesk(link.getAttribute('href'));
+            });
+        });
+        dialog.querySelector('[data-connect-retry]').addEventListener('click', (event) => {
+            event.preventDefault();
+            openRustdesk(event.currentTarget.getAttribute('href'));
+        });
+        dialog.querySelectorAll('[data-copy-field]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const input = dialog.querySelector(`[data-connect-field="${button.dataset.copyField}"]`);
+                input.select();
+                const done = () => {
+                    button.innerHTML = '<i class="ti ti-check"></i> Copiado';
+                    setTimeout(() => { button.innerHTML = '<i class="ti ti-copy"></i> Copiar'; }, 2000);
+                };
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(input.value).then(done, () => { document.execCommand('copy'); done(); });
+                } else {
+                    document.execCommand('copy');
+                    done();
+                }
+            });
+        });
         document.querySelectorAll('form[data-ativa-confirm]').forEach((form) => {
             form.addEventListener('submit', (event) => {
                 if (!window.confirm(form.dataset.ativaConfirm)) {
