@@ -16,14 +16,11 @@ function plugin_init_ativaremote(): void
     $PLUGIN_HOOKS['csrf_compliant']['ativaremote'] = true;
     
     Plugin::registerClass('PluginAtivaremoteMenu');
-    if (Session::haveRight('plugin_ativaremote', READ)) {
-        $PLUGIN_HOOKS['menu_toadd']['ativaremote']['admin'] = 'PluginAtivaremoteMenu';
-    }
+    $PLUGIN_HOOKS['menu_toadd']['ativaremote']['admin'] = 'PluginAtivaremoteMenu';
+    $PLUGIN_HOOKS['config_page']['ativaremote'] = 'front/dashboard.php';
 
     // For GLPI API
     $PLUGIN_HOOKS['item_get_events_and_emails_hooks']['ativaremote'] = true;
-
-    plugin_ativaremote_refresh_cached_menu();
 }
 
 /**

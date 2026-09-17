@@ -20,10 +20,16 @@ class PluginAtivaremoteMenu extends CommonGLPI
         global $CFG_GLPI;
 
         $menu = [];
-        if (Session::haveRight(self::$rightname, READ)) {
+        if (Session::haveRight(self::$rightname, READ) || Session::haveRight('config', UPDATE)) {
+            $landingPage = $CFG_GLPI['root_doc'] . '/plugins/ativaremote/front/dashboard.php';
             $menu['title'] = self::getMenuName();
-            $menu['page']  = $CFG_GLPI['root_doc'] . '/plugins/ativaremote/front/dashboard.php';
+            $menu['page']  = $landingPage;
             $menu['icon']  = 'ti ti-device-desktop';
+            $menu['options']['dashboard'] = [
+                'title' => 'Painel de Controle',
+                'page'  => $landingPage,
+                'icon'  => 'ti ti-device-desktop',
+            ];
         }
 
         return $menu;
@@ -31,6 +37,6 @@ class PluginAtivaremoteMenu extends CommonGLPI
 
     public static function canView(): bool
     {
-        return Session::haveRight(self::$rightname, READ);
+        return Session::haveRight(self::$rightname, READ) || Session::haveRight('config', UPDATE);
     }
 }

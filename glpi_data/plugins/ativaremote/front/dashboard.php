@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 include '../../../inc/includes.php';
 
-Session::checkRight('plugin_ativaremote', READ);
+if (!Session::haveRight('plugin_ativaremote', READ) && !Session::haveRight('config', UPDATE)) {
+    Html::displayRightError();
+}
 
 Html::header('Ativa Remote', $_SERVER['PHP_SELF'], 'admin', 'pluginativaremotemenu', 'dashboard');
 
