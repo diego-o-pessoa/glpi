@@ -1,0 +1,74 @@
+<div class="row">
+    <div class="col-12 mb-3">
+        <a href="{{ urls.dashboard }}" class="btn btn-sm btn-outline-secondary">
+            <i class="ti ti-arrow-left"></i> Voltar para os computadores
+        </a>
+    </div>
+
+    <div class="col-12 col-xl-6 mb-3">
+        <div class="card h-100">
+            <div class="card-header">
+                <h3 class="card-title"><i class="ti ti-shield-lock me-2"></i>Grupos protegidos</h3>
+            </div>
+            <form method="post" action="{{ urls.config }}">
+                <div class="card-body">
+                    <p class="text-muted">
+                        Computadores destes grupos (campo <strong>Grupo</strong> ou <strong>Grupo técnico</strong> no inventário, incluindo subgrupos)
+                        <strong>sempre pedem autorização do usuário</strong>, e o botão <strong>Conectar</strong> exige a senha do T.I.
+                    </p>
+                    <label class="form-label" for="ativaremote-groups">Grupos (ex.: Diretoria e T.I.)</label>
+                    <select class="form-select" id="ativaremote-groups" name="groups[]" multiple size="12">
+                        {% for group in groups %}
+                            <option value="{{ group.id }}" {{ group.selected ? 'selected' : '' }}>{{ group.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-hint mt-1">Use Ctrl + clique para marcar mais de um grupo.</div>
+                    <div class="alert alert-info mt-3 mb-0">
+                        <i class="ti ti-info-circle"></i>
+                        A proteção vale para computadores que o Ativa Remote conseguiu ligar ao inventário (nome do computador igual ao do GLPI).
+                        Os que não estiverem ligados aparecem na lista com o aviso "Sem vínculo com o inventário".
+                    </div>
+                </div>
+                <div class="card-footer text-end">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="save_groups">
+                    <button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy"></i> Salvar grupos</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-6 mb-3">
+        <div class="card h-100">
+            <div class="card-header">
+                <h3 class="card-title"><i class="ti ti-key me-2"></i>Senha do T.I.</h3>
+            </div>
+            <form method="post" action="{{ urls.config }}" autocomplete="off">
+                <div class="card-body">
+                    {% if default_password %}
+                        <div class="alert alert-warning">
+                            <i class="ti ti-alert-triangle"></i>
+                            A senha ainda é a padrão (<code>mudar123</code>). Troque-a antes de usar em produção.
+                        </div>
+                    {% endif %}
+                    <p class="text-muted">
+                        Pedida ao clicar em <strong>Conectar</strong> nos computadores protegidos. Fica guardada somente como hash.
+                        Cinco tentativas erradas bloqueiam novas tentativas do técnico por 5 minutos, e cada tentativa fica registrada no log <code>ativaremote.log</code>.
+                    </p>
+                    <label class="form-label" for="ativaremote-new-password">Nova senha</label>
+                    <input class="form-control mb-2" type="password" id="ativaremote-new-password" name="new_password"
+                           minlength="{{ min_password_length }}" required autocomplete="new-password">
+                    <label class="form-label" for="ativaremote-confirm-password">Confirmar nova senha</label>
+                    <input class="form-control" type="password" id="ativaremote-confirm-password" name="confirm_password"
+                           minlength="{{ min_password_length }}" required autocomplete="new-password">
+                    <div class="form-hint mt-1">Mínimo de {{ min_password_length }} caracteres.</div>
+                </div>
+                <div class="card-footer text-end">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="change_ti_password">
+                    <button type="submit" class="btn btn-primary"><i class="ti ti-lock"></i> Alterar senha</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -38,6 +38,9 @@ function plugin_ativaremote_install(): bool
     }
 
     $migration->executeMigration();
+    // 1.2.0: protected groups and the T.I. password (initially "mudar123").
+    require_once __DIR__ . '/src/Settings.php';
+    GlpiPlugin\Ativaremote\Settings::ensureDefaults();
     require_once __DIR__ . '/inc/profile.class.php';
     PluginAtivaremoteProfile::createAdminAccess();
     return true;
@@ -59,6 +62,8 @@ function plugin_ativaremote_uninstall(): bool
     foreach ($tables as $table) {
         $DB->dropTable($table);
     }
+    require_once __DIR__ . '/src/Settings.php';
+    GlpiPlugin\Ativaremote\Settings::removeAll();
 
     return true;
 }

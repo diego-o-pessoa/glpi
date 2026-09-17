@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Glpi\Application\View\TemplateRenderer;
 use GlpiPlugin\Ativaremote\ClientRepository;
+use GlpiPlugin\Ativaremote\Settings;
 
 include '../../../inc/includes.php';
 
@@ -44,8 +45,12 @@ TemplateRenderer::getInstance()->display('@ativaremote/dashboard.html.twig', [
     'waiting'         => $waiting,
     'updater_active'  => Plugin::isPluginActive('ativaupdater'),
     'online_seconds'  => ClientRepository::ONLINE_SECONDS,
+    'can_configure'   => (bool) Session::haveRight('config', UPDATE),
+    'default_password' => Settings::isDefaultTiPassword(),
     'urls' => [
         'action'    => $base . '/front/action.php',
+        'connect'   => $base . '/front/connect.php',
+        'config'    => $base . '/front/config.php',
         'dashboard' => $base . '/front/dashboard.php',
         'computer'  => $CFG_GLPI['root_doc'] . '/front/computer.form.php',
     ],

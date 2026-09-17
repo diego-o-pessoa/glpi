@@ -30,6 +30,13 @@ class PluginAtivaremoteMenu extends CommonGLPI
                 'page'  => $landingPage,
                 'icon'  => 'ti ti-device-desktop',
             ];
+            if (Session::haveRight('config', UPDATE)) {
+                $menu['options']['config'] = [
+                    'title' => 'Configurações',
+                    'page'  => $CFG_GLPI['root_doc'] . '/plugins/ativaremote/front/config.php',
+                    'icon'  => 'ti ti-settings',
+                ];
+            }
         }
 
         return $menu;

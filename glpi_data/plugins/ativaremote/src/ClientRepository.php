@@ -113,7 +113,7 @@ final class ClientRepository
         }
 
         return [
-            'require_consent'    => (bool) $client['require_consent'],
+            'require_consent'    => self::requiresConsent($client),
             'request'            => $request,
             'poll_after_seconds' => self::POLL_SECONDS,
         ];
@@ -221,7 +221,7 @@ final class ClientRepository
             'requested_at'         => $now,
             'session_password'     => null,
             'session_started_at'   => null,
-            'status_message'       => $client['require_consent']
+            'status_message'       => self::requiresConsent($client)
                 ? 'Aguardando a autorizacao do usuario.'
                 : 'Aguardando o computador liberar o acesso.',
             'updated_at'           => $now,
@@ -266,14 +266,21 @@ final class ClientRepository
     public function setRequireConsent(int $id, bool $require): void
     {
         global $DB;
-        $this->require($id);
+        $client = $this->require($id);
+        if (!$require && ProtectionPolicy::isProtected($client)) {
+            throw new Exception('Este computador pertence a um grupo protegido: a autorização do usuário é obrigatória.');
+        }
         $DB->update(self::TABLE, [
             'require_consent' => $require ? 1 : 0,
             'updated_at'      => ServerClock::now(),
         ], ['id' => $id]);
     }
 
-    /** Rows for the dashboard, with the session password only when $withPassword is true. */
+    /**
+     * Rows for the dashboard, with the session password only when $withPassword is true.
+     * Protected computers never carry the password: it is released by connectionFor()
+     * after the T.I. password is checked.
+     */
     public function listForDashboard(int $start, int $limit, bool $withPassword): array
     {
         global $DB;
@@ -286,20 +293,63 @@ final class ClientRepository
             'LIMIT' => $limit,
         ]) as $row) {
             $this->expire((int) $row['id']);
-            $row = $this->findById((int) $row['id']) ?? $row;
+            $rows[] = $this->findById((int) $row['id']) ?? $row;
+        }
+        $protected = ProtectionPolicy::protectedComputers(array_column($rows, 'computers_id'));
+
+        foreach ($rows as &$row) {
+            $row['protected'] = isset($protected[(int) $row['computers_id']]);
+            $row['require_consent'] = $row['protected'] || (bool) $row['require_consent'];
             $row['online'] = self::isOnline($row);
-            $password = null;
-            if ($withPassword && $row['remote_access_status'] === self::STATUS_ACCEPTED) {
-                $password = self::decrypt($row['session_password']);
+            $connection = null;
+            if ($withPassword && !$row['protected']) {
+                $connection = $this->connection($row);
             }
             unset($row['session_password'], $row['rustdesk_password'], $row['token_hash']);
-            $row['password'] = $password;
-            $row['connect_url'] = $password !== null && !empty($row['rustdesk_id'])
-                ? 'rustdesk://connection/new/' . rawurlencode((string) $row['rustdesk_id']) . '?password=' . rawurlencode($password)
-                : null;
-            $rows[] = $row;
+            $row['password'] = $connection['password'] ?? null;
+            $row['connect_url'] = $connection['connect_url'] ?? null;
+            $row['can_connect'] = $row['remote_access_status'] === self::STATUS_ACCEPTED && !empty($row['rustdesk_id']);
         }
+        unset($row);
         return $rows;
+    }
+
+    /**
+     * ID, session password and rustdesk:// link of an open session.
+     *
+     * @throws Exception when the session is not open
+     */
+    public function connectionFor(int $id): array
+    {
+        $this->expire($id);
+        $connection = $this->connection($this->require($id));
+        if ($connection === null) {
+            throw new Exception('A sessão deste computador não está liberada. Solicite o acesso novamente.');
+        }
+        return $connection;
+    }
+
+    private function connection(array $client): ?array
+    {
+        if ($client['remote_access_status'] !== self::STATUS_ACCEPTED || empty($client['rustdesk_id'])) {
+            return null;
+        }
+        $password = self::decrypt($client['session_password']);
+        if ($password === null) {
+            return null;
+        }
+        $id = (string) $client['rustdesk_id'];
+        return [
+            'rustdesk_id' => $id,
+            'password'    => $password,
+            'connect_url' => 'rustdesk://connection/new/' . rawurlencode($id) . '?password=' . rawurlencode($password),
+        ];
+    }
+
+    /** Protected computers always ask the user, whatever the per-computer setting says. */
+    public static function requiresConsent(array $client): bool
+    {
+        return (bool) $client['require_consent'] || ProtectionPolicy::isProtected($client);
     }
 
     public static function isOnline(array $client): bool
