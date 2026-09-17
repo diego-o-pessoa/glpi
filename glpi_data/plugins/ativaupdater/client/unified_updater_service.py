@@ -13,6 +13,7 @@ from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import socket
 import ssl
@@ -28,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.6.1"
+UPDATER_VERSION = "1.7.0"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -1007,6 +1008,16 @@ class ApiClient:
             self.base_url + "/diagnostics", method="POST", data=data, timeout=60, retry_delays=API_RETRY_DELAYS_SECONDS
         ) as response:
             response.read(4096)
+
+    def post_json(self, path: str, payload: dict[str, Any], timeout: int = 30) -> dict[str, Any]:
+        data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        with self._request(self.base_url + path, method="POST", data=data, timeout=timeout) as response:
+            if "application/json" not in response.headers.get("Content-Type", ""):
+                raise UpdaterError("A API respondeu com tipo de conteudo invalido.")
+            value = json.loads(response.read(65537).decode("utf-8"))
+        if not isinstance(value, dict):
+            raise UpdaterError("Resposta da API invalida.")
+        return value
 
     def download(
         self,
@@ -2049,6 +2060,360 @@ def run_watchdog(logger: logging.Logger) -> int:
         kernel32.CloseHandle(mutex)
 
 
+# --- Ativa Remote: RustDesk managed by this service -------------------------------------------
+REMOTE_POLL_SECONDS = 10
+REMOTE_UNAVAILABLE_SECONDS = 300
+REMOTE_ID_REFRESH_SECONDS = 600
+REMOTE_ID_RETRY_SECONDS = 30
+REMOTE_INSTALL_RETRY_SECONDS = 1800
+REMOTE_INSTALL_TIMEOUT_SECONDS = 300
+REMOTE_CONSENT_TIMEOUT_SECONDS = 60
+REMOTE_PASSWORD_LENGTH = 12
+REMOTE_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
+REMOTE_ACTION_OPEN = "open"
+REMOTE_ACTION_CLOSE = "close"
+REMOTE_API_SUFFIX = "/plugins/ativaremote/api/v1"
+RUSTDESK_SERVICE_NAME = "RustDesk"
+RUSTDESK_BUNDLED_EXE = PRODUCT_DIR / "rustdesk.exe"
+RUSTDESK_INSTALLED_EXE = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "RustDesk" / "rustdesk.exe"
+RUSTDESK_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,32}$")
+REMOTE_STATE_PATH = PRODUCT_DIR / "remote-state.json"
+IDYES = 6
+IDTIMEOUT = 32000
+
+
+def remote_api_url(updater_api_url: str) -> str:
+    """The Ativa Remote API lives on the same GLPI, next to the updater API."""
+    base = updater_api_url.rstrip("/")
+    suffix = "/plugins/ativaupdater/api/v1"
+    if not base.endswith(suffix):
+        raise UpdaterError("api_url nao aponta para a API do Ativa Updater.")
+    return base[: -len(suffix)] + REMOTE_API_SUFFIX
+
+
+def generate_session_password(length: int = REMOTE_PASSWORD_LENGTH) -> str:
+    return "".join(secrets.choice(REMOTE_PASSWORD_ALPHABET) for _ in range(length))
+
+
+def parse_rustdesk_id(output: str) -> str:
+    """RustDesk prints the ID alone on a line; anything else means it is not ready."""
+    for line in reversed(output.splitlines()):
+        candidate = line.strip()
+        if RUSTDESK_ID_RE.fullmatch(candidate):
+            return candidate
+    return ""
+
+
+def run_rustdesk(executable: Path, *arguments: str, timeout: int = 30) -> str:
+    completed = subprocess.run(
+        [str(executable), *arguments], capture_output=True, timeout=timeout,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    return (completed.stdout or b"").decode("utf-8", errors="replace") + (
+        completed.stderr or b""
+    ).decode("utf-8", errors="replace")
+
+
+def rustdesk_installed_version() -> str:
+    if os.name != "nt":
+        return ""
+    import winreg
+
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RustDesk",
+            0,
+            winreg.KEY_READ | winreg.KEY_WOW64_64KEY,
+        ) as key:
+            return str(winreg.QueryValueEx(key, "DisplayVersion")[0]).strip()[:32]
+    except OSError:
+        return ""
+
+
+def active_user_session(sessions: list[tuple[int, int]], console_session: int | None) -> int | None:
+    """The session that should see the consent prompt: the console user first, then RDP."""
+    active = [session_id for session_id, state in sessions if session_id != 0 and state == WTS_ACTIVE]
+    if console_session in active:
+        return console_session
+    return active[0] if active else None
+
+
+def console_session_id() -> int | None:
+    if os.name != "nt":
+        return None
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.WTSGetActiveConsoleSessionId.restype = wintypes.DWORD
+    value = int(kernel32.WTSGetActiveConsoleSessionId())
+    return None if value == 0xFFFFFFFF else value
+
+
+def ask_user_consent(session_id: int, requester: str, timeout_seconds: int = REMOTE_CONSENT_TIMEOUT_SECONDS) -> str:
+    """Yes/No prompt on the user's desktop. Returns accepted, rejected, timeout or error."""
+    wtsapi32 = ctypes.WinDLL("wtsapi32", use_last_error=True)
+    wtsapi32.WTSSendMessageW.argtypes = [
+        wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, wintypes.DWORD, wintypes.LPWSTR, wintypes.DWORD,
+        wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), wintypes.BOOL,
+    ]
+    wtsapi32.WTSSendMessageW.restype = wintypes.BOOL
+    who = f" ({requester})" if requester else ""
+    title = "Suporte remoto - Ativa"
+    message = (
+        f"A equipe de TI da Ativa{who} solicita acesso remoto a este computador para prestar suporte.\n\n"
+        "Voce autoriza o acesso?"
+    )
+    style = 0x04 | 0x20 | 0x10000 | 0x40000  # MB_YESNO | MB_ICONQUESTION | MB_SETFOREGROUND | MB_TOPMOST
+    response = wintypes.DWORD()
+    title_buffer = ctypes.create_unicode_buffer(title)
+    message_buffer = ctypes.create_unicode_buffer(message)
+    if not wtsapi32.WTSSendMessageW(
+        None, session_id, title_buffer, len(title) * 2, message_buffer, len(message) * 2,
+        style, timeout_seconds, ctypes.byref(response), True,
+    ):
+        return "error"
+    if response.value == IDYES:
+        return "accepted"
+    if response.value == IDTIMEOUT:
+        return "timeout"
+    return "rejected"
+
+
+def parse_remote_response(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise UpdaterError("Resposta do Ativa Remote invalida.")
+    request = payload.get("request")
+    parsed_request = None
+    if isinstance(request, dict):
+        seq = request.get("seq")
+        action = request.get("action")
+        if isinstance(seq, int) and seq > 0 and action in (REMOTE_ACTION_OPEN, REMOTE_ACTION_CLOSE):
+            parsed_request = {
+                "seq": seq,
+                "action": action,
+                "requested_by": str(request.get("requested_by") or "")[:80],
+            }
+    try:
+        delay = int(payload.get("poll_after_seconds", REMOTE_POLL_SECONDS))
+    except (TypeError, ValueError):
+        delay = REMOTE_POLL_SECONDS
+    return {
+        "require_consent": payload.get("require_consent") is not False,
+        "request": parsed_request,
+        "poll_after_seconds": max(5, min(300, delay)),
+    }
+
+
+class RemoteAgent:
+    """Keeps RustDesk installed and answers remote access requests from the Ativa Remote dashboard.
+
+    A request opens a session: the user is asked (when consent is required), a new random
+    RustDesk password is set and sent only to the server. Closing a session, or a session
+    the server gave up on, replaces the password with one nobody knows.
+    """
+
+    def __init__(
+        self,
+        logger: logging.Logger,
+        stop_event: threading.Event,
+        clock: Callable[[], float] = time.monotonic,
+        state_path: Path = REMOTE_STATE_PATH,
+    ):
+        self.logger = logger
+        self.stop_event = stop_event
+        self.clock = clock
+        self.state_path = state_path
+        state = self._load_state()
+        self.handled_seq = int(state.get("handled_seq", 0) or 0)
+        self.session_open = bool(state.get("session_open", False))
+        self.pending_result: dict[str, Any] | None = None
+        self.rustdesk_id = ""
+        self.message = ""
+        self.id_checked_at: float | None = None
+        self.install_attempted_at: float | None = None
+        self.password_rotated = False
+        self.last_problem = ""
+
+    # -- state ------------------------------------------------------------------------------
+    def _load_state(self) -> dict[str, Any]:
+        try:
+            return load_json(self.state_path)
+        except UpdaterError:
+            return {}
+
+    def _save_state(self) -> None:
+        try:
+            atomic_json(self.state_path, {"handled_seq": self.handled_seq, "session_open": self.session_open})
+        except OSError as exc:
+            self.logger.warning("Ativa Remote: nao foi possivel gravar o estado: %s", exc)
+
+    # -- RustDesk ---------------------------------------------------------------------------
+    def rustdesk_ready(self) -> bool:
+        """Install RustDesk from the bundled copy when missing and keep its service running."""
+        if not RUSTDESK_INSTALLED_EXE.is_file():
+            now = self.clock()
+            if not RUSTDESK_BUNDLED_EXE.is_file():
+                self.message = "RustDesk nao encontrado no pacote instalado."
+                return False
+            if self.install_attempted_at is not None and now - self.install_attempted_at < REMOTE_INSTALL_RETRY_SECONDS:
+                return False
+            self.install_attempted_at = now
+            self.logger.info("Ativa Remote: instalando o RustDesk.")
+            try:
+                run_rustdesk(RUSTDESK_BUNDLED_EXE, "--silent-install", timeout=REMOTE_INSTALL_TIMEOUT_SECONDS)
+            except (OSError, subprocess.SubprocessError) as exc:
+                self.message = f"Falha ao instalar o RustDesk: {exc}"
+                self.logger.warning("Ativa Remote: %s", self.message)
+                return False
+            if not RUSTDESK_INSTALLED_EXE.is_file():
+                self.message = "A instalacao do RustDesk nao foi concluida; nova tentativa em 30 minutos."
+                self.logger.warning("Ativa Remote: %s", self.message)
+                return False
+            self.logger.info("Ativa Remote: RustDesk instalado.")
+        service = query_service(RUSTDESK_SERVICE_NAME)
+        if service is None:
+            self.message = "Servico do RustDesk nao encontrado."
+            return False
+        if service[0] != SERVICE_STATE_RUNNING:
+            self.logger.info("Ativa Remote: iniciando o servico do RustDesk.")
+            run_sc("start", RUSTDESK_SERVICE_NAME)
+            self.message = "Servico do RustDesk iniciando."
+            return False
+        return True
+
+    def refresh_id(self, force: bool = False) -> None:
+        now = self.clock()
+        interval = REMOTE_ID_REFRESH_SECONDS if self.rustdesk_id else REMOTE_ID_RETRY_SECONDS
+        if not force and self.id_checked_at is not None and now - self.id_checked_at < interval:
+            return
+        self.id_checked_at = now
+        try:
+            found = parse_rustdesk_id(run_rustdesk(RUSTDESK_INSTALLED_EXE, "--get-id"))
+        except (OSError, subprocess.SubprocessError) as exc:
+            self.message = f"Nao foi possivel ler o ID do RustDesk: {exc}"
+            return
+        if found and found != self.rustdesk_id:
+            self.logger.info("Ativa Remote: ID do RustDesk %s.", found)
+        self.rustdesk_id = found or self.rustdesk_id
+        if not self.rustdesk_id:
+            self.message = "RustDesk ainda nao gerou o ID."
+
+    def set_password(self, password: str) -> bool:
+        try:
+            output = run_rustdesk(RUSTDESK_INSTALLED_EXE, "--password", password)
+        except (OSError, subprocess.SubprocessError) as exc:
+            self.logger.warning("Ativa Remote: falha ao definir a senha do RustDesk: %s", exc)
+            return False
+        if "Done" not in output:
+            self.logger.warning("Ativa Remote: RustDesk recusou a nova senha: %s", output.strip()[:200])
+            return False
+        return True
+
+    def rotate_password(self) -> bool:
+        """Replace the RustDesk password with a random one that is never sent anywhere."""
+        return self.set_password(generate_session_password(24))
+
+    # -- requests ---------------------------------------------------------------------------
+    def open_session(self, seq: int, require_consent: bool, requested_by: str, ready: bool) -> dict[str, Any]:
+        if not ready or not self.rustdesk_id:
+            return {"seq": seq, "status": "error", "message": self.message or "RustDesk indisponivel."}
+        if require_consent:
+            session_id = active_user_session(enumerate_sessions(), console_session_id())
+            if session_id is None:
+                return {"seq": seq, "status": "no_user", "message": "Nenhum usuario conectado para autorizar."}
+            self.logger.info("Ativa Remote: pedindo autorizacao ao usuario (sessao %s).", session_id)
+            answer = ask_user_consent(session_id, requested_by)
+            if answer != "accepted":
+                messages = {
+                    "rejected": "O usuario recusou o acesso.",
+                    "timeout": "O usuario nao respondeu em 60 segundos.",
+                    "error": "Nao foi possivel exibir a pergunta ao usuario.",
+                }
+                self.logger.info("Ativa Remote: %s", messages[answer])
+                return {"seq": seq, "status": answer, "message": messages[answer]}
+        password = generate_session_password()
+        if not self.set_password(password):
+            return {"seq": seq, "status": "error", "message": "RustDesk nao aceitou a senha da sessao."}
+        self.session_open = True
+        self.logger.info("Ativa Remote: acesso liberado (#%s).", seq)
+        return {
+            "seq": seq,
+            "status": "accepted",
+            "password": password,
+            "message": "Acesso autorizado pelo usuario." if require_consent else "Acesso liberado sem consentimento.",
+        }
+
+    def close_session(self, seq: int, ready: bool) -> dict[str, Any]:
+        self.session_open = False
+        if not ready or not self.rotate_password():
+            # poll_once keeps trying until the password is replaced.
+            self.password_rotated = False
+            self._save_state()
+            return {"seq": seq, "status": "error", "message": "Senha do RustDesk sera trocada assim que possivel."}
+        self.logger.info("Ativa Remote: sessao encerrada e senha trocada (#%s).", seq)
+        return {"seq": seq, "status": "closed", "message": "Sessao encerrada."}
+
+    def handle_request(self, request: dict[str, Any] | None, require_consent: bool, ready: bool) -> None:
+        if request is None or request["seq"] <= self.handled_seq or self.pending_result is not None:
+            return
+        if request["action"] == REMOTE_ACTION_OPEN:
+            self.pending_result = self.open_session(request["seq"], require_consent, request["requested_by"], ready)
+        else:
+            self.pending_result = self.close_session(request["seq"], ready)
+        self.handled_seq = request["seq"]
+        self._save_state()
+
+    def build_report(self, ready: bool) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "machine_guid": machine_guid(),
+            "hostname": socket.gethostname(),
+            "client_version": UPDATER_VERSION,
+            "rustdesk": {
+                "installed": RUSTDESK_INSTALLED_EXE.is_file(),
+                "ready": ready,
+                "id": self.rustdesk_id,
+                "version": rustdesk_installed_version(),
+                "message": "" if ready and self.rustdesk_id else self.message[:255],
+            },
+        }
+        if self.pending_result is not None:
+            payload["result"] = self.pending_result
+        return payload
+
+    def poll_once(self, api: ApiClient) -> int:
+        ready = self.rustdesk_ready()
+        if ready:
+            self.refresh_id()
+            if not self.password_rotated and not self.session_open:
+                # A password left by an older session must not stay valid after a restart.
+                self.password_rotated = self.rotate_password()
+        response = parse_remote_response(api.post_json("/report", self.build_report(ready)))
+        # The server has the result now; the password only lived in memory for this report.
+        self.pending_result = None
+        self.handle_request(response["request"], response["require_consent"], ready)
+        if self.pending_result is not None:
+            response = parse_remote_response(api.post_json("/report", self.build_report(ready)))
+            self.pending_result = None
+        return response["poll_after_seconds"]
+
+    def run(self) -> None:
+        while not self.stop_event.is_set():
+            delay = REMOTE_POLL_SECONDS
+            try:
+                config = validate_config(load_json(CONFIG_PATH))
+                config["api_url"] = remote_api_url(config["api_url"])
+                delay = self.poll_once(ApiClient(config, retry_sleep=self.stop_event.wait))
+                self.last_problem = ""
+            except Exception as exc:
+                problem = str(exc)
+                if "HTTP 404" in problem:
+                    delay = REMOTE_UNAVAILABLE_SECONDS
+                    problem = "Plugin Ativa Remote indisponivel no GLPI (HTTP 404)."
+                if problem != self.last_problem:
+                    self.logger.warning("Ativa Remote: %s", problem)
+                    self.last_problem = problem
+            self.stop_event.wait(delay)
+
+
 class ServiceRuntime:
     """Main loop plus a thread that polls dashboard commands every 15 seconds.
 
@@ -2113,6 +2478,8 @@ class ServiceRuntime:
         ensure_watchdog_task(logger)
         if start_poller:
             threading.Thread(target=self.poll_commands, args=(logger,), name="commands", daemon=True).start()
+            remote = RemoteAgent(logger, self.stop_event)
+            threading.Thread(target=remote.run, name="remote", daemon=True).start()
         next_full_check = 0.0
         promoted = False
         while not self.stop_event.is_set():

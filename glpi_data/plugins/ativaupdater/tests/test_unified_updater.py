@@ -32,8 +32,8 @@ def quiet_logger(name: str) -> logging.Logger:
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.6.1")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 6, 1))
+        self.assertEqual(updater.UPDATER_VERSION, "1.7.0")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 0))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -1241,6 +1241,179 @@ class ComponentVersionTests(unittest.TestCase):
     def test_non_windows_glpi_agent_version_is_empty(self) -> None:
         if updater.os.name != "nt":
             self.assertEqual(updater.glpi_agent_version(), "")
+
+
+class FakeRemoteApi:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.sent = []
+
+    def post_json(self, path, payload, timeout=30):
+        self.sent.append((path, json.loads(json.dumps(payload))))
+        return self.responses.pop(0)
+
+
+class RemoteAccessTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.state_path = Path(self.temp.name) / "remote-state.json"
+        patches = [
+            mock.patch.object(updater, "machine_guid", return_value="a" * 32),
+            mock.patch.object(updater, "rustdesk_installed_version", return_value="1.3.1"),
+            mock.patch.object(updater.RemoteAgent, "rustdesk_ready", return_value=True),
+            mock.patch.object(updater, "RUSTDESK_INSTALLED_EXE", Path(self.temp.name) / "rustdesk.exe"),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.passwords = []
+        self.agent = self.new_agent()
+
+    def new_agent(self):
+        agent = updater.RemoteAgent(
+            quiet_logger("remote-tests"), updater.threading.Event(), state_path=self.state_path
+        )
+        agent.rustdesk_id = "123456789"
+        agent.id_checked_at = time.monotonic()
+        agent.set_password = lambda password: self.passwords.append(password) or True
+        return agent
+
+    def test_remote_api_is_next_to_the_updater_api(self) -> None:
+        self.assertEqual(
+            updater.remote_api_url(API_URL),
+            "https://chamados.ativalocacao.com.br:8443/plugins/ativaremote/api/v1",
+        )
+        with self.assertRaises(updater.UpdaterError):
+            updater.remote_api_url("https://example.com/other/api/v1")
+
+    def test_rustdesk_id_is_read_only_from_a_clean_line(self) -> None:
+        self.assertEqual(updater.parse_rustdesk_id("123 456 789\r\n123456789\r\n"), "123456789")
+        self.assertEqual(updater.parse_rustdesk_id("Installation and administrative privileges required!"), "")
+        self.assertEqual(updater.parse_rustdesk_id(""), "")
+
+    def test_session_passwords_are_random_and_unambiguous(self) -> None:
+        first = updater.generate_session_password()
+        self.assertEqual(len(first), 12)
+        self.assertNotEqual(first, updater.generate_session_password())
+        self.assertFalse(set(first) & set("0O1lI"))
+
+    def test_response_parsing_is_strict(self) -> None:
+        parsed = updater.parse_remote_response({
+            "require_consent": False,
+            "request": {"seq": 3, "action": "open", "requested_by": "Ana"},
+            "poll_after_seconds": 1,
+        })
+        self.assertEqual(parsed, {
+            "require_consent": False,
+            "request": {"seq": 3, "action": "open", "requested_by": "Ana"},
+            "poll_after_seconds": 5,
+        })
+        parsed = updater.parse_remote_response({"request": {"seq": "3", "action": "run"}})
+        self.assertTrue(parsed["require_consent"])
+        self.assertIsNone(parsed["request"])
+        with self.assertRaises(updater.UpdaterError):
+            updater.parse_remote_response([])
+
+    def test_consent_prompt_goes_to_the_console_user_first(self) -> None:
+        sessions = [(0, 4), (2, 0), (3, 0), (5, 4)]
+        self.assertEqual(updater.active_user_session(sessions, 3), 3)
+        self.assertEqual(updater.active_user_session(sessions, 5), 2)
+        self.assertIsNone(updater.active_user_session([(0, 0), (4, 4)], None))
+
+    def test_startup_rotates_the_password_and_reports_the_id(self) -> None:
+        api = FakeRemoteApi([{"require_consent": True, "request": None}])
+        self.assertEqual(self.agent.poll_once(api), 10)
+        self.assertEqual(len(self.passwords), 1)
+        path, payload = api.sent[0]
+        self.assertEqual(path, "/report")
+        self.assertEqual(payload["rustdesk"]["id"], "123456789")
+        self.assertNotIn("result", payload)
+        self.assertNotIn(self.passwords[0], json.dumps(api.sent))
+
+    def test_access_without_consent_sends_the_new_password_once(self) -> None:
+        self.agent.password_rotated = True
+        request = {"require_consent": False, "request": {"seq": 4, "action": "open"}}
+        api = FakeRemoteApi([request, request, request])
+        with mock.patch.object(updater, "ask_user_consent") as ask:
+            self.agent.poll_once(api)
+            self.agent.poll_once(api)
+        ask.assert_not_called()
+        result = api.sent[1][1]["result"]
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(result["password"], self.passwords[0])
+        self.assertNotIn("result", api.sent[2][1])
+        self.assertEqual(json.loads(self.state_path.read_text()), {"handled_seq": 4, "session_open": True})
+
+    def test_refused_consent_keeps_the_password(self) -> None:
+        self.agent.password_rotated = True
+        api = FakeRemoteApi([
+            {"require_consent": True, "request": {"seq": 1, "action": "open", "requested_by": "Ana"}},
+            {"require_consent": True, "request": None},
+        ])
+        with mock.patch.object(updater, "enumerate_sessions", return_value=[(1, 0)]), \
+                mock.patch.object(updater, "console_session_id", return_value=1), \
+                mock.patch.object(updater, "ask_user_consent", return_value="rejected") as ask:
+            self.agent.poll_once(api)
+        ask.assert_called_once_with(1, "Ana")
+        self.assertEqual(api.sent[1][1]["result"]["status"], "rejected")
+        self.assertNotIn("password", api.sent[1][1]["result"])
+        self.assertEqual(self.passwords, [])
+
+    def test_consent_without_a_logged_on_user_is_refused(self) -> None:
+        self.agent.password_rotated = True
+        api = FakeRemoteApi([{"request": {"seq": 2, "action": "open"}}, {"request": None}])
+        with mock.patch.object(updater, "enumerate_sessions", return_value=[(0, 0)]), \
+                mock.patch.object(updater, "console_session_id", return_value=None):
+            self.agent.poll_once(api)
+        self.assertEqual(api.sent[1][1]["result"]["status"], "no_user")
+
+    def test_closing_replaces_the_password(self) -> None:
+        self.agent.password_rotated = True
+        self.agent.session_open = True
+        self.agent.handled_seq = 4
+        api = FakeRemoteApi([{"request": {"seq": 5, "action": "close"}}, {"request": None}])
+        self.agent.poll_once(api)
+        self.assertEqual(len(self.passwords), 1)
+        self.assertEqual(len(self.passwords[0]), 24)
+        self.assertEqual(api.sent[1][1]["result"], {"seq": 5, "status": "closed", "message": "Sessao encerrada."})
+        self.assertFalse(self.agent.session_open)
+
+    def test_an_open_session_survives_a_service_restart(self) -> None:
+        updater.atomic_json(self.state_path, {"handled_seq": 7, "session_open": True})
+        agent = self.new_agent()
+        agent.poll_once(FakeRemoteApi([{"request": {"seq": 7, "action": "open"}}]))
+        self.assertEqual(self.passwords, [])
+
+    def test_a_failed_report_is_sent_again_without_repeating_the_request(self) -> None:
+        self.agent.password_rotated = True
+
+        class FlakyApi(FakeRemoteApi):
+            failed = False
+
+            def post_json(self, path, payload, timeout=30):
+                if "result" in payload and not self.failed:
+                    self.failed = True
+                    raise updater.UpdaterError("Falha de comunicacao com a API")
+                return super().post_json(path, payload, timeout)
+
+        request = {"require_consent": False, "request": {"seq": 9, "action": "open"}}
+        api = FlakyApi([request, request])
+        with self.assertRaises(updater.UpdaterError):
+            self.agent.poll_once(api)
+        self.agent.poll_once(api)
+        self.assertEqual(len(self.passwords), 1)
+        self.assertEqual(api.sent[1][1]["result"]["password"], self.passwords[0])
+
+    def test_missing_rustdesk_is_reported_with_the_reason(self) -> None:
+        self.agent.rustdesk_id = ""
+        self.agent.message = "Servico do RustDesk nao encontrado."
+        with mock.patch.object(updater.RemoteAgent, "rustdesk_ready", return_value=False):
+            api = FakeRemoteApi([{"request": {"seq": 1, "action": "open"}}, {"request": None}])
+            self.agent.poll_once(api)
+        self.assertEqual(api.sent[0][1]["rustdesk"]["message"], "Servico do RustDesk nao encontrado.")
+        self.assertEqual(api.sent[1][1]["result"]["status"], "error")
+        self.assertEqual(self.passwords, [])
 
 
 if __name__ == "__main__":

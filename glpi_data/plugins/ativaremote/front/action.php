@@ -19,22 +19,26 @@ $id = (int) ($_POST['id'] ?? 0);
 
 try {
     $repo = new ClientRepository();
-    
+
     switch ($action) {
         case 'toggle_rustdesk_consent':
             $require = ($_POST['require'] ?? '1') === '1';
             $repo->setRequireConsent($id, $require);
-            Session::addMessageAfterRedirect('Configuração de consentimento atualizada.', true, INFO);
+            Session::addMessageAfterRedirect(
+                $require ? 'O usuário precisará autorizar cada acesso.' : 'Acesso sem autorização do usuário ativado.',
+                true,
+                INFO
+            );
             break;
 
         case 'request_remote_access':
-            $repo->setRemoteAccessStatus($id, 'pending');
-            Session::addMessageAfterRedirect('Acesso remoto solicitado. Aguarde a aprovação do usuário.', true, INFO);
+            $repo->requestAccess($id, (int) Session::getLoginUserID());
+            Session::addMessageAfterRedirect('Acesso remoto solicitado. A tela atualiza sozinha quando o computador responder.', true, INFO);
             break;
 
-        case 'cancel_remote_access':
-            $repo->setRemoteAccessStatus($id, null);
-            Session::addMessageAfterRedirect('Solicitação de acesso cancelada ou encerrada.', true, INFO);
+        case 'close_remote_access':
+            $repo->closeAccess($id);
+            Session::addMessageAfterRedirect('Sessão encerrada. O computador troca a senha do RustDesk em seguida.', true, INFO);
             break;
 
         default:

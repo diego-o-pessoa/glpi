@@ -5,141 +5,357 @@ declare(strict_types=1);
 namespace GlpiPlugin\Ativaremote;
 
 use Exception;
+use GLPIKey;
+use Throwable;
 
-class ClientRepository
+/**
+ * Computers reported by the Ativa Updater service and their remote access sessions.
+ *
+ * A session goes: pending (waiting for the computer / the user) -> accepted (password
+ * available to technicians) -> closing (computer replaces the password) -> closed.
+ * Every command sent to the computer increments request_seq; the computer answers
+ * each sequence number once.
+ */
+final class ClientRepository
 {
-    private const TABLE = 'glpi_plugin_ativaremote_clients';
+    public const TABLE = 'glpi_plugin_ativaremote_clients';
+    public const ONLINE_SECONDS = 60;
+    public const POLL_SECONDS = 10;
+    /** The computer polls every 10 s and the user has 60 s to answer. */
+    public const PENDING_TIMEOUT_SECONDS = 180;
+    public const CLOSING_TIMEOUT_SECONDS = 180;
+    public const SESSION_MAX_SECONDS = 4 * 3600;
 
-    public function register(array $payload, ?string $ipAddress): array
+    public const STATUS_PENDING = 'pending';
+    public const STATUS_ACCEPTED = 'accepted';
+    public const STATUS_CLOSING = 'closing';
+    public const STATUS_REJECTED = 'rejected';
+    public const STATUS_FAILED = 'failed';
+
+    public const ACTION_OPEN = 'open';
+    public const ACTION_CLOSE = 'close';
+
+    private const RUSTDESK_ID_PATTERN = '/^[A-Za-z0-9_-]{6,32}$/D';
+    private const PASSWORD_PATTERN = '/^[A-Za-z0-9]{8,64}$/D';
+    private const VERSION_PATTERN = '/^\d{1,5}\.\d{1,5}\.\d{1,5}$/D';
+
+    /**
+     * Stores what the computer reported and returns the command it must execute.
+     *
+     * @throws ApiException
+     */
+    public function report(array $payload, string $ipAddress): array
     {
         global $DB;
 
-        $hostname = strtoupper($payload['hostname'] ?? '');
-        $machineGuid = $payload['machine_guid'] ?? '';
-        
-        if (empty($hostname) || empty($machineGuid)) {
-            throw new Exception("Hostname ou Machine GUID invalidos");
+        $guid = strtolower(trim((string) ($payload['machine_guid'] ?? '')));
+        $hostname = trim((string) ($payload['hostname'] ?? ''));
+        if (!preg_match('/^[a-f0-9-]{32,64}$/D', $guid) || !preg_match('/^[a-zA-Z0-9._-]{1,255}$/D', $hostname)) {
+            throw new ApiException('INVALID_PAYLOAD', 'Identificacao do computador invalida.', 422);
+        }
+        $rustdesk = is_array($payload['rustdesk'] ?? null) ? $payload['rustdesk'] : [];
+        $rustdeskId = trim((string) ($rustdesk['id'] ?? ''));
+        if ($rustdeskId !== '' && !preg_match(self::RUSTDESK_ID_PATTERN, $rustdeskId)) {
+            throw new ApiException('INVALID_PAYLOAD', 'ID do RustDesk invalido.', 422);
+        }
+        $clientVersion = trim((string) ($payload['client_version'] ?? ''));
+        $rustdeskVersion = trim((string) ($rustdesk['version'] ?? ''));
+        $installed = ($rustdesk['installed'] ?? false) === true;
+
+        $now = ServerClock::now();
+        $data = [
+            'hostname'         => strtoupper($hostname),
+            'client_version'   => preg_match(self::VERSION_PATTERN, $clientVersion) ? $clientVersion : '',
+            'rustdesk_version' => preg_match('/^[0-9A-Za-z.+-]{1,32}$/D', $rustdeskVersion) ? $rustdeskVersion : null,
+            'rustdesk_ready'   => ($rustdesk['ready'] ?? false) === true ? 1 : 0,
+            'rustdesk_message' => mb_substr(trim((string) ($rustdesk['message'] ?? '')), 0, 255),
+            'last_check'       => $now,
+            'last_ip'          => mb_substr($ipAddress, 0, 45),
+            'updated_at'       => $now,
+        ];
+        if ($rustdeskId !== '') {
+            $data['rustdesk_id'] = $rustdeskId;
+        } elseif (!$installed) {
+            $data['rustdesk_id'] = null;
         }
 
-        $now = date('Y-m-d H:i:s');
-        $token = bin2hex(random_bytes(32));
-
-        $existing = $this->findByMachineGuid($machineGuid);
-
-        $values = [
-            'hostname'             => $hostname,
-            'client_version'       => $payload['client_version'] ?? '',
-            'rustdesk_id'          => $payload['rustdesk_id'] ?? null,
-            'rustdesk_password'    => $payload['rustdesk_password'] ?? null,
-            'token_hash'           => hash('sha256', $token),
-            'last_check'           => $now,
-            'last_ip'              => $ipAddress,
-            'updated_at'           => $now,
-        ];
-
-        if ($existing === null) {
-            $values['machine_guid'] = $machineGuid;
-            $values['registered_at'] = $now;
-            $DB->insert(self::TABLE, $values);
-            $id = (int) $DB->insertId();
+        $client = $this->findByMachineGuid($guid);
+        if ($client === null) {
+            $DB->insert(self::TABLE, $data + [
+                'machine_guid'  => $guid,
+                'registered_at' => $now,
+                'computers_id'  => $this->computerId($data['hostname']),
+            ]);
         } else {
-            $id = (int) $existing['id'];
-            $DB->update(self::TABLE, $values, ['id' => $id]);
+            if (empty($client['computers_id'])) {
+                $data['computers_id'] = $this->computerId($data['hostname']);
+            }
+            $DB->update(self::TABLE, $data, ['id' => (int) $client['id']]);
+        }
+        $client = $this->findByMachineGuid($guid);
+        if ($client === null) {
+            throw new ApiException('DATABASE_ERROR', 'Nao foi possivel registrar o computador.', 500);
         }
 
-        return ['id' => $id, 'token' => $token];
-    }
+        if (is_array($payload['result'] ?? null)) {
+            $this->applyResult($client, $payload['result']);
+        }
+        $this->expire((int) $client['id']);
+        $client = $this->findById((int) $client['id']) ?? $client;
 
-    public function authenticate(string $token): ?array
-    {
-        global $DB;
-
-        $hash = hash('sha256', $token);
-        $iterator = $DB->request([
-            'FROM'  => self::TABLE,
-            'WHERE' => ['token_hash' => $hash],
-            'LIMIT' => 1,
-        ]);
-        $client = $iterator->current();
-        
-        if (!is_array($client)) {
-            throw new Exception("Token invalido");
+        $request = null;
+        if (in_array($client['request_action'], [self::ACTION_OPEN, self::ACTION_CLOSE], true)) {
+            $request = [
+                'seq'          => (int) $client['request_seq'],
+                'action'       => $client['request_action'],
+                'requested_by' => $client['requested_by'] ? mb_substr(getUserName((int) $client['requested_by']), 0, 80) : '',
+            ];
         }
 
-        return $client;
-    }
-
-    public function heartbeat(array $client, array $payload, ?string $ipAddress): void
-    {
-        global $DB;
-
-        $now = date('Y-m-d H:i:s');
-        $updates = [
-            'last_check'           => $now,
-            'last_ip'              => $ipAddress,
-            'updated_at'           => $now,
+        return [
+            'require_consent'    => (bool) $client['require_consent'],
+            'request'            => $request,
+            'poll_after_seconds' => self::POLL_SECONDS,
         ];
-        
-        if (isset($payload['rustdesk_id'])) {
-            $updates['rustdesk_id'] = $payload['rustdesk_id'];
-        }
-        if (isset($payload['rustdesk_password'])) {
-            $updates['rustdesk_password'] = $payload['rustdesk_password'];
-        }
-        
-        if (isset($payload['remote_access_status']) && in_array($payload['remote_access_status'], ['accepted', 'rejected', 'null'])) {
-            $status = $payload['remote_access_status'] === 'null' ? null : $payload['remote_access_status'];
-            $updates['remote_access_status'] = $status;
-        }
-
-        $DB->update(self::TABLE, $updates, ['id' => (int) $client['id']]);
     }
 
-    public function findByMachineGuid(string $machineGuid): ?array
+    private function applyResult(array $client, array $result): void
     {
         global $DB;
-        $iterator = $DB->request([
-            'FROM'  => self::TABLE,
-            'WHERE' => ['machine_guid' => $machineGuid],
-            'LIMIT' => 1,
-        ]);
-        $row = $iterator->current();
-        return is_array($row) ? $row : null;
+
+        $seq = $result['seq'] ?? null;
+        if (!is_int($seq) || $seq !== (int) $client['request_seq']) {
+            return;
+        }
+        $status = (string) ($result['status'] ?? '');
+        $message = mb_substr(trim((string) ($result['message'] ?? '')), 0, 255);
+        $now = ServerClock::now();
+        $updates = [];
+
+        if ($client['request_action'] === self::ACTION_OPEN && $client['remote_access_status'] === self::STATUS_PENDING) {
+            $password = (string) ($result['password'] ?? '');
+            if ($status === 'accepted' && preg_match(self::PASSWORD_PATTERN, $password)) {
+                $updates = [
+                    'remote_access_status' => self::STATUS_ACCEPTED,
+                    'session_password'     => (new GLPIKey())->encrypt($password),
+                    'session_started_at'   => $now,
+                    'status_message'       => $message ?: 'Acesso liberado.',
+                ];
+            } elseif (in_array($status, ['rejected', 'timeout', 'no_user'], true)) {
+                $updates = [
+                    'remote_access_status' => self::STATUS_REJECTED,
+                    'request_action'       => null,
+                    'status_message'       => $message ?: 'Acesso recusado.',
+                ];
+            } else {
+                $updates = [
+                    'remote_access_status' => self::STATUS_FAILED,
+                    'request_action'       => null,
+                    'status_message'       => $message ?: 'O computador nao conseguiu liberar o acesso.',
+                ];
+            }
+        } elseif ($client['request_action'] === self::ACTION_CLOSE) {
+            $updates = ['request_action' => null];
+            if ($client['remote_access_status'] === self::STATUS_CLOSING) {
+                $updates['remote_access_status'] = null;
+            }
+            $updates['status_message'] = $status === 'closed'
+                ? 'Sessao encerrada; a senha foi trocada.'
+                : ($message ?: 'O computador vai trocar a senha assim que possivel.');
+        }
+
+        if ($updates !== []) {
+            $DB->update(self::TABLE, $updates + ['updated_at' => $now], ['id' => (int) $client['id']]);
+        }
     }
 
-    public function findById(int $id): ?array
+    /** Gives up on requests the computer did not answer and ends sessions that are too long. */
+    private function expire(int $id): void
+    {
+        $client = $this->findById($id);
+        if ($client === null) {
+            return;
+        }
+        $now = time();
+        $status = $client['remote_access_status'];
+        $requestedAt = ServerClock::toTimestamp($client['requested_at']);
+        if ($status === self::STATUS_PENDING && $now - $requestedAt > self::PENDING_TIMEOUT_SECONDS) {
+            $this->sendClose($client, self::STATUS_FAILED, 'O computador nao respondeu a solicitacao.');
+        } elseif ($status === self::STATUS_ACCEPTED
+            && $now - ServerClock::toTimestamp($client['session_started_at']) > self::SESSION_MAX_SECONDS
+        ) {
+            $this->sendClose($client, self::STATUS_CLOSING, 'Sessao encerrada automaticamente apos 4 horas.');
+        } elseif ($status === self::STATUS_CLOSING && $now - $requestedAt > self::CLOSING_TIMEOUT_SECONDS) {
+            global $DB;
+            // The close command stays queued: the computer replaces the password when it comes back.
+            $DB->update(self::TABLE, [
+                'remote_access_status' => null,
+                'status_message'       => 'Sessao encerrada; a senha sera trocada quando o computador voltar.',
+                'updated_at'           => ServerClock::now(),
+            ], ['id' => $id]);
+        }
+    }
+
+    public function requestAccess(int $id, int $userId): void
     {
         global $DB;
-        $iterator = $DB->request([
-            'FROM'  => self::TABLE,
-            'WHERE' => ['id' => $id],
-            'LIMIT' => 1,
-        ]);
-        $row = $iterator->current();
-        return is_array($row) ? $row : null;
+
+        $client = $this->require($id);
+        $this->expire($id);
+        $client = $this->require($id);
+        if (in_array($client['remote_access_status'], [self::STATUS_PENDING, self::STATUS_ACCEPTED], true)) {
+            return;
+        }
+        if (!self::isOnline($client)) {
+            throw new Exception('O computador esta offline.');
+        }
+        if (empty($client['rustdesk_id'])) {
+            throw new Exception('O RustDesk deste computador ainda nao esta pronto.');
+        }
+        $now = ServerClock::now();
+        $DB->update(self::TABLE, [
+            'request_seq'          => (int) $client['request_seq'] + 1,
+            'request_action'       => self::ACTION_OPEN,
+            'remote_access_status' => self::STATUS_PENDING,
+            'requested_by'         => $userId,
+            'requested_at'         => $now,
+            'session_password'     => null,
+            'session_started_at'   => null,
+            'status_message'       => $client['require_consent']
+                ? 'Aguardando a autorizacao do usuario.'
+                : 'Aguardando o computador liberar o acesso.',
+            'updated_at'           => $now,
+        ], ['id' => $id]);
+    }
+
+    public function closeAccess(int $id): void
+    {
+        $client = $this->require($id);
+        if ($client['remote_access_status'] === self::STATUS_CLOSING) {
+            return;
+        }
+        if (in_array($client['remote_access_status'], [self::STATUS_PENDING, self::STATUS_ACCEPTED], true)) {
+            $this->sendClose($client, self::STATUS_CLOSING, 'Encerrando a sessao...');
+            return;
+        }
+        global $DB;
+        // Clears a refused or failed request from the list.
+        $DB->update(self::TABLE, [
+            'remote_access_status' => null,
+            'status_message'       => null,
+            'updated_at'           => ServerClock::now(),
+        ], ['id' => $id]);
+    }
+
+    private function sendClose(array $client, ?string $status, string $message): void
+    {
+        global $DB;
+        $now = ServerClock::now();
+        $DB->update(self::TABLE, [
+            'request_seq'          => (int) $client['request_seq'] + 1,
+            'request_action'       => self::ACTION_CLOSE,
+            'remote_access_status' => $status,
+            'requested_at'         => $now,
+            'session_password'     => null,
+            'session_started_at'   => null,
+            'status_message'       => $message,
+            'updated_at'           => $now,
+        ], ['id' => (int) $client['id']]);
     }
 
     public function setRequireConsent(int $id, bool $require): void
     {
         global $DB;
-        if ($this->findById($id) === null) {
-            throw new Exception('Cliente nao encontrado.');
-        }
+        $this->require($id);
         $DB->update(self::TABLE, [
             'require_consent' => $require ? 1 : 0,
-            'updated_at'      => date('Y-m-d H:i:s'),
+            'updated_at'      => ServerClock::now(),
         ], ['id' => $id]);
     }
 
-    public function setRemoteAccessStatus(int $id, ?string $status): void
+    /** Rows for the dashboard, with the session password only when $withPassword is true. */
+    public function listForDashboard(int $start, int $limit, bool $withPassword): array
     {
         global $DB;
-        if ($this->findById($id) === null) {
-            throw new Exception('Cliente nao encontrado.');
+
+        $rows = [];
+        foreach ($DB->request([
+            'FROM'  => self::TABLE,
+            'ORDER' => ['hostname ASC'],
+            'START' => $start,
+            'LIMIT' => $limit,
+        ]) as $row) {
+            $this->expire((int) $row['id']);
+            $row = $this->findById((int) $row['id']) ?? $row;
+            $row['online'] = self::isOnline($row);
+            $password = null;
+            if ($withPassword && $row['remote_access_status'] === self::STATUS_ACCEPTED) {
+                $password = self::decrypt($row['session_password']);
+            }
+            unset($row['session_password'], $row['rustdesk_password'], $row['token_hash']);
+            $row['password'] = $password;
+            $row['connect_url'] = $password !== null && !empty($row['rustdesk_id'])
+                ? 'rustdesk://connection/new/' . rawurlencode((string) $row['rustdesk_id']) . '?password=' . rawurlencode($password)
+                : null;
+            $rows[] = $row;
         }
-        $DB->update(self::TABLE, [
-            'remote_access_status' => $status,
-            'updated_at'           => date('Y-m-d H:i:s'),
-        ], ['id' => $id]);
+        return $rows;
+    }
+
+    public static function isOnline(array $client): bool
+    {
+        $lastCheck = ServerClock::toTimestamp($client['last_check'] ?? null);
+        return $lastCheck > 0 && time() - $lastCheck <= self::ONLINE_SECONDS;
+    }
+
+    private static function decrypt(?string $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        try {
+            return (new GLPIKey())->decrypt($value);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function computerId(string $hostname): int
+    {
+        global $DB;
+        $iterator = $DB->request([
+            'SELECT' => ['id'],
+            'FROM'   => 'glpi_computers',
+            'WHERE'  => ['name' => $hostname, 'is_deleted' => 0, 'is_template' => 0],
+            'LIMIT'  => 2,
+        ]);
+        // Only link when the name is unambiguous.
+        return count($iterator) === 1 ? (int) $iterator->current()['id'] : 0;
+    }
+
+    private function require(int $id): array
+    {
+        $client = $this->findById($id);
+        if ($client === null) {
+            throw new Exception('Computador nao encontrado.');
+        }
+        return $client;
+    }
+
+    public function findByMachineGuid(string $machineGuid): ?array
+    {
+        return $this->findOne(['machine_guid' => $machineGuid]);
+    }
+
+    public function findById(int $id): ?array
+    {
+        return $this->findOne(['id' => $id]);
+    }
+
+    private function findOne(array $where): ?array
+    {
+        global $DB;
+        $row = $DB->request(['FROM' => self::TABLE, 'WHERE' => $where, 'LIMIT' => 1])->current();
+        return is_array($row) ? $row : null;
     }
 }

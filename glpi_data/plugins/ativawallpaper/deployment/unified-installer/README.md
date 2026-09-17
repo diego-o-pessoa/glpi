@@ -100,6 +100,18 @@ O dashboard atualiza a seção **Computadores** sozinho, a cada 3 s, sem recarre
 
 As três ações por computador exigem o serviço 1.5.0 (pacote 1.6.2) ou superior. Sem confirmação em 2 minutos, o status vira **Sem resposta ao comando**.
 
+## Acesso remoto (Ativa Remote + RustDesk)
+
+A partir do pacote 1.6.7 (serviço 1.7.0), o pacote leva o RustDesk 1.3.1 oficial (SHA-256 conferido no build) em `UnifiedUpdater\rustdesk.exe`. O serviço, que já roda como SYSTEM:
+
+1. instala o RustDesk (`--silent-install`) se ele não estiver em `Program Files\RustDesk` e mantém o serviço **RustDesk** ligado;
+2. lê o ID (`--get-id`) e informa a cada 10 s em `/plugins/ativaremote/api/v1/report`, com o mesmo token da API do Ativa Updater;
+3. troca a senha permanente por uma aleatória desconhecida ao iniciar, para que nenhuma senha antiga continue válida.
+
+Em **Administração > Ativa Remote**, **Solicitar acesso** envia o pedido ao computador. Com **Autorização: ON**, o usuário responde Sim/Não em até 60 s. Com a autorização, o serviço gera uma senha nova e a envia só ao GLPI, onde ela fica criptografada e aparece para quem tem direito de gerenciar, junto com o botão **Conectar** (`rustdesk://`). **Encerrar**, ou 4 horas de sessão, faz o computador trocar a senha de novo. Pedidos sem resposta em 3 minutos viram **Falhou**.
+
+Requisitos: plugin **Ativa Updater** ativo com a API habilitada e o RustDesk instalado no computador do técnico. O log fica em `UnifiedUpdater\logs\service.log` (linhas "Ativa Remote:").
+
 ## Vigia (segurança na máquina)
 
 O instalador cria a tarefa agendada **Ativa Unified Updater Watchdog**, que roda a cada 15 minutos como SYSTEM uma **cópia separada** do serviço (`UnifiedUpdater\watchdog\AtivaUnifiedUpdater.exe`). Essa cópia só é substituída depois que uma versão nova do serviço consegue falar com a API. O vigia:

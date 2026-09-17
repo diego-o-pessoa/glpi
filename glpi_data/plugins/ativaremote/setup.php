@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
-define('PLUGIN_ATIVAREMOTE_VERSION', '1.0.0');
-define('PLUGIN_ATIVAREMOTE_MIN_GLPI', '10.0.0');
+use Glpi\Http\SessionManager;
+
+define('PLUGIN_ATIVAREMOTE_VERSION', '1.1.0');
+define('PLUGIN_ATIVAREMOTE_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVAREMOTE_MAX_GLPI', '12.0.0');
 
 /**
@@ -14,6 +16,9 @@ function plugin_init_ativaremote(): void
     global $PLUGIN_HOOKS;
 
     $PLUGIN_HOOKS['csrf_compliant']['ativaremote'] = true;
+
+    // API used by the Ativa Updater service (token authentication, no session).
+    SessionManager::registerPluginStatelessPath('ativaremote', '#^/api/v1(?:/|$)#');
     
     Plugin::registerClass('PluginAtivaremoteMenu');
     $PLUGIN_HOOKS['menu_toadd']['ativaremote']['admin'] = 'PluginAtivaremoteMenu';

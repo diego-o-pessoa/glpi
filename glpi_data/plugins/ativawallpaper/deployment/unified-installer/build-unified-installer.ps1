@@ -195,6 +195,8 @@ if (-not (Test-Path -LiteralPath $RustDeskExe)) {
     Write-Host "Baixando RustDesk portable (1.3.1)..."
     Invoke-WebRequest -UseBasicParsing -Uri $RustDeskUrl -OutFile $RustDeskExe
 }
+# O servico Ativa Updater instala este executavel como SYSTEM: so aceita a release oficial conferida.
+Assert-Sha256 -Path $RustDeskExe -Expected "fc20fd159eea217fa8ba30309aef177ec00913007f42b325e6b7dd1f21a2f245"
 
 $AgentSignature = Get-AuthenticodeSignature -LiteralPath $AgentMsi
 if ($AgentSignature.Status -eq 'NotSigned') {

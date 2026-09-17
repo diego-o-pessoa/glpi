@@ -1,104 +1,183 @@
 <div class="row">
     <div class="col-12">
+        {% if not updater_active %}
+            <div class="alert alert-warning">
+                <i class="ti ti-alert-triangle"></i>
+                O plugin <strong>Ativa Updater</strong> precisa estar ativo: é o serviço dele que instala o RustDesk e registra os computadores.
+            </div>
+        {% endif %}
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">Computadores com Ativa Remote</h3>
+                <h3 class="card-title"><i class="ti ti-device-desktop-share me-2"></i>Computadores com Ativa Remote</h3>
             </div>
             <div class="card-body">
+                <p class="text-muted mb-3">
+                    Os computadores aparecem aqui quando o serviço Ativa Updater 1.7.0 ou superior (pacote unificado com RustDesk) está instalado.
+                    "Solicitar acesso" gera uma senha nova no RustDesk, válida até a sessão ser encerrada (no máximo 4 horas).
+                </p>
                 <div class="table-responsive">
-                    <table class="table table-hover table-striped">
+                    <table class="table table-hover table-striped align-middle">
                         <thead>
                             <tr>
                                 <th>Computador</th>
-                                <th>Versão do Cliente</th>
-                                <th>Último Contato</th>
-                                <th>Status do Acesso</th>
-                                <th class="text-end">Ações (RustDesk)</th>
+                                <th>Situação</th>
+                                <th>RustDesk</th>
+                                <th>Último contato</th>
+                                <th>Acesso</th>
+                                <th class="text-end">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                         {% for client in clients.rows %}
+                            {% set status = client.remote_access_status %}
                             <tr>
-                                <td><strong>{{ client.hostname }}</strong></td>
-                                <td>{{ client.client_version ?: '—' }}</td>
-                                <td>{{ client.last_check ? client.last_check|formatted_datetime : '—' }}</td>
                                 <td>
-                                    {% if client.require_consent %}
-                                        <span class="badge bg-primary">Consentimento Exigido</span>
+                                    {% if client.computers_id %}
+                                        <a href="{{ urls.computer }}?id={{ client.computers_id }}"><strong>{{ client.hostname }}</strong></a>
                                     {% else %}
-                                        <span class="badge bg-secondary">Acesso Livre</span>
+                                        <strong>{{ client.hostname }}</strong>
+                                    {% endif %}
+                                    <div class="small text-muted">Serviço {{ client.client_version ?: '—' }}</div>
+                                </td>
+                                <td>
+                                    {% if client.online %}
+                                        <span class="badge bg-success">Online</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Offline</span>
                                     {% endif %}
                                 </td>
-                                <td class="text-end">
+                                <td>
                                     {% if client.rustdesk_id %}
-                                        <form method="post" action="{{ urls.action }}" style="display: inline-block; margin-bottom: 5px;">
-                                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
-                                            <input type="hidden" name="action" value="toggle_rustdesk_consent">
-                                            <input type="hidden" name="id" value="{{ client.id }}">
-                                            <input type="hidden" name="require" value="{{ client.require_consent ? '0' : '1' }}">
-                                            <button type="submit" class="btn btn-sm {{ client.require_consent ? 'btn-outline-primary' : 'btn-outline-secondary' }}" title="Alterar exigência de consentimento">
-                                                <i class="ti ti-key"></i> Consentimento: {{ client.require_consent ? 'ON' : 'OFF' }}
-                                            </button>
-                                        </form>
-                                        <br>
-                                        {% if client.require_consent %}
-                                            {% if client.remote_access_status == 'pending' %}
-                                                <button type="button" class="btn btn-sm btn-warning" disabled>
-                                                    <i class="ti ti-loader-2 ativa-spin"></i> Aguardando...
-                                                </button>
-                                                <form method="post" action="{{ urls.action }}" style="display: inline-block;">
-                                                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
-                                                    <input type="hidden" name="action" value="cancel_remote_access">
-                                                    <input type="hidden" name="id" value="{{ client.id }}">
-                                                    <button type="submit" class="btn btn-sm btn-danger" title="Cancelar requisição"><i class="ti ti-x"></i></button>
-                                                </form>
-                                            {% elseif client.remote_access_status == 'accepted' %}
-                                                <a href="rustdesk://{{ client.rustdesk_id }}" class="btn btn-sm btn-success">
-                                                    <i class="ti ti-device-desktop"></i> Conectar
-                                                </a>
-                                                <form method="post" action="{{ urls.action }}" style="display: inline-block;">
-                                                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
-                                                    <input type="hidden" name="action" value="cancel_remote_access">
-                                                    <input type="hidden" name="id" value="{{ client.id }}">
-                                                    <button type="submit" class="btn btn-sm btn-secondary" title="Encerrar sessão"><i class="ti ti-x"></i></button>
-                                                </form>
-                                            {% else %}
-                                                <form method="post" action="{{ urls.action }}" style="display: inline-block;">
-                                                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
-                                                    <input type="hidden" name="action" value="request_remote_access">
-                                                    <input type="hidden" name="id" value="{{ client.id }}">
-                                                    <button type="submit" class="btn btn-sm btn-primary">
-                                                        <i class="ti ti-hand-click"></i> Solicitar Acesso
-                                                    </button>
-                                                </form>
-                                            {% endif %}
-                                        {% else %}
-                                            <a href="rustdesk://{{ client.rustdesk_id }}" class="btn btn-sm btn-success">
-                                                <i class="ti ti-device-desktop"></i> Acesso Direto
+                                        <code>{{ client.rustdesk_id }}</code>
+                                        <div class="small text-muted">{{ client.rustdesk_version ? 'v' ~ client.rustdesk_version : '' }}</div>
+                                    {% else %}
+                                        <span class="text-warning">Não pronto</span>
+                                    {% endif %}
+                                    {% if client.rustdesk_message %}
+                                        <div class="small text-muted">{{ client.rustdesk_message }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>{{ client.last_check ? client.last_check|formatted_datetime : '—' }}</td>
+                                <td>
+                                    {% if status == 'pending' %}
+                                        <span class="badge bg-warning"><i class="ti ti-loader-2"></i> Aguardando</span>
+                                    {% elseif status == 'accepted' %}
+                                        <span class="badge bg-success">Liberado</span>
+                                    {% elseif status == 'closing' %}
+                                        <span class="badge bg-secondary">Encerrando</span>
+                                    {% elseif status == 'rejected' %}
+                                        <span class="badge bg-danger">Recusado</span>
+                                    {% elseif status == 'failed' %}
+                                        <span class="badge bg-danger">Falhou</span>
+                                    {% else %}
+                                        <span class="badge {{ client.require_consent ? 'bg-primary' : 'bg-secondary' }}">
+                                            {{ client.require_consent ? 'Pede autorização' : 'Acesso sem autorização' }}
+                                        </span>
+                                    {% endif %}
+                                    {% if client.status_message %}
+                                        <div class="small text-muted">{{ client.status_message }}</div>
+                                    {% endif %}
+                                    {% if status == 'accepted' and client.password %}
+                                        <div class="mt-1 small">
+                                            ID <code>{{ client.rustdesk_id }}</code> · Senha <code>{{ client.password }}</code>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    {% if can_manage %}
+                                        {% if status == 'accepted' and client.connect_url %}
+                                            <a href="{{ client.connect_url }}" class="btn btn-sm btn-success">
+                                                <i class="ti ti-device-desktop"></i> Conectar
                                             </a>
                                         {% endif %}
+                                        {% if status in ['pending', 'accepted'] %}
+                                            <form method="post" action="{{ urls.action }}" class="d-inline-block">
+                                                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="action" value="close_remote_access">
+                                                <input type="hidden" name="id" value="{{ client.id }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Encerrar e trocar a senha">
+                                                    <i class="ti ti-x"></i> {{ status == 'pending' ? 'Cancelar' : 'Encerrar' }}
+                                                </button>
+                                            </form>
+                                        {% elseif status != 'closing' %}
+                                            <form method="post" action="{{ urls.action }}" class="d-inline-block">
+                                                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="action" value="request_remote_access">
+                                                <input type="hidden" name="id" value="{{ client.id }}">
+                                                <button type="submit" class="btn btn-sm btn-primary"
+                                                        {{ client.online and client.rustdesk_id ? '' : 'disabled' }}
+                                                        title="{{ client.online ? (client.rustdesk_id ? 'Solicitar acesso remoto' : 'RustDesk ainda não está pronto') : 'Computador offline' }}">
+                                                    <i class="ti ti-hand-click"></i> Solicitar acesso
+                                                </button>
+                                            </form>
+                                        {% endif %}
+                                        {% if status is null %}
+                                            <form method="post" action="{{ urls.action }}" class="d-inline-block"
+                                                  data-ativa-confirm="{{ client.require_consent ? 'Permitir acesso a este computador sem a autorização do usuário?' : 'Voltar a pedir a autorização do usuário?' }}">
+                                                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="action" value="toggle_rustdesk_consent">
+                                                <input type="hidden" name="id" value="{{ client.id }}">
+                                                <input type="hidden" name="require" value="{{ client.require_consent ? '0' : '1' }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Alterar a exigência de autorização">
+                                                    <i class="ti ti-key"></i> Autorização: {{ client.require_consent ? 'ON' : 'OFF' }}
+                                                </button>
+                                            </form>
+                                        {% elseif status in ['rejected', 'failed'] %}
+                                            <form method="post" action="{{ urls.action }}" class="d-inline-block">
+                                                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="action" value="close_remote_access">
+                                                <input type="hidden" name="id" value="{{ client.id }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Limpar o resultado">
+                                                    <i class="ti ti-eraser"></i>
+                                                </button>
+                                            </form>
+                                        {% endif %}
                                     {% else %}
-                                        <small class="text-muted">Aguardando ID do RustDesk...</small>
+                                        <small class="text-muted">Somente leitura</small>
                                     {% endif %}
                                 </td>
                             </tr>
                         {% else %}
-                            <tr><td colspan="5" class="text-center text-muted">Nenhum computador encontrado.</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted">Nenhum computador registrado ainda.</td></tr>
                         {% endfor %}
                         </tbody>
                     </table>
                 </div>
             </div>
-            <div class="card-footer">
-                <span class="text-muted">Mostrando {{ clients.total }} computadores</span>
-                <!-- Paginação simplificada omitida para clareza visual -->
+            <div class="card-footer d-flex justify-content-between align-items-center">
+                <span class="text-muted">{{ clients.total }} computador(es)</span>
+                {% if clients.pages > 1 %}
+                    <div class="btn-group">
+                        {% if clients.page > 1 %}
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ urls.dashboard }}?page={{ clients.page - 1 }}&limit={{ clients.limit }}">Anterior</a>
+                        {% endif %}
+                        <span class="btn btn-sm disabled">{{ clients.page }} / {{ clients.pages }}</span>
+                        {% if clients.page < clients.pages %}
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ urls.dashboard }}?page={{ clients.page + 1 }}&limit={{ clients.limit }}">Próxima</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
 <script>
-    // Auto-refresh da página a cada 10 segundos para ver se o status "pending" mudou para "accepted"
-    setTimeout(() => {
-        window.location.reload();
-    }, 10000);
+    (() => {
+        // Faster while waiting for a computer; otherwise refresh the online status every 30 s.
+        const delay = {{ waiting ? 5000 : 30000 }};
+        setTimeout(() => {
+            if (document.visibilityState === 'visible') {
+                window.location.reload();
+            } else {
+                document.addEventListener('visibilitychange', () => window.location.reload(), { once: true });
+            }
+        }, delay);
+        document.querySelectorAll('form[data-ativa-confirm]').forEach((form) => {
+            form.addEventListener('submit', (event) => {
+                if (!window.confirm(form.dataset.ativaConfirm)) {
+                    event.preventDefault();
+                }
+            });
+        });
+    })();
 </script>
