@@ -17,7 +17,8 @@ $limit = max(1, min(200, (int) ($_GET['limit'] ?? 50)));
 $total = countElementsInTable(ClientRepository::TABLE);
 $pages = max(1, (int) ceil($total / $limit));
 $page = min($pages, max(1, (int) ($_GET['page'] ?? 1)));
-$canManage = Session::haveRight('plugin_ativaremote', UPDATE);
+// haveRight() returns the right bits (int), not a bool.
+$canManage = (bool) Session::haveRight('plugin_ativaremote', UPDATE);
 
 $rows = (new ClientRepository())->listForDashboard(($page - 1) * $limit, $limit, $canManage);
 $waiting = false;
