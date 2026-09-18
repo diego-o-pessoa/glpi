@@ -45,7 +45,7 @@ function plugin_ativasplash_display_login(): void
             playsinline 
             preload="auto"
         >
-            <source src="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/assets/video/ativa-intro.mp4?v=' . $version . '" type="video/mp4">
+            <source src="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/assets/video/ativa-intro.mp4?v=2.0.1" type="video/mp4">
         </video>
         <img 
             id="ativa-final-logo" 

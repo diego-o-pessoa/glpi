@@ -30,7 +30,8 @@
         video.style.display = 'none';
         finishSplash(true); 
     } else {
-        // Inicializa o vídeo
+        // Inicializa o vídeo e força o mute para garantir que a política de autoplay não barre
+        video.muted = true;
         var playPromise = video.play();
 
         if (playPromise !== undefined) {
