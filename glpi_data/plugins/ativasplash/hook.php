@@ -31,9 +31,10 @@ function plugin_ativasplash_display_login(): void
 
     // Utiliza a versão estrita do plugin para cache. Ao atualizar a versão em setup.php, o cache de todos os PCs é limpo.
     $version = PLUGIN_ATIVASPLASH_VERSION;
+    $plugin_url = Plugin::getWebDir('ativasplash');
 
     // Inject CSS
-    echo '<link rel="stylesheet" type="text/css" href="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/css/splash.css?v=' . $version . '">';
+    echo '<link rel="stylesheet" type="text/css" href="' . $plugin_url . '/css/splash.css?v=' . $version . '">';
 
     // Inject HTML structure for the splash screen
     echo '
@@ -45,11 +46,11 @@ function plugin_ativasplash_display_login(): void
             playsinline 
             preload="auto"
         >
-            <source src="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/assets/video/ativa-intro.mp4?v=2.0.1" type="video/mp4">
+            <source src="' . $plugin_url . '/assets/video/ativa-intro.mp4?v=2.0.2" type="video/mp4">
         </video>
         <img 
             id="ativa-final-logo" 
-            src="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/assets/img/ativa-logo.webp?v=' . $version . '" 
+            src="' . $plugin_url . '/assets/img/ativa-logo.webp?v=' . $version . '" 
             alt="Ativa Locação"
         >
     </div>
@@ -60,5 +61,5 @@ function plugin_ativasplash_display_login(): void
     </script>';
 
     // Inject JS
-    echo '<script type="text/javascript" src="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/js/splash.js?v=' . $version . '"></script>';
+    echo '<script type="text/javascript" src="' . $plugin_url . '/js/splash.js?v=' . $version . '"></script>';
 }
