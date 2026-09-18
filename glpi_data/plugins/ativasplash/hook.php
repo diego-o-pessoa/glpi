@@ -29,8 +29,8 @@ function plugin_ativasplash_display_login(): void
 {
     global $CFG_GLPI;
 
-    // Adiciona timestamp ou versão para forçar cache busting (limpar cache entre máquinas)
-    $version = PLUGIN_ATIVASPLASH_VERSION . '.' . time();
+    // Utiliza a versão estrita do plugin para cache. Ao atualizar a versão em setup.php, o cache de todos os PCs é limpo.
+    $version = PLUGIN_ATIVASPLASH_VERSION;
 
     // Inject CSS
     echo '<link rel="stylesheet" type="text/css" href="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/css/splash.css?v=' . $version . '">';

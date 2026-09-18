@@ -14,7 +14,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: opacity 0.35s ease-out; /* Fade out final da splash */
+    transition: opacity 0.3s ease-out; /* Fade out final da splash (300ms) */
 }
 
 /* Ocultar splash no modo reduzido de movimento */
@@ -33,30 +33,21 @@
     left: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
-    transition: opacity 0.2s ease-out; /* Crossfade do vídeo sumindo */
-}
-
-/* Em telas muito altas/estreitas, garantir que não corte os lados de forma prejudicial. */
-@media (max-aspect-ratio: 4/3) {
-    #ativa-intro-video {
-        object-fit: contain;
-        background-color: #ffffff;
-    }
+    background: #ffffff;
+    object-fit: contain;
+    transition: opacity 0.15s ease-out;
 }
 
 #ativa-final-logo {
     position: absolute;
     width: 100%;
-    max-width: 450px; /* Adapte se necessário para a proporção real */
+    max-width: 450px;
     height: auto;
     opacity: 0;
-    transition: opacity 0.2s ease-in, transform 0.35s ease-out;
-    transform: scale(1);
     object-fit: contain;
-    /* Ajuste para evitar seleção de imagem */
     user-select: none;
     pointer-events: none;
+    transition: opacity 0.15s ease-in;
 }
 
 /* Quando ativado via JS */
@@ -68,8 +59,4 @@
 #ativa-splash.ativa-fade-out {
     opacity: 0;
     pointer-events: none;
-}
-
-#ativa-splash.ativa-fade-out #ativa-final-logo {
-    transform: scale(0.95); /* Leve diminuição na saída */
 }

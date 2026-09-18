@@ -16,11 +16,11 @@
 
     if (!splash || !video || !logo) return;
 
-    // Timeout máximo de segurança (ex: 7 segundos). O vídeo tem 9s? 
-    // Ajuste o timeout se o vídeo for mais longo. Colocarei 11 segundos por segurança máxima.
+    // Timeout máximo de segurança (o novo vídeo tem ~2.55s). 
+    // Colocarei 5 segundos por segurança máxima.
     var fallbackTimeout = setTimeout(function() {
         if (!isFinished) finishSplash();
-    }, 12000);
+    }, 5000);
 
     // Preferência do usuário por movimento reduzido
     var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -60,23 +60,23 @@
         // Marca a sessão
         sessionStorage.setItem("ativaSplashViewed", "true");
 
-        // 1. Ocultar o vídeo e exibir a logo (Crossfade)
+        // 1. Ocultar o vídeo e exibir a logo (Crossfade muito rápido para fechar o frame final)
         if (!skipVideoFade) {
             video.style.opacity = '0';
         }
         logo.classList.add('ativa-show-logo');
 
-        // 2. Pequena permanência da logo oficial (200ms)
+        // 2. Não há mais pausa perceptível (100ms apenas para garantir o crossfade visual)
         setTimeout(function() {
             
-            // 3. Fade da splash inteira (350ms definidos no CSS)
+            // 3. Fade da splash inteira (300ms definidos no CSS)
             splash.classList.add('ativa-fade-out');
 
             // 4. Remove do DOM após a transição
             setTimeout(function() {
                 splash.remove();
-            }, 400); // 400ms para garantir que o fade-out do CSS completou
+            }, 350); 
 
-        }, 200); 
+        }, 100); 
     }
 })();
