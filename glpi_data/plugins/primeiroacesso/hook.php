@@ -53,9 +53,15 @@ function plugin_primeiroacesso_check_location() {
     }
 
     
-    // Injeta o bloqueio visual nos formulários de usuário/preferências
-    if (strpos($_SERVER['REQUEST_URI'], 'front/user.form.php') !== false || 
-        strpos($_SERVER['REQUEST_URI'], 'front/preference.php') !== false) {
+    // Injeta o bloqueio visual nos formulários de usuário/preferências apenas para Self-Service
+    $is_self_service = false;
+    if (isset($_SESSION['glpiactiveprofile']) && 
+       ($_SESSION['glpiactiveprofile']['id'] == 1 || stripos($_SESSION['glpiactiveprofile']['name'], 'self-service') !== false)) {
+        $is_self_service = true;
+    }
+
+    if ($is_self_service && (strpos($_SERVER['REQUEST_URI'], 'front/user.form.php') !== false || 
+        strpos($_SERVER['REQUEST_URI'], 'front/preference.php') !== false)) {
         
         register_shutdown_function(function() {
             echo "<script type='text/javascript'>
