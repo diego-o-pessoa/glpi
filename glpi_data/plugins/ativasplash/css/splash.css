@@ -1,0 +1,194 @@
+/* plugins/ativasplash/css/splash.css */
+
+/*
+  Splash Screen Corporativa - GLPI ATIVA
+  Utiliza variáveis CSS para facilitar ajustes futuros caso as proporções da imagem mudem.
+  Baseado em imagem de aprox. 685x190.
+*/
+
+:root {
+    --splash-bg: #ffffff; /* Fundo sólido e premium que esconde a tela antes de renderizar */
+    --splash-logo-width: clamp(280px, 50vw, 500px);
+    --splash-logo-aspect-ratio: 685 / 190;
+    
+    /* Configurações de tempo das animações */
+    --splash-t-bg: 0.3s;
+    --splash-t-blue: 0.7s;
+    --splash-t-green: 0.8s;
+    --splash-t-ativa: 0.8s;
+    --splash-t-locacao: 0.6s;
+    --splash-t-exit: 0.6s;
+}
+
+body.ativa-splash-active {
+    overflow: hidden;
+}
+
+/* O container principal que cobre toda a tela */
+#ativa-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 9999999;
+    background-color: var(--splash-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity var(--splash-t-exit) ease, visibility var(--splash-t-exit) ease;
+    /* Impede interação com o formulário enquanto a splash roda */
+    pointer-events: all;
+}
+
+#ativa-splash.splash-hide {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+/* Container que mantém a proporção da logo */
+.ativa-splash-wrapper {
+    position: relative;
+    width: var(--splash-logo-width);
+    aspect-ratio: var(--splash-logo-aspect-ratio);
+    transition: transform var(--splash-t-exit) cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+#ativa-splash.splash-hide .ativa-splash-wrapper {
+    /* Diminui suavemente no final */
+    transform: scale(0.85);
+}
+
+/* Configuração base de todas as camadas */
+.ativa-splash-layer {
+    position: absolute;
+    inset: 0;
+    background-image: url('../assets/img/ativa-logo.webp');
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0;
+}
+
+/* 
+  Camada 1: Símbolo Azul
+  Estimativa: Esquerda (0 a 27%)
+*/
+.ativa-splash-blue {
+    clip-path: inset(0 73% 0 0);
+    animation: splash-blue-enter var(--splash-t-blue) cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    animation-delay: 0.1s;
+}
+
+/* 
+  Camada 2: Triângulo Verde
+  Estimativa: Esquerda-inferior, sobrepondo o azul. 
+  Para evitar conflito com o clip-path do azul, o ideal seria o usuário separar na imagem.
+  Como a imagem é unificada, vamos focar em animar o símbolo inteiro primeiro, 
+  ou fazer um reveal vertical. Faremos o triângulo surgir de baixo.
+*/
+.ativa-splash-green {
+    /* Cortando a parte inferior do símbolo (estimativa) */
+    clip-path: inset(50% 73% 0 0);
+    animation: splash-green-enter var(--splash-t-green) cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    animation-delay: 0.4s;
+}
+
+/* Para garantir que o azul não mostre o verde por baixo prematuramente, cortamos o fundo do azul */
+.ativa-splash-blue {
+    clip-path: inset(0 73% 50% 0);
+}
+
+/* 
+  Camada 3: Palavra "Ativa"
+  Estimativa: Centro para a direita, metade superior
+*/
+.ativa-splash-text-ativa {
+    clip-path: inset(0 0 50% 27%);
+    opacity: 1; /* A máscara lidará com a ocultação inicial */
+    mask-image: linear-gradient(to right, black 50%, transparent 50%);
+    mask-size: 200% 100%;
+    mask-position: 100% 0;
+    -webkit-mask-image: linear-gradient(to right, black 50%, transparent 50%);
+    -webkit-mask-size: 200% 100%;
+    -webkit-mask-position: 100% 0;
+    animation: splash-ativa-reveal var(--splash-t-ativa) cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    animation-delay: 0.9s;
+}
+
+/* 
+  Camada 4: Palavra "Locação"
+  Estimativa: Centro para a direita, metade inferior
+*/
+.ativa-splash-text-locacao {
+    clip-path: inset(50% 0 0 27%);
+    animation: splash-locacao-enter var(--splash-t-locacao) ease-out forwards;
+    animation-delay: 1.6s;
+}
+
+
+/* -- KEYFRAMES -- */
+
+@keyframes splash-blue-enter {
+    0% {
+        opacity: 0;
+        transform: translateX(-30px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes splash-green-enter {
+    0% {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes splash-ativa-reveal {
+    0% {
+        mask-position: 100% 0;
+        -webkit-mask-position: 100% 0;
+    }
+    100% {
+        mask-position: 0 0;
+        -webkit-mask-position: 0 0;
+    }
+}
+
+@keyframes splash-locacao-enter {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* -- ACESSIBILIDADE -- */
+@media (prefers-reduced-motion: reduce) {
+    .ativa-splash-layer {
+        animation: none !important;
+        clip-path: none !important;
+        mask-image: none !important;
+        -webkit-mask-image: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+    }
+
+    /* Anima a logo inteira de uma vez via fade */
+    .ativa-splash-wrapper {
+        opacity: 0;
+        animation: splash-fade-in 1s ease forwards;
+    }
+
+    @keyframes splash-fade-in {
+        to { opacity: 1; }
+    }
+}
