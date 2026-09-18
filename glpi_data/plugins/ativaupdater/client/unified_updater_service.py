@@ -764,7 +764,8 @@ def start_wallpaper_clients(logger: logging.Logger) -> int:
             started += 1
         except OSError as exc:
             logger.warning("Nao foi possivel iniciar o cliente de wallpaper na sessao %s: %s", session_id, exc)
-    logger.info("Cliente de wallpaper iniciado em %d sessao(oes) de usuario.", started)
+    if started > 0:
+        logger.debug("Cliente de wallpaper iniciado em %d sessao(oes) de usuario.", started)
     return 0
 
 
@@ -2520,6 +2521,7 @@ class ServiceRuntime:
                 break
             if result == RESULT_OK and not promoted:
                 promoted = promote_known_good(logger)
+            start_wallpaper_clients(logger)
             if result == RESULT_RESTART_NOW:
                 next_full_check = 0.0
                 continue

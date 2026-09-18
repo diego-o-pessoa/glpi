@@ -905,7 +905,7 @@ class SingleInstance:
         if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
             _kernel32.CloseHandle(self.handle)
             self.handle = None
-            raise ClientError("ALREADY_RUNNING", "Client is already running for this user", retriable=False)
+            sys.exit(0)
         return self
 
     def __exit__(self, *_: Any) -> None:
