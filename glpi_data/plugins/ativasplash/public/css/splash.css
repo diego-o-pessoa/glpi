@@ -1,25 +1,7 @@
 /* 
     GLPI Ativa Splash Screen 
-    Refatorado para FLIP Animation + CSS Clipping Mask
+    Refatorado para reprodução nativa de vídeo
 */
-
-/* Ocultar svg nativo do tabler se houver (para login page) */
-.glpi-logo svg {
-    display: none !important;
-}
-
-/* Permanente Logo no Header do GLPI */
-.glpi-logo {
-    background-image: url('../assets/img/ativa-logo.webp') !important;
-    background-size: contain !important;
-    background-position: center !important;
-    background-repeat: no-repeat !important;
-    width: 140px !important;
-    height: 140px !important;
-    display: inline-flex !important;
-    color: transparent !important; 
-    transition: opacity 0.3s ease;
-}
 
 #ativa-splash {
     position: fixed;
@@ -32,13 +14,16 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: opacity 0.3s ease-out; 
+    transition: opacity 0.3s ease-out; /* Fade out final da splash (300ms) */
 }
 
 /* Ocultar splash no modo reduzido de movimento */
 @media (prefers-reduced-motion: reduce) {
     #ativa-splash {
-        display: none !important; /* Em vez de fallback brusco, deixamos carregar normalmente */
+        display: flex;
+    }
+    #ativa-intro-video {
+        display: none !important;
     }
 }
 
@@ -53,87 +38,25 @@
     transition: opacity 0.15s ease-out;
 }
 
-/* 
-    Container animado 
-    Tamanho base de 300x300, usado como referência para os recortes
-*/
-#ativa-animated-logo {
+#ativa-final-logo {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 300px;
-    height: 300px;
-    /* Centraliza fisicamente baseando no próprio tamanho */
-    margin-top: -150px;
-    margin-left: -150px;
-    opacity: 0; 
+    width: 100%;
+    max-width: 450px;
+    height: auto;
+    opacity: 0;
+    object-fit: contain;
+    user-select: none;
     pointer-events: none;
-    z-index: 10;
-    /* Essa transição é usada pela animação FLIP */
-    transform-origin: top left;
+    transition: opacity 0.15s ease-in;
 }
 
-#ativa-animated-logo.ativa-show-logo {
+/* Quando ativado via JS */
+#ativa-final-logo.ativa-show-logo {
     opacity: 1;
 }
 
-/* Para o fade-out final da splash inteira após o FLIP */
+/* Para o fade-out final e transição de saída do DOM */
 #ativa-splash.ativa-fade-out {
     opacity: 0;
     pointer-events: none;
-}
-
-/* RECORTE DA IMAGEM VERTICAL */
-.ativa-clip {
-    position: absolute;
-    background-image: url('../assets/img/ativa-logo.webp');
-    background-size: 300px 300px;
-    background-repeat: no-repeat;
-    /* Transição de reordenação (Horizontal para Vertical) */
-    transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-}
-
-.ativa-symbol {
-    width: 300px;
-    height: 135px;
-    background-position: 0 0;
-}
-
-.ativa-ativa {
-    width: 300px;
-    height: 105px;
-    background-position: 0 -135px;
-}
-
-.ativa-locacao {
-    width: 300px;
-    height: 60px;
-    background-position: 0 -240px;
-}
-
-/* 
-   ESTADO INICIAL: COMPOSIÇÃO HORIZONTAL
-   Simula a posição final do vídeo onde o símbolo está à esquerda 
-   e os textos à direita. Os valores podem precisar de microajustes visuais.
-*/
-#ativa-animated-logo.horizontal .ativa-symbol {
-    transform: translate(-90px, 80px) scale(0.65);
-}
-
-#ativa-animated-logo.horizontal .ativa-ativa {
-    transform: translate(60px, -45px) scale(0.65);
-}
-
-#ativa-animated-logo.horizontal .ativa-locacao {
-    transform: translate(60px, -45px) scale(0.65);
-}
-
-/* 
-   ESTADO ALVO DA REORDENAÇÃO: COMPOSIÇÃO VERTICAL
-   Reagrupa perfeitamente a imagem webp original
-*/
-#ativa-animated-logo.vertical .ativa-symbol,
-#ativa-animated-logo.vertical .ativa-ativa,
-#ativa-animated-logo.vertical .ativa-locacao {
-    transform: translate(0, 0) scale(1);
 }

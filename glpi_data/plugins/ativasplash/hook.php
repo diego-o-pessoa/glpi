@@ -48,20 +48,15 @@ function plugin_ativasplash_display_login(): void
         >
             <source src="' . $plugin_url . '/assets/video/ativa-intro.mp4?v=2.0.2" type="video/mp4">
         </video>
-        <div id="ativa-animated-logo" class="horizontal">
-            <div class="ativa-clip ativa-symbol"></div>
-            <div class="ativa-clip ativa-ativa"></div>
-            <div class="ativa-clip ativa-locacao"></div>
-        </div>
+        <img 
+            id="ativa-final-logo" 
+            src="' . $plugin_url . '/assets/img/ativa-logo.webp?v=' . $version . '" 
+            alt="Ativa Locação"
+        >
     </div>
     <script>
         if (sessionStorage.getItem("ativaSplashViewed") === "true") {
             document.getElementById("ativa-splash").style.display = "none";
-        } else {
-            // Hide the login card immediately if splash is running to prepare for fade in
-            var style = document.createElement("style");
-            style.innerHTML = ".main-content-card { opacity: 0; transition: opacity 1s ease; }";
-            document.head.appendChild(style);
         }
     </script>';
 

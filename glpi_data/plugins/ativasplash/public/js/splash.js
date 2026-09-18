@@ -1,120 +1,83 @@
 // GLPI Ativa Splash Screen - Refatorado para Vídeo
 
 (function() {
-    // 1. Verificação de Sessão
+    // 1. Verificação de Sessão já manipulada parcialmente no inline script do hook.php
+    // Aqui garantimos a redundância caso o JS carregue antes ou em outro contexto.
     if (sessionStorage.getItem("ativaSplashViewed") === "true") {
         var splashEl = document.getElementById('ativa-splash');
         if (splashEl) splashEl.remove();
-        // Remove the inline style that hides the card if the splash is skipped
-        var formCard = document.querySelector('.main-content-card');
-        if (formCard) formCard.style.opacity = '1';
         return;
     }
 
     var splash = document.getElementById('ativa-splash');
     var video = document.getElementById('ativa-intro-video');
-    var animatedLogo = document.getElementById('ativa-animated-logo');
+    var logo = document.getElementById('ativa-final-logo');
     var isFinished = false;
 
-    if (!splash || !video || !animatedLogo) return;
+    if (!splash || !video || !logo) return;
 
-    // Timeout de fallback de 5 segundos
+    // Timeout máximo de segurança (o novo vídeo tem ~2.55s). 
+    // Colocarei 5 segundos por segurança máxima.
     var fallbackTimeout = setTimeout(function() {
-        if (!isFinished) finishSplash(true);
+        if (!isFinished) finishSplash();
     }, 5000);
 
+    // Preferência do usuário por movimento reduzido
     var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (prefersReducedMotion) {
+        // Se o usuário não gosta de animações, pulamos o vídeo
         video.style.display = 'none';
         finishSplash(true); 
     } else {
+        // Inicializa o vídeo e força o mute para garantir que a política de autoplay não barre
         video.muted = true;
         var playPromise = video.play();
 
         if (playPromise !== undefined) {
             playPromise.catch(function(error) {
-                console.warn("Ativa Splash: Autoplay bloqueado ou falha.", error);
-                finishSplash(true);
+                // Autoplay bloqueado ou erro de carregamento
+                console.warn("Ativa Splash: Autoplay bloqueado ou falha no vídeo.", error);
+                finishSplash();
             });
         }
 
+        // Eventos do vídeo
         video.addEventListener("ended", function() {
-            finishSplash(false);
+            finishSplash();
         });
 
         video.addEventListener("error", function() {
-            finishSplash(true);
+            finishSplash();
         });
     }
 
-    function finishSplash(fallback) {
+    // Função central que gerencia o término
+    function finishSplash(skipVideoFade) {
         if (isFinished) return;
         isFinished = true;
         clearTimeout(fallbackTimeout);
+
+        // Marca a sessão
         sessionStorage.setItem("ativaSplashViewed", "true");
 
-        var formCard = document.querySelector('.main-content-card');
-        var targetLogo = document.querySelector('.glpi-logo');
-
-        if (fallback || !targetLogo) {
-            // Em caso de falha no video, aborta animação e exibe o login
-            if (formCard) {
-                formCard.style.opacity = '1';
-            }
-            splash.remove();
-            return;
+        // 1. Ocultar o vídeo e exibir a logo (Crossfade muito rápido para fechar o frame final)
+        if (!skipVideoFade) {
+            video.style.opacity = '0';
         }
+        logo.classList.add('ativa-show-logo');
 
-        // 1. Crossfade do vídeo para o layout horizontal DOM
-        video.style.opacity = '0';
-        animatedLogo.classList.add('ativa-show-logo');
-
-        // 2. Iniciar reordenação (Horizontal -> Vertical)
+        // 2. Não há mais pausa perceptível (100ms apenas para garantir o crossfade visual)
         setTimeout(function() {
-            animatedLogo.classList.remove('horizontal');
-            animatedLogo.classList.add('vertical');
-
-            // 3. Aguardar CSS reordenar a logo (600ms no CSS + folga)
-            setTimeout(function() {
-                
-                // Preparar FLIP (First, Last, Invert, Play)
-                var srcRect = animatedLogo.getBoundingClientRect();
-                var dstRect = targetLogo.getBoundingClientRect();
-
-                // Calcular escala preservando proporção
-                var scaleX = dstRect.width / srcRect.width;
-                var scaleY = dstRect.height / srcRect.height;
-                var scale = Math.min(scaleX, scaleY);
-
-                var deltaX = dstRect.left + (dstRect.width / 2) - (srcRect.left + (srcRect.width / 2));
-                var deltaY = dstRect.top + (dstRect.height / 2) - (srcRect.top + (srcRect.height / 2));
-
-                // Oculta temporariamente a logo nativa para não dar duplo visual
-                targetLogo.style.opacity = '0';
-
-                // Voo da Logo
-                animatedLogo.style.transition = 'transform 1s cubic-bezier(0.25, 1, 0.5, 1)';
-                animatedLogo.style.transform = 'translate3d(' + deltaX + 'px, ' + deltaY + 'px, 0) scale(' + scale + ')';
-
-                // Revelação suave do formulário de login
-                if (formCard) {
-                    formCard.classList.add('show-login');
-                }
-
-                // 4. Chegada ao destino
-                setTimeout(function() {
-                    targetLogo.style.opacity = '1';
-                    splash.classList.add('ativa-fade-out');
-
-                    setTimeout(function() {
-                        splash.remove();
-                    }, 350);
-
-                }, 1000); // 1000ms do tempo de voo (FLIP)
-                
-            }, 650); 
             
-        }, 150); 
+            // 3. Fade da splash inteira (300ms definidos no CSS)
+            splash.classList.add('ativa-fade-out');
+
+            // 4. Remove do DOM após a transição
+            setTimeout(function() {
+                splash.remove();
+            }, 350); 
+
+        }, 100); 
     }
 })();
