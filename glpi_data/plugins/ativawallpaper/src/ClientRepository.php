@@ -213,6 +213,7 @@ final class ClientRepository
         ];
 
         if (in_array($action, ['already_current', 'initial_applied', 'configuration_applied', 'forced_applied', 'drift_corrected'], true)) {
+            $updates['status'] = 'success';
             $updates['last_error'] = null;
             $updates['last_error_code'] = null;
             if (($client['rollout_status'] ?? '') === 'error') {
