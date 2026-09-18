@@ -1053,6 +1053,15 @@ def install_client(args: argparse.Namespace) -> None:
     if token is not None:
         logger.info("Existing client registration reused")
     else:
+        try:
+            # Force SChannel to fetch the Root CA so OpenSSL can find it
+            subprocess.run(
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", f"try {{ Invoke-WebRequest -Uri '{values['server']}' -UseBasicParsing -TimeoutSec 5 }} catch {{}}"],
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                timeout=10,
+            )
+        except Exception:
+            pass
         token = register_with_retries(
             ApiClient(values["server"]), str(values["registration_secret"]), identity, logger
         )

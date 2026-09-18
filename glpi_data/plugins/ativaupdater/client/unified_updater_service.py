@@ -2487,6 +2487,17 @@ class ServiceRuntime:
     def run(self, logger: logging.Logger, start_poller: bool = True) -> None:
         logger.info("Servico %s iniciado; primeira consulta imediata.", UPDATER_VERSION)
         cleanup_replaced_binaries()
+        try:
+            config = load_json(CONFIG_PATH)
+            server = str(config.get("api_url", ""))
+            if server:
+                subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", f"try {{ Invoke-WebRequest -Uri '{server}' -UseBasicParsing -TimeoutSec 5 }} catch {{}}"],
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    timeout=10,
+                )
+        except Exception:
+            pass
         write_heartbeat()
         ensure_watchdog_task(logger)
         if start_poller:
