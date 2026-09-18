@@ -1,198 +1,75 @@
-/* plugins/ativasplash/public/css/splash.css */
-
-/*
-  Splash Screen Corporativa - GLPI ATIVA
-  Motion Design refinado: fluido, rápido e orgânico.
+/* 
+    GLPI Ativa Splash Screen 
+    Refatorado para reprodução nativa de vídeo
 */
 
-:root {
-    /* Fundo elegante: branco para gelo sutil, criando profundidade */
-    --splash-bg: radial-gradient(circle at center, #ffffff 0%, #f6f8fb 100%);
-    --splash-logo-width: clamp(280px, 50vw, 500px);
-    --splash-logo-aspect-ratio: 685 / 190;
-    
-    /* Configurações de tempo e easings para Overlapping Motion */
-    --splash-ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1); /* Overshoot macio */
-    --splash-ease-smooth: cubic-bezier(0.25, 1, 0.15, 1); /* Fluidez suave */
-    
-    --splash-t-exit: 0.8s;
-}
-
-body.ativa-splash-active {
-    overflow: hidden;
-}
-
-/* O container principal que cobre toda a tela */
 #ativa-splash {
     position: fixed;
     inset: 0;
-    z-index: 9999999;
-    background: var(--splash-bg);
+    width: 100vw;
+    height: 100vh;
+    z-index: 999999;
+    overflow: hidden;
+    background: #ffffff;
     display: flex;
-    align-items: center;
     justify-content: center;
-    /* Transição suave do fundo e visibilidade na saída */
-    transition: opacity var(--splash-t-exit) ease, visibility var(--splash-t-exit) ease;
-    pointer-events: all;
+    align-items: center;
+    transition: opacity 0.35s ease-out; /* Fade out final da splash */
 }
 
-/* Transição fina para o login */
-#ativa-splash.splash-hide {
+/* Ocultar splash no modo reduzido de movimento */
+@media (prefers-reduced-motion: reduce) {
+    #ativa-splash {
+        display: flex;
+    }
+    #ativa-intro-video {
+        display: none !important;
+    }
+}
+
+#ativa-intro-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: opacity 0.2s ease-out; /* Crossfade do vídeo sumindo */
+}
+
+/* Em telas muito altas/estreitas, garantir que não corte os lados de forma prejudicial. */
+@media (max-aspect-ratio: 4/3) {
+    #ativa-intro-video {
+        object-fit: contain;
+        background-color: #ffffff;
+    }
+}
+
+#ativa-final-logo {
+    position: absolute;
+    width: 100%;
+    max-width: 450px; /* Adapte se necessário para a proporção real */
+    height: auto;
     opacity: 0;
-    visibility: hidden;
+    transition: opacity 0.2s ease-in, transform 0.35s ease-out;
+    transform: scale(1);
+    object-fit: contain;
+    /* Ajuste para evitar seleção de imagem */
+    user-select: none;
     pointer-events: none;
 }
 
-/* Container que mantém a proporção da logo */
-.ativa-splash-wrapper {
-    position: relative;
-    width: var(--splash-logo-width);
-    aspect-ratio: var(--splash-logo-aspect-ratio);
-    /* Na saída, aproxima-se do fundo da tela de login (escala reduz suavemente) */
-    transition: transform var(--splash-t-exit) var(--splash-ease-smooth);
+/* Quando ativado via JS */
+#ativa-final-logo.ativa-show-logo {
+    opacity: 1;
 }
 
-#ativa-splash.splash-hide .ativa-splash-wrapper {
-    transform: scale(0.92) translateY(10px);
-}
-
-/* Configuração base de todas as camadas */
-.ativa-splash-layer {
-    position: absolute;
-    inset: 0;
-    background-image: url('../assets/img/ativa-logo.webp');
-    background-size: 100% 100%;
-    background-repeat: no-repeat;
-    background-position: center;
+/* Para o fade-out final e transição de saída do DOM */
+#ativa-splash.ativa-fade-out {
     opacity: 0;
+    pointer-events: none;
 }
 
-/* 
-  Camada 1: Símbolo Azul
-  Entra macio da esquerda, ganha foco (blur to normal) e dá um settle.
-*/
-.ativa-splash-blue {
-    clip-path: inset(0 73% 50% 0);
-    animation: splash-blue-enter 0.8s var(--splash-ease-smooth) forwards;
-    animation-delay: 0.1s;
-}
-
-/* 
-  Camada 2: Triângulo Verde
-  Surge logo em seguida, deslizando de baixo com um leve bounce elástico.
-*/
-.ativa-splash-green {
-    clip-path: inset(50% 73% 0 0);
-    animation: splash-green-enter 0.8s var(--splash-ease-out-back) forwards;
-    animation-delay: 0.25s; /* Overlap com o símbolo azul */
-}
-
-/* 
-  Camada 3: Palavra "Ativa"
-  Revelação horizontal contínua com deslocamento lateral fino.
-*/
-.ativa-splash-text-ativa {
-    clip-path: inset(0 0 50% 27%);
-    mask-image: linear-gradient(to right, black 50%, transparent 50%);
-    mask-size: 200% 100%;
-    mask-position: 100% 0;
-    -webkit-mask-image: linear-gradient(to right, black 50%, transparent 60%);
-    -webkit-mask-size: 200% 100%;
-    -webkit-mask-position: 100% 0;
-    
-    animation: splash-ativa-reveal 1s var(--splash-ease-smooth) forwards;
-    animation-delay: 0.4s; /* Começa antes do verde terminar */
-}
-
-/* 
-  Camada 4: Palavra "Locação"
-  Surge elegante embaixo, finalizando a harmonia.
-*/
-.ativa-splash-text-locacao {
-    clip-path: inset(50% 0 0 27%);
-    animation: splash-locacao-enter 0.7s var(--splash-ease-smooth) forwards;
-    animation-delay: 0.65s; /* Entra durante o texto Ativa */
-}
-
-
-/* -- KEYFRAMES -- */
-
-@keyframes splash-blue-enter {
-    0% {
-        opacity: 0;
-        transform: translateX(-40px);
-        filter: blur(8px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateX(0);
-        filter: blur(0);
-    }
-}
-
-@keyframes splash-green-enter {
-    0% {
-        opacity: 0;
-        transform: translateY(25px) scale(0.95);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
-@keyframes splash-ativa-reveal {
-    0% {
-        opacity: 0;
-        mask-position: 100% 0;
-        -webkit-mask-position: 100% 0;
-        transform: translateX(-15px);
-    }
-    30% {
-        opacity: 1;
-    }
-    100% {
-        opacity: 1;
-        mask-position: 0 0;
-        -webkit-mask-position: 0 0;
-        transform: translateX(0);
-    }
-}
-
-@keyframes splash-locacao-enter {
-    0% {
-        opacity: 0;
-        transform: translateY(15px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* -- ACESSIBILIDADE -- */
-@media (prefers-reduced-motion: reduce) {
-    .ativa-splash-layer {
-        animation: none !important;
-        clip-path: none !important;
-        mask-image: none !important;
-        -webkit-mask-image: none !important;
-        opacity: 1 !important;
-        transform: none !important;
-        filter: none !important;
-    }
-
-    .ativa-splash-wrapper {
-        opacity: 0;
-        animation: splash-fade-in 1s ease forwards;
-        transform: none !important;
-    }
-    
-    #ativa-splash.splash-hide .ativa-splash-wrapper {
-        transform: none !important;
-    }
-
-    @keyframes splash-fade-in {
-        to { opacity: 1; }
-    }
+#ativa-splash.ativa-fade-out #ativa-final-logo {
+    transform: scale(0.95); /* Leve diminuição na saída */
 }

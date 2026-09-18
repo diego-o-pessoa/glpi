@@ -29,20 +29,36 @@ function plugin_ativasplash_display_login(): void
 {
     global $CFG_GLPI;
 
+    // Adiciona timestamp ou versão para forçar cache busting (limpar cache entre máquinas)
+    $version = PLUGIN_ATIVASPLASH_VERSION . '.' . time();
+
     // Inject CSS
-    echo '<link rel="stylesheet" type="text/css" href="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/css/splash.css?v=' . PLUGIN_ATIVASPLASH_VERSION . '">';
+    echo '<link rel="stylesheet" type="text/css" href="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/css/splash.css?v=' . $version . '">';
 
     // Inject HTML structure for the splash screen
     echo '
     <div id="ativa-splash" aria-hidden="true">
-        <div class="ativa-splash-wrapper">
-            <div class="ativa-splash-layer ativa-splash-blue"></div>
-            <div class="ativa-splash-layer ativa-splash-green"></div>
-            <div class="ativa-splash-layer ativa-splash-text-ativa"></div>
-            <div class="ativa-splash-layer ativa-splash-text-locacao"></div>
-        </div>
-    </div>';
+        <video 
+            id="ativa-intro-video" 
+            autoplay 
+            muted 
+            playsinline 
+            preload="auto"
+        >
+            <source src="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/assets/video/ativa-intro.mp4?v=' . $version . '" type="video/mp4">
+        </video>
+        <img 
+            id="ativa-final-logo" 
+            src="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/assets/img/ativa-logo.webp?v=' . $version . '" 
+            alt="Ativa Locação"
+        >
+    </div>
+    <script>
+        if (sessionStorage.getItem("ativaSplashViewed") === "true") {
+            document.getElementById("ativa-splash").style.display = "none";
+        }
+    </script>';
 
     // Inject JS
-    echo '<script type="text/javascript" src="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/js/splash.js?v=' . PLUGIN_ATIVASPLASH_VERSION . '"></script>';
+    echo '<script type="text/javascript" src="' . $CFG_GLPI["root_doc"] . '/plugins/ativasplash/js/splash.js?v=' . $version . '"></script>';
 }

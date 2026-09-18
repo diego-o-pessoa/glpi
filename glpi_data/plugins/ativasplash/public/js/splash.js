@@ -1,51 +1,82 @@
-/**
- * plugins/ativasplash/js/splash.js
- * Lógica de controle da Splash Screen corporativa.
- */
+// GLPI Ativa Splash Screen - Refatorado para Vídeo
 
-document.addEventListener("DOMContentLoaded", function() {
-    const splash = document.getElementById("ativa-splash");
-    if (!splash) return;
-
-    const SESSION_KEY = "ativaSplashViewed";
-    const ANIMATION_DURATION = 2000; // Tempo até iniciar a transição suave para o login
-    const EXIT_DURATION = 800; // Tempo do CSS transition de saída (fade do fundo e zoom do logo)
-    const FALLBACK_TIMEOUT = 5000; // Segurança extrema
-
-    // Função para remover completamente a splash do DOM
-    function destroySplash() {
-        if (splash && splash.parentNode) {
-            splash.parentNode.removeChild(splash);
-        }
-        document.body.classList.remove("ativa-splash-active");
-    }
-
-    // 1. Verificação de sessão (Apenas uma vez por aba/sessão)
-    if (sessionStorage.getItem(SESSION_KEY)) {
-        // Já viu a splash nesta sessão, destroi imediatamente
-        destroySplash();
+(function() {
+    // 1. Verificação de Sessão já manipulada parcialmente no inline script do hook.php
+    // Aqui garantimos a redundância caso o JS carregue antes ou em outro contexto.
+    if (sessionStorage.getItem("ativaSplashViewed") === "true") {
+        var splashEl = document.getElementById('ativa-splash');
+        if (splashEl) splashEl.remove();
         return;
     }
 
-    // Marca como visualizada para os próximos F5 ou navegações
-    sessionStorage.setItem(SESSION_KEY, "true");
+    var splash = document.getElementById('ativa-splash');
+    var video = document.getElementById('ativa-intro-video');
+    var logo = document.getElementById('ativa-final-logo');
+    var isFinished = false;
 
-    // 2. Trava o scroll da página enquanto a splash acontece
-    document.body.classList.add("ativa-splash-active");
+    if (!splash || !video || !logo) return;
 
-    // 3. Agendar fim da animação
-    setTimeout(() => {
-        if (!splash.parentNode) return;
-        
-        // Adiciona a classe que engatilha o fade-out e o zoom-out no CSS
-        splash.classList.add("splash-hide");
+    // Timeout máximo de segurança (ex: 7 segundos). O vídeo tem 9s? 
+    // Ajuste o timeout se o vídeo for mais longo. Colocarei 11 segundos por segurança máxima.
+    var fallbackTimeout = setTimeout(function() {
+        if (!isFinished) finishSplash();
+    }, 12000);
 
-        // Aguarda a transição CSS terminar para remover do DOM
-        setTimeout(destroySplash, EXIT_DURATION);
-    }, ANIMATION_DURATION);
+    // Preferência do usuário por movimento reduzido
+    var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // 4. Fallback de Segurança
-    // Garante que, independentemente de abas inativas ou erros de timer, 
-    // a splash jamais travará a tela de login permanentemente.
-    setTimeout(destroySplash, FALLBACK_TIMEOUT);
-});
+    if (prefersReducedMotion) {
+        // Se o usuário não gosta de animações, pulamos o vídeo
+        video.style.display = 'none';
+        finishSplash(true); 
+    } else {
+        // Inicializa o vídeo
+        var playPromise = video.play();
+
+        if (playPromise !== undefined) {
+            playPromise.catch(function(error) {
+                // Autoplay bloqueado ou erro de carregamento
+                console.warn("Ativa Splash: Autoplay bloqueado ou falha no vídeo.", error);
+                finishSplash();
+            });
+        }
+
+        // Eventos do vídeo
+        video.addEventListener("ended", function() {
+            finishSplash();
+        });
+
+        video.addEventListener("error", function() {
+            finishSplash();
+        });
+    }
+
+    // Função central que gerencia o término
+    function finishSplash(skipVideoFade) {
+        if (isFinished) return;
+        isFinished = true;
+        clearTimeout(fallbackTimeout);
+
+        // Marca a sessão
+        sessionStorage.setItem("ativaSplashViewed", "true");
+
+        // 1. Ocultar o vídeo e exibir a logo (Crossfade)
+        if (!skipVideoFade) {
+            video.style.opacity = '0';
+        }
+        logo.classList.add('ativa-show-logo');
+
+        // 2. Pequena permanência da logo oficial (200ms)
+        setTimeout(function() {
+            
+            // 3. Fade da splash inteira (350ms definidos no CSS)
+            splash.classList.add('ativa-fade-out');
+
+            // 4. Remove do DOM após a transição
+            setTimeout(function() {
+                splash.remove();
+            }, 400); // 400ms para garantir que o fade-out do CSS completou
+
+        }, 200); 
+    }
+})();
