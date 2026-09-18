@@ -8,8 +8,8 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!splash) return;
 
     const SESSION_KEY = "ativaSplashViewed";
-    const ANIMATION_DURATION = 2700; // Tempo até iniciar o fade-out
-    const EXIT_DURATION = 600; // Tempo do CSS transition de saída
+    const ANIMATION_DURATION = 2000; // Tempo até iniciar a transição suave para o login
+    const EXIT_DURATION = 800; // Tempo do CSS transition de saída (fade do fundo e zoom do logo)
     const FALLBACK_TIMEOUT = 5000; // Segurança extrema
 
     // Função para remover completamente a splash do DOM
