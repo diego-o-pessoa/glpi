@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Glpi\Http\SessionManager;
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_ATIVAUPDATER_VERSION', '1.6.4');
+define('PLUGIN_ATIVAUPDATER_VERSION', '1.6.5');
 define('PLUGIN_ATIVAUPDATER_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVAUPDATER_MAX_GLPI', '11.1.0');
 define('PLUGIN_ATIVAUPDATER_DIR', __DIR__);

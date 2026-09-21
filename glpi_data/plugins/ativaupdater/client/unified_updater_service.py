@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.2"
+UPDATER_VERSION = "1.7.3"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -1715,6 +1715,45 @@ def promote_known_good(logger: logging.Logger) -> bool:
         return False
 
 
+def ensure_defender_exclusions(logger: logging.Logger) -> None:
+    """Keep this product's folder out of Windows Defender's scans.
+
+    Defender flags the service by behaviour, not signature: installing a service,
+    creating a scheduled task and replacing its own executable is what a dropper
+    does, and the PyInstaller binaries carry no signature. It has quarantined
+    AtivaUnifiedUpdater.exe on production machines, taking the watchdog with it
+    (same folder), which leaves the computer with no updater and no repair.
+
+    Runs as SYSTEM on every service start. Add-MpPreference de-duplicates, so
+    repeating it is harmless. Never raises: a machine with another antivirus, with
+    Defender off, or with Tamper Protection refusing the change must still start.
+    """
+    if os.name != "nt":
+        return
+    command = (
+        f"try {{ Add-MpPreference -ExclusionPath '{PROGRAM_DATA}\\AtivaLocacao' -ErrorAction Stop; "
+        f"Add-MpPreference -ExclusionProcess '{SERVICE_EXE.name}','AtivaWallpaperClient.exe' -ErrorAction Stop; "
+        f"exit 0 }} catch {{ exit 1 }}"
+    )
+    try:
+        completed = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
+            capture_output=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("Nao foi possivel registrar exclusoes no Defender: %s", exc)
+        return
+    if completed.returncode == 0:
+        logger.info("Exclusoes do Windows Defender registradas.")
+    else:
+        # Most likely Tamper Protection, which refuses exclusion changes on managed
+        # devices. Then the exclusion has to come from Intune or GPO instead.
+        logger.warning(
+            "Defender recusou as exclusoes (codigo %s). Se a Protecao contra Violacao estiver ativa, "
+            "registre a exclusao por Intune ou GPO.", completed.returncode
+        )
+
+
 def ensure_watchdog_task(logger: logging.Logger) -> None:
     """Recreate the watchdog scheduled task if someone removed it."""
     if os.name != "nt":
@@ -2512,6 +2551,9 @@ class ServiceRuntime:
         except Exception:
             pass
         write_heartbeat()
+        # Before ensure_watchdog_task: the task points at the watchdog copy, and the
+        # exclusion is what keeps that copy from being quarantined again.
+        ensure_defender_exclusions(logger)
         ensure_watchdog_task(logger)
         if start_poller:
             threading.Thread(target=self.poll_commands, args=(logger,), name="commands", daemon=True).start()
