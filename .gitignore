@@ -16,3 +16,14 @@
 /glpi_data/plugins/ativawallpaper/client/build/
 /glpi_data/plugins/ativawallpaper/client/.venv-build/
 
+
+# graphify knowledge-graph outputs and extraction caches. Generated artifacts,
+# regenerable with /graphify. The pattern is unanchored so it matches the
+# directory at any depth, not just the repo root.
+graphify-out/
+glpi_data/plugins/meshcentral
+# Plugin MeshCentral: mantido apenas no disco, fora do versionamento.
+# Era um gitlink de submodulo sem .gitmodules, entao seu conteudo nunca esteve
+# de fato neste repositorio. Contem patches locais de compatibilidade (GLPI 11)
+# que existem somente na copia de trabalho.
+/glpi_data/plugins/meshcentral/

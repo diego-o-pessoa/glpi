@@ -15,13 +15,27 @@ final class ClientsView
 {
     private const TABLE = 'glpi_plugin_ativaupdater_clients';
 
+    /**
+     * Ativa Wallpaper's client table. The Updater service runs as SYSTEM and so never sees
+     * who is logged in; the Wallpaper client runs per-user (HKCU) and reports it. Both key
+     * their rows by MachineGuid, so the logged-in user is read from there when available.
+     * The Wallpaper dashboard already reads this table's Updater counterpart the same way.
+     */
+    private const WALLPAPER_TABLE = 'glpi_plugin_ativawallpaper_clients';
+
     /** Columns needed to detect changes; the large log columns are only loaded to render. */
     private const SUMMARY_COLUMNS = [
-        'id', 'hostname', 'updater_version', 'installed_version', 'available_version',
+        'id', 'hostname', 'machine_guid', 'updater_version', 'installed_version', 'available_version',
         'wallpaper_client_version', 'glpi_agent_version', 'status', 'message', 'last_check',
         'check_requested_at', 'check_request_seq', 'check_ack_seq', 'command',
         'install_started_at', 'diagnostics_at', 'recovery_note', 'recovery_at',
     ];
+
+    /**
+     * Keys attached to each row after the query rather than selected from self::TABLE.
+     * Tracked by signature() so the polled section also refreshes when they change.
+     */
+    private const DERIVED_COLUMNS = ['username'];
 
     private const LABELS = [
         'checking'           => ['Consultando', 'bg-info'],
@@ -52,12 +66,53 @@ final class ClientsView
             foreach ($DB->request(['SELECT' => $columns, 'FROM' => self::TABLE, 'ORDER' => ['last_check DESC', 'id ASC']]) as $row) {
                 $clients[] = $row;
             }
+            $usernames = self::wallpaperUsernames(array_column($clients, 'machine_guid'));
+            foreach ($clients as &$client) {
+                $client['username'] = $usernames[strtolower(trim((string) $client['machine_guid']))] ?? null;
+            }
+            unset($client);
         }
         return [
             'clients'  => $clients,
             'active'   => (new PluginAtivaupdaterRelease())->getActiveRelease(),
             'interval' => max(300, min(86400, ConfigService::getInt('check_interval_seconds', 3600))),
         ];
+    }
+
+    /**
+     * Logged-in user of the same computers, as reported by the Ativa Wallpaper client,
+     * keyed by lowercase MachineGuid. Returns an empty map when the Wallpaper plugin is
+     * not installed, so the column simply stays blank instead of breaking the dashboard.
+     *
+     * The Wallpaper stores the GUID with its original case while this plugin lowercases
+     * it on write, so rows are re-keyed here rather than trusted to match byte for byte.
+     *
+     * @param  array<int, mixed>     $machineGuids
+     * @return array<string, string>
+     */
+    private static function wallpaperUsernames(array $machineGuids): array
+    {
+        global $DB;
+        $guids = array_values(array_unique(array_filter(array_map(
+            static fn ($guid): string => strtolower(trim((string) $guid)),
+            $machineGuids
+        ))));
+        if ($guids === [] || !$DB->tableExists(self::WALLPAPER_TABLE)) {
+            return [];
+        }
+        $usernames = [];
+        $iterator = $DB->request([
+            'SELECT' => ['machine_guid', 'username'],
+            'FROM'   => self::WALLPAPER_TABLE,
+            'WHERE'  => ['machine_guid' => $guids, 'NOT' => ['username' => null]],
+        ]);
+        foreach ($iterator as $row) {
+            $username = trim((string) $row['username']);
+            if ($username !== '') {
+                $usernames[strtolower(trim((string) $row['machine_guid']))] = $username;
+            }
+        }
+        return $usernames;
     }
 
     /**
@@ -68,7 +123,13 @@ final class ClientsView
     {
         $active = $data['active'];
         return sha1((string) json_encode([
-            array_map(static fn (array $row): array => array_intersect_key($row, array_flip(self::SUMMARY_COLUMNS)), $data['clients']),
+            array_map(
+                static fn (array $row): array => array_intersect_key(
+                    $row,
+                    array_flip(array_merge(self::SUMMARY_COLUMNS, self::DERIVED_COLUMNS))
+                ),
+                $data['clients']
+            ),
             $active === null ? null : [$active['id'], $active['version'], $active['allow_downgrade'] ?? 0, $active['activated_at'] ?? ''],
             $data['interval'],
             intdiv($now, 30),
@@ -245,7 +306,11 @@ final class ClientsView
 
         $problem = in_array($statusKey, ['error', 'offline', 'manual_no_response', InstallStatus::STATUS_INSTALL_FAILED], true);
         $html = "<tr class='" . ($problem ? 'aw-row-error' : '') . "'>";
+        $username = trim((string) ($client['username'] ?? ''));
         $html .= "<td><div class='aw-computer'><i class='fas fa-desktop'></i><div><strong>" . htmlescape($hostname) . '</strong>'
+            . ($username !== ''
+                ? "<small title='Usuário informado pelo Ativa Wallpaper'><i class='fas fa-user'></i> " . htmlescape($username) . '</small>'
+                : '')
             . "<small class='" . ($offline ? 'text-danger' : '') . "'>"
             . ($offline ? 'Sem contato há mais de 2 h' : 'Gerenciado pelo Ativa Updater')
             . '</small></div></div></td>';
