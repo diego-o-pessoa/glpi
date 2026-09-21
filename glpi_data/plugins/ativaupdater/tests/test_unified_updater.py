@@ -32,8 +32,8 @@ def quiet_logger(name: str) -> logging.Logger:
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.7.1")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 1))
+        self.assertEqual(updater.UPDATER_VERSION, "1.7.2")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 2))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -1093,6 +1093,15 @@ class WatchdogTests(unittest.TestCase):
     def test_hung_service_is_restarted(self) -> None:
         self.assertEqual(self.plan(self.RUNNING, heartbeat=updater.WATCHDOG_HEARTBEAT_LIMIT_SECONDS + 1), ["restart_service"])
 
+    def test_service_running_since_hours_without_writing_is_restarted(self) -> None:
+        """Windows reports RUNNING, but nothing has written a heartbeat for hours.
+
+        The computer is on and the service process exists, yet it stopped reaching the
+        API. Until the heartbeat age stopped being suppressed for a foreign PID, this
+        returned [] and the machine sat on the dashboard as "Sem contato" forever.
+        """
+        self.assertEqual(self.plan(self.RUNNING, heartbeat=9000.0), ["restart_service"])
+
     def test_recent_installation_is_left_alone(self) -> None:
         self.assertEqual(self.plan(self.STOPPED, setup=True, age=600), [])
 
@@ -1121,14 +1130,25 @@ class WatchdogTests(unittest.TestCase):
             self.assertIsNone(updater.setup_running_age(False, {}, 1700.0))
             self.assertEqual(updater.setup_running_age(True, {}, 2000.0), 0.0)
 
-    def test_heartbeat_must_belong_to_the_running_service(self) -> None:
+    def test_heartbeat_age_ignores_which_process_wrote_it(self) -> None:
+        """A heartbeat left by a previous PID still dates the last proof of life.
+
+        A service that wedges before its first write keeps the old PID in the file;
+        suppressing the age there hid exactly the state the watchdog exists to repair.
+        """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "heartbeat.json"
             path.write_text(json.dumps({"at": 1000.0, "pids": [11, 10]}), encoding="utf-8")
             with mock.patch.object(updater, "HEARTBEAT_PATH", path):
-                self.assertEqual(updater.heartbeat_age(1030.0, 10), 30.0)
-                self.assertIsNone(updater.heartbeat_age(1030.0, 99))
                 self.assertEqual(updater.heartbeat_age(1030.0), 30.0)
+                # Hours later, with nothing having written since: the wedged service.
+                self.assertEqual(updater.heartbeat_age(10000.0), 9000.0)
+
+    def test_missing_heartbeat_is_unknown(self) -> None:
+        """Services older than 1.5.0 write no file; the watchdog must not touch them."""
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(updater, "HEARTBEAT_PATH", Path(directory) / "absent.json"):
+                self.assertIsNone(updater.heartbeat_age(1030.0))
 
     def test_diagnostics_include_logs_without_the_api_token(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

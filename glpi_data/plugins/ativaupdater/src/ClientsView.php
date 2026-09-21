@@ -35,7 +35,14 @@ final class ClientsView
      * Keys attached to each row after the query rather than selected from self::TABLE.
      * Tracked by signature() so the polled section also refreshes when they change.
      */
-    private const DERIVED_COLUMNS = ['username'];
+    private const DERIVED_COLUMNS = ['username', 'wallpaper_last_check'];
+
+    /**
+     * A computer whose Wallpaper client reported this recently is powered on and on the
+     * network, so silence from the SYSTEM service means the service itself is down --
+     * not the machine. Same 2 h window the Updater uses to call a client offline.
+     */
+    private const POWERED_ON_WINDOW_SECONDS = 7200;
 
     private const LABELS = [
         'checking'           => ['Consultando', 'bg-info'],
@@ -47,6 +54,7 @@ final class ClientsView
         'manual_unsupported' => ['Serviço sem Verificar agora', 'bg-secondary'],
         'manual_no_response' => ['Sem resposta ao comando', 'bg-danger'],
         'offline'            => ['Sem contato', 'bg-danger'],
+        'service_down'       => ['Serviço parado', 'bg-danger'],
         'current'            => ['Atualizado', 'bg-success'],
         'downloading'        => ['Baixando', 'bg-primary'],
         'installing'         => ['Instalando', 'bg-warning text-dark'],
@@ -66,9 +74,11 @@ final class ClientsView
             foreach ($DB->request(['SELECT' => $columns, 'FROM' => self::TABLE, 'ORDER' => ['last_check DESC', 'id ASC']]) as $row) {
                 $clients[] = $row;
             }
-            $usernames = self::wallpaperUsernames(array_column($clients, 'machine_guid'));
+            $wallpaper = self::wallpaperClients(array_column($clients, 'machine_guid'));
             foreach ($clients as &$client) {
-                $client['username'] = $usernames[strtolower(trim((string) $client['machine_guid']))] ?? null;
+                $reported = $wallpaper[strtolower(trim((string) $client['machine_guid']))] ?? null;
+                $client['username'] = $reported['username'] ?? null;
+                $client['wallpaper_last_check'] = $reported['last_check'] ?? 0;
             }
             unset($client);
         }
@@ -80,17 +90,17 @@ final class ClientsView
     }
 
     /**
-     * Logged-in user of the same computers, as reported by the Ativa Wallpaper client,
-     * keyed by lowercase MachineGuid. Returns an empty map when the Wallpaper plugin is
-     * not installed, so the column simply stays blank instead of breaking the dashboard.
+     * Logged-in user and last contact of the same computers, as reported by the Ativa
+     * Wallpaper client, keyed by lowercase MachineGuid. Returns an empty map when the
+     * Wallpaper plugin is not installed, so the dashboard degrades instead of breaking.
      *
      * The Wallpaper stores the GUID with its original case while this plugin lowercases
      * it on write, so rows are re-keyed here rather than trusted to match byte for byte.
      *
-     * @param  array<int, mixed>     $machineGuids
-     * @return array<string, string>
+     * @param  array<int, mixed> $machineGuids
+     * @return array<string, array{username: ?string, last_check: int}>
      */
-    private static function wallpaperUsernames(array $machineGuids): array
+    private static function wallpaperClients(array $machineGuids): array
     {
         global $DB;
         $guids = array_values(array_unique(array_filter(array_map(
@@ -100,19 +110,20 @@ final class ClientsView
         if ($guids === [] || !$DB->tableExists(self::WALLPAPER_TABLE)) {
             return [];
         }
-        $usernames = [];
+        $clients = [];
         $iterator = $DB->request([
-            'SELECT' => ['machine_guid', 'username'],
+            'SELECT' => ['machine_guid', 'username', 'last_check'],
             'FROM'   => self::WALLPAPER_TABLE,
-            'WHERE'  => ['machine_guid' => $guids, 'NOT' => ['username' => null]],
+            'WHERE'  => ['machine_guid' => $guids],
         ]);
         foreach ($iterator as $row) {
-            $username = trim((string) $row['username']);
-            if ($username !== '') {
-                $usernames[strtolower(trim((string) $row['machine_guid']))] = $username;
-            }
+            $username = trim((string) ($row['username'] ?? ''));
+            $clients[strtolower(trim((string) $row['machine_guid']))] = [
+                'username'   => $username !== '' ? $username : null,
+                'last_check' => ServerClock::toTimestamp($row['last_check'] ?? null),
+            ];
         }
-        return $usernames;
+        return $clients;
     }
 
     /**
@@ -296,15 +307,21 @@ final class ClientsView
         }
 
         $offline = $lastCheckAt < $now - 7200;
+        // The Wallpaper client runs per-user and reports on its own schedule. If it was
+        // heard from while this SYSTEM service was silent, the computer is demonstrably
+        // on, which separates "machine off" from "service down" without asking anyone.
+        $poweredOn = (int) ($client['wallpaper_last_check'] ?? 0) > $now - self::POWERED_ON_WINDOW_SECONDS;
         if ($offline && !in_array($statusKey, ['error', InstallStatus::STATUS_INSTALL_FAILED], true)) {
-            $statusKey = 'offline';
-            $displayMessage = 'O computador não entra em contato com o servidor há mais de 2 horas. Verifique se ele está ligado, conectado à rede e se o serviço Ativa Unified Updater está em execução.';
+            $statusKey = $poweredOn ? 'service_down' : 'offline';
+            $displayMessage = $poweredOn
+                ? 'O computador está ligado e em rede (o cliente Ativa Wallpaper reportou há pouco), mas o serviço Ativa Unified Updater não fala com o servidor há mais de 2 horas. O vigia tenta religá-lo a cada 15 minutos; se persistir, reinicie o serviço nesta máquina.'
+                : 'O computador não entra em contato com o servidor há mais de 2 horas. Verifique se ele está ligado, conectado à rede e se o serviço Ativa Unified Updater está em execução.';
         }
         [$statusLabel, $statusClass] = self::LABELS[$statusKey] ?? [$statusKey, 'bg-secondary'];
         $nextCheckLabel = $manualState === ManualCheck::STATE_WAITING ? 'Em até 15 segundos' : ucfirst($nextRegularCheckLabel);
         $hostname = (string) $client['hostname'];
 
-        $problem = in_array($statusKey, ['error', 'offline', 'manual_no_response', InstallStatus::STATUS_INSTALL_FAILED], true);
+        $problem = in_array($statusKey, ['error', 'offline', 'service_down', 'manual_no_response', InstallStatus::STATUS_INSTALL_FAILED], true);
         $html = "<tr class='" . ($problem ? 'aw-row-error' : '') . "'>";
         $username = trim((string) ($client['username'] ?? ''));
         $html .= "<td><div class='aw-computer'><i class='fas fa-desktop'></i><div><strong>" . htmlescape($hostname) . '</strong>'
@@ -312,7 +329,9 @@ final class ClientsView
                 ? "<small title='Usuário informado pelo Ativa Wallpaper'><i class='fas fa-user'></i> " . htmlescape($username) . '</small>'
                 : '')
             . "<small class='" . ($offline ? 'text-danger' : '') . "'>"
-            . ($offline ? 'Sem contato há mais de 2 h' : 'Gerenciado pelo Ativa Updater')
+            . ($offline
+                ? ($poweredOn ? 'Ligado, mas o serviço parou há mais de 2 h' : 'Sem contato há mais de 2 h')
+                : 'Gerenciado pelo Ativa Updater')
             . '</small></div></div></td>';
 
         $packageExtra = $clientAction === ReleasePolicy::ACTION_BLOCKED_DOWNGRADE
@@ -353,7 +372,15 @@ final class ClientsView
                 . "<div><strong><i class='fas fa-exclamation-circle'></i> Detalhes do problema</strong><p>"
                 . htmlescape($displayMessage) . "</p><code>" . htmlescape($logPath) . "</code>{$details}</div>"
                 . "<div><strong><i class='fas fa-wrench'></i> Ações recomendadas</strong><ol>"
-                . '<li>Verifique se o serviço está em execução.</li><li>Tente reiniciar o serviço.</li><li>Consulte os logs para identificar o erro.</li></ol>'
+                // "Reiniciar" and "Logs" travel on the same polling loop the service
+                // itself runs, so a service that stopped answering cannot receive them.
+                // Saying otherwise sends people clicking a button that cannot work.
+                . ($statusKey === 'service_down'
+                    ? '<li>Aguarde até 15 minutos: o vigia tenta religar o serviço sozinho.</li>'
+                        . '<li>Se não voltar, reinicie o serviço <strong>na própria máquina</strong> — os botões abaixo dependem do serviço responder e não chegam até ele neste estado.</li>'
+                        . '<li>Na máquina, consulte os logs no caminho acima para identificar o que travou.</li>'
+                    : '<li>Verifique se o serviço está em execução.</li><li>Tente reiniciar o serviço.</li><li>Consulte os logs para identificar o erro.</li>')
+                . '</ol>'
                 . ($canManage ? self::restartButton($id, $hostname, $serviceVersion) : '')
                 . '</div></div></td></tr>';
         }

@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.1"
+UPDATER_VERSION = "1.7.2"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -1669,16 +1669,24 @@ def write_heartbeat() -> None:
         pass
 
 
-def heartbeat_age(now: float, service_pid: int | None = None) -> float | None:
-    """Seconds since the last heartbeat; None when unknown or written by another process."""
+def heartbeat_age(now: float) -> float | None:
+    """Seconds since the last heartbeat, whichever process wrote it.
+
+    Services older than 1.5.0 write no heartbeat at all, so a missing or unreadable
+    file still returns None and the watchdog leaves them alone.
+
+    A file written by a *different* PID used to return None as well, which left the
+    worst failure invisible: a service that Windows reports as RUNNING but that wedged
+    before reaching its first write still carries the previous PID in the file, so the
+    watchdog saw "running, heartbeat unknown" and never repaired it. The age is real
+    either way -- a fresh file means something wrote recently and no restart follows,
+    a stale one means nothing has written for WATCHDOG_HEARTBEAT_LIMIT_SECONDS -- so
+    the PID is no longer used to suppress it.
+    """
     try:
         heartbeat = load_json(HEARTBEAT_PATH)
         value = float(heartbeat.get("at", 0) or 0)
     except (UpdaterError, TypeError, ValueError):
-        return None
-    if service_pid is not None and service_pid not in heartbeat.get("pids", []):
-        # Services older than 1.5.0 write no heartbeat; a stale file from a
-        # previous version must not make the watchdog restart them.
         return None
     return now - value if value > 0 else None
 
@@ -2007,7 +2015,7 @@ def run_watchdog(logger: logging.Logger) -> int:
             service,
             bool(setup_pids),
             setup_running_age(bool(setup_pids), state, now),
-            heartbeat_age(now, service[1] if service else None),
+            heartbeat_age(now),
             service_exe_healthy,
         )
         if not actions:
@@ -2486,6 +2494,11 @@ class ServiceRuntime:
 
     def run(self, logger: logging.Logger, start_poller: bool = True) -> None:
         logger.info("Servico %s iniciado; primeira consulta imediata.", UPDATER_VERSION)
+        # Before anything that can block. cleanup_replaced_binaries() waits on file
+        # locks and the probe below spawns PowerShell; a service that hangs in either
+        # one would otherwise stay RUNNING carrying the previous run's heartbeat, and
+        # the watchdog would have nothing recent to measure it against.
+        write_heartbeat()
         cleanup_replaced_binaries()
         try:
             config = load_json(CONFIG_PATH)
