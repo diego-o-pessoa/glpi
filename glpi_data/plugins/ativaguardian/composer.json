@@ -1,0 +1,14 @@
+{
+  "name": "ativalocacao/glpi-ativaguardian",
+  "description": "Monitoramento de saude dos componentes Ativa nas maquinas Windows",
+  "type": "glpi-plugin",
+  "license": "GPL-3.0-or-later",
+  "require": {
+    "php": ">=8.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "GlpiPlugin\\Ativaguardian\\": "src/"
+    }
+  }
+}
