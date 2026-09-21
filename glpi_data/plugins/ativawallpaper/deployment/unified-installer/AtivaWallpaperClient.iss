@@ -226,6 +226,45 @@ begin
   end;
 end;
 
+{ O Defender marca o servico por heuristica de comportamento, nao por assinatura:
+  instalar servico + criar tarefa agendada + substituir o proprio executavel e o
+  padrao de um dropper, e os binarios PyInstaller nao sao assinados. Ele chegou a
+  remover AtivaUnifiedUpdater.exe de maquinas em producao, deixando-as sem updater
+  e sem vigia (que mora na mesma pasta e cai junto).
+
+  As exclusoes entram antes de [Files] gravar qualquer coisa: registrar depois nao
+  adianta, o arquivo recem-copiado ja teria sido posto em quarentena.
+
+  Falhar aqui nao interrompe a instalacao. Em maquina com outro antivirus, com o
+  Defender desativado por politica ou sem os cmdlets do modulo Defender, o comando
+  apenas retorna erro e o restante segue normalmente. }
+procedure ExcludeFromDefender();
+var
+  ProductDir: String;
+  Command: String;
+begin
+  { A raiz do produto, e nao cada subpasta: abaixo dela ficam UnifiedUpdater (o
+    servico, o runner e o vigia), Wallpaper (o cliente por usuario) e Deploy (onde
+    o Deploy-AtivaUnifiedAgent.ps1 deposita o proprio setup, que tambem ja foi
+    posto em quarentena antes de conseguir rodar). Uma entrada so cobre as tres e
+    qualquer subpasta que venha depois. }
+  ProductDir := ExpandConstant('{commonappdata}\AtivaLocacao');
+
+  { ExclusionPath cobre os executaveis que o proprio servico regrava a cada
+    atualizacao; ExclusionProcess e o que desarma o Behavior:Win32/Persistence,
+    que observa o processo em execucao e nao o arquivo em disco. }
+  Command :=
+    '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' +
+    'try { ' +
+      'Add-MpPreference -ExclusionPath ''' + ProductDir + ''' -ErrorAction Stop; ' +
+      'Add-MpPreference -ExclusionProcess ''AtivaUnifiedUpdater.exe'',''AtivaWallpaperClient.exe'' -ErrorAction Stop; ' +
+      'exit 0 ' +
+    '} catch { exit 1 }"';
+
+  WizardForm.StatusLabel.Caption := 'Registrando exclusoes no Windows Defender...';
+  RunOptional(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Command);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   UpdaterPath: String;
@@ -235,6 +274,8 @@ var
   ResultCode: Integer;
 begin
   if CurStep = ssInstall then begin
+    { Antes de PrepareUpdaterExecutable, que ja grava o executavel em disco. }
+    ExcludeFromDefender();
     PrepareUpdaterExecutable();
     exit;
   end;

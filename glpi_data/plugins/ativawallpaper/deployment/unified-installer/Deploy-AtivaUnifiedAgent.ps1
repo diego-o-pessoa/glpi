@@ -64,6 +64,24 @@ New-Item -ItemType Directory -Force -Path $ReportDirectory | Out-Null
 $transcript = Join-Path $ReportDirectory ("execucao-{0:yyyyMMdd-HHmmss}.txt" -f (Get-Date))
 Start-Transcript -LiteralPath $transcript | Out-Null
 
+# --- Exclusões do Defender (antes de copiar qualquer executável) ------------
+# O Defender marca o updater por heurística de comportamento (serviço + tarefa
+# agendada + auto-substituição do executável, tudo sem assinatura digital) e
+# chega a removê-lo. Isso atinge também este setup enquanto ele ainda está na
+# pasta de deploy, antes de conseguir rodar — por isso a exclusão vem antes do
+# Copy-Item, e não dentro do instalador. Falhar aqui não interrompe o deploy: a
+# máquina pode ter outro antivírus ou o Defender desativado por política.
+$ExclusionBlock = {
+    try {
+        Add-MpPreference -ExclusionPath "C:\ProgramData\AtivaLocacao" -ErrorAction Stop
+        Add-MpPreference -ExclusionProcess "AtivaUnifiedUpdater.exe", "AtivaWallpaperClient.exe" -ErrorAction Stop
+        Write-Output "Exclusoes do Windows Defender registradas."
+    }
+    catch {
+        Write-Output "Nao foi possivel registrar exclusoes no Defender: $($_.Exception.Message)"
+    }
+}
+
 # --- Instalação em um computador (roda localmente ou via Invoke-Command) ----
 $InstallBlock = {
     param($RemoteDirectory, $SetupPath, $ExpectedHash, $ExpectedVersion, $TimeoutMinutes)
@@ -232,6 +250,7 @@ try {
         try {
             if ($isLocal) {
                 New-Item -ItemType Directory -Force -Path $RemoteDirectory | Out-Null
+                & $ExclusionBlock | ForEach-Object { Write-Host "[$computer] $_" }
                 $setupCopy = Join-Path $RemoteDirectory $installer.Name
                 Copy-Item -LiteralPath $installer.FullName -Destination $setupCopy -Force
                 $output = & $InstallBlock $RemoteDirectory $setupCopy $expectedHash $expectedVersion $TimeoutMinutes
@@ -247,6 +266,8 @@ try {
                     param($Directory)
                     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
                 } -ArgumentList $RemoteDirectory
+                Invoke-Command -Session $session -ScriptBlock $ExclusionBlock |
+                    ForEach-Object { Write-Host "[$computer] $_" }
                 $setupCopy = Join-Path $RemoteDirectory $installer.Name
                 Copy-Item -LiteralPath $installer.FullName -Destination $setupCopy -ToSession $session -Force
                 $output = Invoke-Command -Session $session -ScriptBlock $InstallBlock `
