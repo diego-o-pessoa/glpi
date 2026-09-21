@@ -13,9 +13,11 @@ if (!Session::haveRight(PluginAtivaguardianProfile::RIGHT_CONFIG, UPDATE)) {
 
 $self = $_SERVER['PHP_SELF'];
 
+// Sem Session::checkCSRF aqui: o CheckCsrfListener do GLPI ja validou este POST
+// e consumiu o token (validateCSRF faz unset). Checar de novo recusaria o envio
+// com "A acao que voce requisitou nao e permitida". Os formularios continuam
+// enviando _glpi_csrf_token, que e o que o listener exige.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    Session::checkCSRF($_POST);
-
     if (isset($_POST['generate_token'])) {
         ConfigService::set(['api_token' => ConfigService::generateToken()]);
         Session::addMessageAfterRedirect('Novo token gerado. Atualize o serviço nas máquinas.', false, INFO);
@@ -68,13 +70,13 @@ echo "<p class='text-muted'>O serviço Windows autentica com <code>Authorization
 echo "<div class='d-flex gap-2 flex-wrap'>";
 echo "<form method='post' action='download_token.php'>";
 echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
-echo "<button type='submit' class='btn btn-success'><i class='fas fa-download me-2'></i>Baixar token (para testar a API)</button>";
+echo "<button type='submit' class='btn btn-success'><i class='fas fa-download me-2'></i>Baixar configuração do serviço</button>";
 echo '</form>';
 echo "<form method='post' action='" . htmlescape($self) . "' onsubmit='return confirm(\"O token atual deixará de funcionar em todas as máquinas. Continuar?\");'>";
 echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
 echo "<button type='submit' name='generate_token' class='btn btn-outline-warning'><i class='fas fa-rotate me-2'></i>Gerar novo token</button>";
 echo '</form></div>';
-echo "<hr><p class='small text-muted mb-0'><i class='fas fa-lock me-1'></i>O arquivo baixado contém o token em texto e não deve ser enviado por canais públicos.</p>";
+echo "<hr><p class='small text-muted mb-0'><i class='fas fa-lock me-1'></i>O arquivo baixado é o <code>config.json</code> pronto do serviço (use com <code>AtivaGuardian.exe --configure</code>). Ele contém o token em texto e não deve ser enviado por canais públicos.</p>";
 echo '</div></article>';
 
 echo PageLayout::footer();
