@@ -34,7 +34,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.6.2"
+CLIENT_VERSION = "1.6.3"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -1014,8 +1014,47 @@ def register_with_retries(
     raise ClientError("REGISTRATION_FAILED", "Registration failed")
 
 
+def _rename_out_of_the_way(destination: Path) -> Path | None:
+    """Move an in-use executable aside so the new one can take its path.
+
+    Windows refuses to delete or overwrite a running .exe, but it does allow
+    renaming it: the loaded image keeps pointing at the same file under the new
+    name. The Ativa Updater already relies on this to replace its own service
+    binary. Returns the new path, or None when even the rename is refused.
+    """
+    retired = destination.with_name(
+        destination.name + ".old-" + time.strftime("%Y%m%d%H%M%S")
+    )
+    try:
+        os.rename(destination, retired)
+    except OSError:
+        return None
+
+    # Agenda a remocao para o proximo boot, quando nada mais segura o arquivo.
+    # Mesmo padrao que o desinstalador ja usa; se falhar, a proxima instalacao
+    # limpa em _purge_retired_executables.
+    if os.name == "nt" and _kernel32 is not None:
+        try:
+            movefile_delay_until_reboot = 0x4
+            _kernel32.MoveFileExW(str(retired), None, movefile_delay_until_reboot)
+        except OSError:
+            pass
+    return retired
+
+
+def _purge_retired_executables(destination: Path) -> None:
+    """Delete leftovers from previous upgrades, once nothing holds them anymore."""
+    try:
+        for retired in destination.parent.glob(destination.name + ".old-*"):
+            _safe_unlink(retired)
+    except OSError:
+        pass
+
+
 def replace_executable(staged: Path, destination: Path, attempts: int = 30, delay_seconds: float = 1.0) -> None:
     """Replace the client executable, waiting for stopping clients to release it."""
+    _purge_retired_executables(destination)
+
     last_error: OSError | None = None
     for attempt in range(attempts):
         try:
@@ -1025,6 +1064,30 @@ def replace_executable(staged: Path, destination: Path, attempts: int = 30, dela
             last_error = exc
             if attempt + 1 < attempts:
                 time.sleep(delay_seconds)
+
+    # O cliente em execucao nao liberou o arquivo dentro do prazo. Isso acontece
+    # com versoes antigas, que nao conhecem o evento Global\...Stop enviado por
+    # _signal_stop(), e com um cliente preso numa chamada de rede longa: em
+    # ambos os casos esperar mais nao resolve.
+    #
+    # Renomear o executavel em uso libera o caminho sem depender da cooperacao
+    # dele. O processo antigo segue rodando a partir do arquivo renomeado ate
+    # sair; a proxima instalacao apaga o que sobrou.
+    if destination.exists():
+        retired = _rename_out_of_the_way(destination)
+        if retired is not None:
+            try:
+                os.replace(staged, destination)
+                return
+            except OSError as exc:
+                last_error = exc
+                # Devolve o nome original: melhor um cliente antigo funcionando
+                # do que nenhum executavel no lugar.
+                try:
+                    os.rename(retired, destination)
+                except OSError:
+                    pass
+
     _safe_unlink(staged)
     raise ClientError("CLIENT_REPLACE_FAILED", f"Could not replace the running client: {last_error}", retriable=False)
 

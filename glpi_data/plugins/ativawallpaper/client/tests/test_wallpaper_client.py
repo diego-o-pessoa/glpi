@@ -534,6 +534,76 @@ class SilentUpdateTests(unittest.TestCase):
             self.assertEqual(len(calls), 3)
             self.assertEqual(destination.read_bytes(), b"new")
 
+    def test_replace_renames_locked_executable_out_of_the_way(self):
+        """Cenario real: cliente antigo em execucao nao libera o .exe.
+
+        os.replace falha sempre; o rename do destino e o que destrava. Sem isso
+        a instalacao terminava em CLIENT_REPLACE_FAILED numa maquina que so
+        tinha uma versao antiga rodando.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            staged = root / "client.exe.new"
+            staged.write_bytes(b"new")
+            destination = root / "client.exe"
+            destination.write_bytes(b"old")
+
+            real_replace = wc.os.replace
+            calls = {"n": 0}
+
+            def locked(source, target):
+                calls["n"] += 1
+                if Path(target) == destination and destination.exists():
+                    raise PermissionError("file in use")
+                return real_replace(source, target)
+
+            wc.os.replace = locked
+            try:
+                wc.replace_executable(staged, destination, attempts=2, delay_seconds=0)
+            finally:
+                wc.os.replace = real_replace
+
+            self.assertEqual(destination.read_bytes(), b"new")
+            self.assertFalse(staged.exists())
+            retired = list(root.glob("client.exe.old-*"))
+            self.assertEqual(len(retired), 1, "o executavel antigo deve ficar guardado ao lado")
+            self.assertEqual(retired[0].read_bytes(), b"old")
+
+    def test_replace_restores_original_when_rename_does_not_help(self):
+        """Se mesmo apos o rename nao der para gravar, a maquina nao fica sem cliente."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            staged = root / "client.exe.new"
+            staged.write_bytes(b"new")
+            destination = root / "client.exe"
+            destination.write_bytes(b"old")
+
+            real_replace = wc.os.replace
+            wc.os.replace = lambda _s, _t: (_ for _ in ()).throw(PermissionError("file in use"))
+            try:
+                with self.assertRaises(wc.ClientError) as caught:
+                    wc.replace_executable(staged, destination, attempts=1, delay_seconds=0)
+            finally:
+                wc.os.replace = real_replace
+
+            self.assertEqual(caught.exception.code, "CLIENT_REPLACE_FAILED")
+            self.assertTrue(destination.exists(), "o executavel original deve voltar ao lugar")
+            self.assertEqual(destination.read_bytes(), b"old")
+            self.assertEqual(list(root.glob("client.exe.old-*")), [])
+
+    def test_replace_purges_leftovers_from_previous_upgrades(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "client.exe.old-20250101000000").write_bytes(b"antigo")
+            staged = root / "client.exe.new"
+            staged.write_bytes(b"new")
+            destination = root / "client.exe"
+
+            wc.replace_executable(staged, destination, attempts=1, delay_seconds=0)
+
+            self.assertEqual(destination.read_bytes(), b"new")
+            self.assertEqual(list(root.glob("client.exe.old-*")), [])
+
     def test_replace_executable_gives_up_and_cleans_staged_file(self):
         with tempfile.TemporaryDirectory() as directory:
             staged = Path(directory) / "client.exe.new"
