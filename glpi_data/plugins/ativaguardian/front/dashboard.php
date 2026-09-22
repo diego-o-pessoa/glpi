@@ -137,10 +137,12 @@ echo <<<'HTML'
         bar.textContent = percent + '%';
     };
 
+    // O menu mostra só "Corrigir"; aqui o título diz o que está sendo feito de
+    // fato, que depende do estado em que o componente estava.
     const LABELS = {
-        START_COMPONENT: ['Iniciando o serviço', 'Início'],
-        RESTART_COMPONENT: ['Reiniciando o serviço', 'Reinício'],
-        REPAIR_COMPONENT: ['Reparando o componente', 'Reparo'],
+        START_COMPONENT: ['Corrigindo: iniciando o serviço', 'Correção'],
+        RESTART_COMPONENT: ['Corrigindo: reiniciando o serviço', 'Correção'],
+        REPAIR_COMPONENT: ['Corrigindo: reinstalando o componente', 'Correção'],
         CHECK_COMPONENT: ['Verificando o componente', 'Verificação'],
     };
     const delay = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));

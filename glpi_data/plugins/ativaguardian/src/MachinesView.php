@@ -189,29 +189,37 @@ final class MachinesView
             . "<div class='ag-menu-list' hidden>{$items}</div></div></td>";
     }
 
-    /** Ações oferecidas para um componente no estado atual. */
+    /**
+     * Ação de "Corrigir" para um componente no estado atual.
+     *
+     * Um botão só, em vez de Iniciar/Reiniciar/Reparar separados: quem opera
+     * quer que o componente volte a funcionar, não escolher o procedimento. O
+     * estado decide o que é feito de fato — serviço parado é iniciado,
+     * executável ausente é reinstalado — e o modal mostra qual foi.
+     *
+     * A ação enviada continua sendo uma das já conhecidas pelo Guardian; nada
+     * de verbo novo no contrato.
+     */
     private static function offeredActions(string $component, string $status): array
     {
         $supported = ActionQueue::SUPPORTED[$component] ?? [];
-        $offer = [];
 
-        // Iniciar só faz sentido com o componente parado.
-        if (in_array($status, [HealthStatus::SERVICE_STOPPED, HealthStatus::PROCESS_STOPPED, HealthStatus::ERROR], true)) {
-            $offer[ActionQueue::START] = ['Iniciar', 'fa-play'];
-        }
-        if ($status !== HealthStatus::FILE_MISSING) {
-            $offer[ActionQueue::RESTART] = ['Reiniciar', 'fa-arrows-rotate'];
-        }
-        // Reparar reinstala: só quando iniciar/reiniciar não resolveria.
-        if (in_array($status, [HealthStatus::FILE_MISSING, HealthStatus::ERROR], true)) {
-            $offer[ActionQueue::REPAIR] = ['Reparar', 'fa-wrench'];
+        $action = match (true) {
+            // Sumiu ou quebrou de um jeito que reiniciar não resolve: reinstala.
+            in_array($status, [HealthStatus::FILE_MISSING, HealthStatus::ERROR], true)
+                => ActionQueue::REPAIR,
+            in_array($status, [HealthStatus::SERVICE_STOPPED, HealthStatus::PROCESS_STOPPED], true)
+                => ActionQueue::START,
+            default => ActionQueue::RESTART,
+        };
+
+        // Componente que ainda não sabe se reinstalar (Wallpaper hoje) cai para
+        // reiniciar; se nem isso suportar, não oferece nada.
+        if (!in_array($action, $supported, true)) {
+            $action = in_array(ActionQueue::RESTART, $supported, true) ? ActionQueue::RESTART : null;
         }
 
-        return array_filter(
-            $offer,
-            static fn(string $action): bool => in_array($action, $supported, true),
-            ARRAY_FILTER_USE_KEY
-        );
+        return $action === null ? [] : [$action => ['Corrigir', 'fa-wrench']];
     }
 
     /**

@@ -51,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.1.1"
+GUARDIAN_VERSION = "1.1.2"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -1177,25 +1177,29 @@ class GuardianRuntime:
             logger.debug("Intervalo padrao aplicado.")
             return DEFAULT_INTERVAL_SECONDS
 
-    def run_actions(self, logger: logging.Logger, machine_id: str) -> None:
+    def run_actions(self, logger: logging.Logger, machine_id: str) -> bool:
         """Busca e executa as acoes que o GLPI reservou para esta maquina.
 
         O servidor ja marcou cada acao como running ao entrega-la, entao uma
         acao nunca chega duas vezes. Falhas de rede sao registradas e a proxima
         coleta tenta de novo; nada aqui derruba o servico.
+
+        Retorna True quando executou pelo menos uma acao, para o laco principal
+        saber que o status ja foi reenviado.
         """
         try:
             config = validate_config(load_json(CONFIG_PATH))
         except GuardianError:
-            return  # sem configuracao valida nao ha o que consultar
+            return False  # sem configuracao valida nao ha o que consultar
 
         try:
             api = ApiClient(config)
             actions = api.fetch_actions(machine_id)
         except GuardianError as exc:
             logger.debug("Nao foi possivel consultar acoes: %s", exc)
-            return
+            return False
 
+        executed = False
         for item in actions:
             if not isinstance(item, dict):
                 continue
@@ -1212,11 +1216,23 @@ class GuardianRuntime:
             success, message = execute_action(component, action, logger, action_id=action_id)
             logger.info("Acao %s: %s (%s)", action_id, "success" if success else "failed", message)
 
+            # Heartbeat ANTES de devolver o resultado: o painel abre o modal e o
+            # fecha assim que a acao termina, entao o status novo precisa ja
+            # estar no servidor nesse instante - senao a tela mostraria
+            # "concluido" com o estado antigo ate a proxima coleta.
+            try:
+                self.run_cycle(logger, machine_id)
+            except Exception:  # noqa: BLE001 - nao impede reportar o resultado
+                logger.exception("Falha ao atualizar o status apos a acao.")
+
             try:
                 api.report_action(action_id, machine_id, success, message)
             except GuardianError as exc:
                 # O servidor expira sozinho o que ficar preso em running.
                 logger.warning("Nao foi possivel devolver o resultado da acao %s: %s", action_id, exc)
+            executed = True
+
+        return executed
 
     def finish_pending_repair(self, logger: logging.Logger, machine_id: str) -> None:
         """Fecha um reparo que o proprio instalador interrompeu.
@@ -1283,7 +1299,11 @@ class GuardianRuntime:
                 next_heartbeat = time.monotonic() + self.interval(logger)
 
             try:
-                self.run_actions(logger, machine_id)
+                if self.run_actions(logger, machine_id):
+                    # O status ja foi reenviado dentro de run_actions; zera a
+                    # referencia para o proximo tick nao repetir o envio.
+                    last_reported = None
+                    next_heartbeat = time.monotonic() + self.interval(logger)
             except Exception:  # noqa: BLE001
                 logger.exception("Falha inesperada ao processar acoes.")
 
