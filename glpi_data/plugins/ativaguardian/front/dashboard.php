@@ -265,6 +265,13 @@ echo <<<'HTML'
             const list = kebab.parentElement.querySelector('.ag-menu-list');
             closeMenus(list);
             list.hidden = !list.hidden;
+            // O card tem overflow:hidden e corta o menu nas ultimas linhas.
+            // Abre para cima quando o botao esta na metade de baixo da tabela.
+            if (!list.hidden) {
+                const rect = kebab.getBoundingClientRect();
+                const limit = (body.getBoundingClientRect().bottom) - 160;
+                list.classList.toggle('ag-up', rect.bottom > limit);
+            }
         }
     });
     document.addEventListener('click', (event) => {

@@ -50,8 +50,8 @@ class GuardianMaintenanceTests(unittest.TestCase):
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.7.5")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 5))
+        self.assertEqual(updater.UPDATER_VERSION, "1.7.6")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 6))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -1522,3 +1522,74 @@ class WallpaperWatchdogTests(unittest.TestCase):
              mock.patch.object(updater, "launch_in_session", side_effect=OSError("sem acesso")):
             count = updater.ensure_wallpaper_running(quiet_logger("wallpaper-watchdog"))
         self.assertEqual(count, 0)  # falhou mas nao levantou
+
+
+class GuardianWatchdogTests(unittest.TestCase):
+    """O Updater vigia o Guardian: religa, re-registra ou reinstala o que caiu."""
+
+    RUNNING = (updater.SERVICE_STATE_RUNNING, 1234)
+    STOPPED = (1, 0)
+
+    def _run(self, service, exe_present, maintenance=False, due=True):
+        calls = {"start": [], "install_service": False, "reinstall": False}
+
+        def fake_run(cmd, **kw):
+            if "--install-service" in cmd:
+                calls["install_service"] = True
+            return mock.Mock(returncode=0)
+
+        with mock.patch.object(updater.os, "name", "nt"), \
+             mock.patch.object(updater, "guardian_maintenance_active", return_value=maintenance), \
+             mock.patch.object(updater, "query_service", return_value=service), \
+             mock.patch.object(type(updater.GUARDIAN_EXE), "is_file", return_value=exe_present), \
+             mock.patch.object(updater, "_guardian_recovery_due", return_value=due), \
+             mock.patch.object(updater, "atomic_json"), \
+             mock.patch.object(updater, "run_sc", side_effect=lambda *a: calls["start"].append(a) or 0), \
+             mock.patch.object(updater.subprocess, "run", side_effect=fake_run), \
+             mock.patch.object(updater, "reinstall_unified_package",
+                               side_effect=lambda log: calls.__setitem__("reinstall", True)):
+            updater.ensure_guardian_running(quiet_logger("guardian-watchdog"))
+        return calls
+
+    def test_healthy_does_nothing(self):
+        c = self._run(self.RUNNING, exe_present=True)
+        self.assertEqual(c["start"], [])
+        self.assertFalse(c["install_service"])
+        self.assertFalse(c["reinstall"])
+
+    def test_stopped_service_is_started(self):
+        c = self._run(self.STOPPED, exe_present=True)
+        self.assertIn(("start", "AtivaGuardian"), c["start"])
+        self.assertFalse(c["reinstall"])
+
+    def test_missing_service_but_exe_present_reregisters(self):
+        c = self._run(None, exe_present=True)
+        self.assertTrue(c["install_service"])
+        self.assertFalse(c["reinstall"])
+
+    def test_missing_exe_triggers_reinstall(self):
+        c = self._run(None, exe_present=False)
+        self.assertTrue(c["reinstall"])
+
+    def test_missing_exe_but_rate_limited_skips(self):
+        c = self._run(None, exe_present=False, due=False)
+        self.assertFalse(c["reinstall"])
+
+    def test_maintenance_window_is_respected(self):
+        c = self._run(None, exe_present=False, maintenance=True)
+        self.assertFalse(c["reinstall"])
+        self.assertFalse(c["install_service"])
+
+
+class GuardianRecoveryRateLimitTests(unittest.TestCase):
+    def test_recovery_due_when_never_run(self):
+        with mock.patch.object(updater, "load_json", side_effect=updater.UpdaterError("sem marcador")):
+            self.assertTrue(updater._guardian_recovery_due(10_000))
+
+    def test_recovery_not_due_within_interval(self):
+        with mock.patch.object(updater, "load_json", return_value={"at": 10_000}):
+            self.assertFalse(updater._guardian_recovery_due(10_000 + 60))
+
+    def test_recovery_due_after_interval(self):
+        with mock.patch.object(updater, "load_json", return_value={"at": 10_000}):
+            self.assertTrue(updater._guardian_recovery_due(10_000 + updater.GUARDIAN_RECOVERY_MIN_INTERVAL + 1))

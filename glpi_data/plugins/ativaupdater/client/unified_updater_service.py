@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.5"
+UPDATER_VERSION = "1.7.6"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -740,6 +740,84 @@ def launch_in_session(session_id: int, executable: Path) -> None:
         for handle in (primary_token, user_token):
             if handle:
                 kernel32.CloseHandle(handle)
+
+
+GUARDIAN_SERVICE_NAME = "AtivaGuardian"
+GUARDIAN_EXE = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Ativa Locacao" / "Guardian" / "AtivaGuardian.exe"
+GUARDIAN_RECOVERY_MARKER = PRODUCT_DIR / "guardian-recovery.json"
+# Evita um laco reinstalar sem parar quando um antivirus fica reapagando o exe.
+GUARDIAN_RECOVERY_MIN_INTERVAL = 1800
+
+
+def _guardian_recovery_due(now: float) -> bool:
+    try:
+        last = float(load_json(GUARDIAN_RECOVERY_MARKER).get("at", 0) or 0)
+    except (UpdaterError, TypeError, ValueError):
+        last = 0.0
+    return (now - last) >= GUARDIAN_RECOVERY_MIN_INTERVAL
+
+
+def reinstall_unified_package(logger: logging.Logger) -> None:
+    """Baixa e instala o pacote unificado oficial (mesmo caminho do update normal)."""
+    api = ApiClient(validate_config(load_json(CONFIG_PATH)))
+    release = api.latest()
+    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    destination = DOWNLOAD_DIR / f"Ativa-Unified-Agent-Setup-{release['version']}.exe"
+    cleanup_downloads(keep=destination)
+    download_with_retries(api, release, destination, logger, lambda: False)
+    launch_installer(destination, logger, release["version"], release["sha256"])
+
+
+def ensure_guardian_running(logger: logging.Logger) -> None:
+    """Vigia o Ativa Guardian: o Guardian ja repara este servico, aqui a reciproca.
+
+    Auto-recuperacao, nao anti-kill: nada impede o encerramento; o servico apenas
+    religa/reinstala o que caiu. Mesmo mecanismo do watchdog que ja recupera este
+    proprio servico. Um usuario comum nao consegue derrubar os dois ao mesmo tempo;
+    admin local ainda consegue - isso e limite do Windows, nao algo que se resolva
+    sem tecnica de rootkit.
+    """
+    if os.name != "nt":
+        return
+    # Janela de manutencao autorizada pelo Guardian: nao interferir.
+    if guardian_maintenance_active():
+        return
+    try:
+        service = query_service(GUARDIAN_SERVICE_NAME)
+    except OSError:
+        return
+
+    if GUARDIAN_EXE.is_file():
+        if service is None:
+            # Executavel presente, servico sumiu: o proprio Guardian se re-registra.
+            logger.info("Guardian: servico ausente com executavel presente; re-registrando.")
+            try:
+                subprocess.run(
+                    [str(GUARDIAN_EXE), "--install-service"],
+                    capture_output=True, timeout=120,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+            except (OSError, subprocess.SubprocessError) as exc:
+                logger.warning("Nao foi possivel re-registrar o Guardian: %s", exc)
+        elif service[0] not in (SERVICE_STATE_RUNNING, SERVICE_STATE_START_PENDING):
+            logger.info("Guardian: servico parado; iniciando.")
+            run_sc("start", GUARDIAN_SERVICE_NAME)
+        return
+
+    # Executavel ausente (antivirus ou exclusao manual): so o pacote unificado
+    # traz o Guardian de volta. Limitado no tempo para nao virar loop.
+    now = time.time()
+    if not _guardian_recovery_due(now):
+        return
+    try:
+        atomic_json(GUARDIAN_RECOVERY_MARKER, {"at": now})
+    except OSError:
+        pass
+    logger.warning("Guardian: executavel ausente; reinstalando o pacote unificado.")
+    try:
+        reinstall_unified_package(logger)
+    except Exception as exc:  # noqa: BLE001 - nunca derruba o poll
+        logger.warning("Falha ao reinstalar para recuperar o Guardian: %s", exc)
 
 
 def process_session_ids(image: Path) -> set[int]:
@@ -2605,6 +2683,12 @@ class ServiceRuntime:
                 ensure_wallpaper_running(logger)
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Watchdog do wallpaper falhou neste ciclo: %s", exc)
+            # Reciproca do watchdog: o Guardian repara este servico; aqui este
+            # servico repara o Guardian. Os dois se cobrem.
+            try:
+                ensure_guardian_running(logger)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Watchdog do Guardian falhou neste ciclo: %s", exc)
             self.stop_event.wait(COMMAND_POLL_SECONDS)
 
     def run(self, logger: logging.Logger, start_poller: bool = True) -> None:

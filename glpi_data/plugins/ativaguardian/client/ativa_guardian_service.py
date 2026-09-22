@@ -51,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.4.0"
+GUARDIAN_VERSION = "1.5.0"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -297,9 +297,9 @@ def logged_on_user() -> str:
         user = query(WTS_USER_NAME)
         if not user:
             return ""  # sessao existe mas ninguem logado (tela de bloqueio/logon)
-        domain = query(WTS_DOMAIN_NAME)
-        full = f"{domain}\\{user}" if domain else user
-        return full[:255]
+        # So o nome da conta, sem o dominio/computador (ex.: "Diego", nao
+        # "DESKTOP-R1C8ICN\\Diego").
+        return user[:255]
     except Exception:  # noqa: BLE001 - nunca derruba o heartbeat
         return ""
 
@@ -1355,6 +1355,9 @@ class GuardianRuntime:
         # Assinatura do ultimo status que o servidor confirmou ter recebido.
         # Fica aqui (e nao no laco) porque run_actions tambem envia heartbeat.
         self.last_signature: str | None = None
+        # Ultima tentativa de auto-reparo por componente, para nao repetir num
+        # loop apertado (ex.: reinstalacao que o antivirus desfaz em seguida).
+        self._last_autofix: dict[str, float] = {}
 
     def run_cycle(self, logger: logging.Logger, machine_id: str,
                   components: dict[str, dict[str, str]] | None = None) -> None:
@@ -1486,6 +1489,33 @@ class GuardianRuntime:
             # O servidor expira sozinho o que ficar preso em running.
             logger.warning("Nao foi possivel reportar o reparo %s: %s", action_id, exc)
 
+    # Quanto tempo esperar antes de tentar de novo o auto-reparo do mesmo
+    # componente. Reparar (reinstalar) e caro; iniciar servico e barato, mas a
+    # janela evita marteladas se o problema persistir.
+    AUTOFIX_MIN_INTERVAL = 600
+
+    def auto_repair(self, logger: logging.Logger, components: dict[str, dict[str, str]]) -> None:
+        """Corrige sozinho o que estiver quebrado, sem esperar clique no painel.
+
+        Mesma escada do botao "Corrigir" (fix_component): so age no que da para
+        agir, e nunca reinstala se os arquivos estao no lugar. Rate-limit por
+        componente para nao entrar em loop com um antivirus que reapaga o exe.
+        """
+        now = time.monotonic()
+        for name, data in components.items():
+            status = data.get("status")
+            if status in (STATUS_HEALTHY, STATUS_UNKNOWN):
+                continue
+            if now - self._last_autofix.get(name, 0.0) < self.AUTOFIX_MIN_INTERVAL:
+                continue
+            self._last_autofix[name] = now
+            logger.info("Auto-reparo: %s esta %s; corrigindo.", name, status)
+            try:
+                ok, message = fix_component(name, logger)
+                logger.info("Auto-reparo de %s: %s (%s)", name, "ok" if ok else "falhou", message)
+            except Exception as exc:  # noqa: BLE001 - nunca derruba o loop
+                logger.warning("Auto-reparo de %s falhou: %s", name, exc)
+
     def run(self, logger: logging.Logger) -> None:
         logger.info("Guardian started (versao %s)", GUARDIAN_VERSION)
         machine_id = machine_identity(logger)
@@ -1505,6 +1535,13 @@ class GuardianRuntime:
                 components = collect_components(logger, quiet=True)
             except Exception:  # noqa: BLE001
                 logger.exception("Falha inesperada ao verificar componentes.")
+
+            # Corrige sozinho o que estiver quebrado, sem depender de clique.
+            if components is not None:
+                try:
+                    self.auto_repair(logger, components)
+                except Exception:  # noqa: BLE001
+                    logger.exception("Falha inesperada no auto-reparo.")
 
             signature = json.dumps(components, sort_keys=True) if components is not None else None
             changed = (

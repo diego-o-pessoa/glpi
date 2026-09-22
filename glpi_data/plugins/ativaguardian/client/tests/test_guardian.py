@@ -958,3 +958,45 @@ class LoggedOnUserTests(unittest.TestCase):
     def test_failure_degrades_to_empty(self) -> None:
         with mock.patch.object(guardian.ctypes, "WinDLL", side_effect=OSError("sem wtsapi32")):
             self.assertEqual(guardian.logged_on_user(), "")
+
+
+class AutoRepairTests(unittest.TestCase):
+    """O Guardian corrige sozinho o que esta quebrado, com rate-limit."""
+
+    def test_broken_component_is_fixed(self):
+        rt = guardian.GuardianRuntime()
+        with mock.patch.object(guardian, "fix_component", return_value=(True, "ok")) as fix:
+            rt.auto_repair(quiet_logger(), {"updater": {"status": "service_stopped", "version": ""}})
+        fix.assert_called_once()
+        self.assertEqual(fix.call_args[0][0], "updater")
+
+    def test_healthy_and_unknown_are_left_alone(self):
+        rt = guardian.GuardianRuntime()
+        with mock.patch.object(guardian, "fix_component") as fix:
+            rt.auto_repair(quiet_logger(), {
+                "updater": {"status": "healthy", "version": ""},
+                "remote": {"status": "unknown", "version": ""},
+            })
+        fix.assert_not_called()
+
+    def test_rate_limited_per_component(self):
+        rt = guardian.GuardianRuntime()
+        broken = {"updater": {"status": "file_missing", "version": ""}}
+        with mock.patch.object(guardian, "fix_component", return_value=(False, "x")) as fix:
+            rt.auto_repair(quiet_logger(), broken)  # tenta
+            rt.auto_repair(quiet_logger(), broken)  # dentro da janela: pula
+        self.assertEqual(fix.call_count, 1)
+
+    def test_failure_does_not_raise(self):
+        rt = guardian.GuardianRuntime()
+        with mock.patch.object(guardian, "fix_component", side_effect=OSError("boom")):
+            rt.auto_repair(quiet_logger(), {"updater": {"status": "error", "version": ""}})  # nao levanta
+
+
+class UsernameFormatTests(unittest.TestCase):
+    def test_username_has_no_domain_prefix(self):
+        # WTS_USER_NAME retorna so o usuario; garantimos que nada reanexa dominio.
+        with mock.patch.object(guardian, "logged_on_user", return_value="Diego"):
+            payload = guardian.build_heartbeat("m", {}, "Defender")
+        self.assertEqual(payload["username"], "Diego")
+        self.assertNotIn("\\", payload["username"])
