@@ -22,9 +22,9 @@ final class ActionQueue
     public const CHECK   = 'CHECK_COMPONENT';
     public const START   = 'START_COMPONENT';
     public const RESTART = 'RESTART_COMPONENT';
+    public const REPAIR  = 'REPAIR_COMPONENT';
 
-    /** Ações aceitas nesta etapa. Reinstalação/download não entram. */
-    public const ACTIONS = [self::CHECK, self::START, self::RESTART];
+    public const ACTIONS = [self::CHECK, self::START, self::RESTART, self::REPAIR];
 
     public const PENDING = 'pending';
     public const RUNNING = 'running';
@@ -39,11 +39,17 @@ final class ActionQueue
      * Ativa Updater. Por isso ele aceita só verificação nesta etapa.
      */
     public const SUPPORTED = [
-        'updater'    => [self::CHECK, self::START, self::RESTART],
+        // Só o Updater sabe se reinstalar por enquanto: ele é o caso validado
+        // primeiro. Wallpaper, Remote e GLPI Agent entram depois; até lá o
+        // Guardian recusa REPAIR neles com mensagem clara.
+        'updater'    => [self::CHECK, self::START, self::RESTART, self::REPAIR],
         'remote'     => [self::CHECK, self::START, self::RESTART],
         'glpi_agent' => [self::CHECK, self::START, self::RESTART],
         'wallpaper'  => [self::CHECK],
     ];
+
+    /** Reparo baixa e instala pacote: leva bem mais que as demais ações. */
+    public const REPAIR_STALE_SECONDS = 1800;
 
     /** Uma ação presa em running por mais que isto é considerada perdida. */
     public const STALE_SECONDS = 600;
@@ -159,17 +165,26 @@ final class ActionQueue
     {
         global $DB;
 
-        $cutoff = ServerClock::format(time() - self::STALE_SECONDS);
-        $DB->update(
-            self::TABLE,
-            [
-                'status'        => self::FAILED,
-                'result'        => self::FAILED,
-                'error_message' => 'A máquina não devolveu o resultado a tempo.',
-                'finished_at'   => ServerClock::now(),
-            ],
-            ['status' => self::RUNNING, ['started_at' => ['<', $cutoff]]]
-        );
+        $expire = static function (int $seconds, array $actionFilter) use ($DB): void {
+            $cutoff = ServerClock::format(time() - $seconds);
+            $DB->update(
+                self::TABLE,
+                [
+                    'status'        => self::FAILED,
+                    'result'        => self::FAILED,
+                    'error_message' => 'A máquina não devolveu o resultado a tempo.',
+                    'finished_at'   => ServerClock::now(),
+                ],
+                ['status' => self::RUNNING, 'action' => $actionFilter, ['started_at' => ['<', $cutoff]]]
+            );
+        };
+
+        // O reparo baixa um instalador e reinicia serviços - inclusive o próprio
+        // Guardian, que o instalador para para trocar binários. Expirá-lo no
+        // mesmo prazo das outras ações marcaria como falha um reparo que ainda
+        // está em curso.
+        $expire(self::STALE_SECONDS, [self::CHECK, self::START, self::RESTART]);
+        $expire(self::REPAIR_STALE_SECONDS, [self::REPAIR]);
     }
 
     /**

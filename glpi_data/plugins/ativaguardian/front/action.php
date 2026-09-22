@@ -47,6 +47,7 @@ $labels = [
     ActionQueue::CHECK   => 'Verificação solicitada',
     ActionQueue::START   => 'Início solicitado',
     ActionQueue::RESTART => 'Reinício solicitado',
+    ActionQueue::REPAIR  => 'Reparo solicitado',
 ];
 
 echo json_encode([

@@ -1,13 +1,18 @@
 """Ativa Guardian - servico Windows de monitoramento de saude.
 
 Verifica os componentes Ativa instalados na maquina e envia um heartbeat para a
-API do plugin Ativa Guardian no GLPI, e executa acoes corretivas de nivel 1
-enfileiradas pelo painel: CHECK_COMPONENT, START_COMPONENT e RESTART_COMPONENT.
+API do plugin Ativa Guardian no GLPI, e executa acoes corretivas enfileiradas
+pelo painel: CHECK_COMPONENT, START_COMPONENT, RESTART_COMPONENT e
+REPAIR_COMPONENT (por enquanto so o Ativa Updater sabe se reinstalar).
 
-O servico NAO reinstala, nao baixa nada, nao altera antivirus e nunca executa
-comando enviado como texto: o servidor manda apenas um par (componente, acao)
-de listas fechadas, e o mapeamento para servicos reais do Windows vive neste
-arquivo (COMPONENT_SERVICES).
+O servico nunca executa comando enviado como texto: o servidor manda apenas um
+par (componente, acao) de listas fechadas, e o mapeamento para servicos reais
+do Windows vive neste arquivo (COMPONENT_SERVICES / REPAIR_HANDLERS).
+
+O reparo baixa o pacote oficial publicado na API do proprio Ativa Updater, no
+mesmo host que o Guardian ja usa. A URL nunca vem da acao e o arquivo so e
+executado depois que o SHA-256 confere. Nada aqui desativa ou contorna
+antivirus: se o AV remover o componente de novo, isso vira erro reportado.
 
 Caminhos e nomes de servico dos componentes nao foram inventados: vieram do
 codigo que ja os instala e gerencia (Ativa Updater / instalador unificado).
@@ -26,10 +31,12 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
 import json
 import logging
 import os
 import re
+import shutil
 import ssl
 import subprocess
 import sys
@@ -44,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.0.0"
+GUARDIAN_VERSION = "1.1.0"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -657,7 +664,8 @@ COMPONENT_CHECKS = {
 ACTION_CHECK = "CHECK_COMPONENT"
 ACTION_START = "START_COMPONENT"
 ACTION_RESTART = "RESTART_COMPONENT"
-ALLOWED_ACTIONS = frozenset({ACTION_CHECK, ACTION_START, ACTION_RESTART})
+ACTION_REPAIR = "REPAIR_COMPONENT"
+ALLOWED_ACTIONS = frozenset({ACTION_CHECK, ACTION_START, ACTION_RESTART, ACTION_REPAIR})
 
 # O servidor manda apenas um par (componente, acao) de listas fechadas. Este
 # mapa - compilado dentro do executavel - e o unico lugar que traduz isso para
@@ -675,6 +683,27 @@ COMPONENT_SERVICES: dict[str, tuple[str, ...]] = {
 
 SERVICE_WAIT_SECONDS = 45
 SERVICE_STATE_STOPPED = 1
+
+# --- Reparo ------------------------------------------------------------------
+# O pacote oficial vem da API do proprio Ativa Updater no mesmo GLPI: ela ja
+# publica versao, SHA-256 e o instalador unificado assinado pelo build. A URL
+# NUNCA chega pela acao; e derivada da configuracao local e conferida contra o
+# host que o Guardian ja usa.
+UPDATER_API_SUFFIX = "/plugins/ativaupdater/api/v1"
+UPDATER_CONFIG_PATH = UPDATER_DIR / "service-config.json"
+REPAIR_DIR = PRODUCT_DIR / "repair"
+REPAIR_STATE_PATH = PRODUCT_DIR / "repair-state.json"
+# O instalador unificado cabe folgado aqui; um corpo maior indica outra coisa.
+MAX_PACKAGE_BYTES = 400 * 1024 * 1024
+REQUIRED_FREE_BYTES = 1024 * 1024 * 1024
+DOWNLOAD_TIMEOUT_SECONDS = 600
+INSTALL_TIMEOUT_SECONDS = 900
+SHA256_RE = re.compile(r"^[a-fA-F0-9]{64}$")
+
+# Quais componentes sabem se reparar. Wallpaper, Remote e GLPI Agent entram
+# depois que o Updater estiver validado em campo; ate la a acao e recusada com
+# mensagem clara em vez de fingir que funciona.
+REPAIRABLE_COMPONENTS = ("updater",)
 
 
 def resolve_component_service(component: str) -> str | None:
@@ -705,8 +734,210 @@ def wait_for_service_state(name: str, expected: int, timeout: int = SERVICE_WAIT
         return False
 
 
+def updater_api_credentials() -> tuple[str, str]:
+    """(api_url, token) da API do Ativa Updater, a partir de config LOCAL.
+
+    Nunca vem da acao. A ordem e: bloco opcional no config.json do Guardian e,
+    se ausente, o service-config.json que o proprio Updater ja mantem (a pasta
+    dele e restrita a SYSTEM/Administradores, e o Guardian roda como SYSTEM).
+
+    O host precisa ser o mesmo da API do Guardian: assim o pacote so pode vir do
+    servidor GLPI que esta maquina ja confia, e nao de outro qualquer.
+    """
+    guardian = validate_config(load_json(CONFIG_PATH))
+    guardian_host = urlsplit(guardian["api_url"]).hostname
+
+    api_url = str(guardian.get("updater_api_url", "")).rstrip("/")
+    token = str(guardian.get("updater_api_token", ""))
+
+    if not api_url or not token:
+        updater = load_json(UPDATER_CONFIG_PATH)  # levanta GuardianError se faltar
+        api_url = str(updater.get("api_url", "")).rstrip("/")
+        token = str(updater.get("api_token", ""))
+
+    parsed = urlsplit(api_url)
+    if (
+        parsed.scheme.lower() != "https"
+        or not parsed.path.endswith(UPDATER_API_SUFFIX)
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise GuardianError(f"api_url do Updater invalida (esperado HTTPS .../{UPDATER_API_SUFFIX.lstrip('/')}).")
+    if parsed.hostname != guardian_host:
+        raise GuardianError("A API do Updater aponta para outro host; pacote recusado.")
+    if not re.fullmatch(r"[a-fA-F0-9]{64}", token):
+        raise GuardianError("Token da API do Updater invalido.")
+
+    return api_url, token
+
+
+def download_package(url: str, token: str, expected_sha256: str, destination: Path,
+                     expected_size: int = 0) -> None:
+    """Baixa e valida o pacote. Qualquer divergencia apaga o arquivo e falha.
+
+    O arquivo so e considerado valido quando o SHA-256 do conteudo gravado bate
+    com o publicado pela API: download truncado, proxy que devolve HTML ou
+    pacote trocado sao todos rejeitados aqui, antes de qualquer execucao.
+    """
+    if not SHA256_RE.fullmatch(expected_sha256):
+        raise GuardianError("SHA-256 publicado pela API e invalido.")
+
+    free = shutil.disk_usage(destination.parent).free
+    if free < max(REQUIRED_FREE_BYTES, expected_size * 2):
+        raise GuardianError(f"Espaco em disco insuficiente ({free // (1024 * 1024)} MB livres).")
+
+    digest = hashlib.sha256()
+    written = 0
+    request = Request(url, headers={
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/octet-stream",
+        "User-Agent": f"AtivaGuardian/{GUARDIAN_VERSION}",
+    }, method="GET")
+
+    opener = build_opener(NoRedirect(), HTTPSHandler(context=ssl.create_default_context()))
+    try:
+        with opener.open(request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response, \
+                destination.open("wb") as handle:
+            while True:
+                chunk = response.read(1024 * 256)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > MAX_PACKAGE_BYTES:
+                    raise GuardianError("Pacote maior que o limite aceito.")
+                digest.update(chunk)
+                handle.write(chunk)
+    except HTTPError as exc:
+        _safe_unlink(destination)
+        raise GuardianError(f"Servidor respondeu HTTP {exc.code} ao baixar o pacote.") from exc
+    except (URLError, OSError) as exc:
+        _safe_unlink(destination)
+        raise GuardianError(f"Falha ao baixar o pacote: {exc}") from exc
+
+    if expected_size and written != expected_size:
+        _safe_unlink(destination)
+        raise GuardianError(f"Download incompleto: {written} de {expected_size} bytes.")
+    if digest.hexdigest().lower() != expected_sha256.lower():
+        _safe_unlink(destination)
+        raise GuardianError("SHA-256 do arquivo baixado nao confere; pacote descartado.")
+
+
+def _safe_unlink(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def installer_command(package: Path, install_log: Path) -> list[str]:
+    """Mesma linha silenciosa que o Ativa Updater e o Deploy ja usam."""
+    return [
+        str(package),
+        "/VERYSILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+        # /CLOSEAPPLICATIONS faria o Restart Manager tentar parar servicos por
+        # 90 s e abortar a instalacao inteira.
+        "/NOCLOSEAPPLICATIONS",
+        "/SP-",
+        f"/LOG={install_log}",
+    ]
+
+
+def repair_updater(logger: logging.Logger, action_id: int = 0) -> tuple[bool, str]:
+    """Reinstala o Ativa Updater a partir do pacote oficial publicado no GLPI.
+
+    Preserva configuracao: o instalador unificado reaproveita o registro do
+    Wallpaper, mantem o config.json do Guardian e nao toca em machine.json.
+    Nada e apagado aqui antes da instalacao.
+    """
+    api_url, token = updater_api_credentials()
+
+    client = ApiClient({"api_url": api_url, "api_token": token})
+    release = client._json(f"{api_url}/latest", "GET")
+
+    version = str(release.get("version", "")).strip()
+    sha256 = str(release.get("sha256", "")).strip()
+    file_name = str(release.get("file_name", "")).strip()
+    size = int(release.get("size", 0) or 0)
+    if not VERSION_RE.fullmatch(version) or not SHA256_RE.fullmatch(sha256):
+        raise GuardianError("A API do Updater devolveu versao ou SHA-256 invalido.")
+    # O pacote precisa ser o instalador unificado, nao outro arquivo qualquer.
+    if not file_name.lower().endswith(".exe"):
+        raise GuardianError(f"Pacote publicado nao e um instalador: {file_name}")
+
+    REPAIR_DIR.mkdir(parents=True, exist_ok=True)
+    package = REPAIR_DIR / f"Ativa-Unified-Agent-Setup-{version}.exe"
+    logger.info("Reparo: baixando o pacote oficial %s", version)
+    # A URL de download e montada a partir da api_url local, nunca do payload.
+    download_package(f"{api_url}/download/{quote(version, safe='')}", token, sha256, package, size)
+    logger.info("Reparo: SHA-256 conferido para o pacote %s", version)
+
+    install_log = LOG_DIR / f"repair-{int(time.time())}.log"
+    # O instalador unificado PARA o servico AtivaGuardian para trocar binarios,
+    # ou seja, este processo pode morrer no meio. O marcador deixa registrado
+    # qual acao estava em curso para reportar o resultado ao voltar.
+    if action_id > 0:
+        atomic_json(REPAIR_STATE_PATH, {
+            "action_id": action_id,
+            "component": "updater",
+            "version": version,
+            "started_at": time.time(),
+        })
+
+    logger.info("Reparo: executando a instalacao silenciosa")
+    try:
+        completed = subprocess.run(
+            installer_command(package, install_log),
+            timeout=INSTALL_TIMEOUT_SECONDS,
+            creationflags=NO_WINDOW,
+        )
+        exit_code = completed.returncode
+    except subprocess.TimeoutExpired:
+        return False, "O instalador excedeu o tempo limite."
+    except OSError as exc:
+        return False, f"Nao foi possivel executar o instalador: {exc}"
+    finally:
+        _safe_unlink(package)
+
+    # 0 = ok; 3010/1641 = sucesso pedindo reinicio.
+    if exit_code not in (0, 1641, 3010):
+        return False, f"O instalador terminou com codigo {exit_code}. Log: {install_log}"
+
+    return verify_updater_repair(logger)
+
+
+def verify_updater_repair(logger: logging.Logger, sleep=time.sleep,
+                          timeout: int = SERVICE_WAIT_SECONDS) -> tuple[bool, str]:
+    """Health check apos o reparo: o componente precisa estar realmente de pe."""
+    _safe_unlink(REPAIR_STATE_PATH)
+
+    if not UPDATER_EXE.is_file():
+        # Cenario conhecido: o antivirus remove o executavel de novo. Nao
+        # tentamos desativar nem contornar o AV - so reportamos.
+        return False, ("O executavel do Updater sumiu logo apos a instalacao. "
+                       "Um antivirus provavelmente o colocou em quarentena.")
+
+    service = resolve_component_service("updater")
+    if service is None:
+        return False, "O servico do Updater nao existe apos a instalacao."
+    if not wait_for_service_state(service, SERVICE_STATE_RUNNING, timeout=timeout, sleep=sleep):
+        return False, "O Updater foi instalado, mas o servico nao entrou em execucao."
+
+    status = check_updater()["status"]
+    if status != STATUS_HEALTHY:
+        return False, f"Apos o reparo o Updater segue com status {status}."
+
+    logger.info("Reparo concluido: updater healthy")
+    return True, "Ativa Updater reinstalado e em execucao."
+
+
+REPAIR_HANDLERS = {"updater": repair_updater}
+
+
 def execute_action(component: str, action: str, logger: logging.Logger,
-                   sleep=time.sleep, timeout: int = SERVICE_WAIT_SECONDS) -> tuple[bool, str]:
+                   sleep=time.sleep, timeout: int = SERVICE_WAIT_SECONDS,
+                   action_id: int = 0) -> tuple[bool, str]:
     """Executa uma acao permitida. Retorna (sucesso, mensagem).
 
     Nunca levanta: qualquer falha vira (False, motivo) para o GLPI registrar.
@@ -720,6 +951,13 @@ def execute_action(component: str, action: str, logger: logging.Logger,
         if action == ACTION_CHECK:
             result = COMPONENT_CHECKS[component]()
             return True, f"{component}: {result['status']}"
+
+        if action == ACTION_REPAIR:
+            handler = REPAIR_HANDLERS.get(component)
+            if handler is None:
+                return False, (f"O reparo de '{component}' ainda nao foi implementado; "
+                               "por enquanto apenas o Ativa Updater se repara sozinho.")
+            return handler(logger, action_id)
 
         service = resolve_component_service(component)
         if service is None:
@@ -943,7 +1181,7 @@ class GuardianRuntime:
                 continue
 
             logger.info("Acao %s recebida: %s em %s", action_id, action, component)
-            success, message = execute_action(component, action, logger)
+            success, message = execute_action(component, action, logger, action_id=action_id)
             logger.info("Acao %s: %s (%s)", action_id, "success" if success else "failed", message)
 
             try:
@@ -952,9 +1190,43 @@ class GuardianRuntime:
                 # O servidor expira sozinho o que ficar preso em running.
                 logger.warning("Nao foi possivel devolver o resultado da acao %s: %s", action_id, exc)
 
+    def finish_pending_repair(self, logger: logging.Logger, machine_id: str) -> None:
+        """Fecha um reparo que o proprio instalador interrompeu.
+
+        O instalador unificado para o servico AtivaGuardian para trocar
+        binarios, entao o processo que pediu o reparo morre antes de reportar.
+        Ao voltar, o marcador diz qual acao ficou em aberto: roda-se o health
+        check e o resultado real e devolvido ao GLPI.
+        """
+        if not REPAIR_STATE_PATH.is_file():
+            return
+        try:
+            state = load_json(REPAIR_STATE_PATH)
+        except GuardianError:
+            _safe_unlink(REPAIR_STATE_PATH)
+            return
+
+        action_id = int(state.get("action_id", 0) or 0)
+        logger.info("Retomando o reparo interrompido (acao %s)", action_id)
+        success, message = verify_updater_repair(logger)
+        logger.info("Reparo %s: %s (%s)", action_id, "success" if success else "failed", message)
+
+        if action_id <= 0:
+            return
+        try:
+            config = validate_config(load_json(CONFIG_PATH))
+            ApiClient(config).report_action(action_id, machine_id, success, message)
+        except GuardianError as exc:
+            # O servidor expira sozinho o que ficar preso em running.
+            logger.warning("Nao foi possivel reportar o reparo %s: %s", action_id, exc)
+
     def run(self, logger: logging.Logger) -> None:
         logger.info("Guardian started (versao %s)", GUARDIAN_VERSION)
         machine_id = machine_identity(logger)
+        try:
+            self.finish_pending_repair(logger, machine_id)
+        except Exception:  # noqa: BLE001 - nunca impede o servico de subir
+            logger.exception("Falha ao retomar o reparo pendente.")
         next_heartbeat = 0.0
 
         # Duas cadencias no mesmo laco: o heartbeat no intervalo configurado e a

@@ -162,8 +162,12 @@ final class MachinesView
         if ($action !== null) {
             // Ja existe acao na fila: mostra o andamento em vez de novos botoes,
             // para o operador nao empilhar cliques.
+            $running = $action['status'] === ActionQueue::RUNNING;
+            $isRepair = $action['action'] === ActionQueue::REPAIR;
             $extra = "<span class='ag-action-state'>"
-                . ($action['status'] === ActionQueue::RUNNING ? 'Executando…' : 'Solicitado')
+                . ($isRepair
+                    ? ($running ? 'Reparando…' : 'Reparo solicitado')
+                    : ($running ? 'Executando…' : 'Solicitado'))
                 . '</span>';
         } elseif ($canManage && $component !== '') {
             $extra = self::actionButtons($machinesId, $component, $status);
@@ -188,6 +192,11 @@ final class MachinesView
         }
         if ($status !== HealthStatus::FILE_MISSING) {
             $offer[ActionQueue::RESTART] = ['Reiniciar', 'fa-arrows-rotate'];
+        }
+        // Reparar reinstala o componente: so aparece quando ele esta quebrado
+        // de um jeito que iniciar/reiniciar nao resolve.
+        if (in_array($status, [HealthStatus::FILE_MISSING, HealthStatus::ERROR], true)) {
+            $offer[ActionQueue::REPAIR] = ['Reparar (reinstala o componente)', 'fa-wrench'];
         }
 
         $html = '';

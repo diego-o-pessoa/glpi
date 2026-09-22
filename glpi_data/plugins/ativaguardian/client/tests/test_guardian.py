@@ -12,6 +12,7 @@ Reboot e partida real do servico sao verificados manualmente (ver docs/SERVICE.m
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -475,3 +476,185 @@ class ActionPollingTests(unittest.TestCase):
              mock.patch.object(guardian, "ApiClient", return_value=api):
             runtime.run_actions(quiet_logger(), "maquina-1")
         api.report_action.assert_not_called()
+
+
+class RepairSecurityTests(unittest.TestCase):
+    """A origem do pacote e local e verificada; nunca vem da acao."""
+
+    GUARDIAN = dict(ConfigurationTests.BASE)
+
+    def creds(self, guardian_extra=None, updater=None):
+        cfg = dict(self.GUARDIAN)
+        cfg.update(guardian_extra or {})
+
+        def fake_load(path):
+            if path == guardian.CONFIG_PATH:
+                return cfg
+            if path == guardian.UPDATER_CONFIG_PATH:
+                if updater is None:
+                    raise guardian.GuardianError("sem config do updater")
+                return updater
+            raise guardian.GuardianError("inesperado")
+
+        with mock.patch.object(guardian, "load_json", side_effect=fake_load):
+            return guardian.updater_api_credentials()
+
+    def test_reads_updater_config_when_guardian_has_none(self) -> None:
+        url, token = self.creds(updater={
+            "api_url": "https://glpi.exemplo.com/plugins/ativaupdater/api/v1",
+            "api_token": "b" * 64,
+        })
+        self.assertTrue(url.endswith("/plugins/ativaupdater/api/v1"))
+        self.assertEqual(token, "b" * 64)
+
+    def test_rejects_package_source_on_another_host(self) -> None:
+        """Impede que um config adulterado aponte o download para outro servidor."""
+        with self.assertRaises(guardian.GuardianError) as caught:
+            self.creds(updater={
+                "api_url": "https://atacante.example/plugins/ativaupdater/api/v1",
+                "api_token": "b" * 64,
+            })
+        self.assertIn("outro host", str(caught.exception))
+
+    def test_rejects_http_source(self) -> None:
+        with self.assertRaises(guardian.GuardianError):
+            self.creds(updater={
+                "api_url": "http://glpi.exemplo.com/plugins/ativaupdater/api/v1",
+                "api_token": "b" * 64,
+            })
+
+    def test_rejects_wrong_plugin_endpoint(self) -> None:
+        with self.assertRaises(guardian.GuardianError):
+            self.creds(updater={
+                "api_url": "https://glpi.exemplo.com/plugins/qualquer/api/v1",
+                "api_token": "b" * 64,
+            })
+
+    def test_repair_of_unsupported_component_is_refused(self) -> None:
+        ok, message = guardian.execute_action("wallpaper", guardian.ACTION_REPAIR, quiet_logger())
+        self.assertFalse(ok)
+        self.assertIn("ainda nao foi implementado", message)
+
+    def test_only_updater_is_repairable_for_now(self) -> None:
+        self.assertEqual(tuple(guardian.REPAIR_HANDLERS), guardian.REPAIRABLE_COMPONENTS)
+
+
+class DownloadValidationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+
+    def fake_download(self, payload: bytes, expected_sha: str, expected_size: int = 0):
+        destination = self.root / "pacote.exe"
+        response = mock.MagicMock()
+        chunks = [payload, b""]
+        response.read.side_effect = lambda _n=0: chunks.pop(0)
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=False)
+        opener = mock.Mock()
+        opener.open.return_value = response
+        with mock.patch.object(guardian, "build_opener", return_value=opener):
+            guardian.download_package("https://glpi/x", "t" * 64, expected_sha, destination, expected_size)
+        return destination
+
+    def test_valid_package_is_written(self) -> None:
+        payload = b"instalador"
+        sha = hashlib.sha256(payload).hexdigest()
+        destination = self.fake_download(payload, sha)
+        self.assertEqual(destination.read_bytes(), payload)
+
+    def test_wrong_hash_deletes_the_file(self) -> None:
+        with self.assertRaises(guardian.GuardianError) as caught:
+            self.fake_download(b"adulterado", hashlib.sha256(b"original").hexdigest())
+        self.assertIn("SHA-256", str(caught.exception))
+        self.assertFalse((self.root / "pacote.exe").exists())
+
+    def test_incomplete_download_is_rejected(self) -> None:
+        payload = b"curto"
+        sha = hashlib.sha256(payload).hexdigest()
+        with self.assertRaises(guardian.GuardianError) as caught:
+            self.fake_download(payload, sha, expected_size=999999)
+        self.assertIn("incompleto", str(caught.exception))
+        self.assertFalse((self.root / "pacote.exe").exists())
+
+    def test_malformed_published_hash_is_refused(self) -> None:
+        with self.assertRaises(guardian.GuardianError):
+            self.fake_download(b"x", "nao-e-um-sha")
+
+    def test_no_disk_space_is_reported(self) -> None:
+        usage = mock.Mock(free=1024)
+        with mock.patch.object(guardian.shutil, "disk_usage", return_value=usage):
+            with self.assertRaises(guardian.GuardianError) as caught:
+                guardian.download_package("https://glpi/x", "t" * 64, "a" * 64, self.root / "p.exe")
+        self.assertIn("Espaco em disco", str(caught.exception))
+
+
+class RepairOutcomeTests(unittest.TestCase):
+    """Health check apos o reparo: so healthy conta como sucesso."""
+
+    def test_antivirus_removing_the_file_again_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(guardian, "REPAIR_STATE_PATH", Path(directory) / "s.json"), \
+                 mock.patch.object(guardian, "UPDATER_EXE", Path(directory) / "ausente.exe"):
+                ok, message = guardian.verify_updater_repair(quiet_logger())
+        self.assertFalse(ok)
+        self.assertIn("antivirus", message.lower())
+
+    def test_service_not_starting_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            exe = Path(directory) / "AtivaUnifiedUpdater.exe"
+            exe.write_text("x", encoding="utf-8")
+            with mock.patch.object(guardian, "REPAIR_STATE_PATH", Path(directory) / "s.json"), \
+                 mock.patch.object(guardian, "UPDATER_EXE", exe), \
+                 mock.patch.object(guardian, "resolve_component_service", return_value="AtivaUnifiedUpdater"), \
+                 mock.patch.object(guardian, "query_service", return_value=guardian.SERVICE_STATE_STOPPED):
+                ok, message = guardian.verify_updater_repair(quiet_logger(), sleep=lambda _s: None, timeout=1)
+        self.assertFalse(ok)
+        self.assertIn("nao entrou em execucao", message)
+
+    def test_successful_repair_requires_healthy_status(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            exe = Path(directory) / "AtivaUnifiedUpdater.exe"
+            exe.write_text("x", encoding="utf-8")
+            with mock.patch.object(guardian, "REPAIR_STATE_PATH", Path(directory) / "s.json"), \
+                 mock.patch.object(guardian, "UPDATER_EXE", exe), \
+                 mock.patch.object(guardian, "resolve_component_service", return_value="AtivaUnifiedUpdater"), \
+                 mock.patch.object(guardian, "query_service", return_value=guardian.SERVICE_STATE_RUNNING), \
+                 mock.patch.object(guardian, "check_updater", return_value={"status": "healthy", "version": "1.7.3"}):
+                ok, message = guardian.verify_updater_repair(quiet_logger(), sleep=lambda _s: None, timeout=1)
+        self.assertTrue(ok)
+        self.assertIn("reinstalado", message)
+
+
+class InterruptedRepairTests(unittest.TestCase):
+    """O instalador para o servico AtivaGuardian; o resultado sai na volta."""
+
+    def test_pending_repair_is_reported_after_restart(self) -> None:
+        runtime = guardian.GuardianRuntime()
+        api = mock.Mock()
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "repair-state.json"
+            marker.write_text(json.dumps({"action_id": 42, "component": "updater"}), encoding="utf-8")
+
+            # load_json atende tanto o marcador quanto o config.json do Guardian,
+            # que nesta maquina de teste nao existe em ProgramData.
+            def fake_load(path):
+                if path == marker:
+                    return {"action_id": 42, "component": "updater"}
+                return dict(ConfigurationTests.BASE)
+
+            with mock.patch.object(guardian, "REPAIR_STATE_PATH", marker), \
+                 mock.patch.object(guardian, "load_json", side_effect=fake_load), \
+                 mock.patch.object(guardian, "verify_updater_repair", return_value=(True, "ok")), \
+                 mock.patch.object(guardian, "ApiClient", return_value=api):
+                runtime.finish_pending_repair(quiet_logger(), "maquina-1")
+        api.report_action.assert_called_once_with(42, "maquina-1", True, "ok")
+
+    def test_no_marker_does_nothing(self) -> None:
+        runtime = guardian.GuardianRuntime()
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(guardian, "REPAIR_STATE_PATH", Path(directory) / "ausente.json"), \
+                 mock.patch.object(guardian, "ApiClient") as client:
+                runtime.finish_pending_repair(quiet_logger(), "maquina-1")
+        client.assert_not_called()
