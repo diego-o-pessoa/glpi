@@ -234,21 +234,10 @@ final class MachinesView
             ? "<span class='ag-comp-ver'>" . htmlescape($version) . '</span>'
             : "<span class='ag-comp-ver'>—</span>";
 
-        $extra = '';
-        if ($action !== null) {
-            // Ja existe acao na fila: mostra o andamento em vez de novos botoes,
-            // para o operador nao empilhar cliques.
-            $running = $action['status'] === ActionQueue::RUNNING;
-            $isRepair = $action['action'] === ActionQueue::REPAIR;
-            $extra = "<span class='ag-action-state'>"
-                . ($isRepair
-                    ? ($running ? 'Reparando…' : 'Reparo solicitado')
-                    : ($running ? 'Executando…' : 'Solicitado'))
-                . '</span>';
-        }
-
+        // Sem texto de andamento aqui: o progresso da ação aparece no modal
+        // bloqueante aberto no clique, como no Ativa Updater.
         return "<td><div class='ag-comp'><span class='ag-badge {$class}'>" . htmlescape($label)
-            . "</span>{$versionLine}{$extra}</div></td>";
+            . "</span>{$versionLine}</div></td>";
     }
 
     /** @return array{label:string, absolute:string} */

@@ -33,6 +33,25 @@ echo "<div class='ag-card-body' id='ag-machines-body'>" . MachinesView::renderTa
 
 echo PageLayout::footer();
 
+// Modal de operação: fica travado enquanto a ação roda, como no Ativa Updater.
+echo <<<'HTML'
+<div class="ag-modal-layer" id="ag-modal" role="dialog" aria-modal="true" aria-labelledby="ag-modal-title" hidden>
+    <section class="ag-modal">
+        <header class="ag-modal-head">
+            <div class="ag-modal-head-text">
+                <h3 id="ag-modal-title">Ativa Guardian</h3>
+                <p id="ag-modal-subtitle"></p>
+            </div>
+            <button type="button" class="ag-modal-close" id="ag-modal-close" aria-label="Fechar" hidden>&times;</button>
+        </header>
+        <div id="ag-modal-body"></div>
+        <footer class="ag-modal-foot" id="ag-modal-foot" hidden>
+            <button type="button" class="btn btn-primary" id="ag-modal-done">Fechar</button>
+        </footer>
+    </section>
+</div>
+HTML;
+
 echo <<<'HTML'
 <script>
 (() => {
@@ -79,20 +98,106 @@ echo <<<'HTML'
     };
 
     const csrf = () => document.querySelector('meta[property="glpi:csrf_token"]')?.getAttribute('content') || '';
-    const notify = (text, ok) => {
-        let box = document.getElementById('ag-message');
-        if (!box) { box = document.createElement('div'); box.id = 'ag-message'; card.parentNode.insertBefore(box, card); }
-        box.innerHTML = '';
-        const alert = document.createElement('div');
-        alert.className = 'ag-alert ' + (ok ? 'ag-alert-info' : 'ag-alert-danger');
-        alert.textContent = text;
-        box.append(alert);
+    // --- Modal de operação (mesmo comportamento do Ativa Updater) ------------
+    const layer = document.getElementById('ag-modal');
+    const modalTitle = document.getElementById('ag-modal-title');
+    const modalSubtitle = document.getElementById('ag-modal-subtitle');
+    const modalBody = document.getElementById('ag-modal-body');
+    const modalClose = document.getElementById('ag-modal-close');
+    const modalFoot = document.getElementById('ag-modal-foot');
+    const modalDone = document.getElementById('ag-modal-done');
+    let locked = false;
+
+    const openModal = (title, subtitle) => {
+        locked = true;                 // travado: não dá para fechar durante a execução
+        modalTitle.textContent = title;
+        modalSubtitle.textContent = subtitle;
+        modalBody.innerHTML = '';
+        modalClose.hidden = true;
+        modalFoot.hidden = true;
+        layer.hidden = false;
+        document.body.classList.add('ag-modal-open');
     };
+    const unlockModal = () => { locked = false; modalClose.hidden = false; modalFoot.hidden = false; };
+    const closeModal = () => {
+        if (locked) return;
+        layer.hidden = true;
+        document.body.classList.remove('ag-modal-open');
+    };
+    const renderOp = (percent, title, note, state = 'run') => {
+        const icon = state === 'done' ? 'fa-check' : state === 'err' ? 'fa-triangle-exclamation' : 'fa-arrows-rotate';
+        modalBody.innerHTML =
+            `<div class="ag-op"><div class="ag-op-icon is-${state}"><i class="fas ${icon}"></i></div>` +
+            '<h4></h4><p></p><div class="ag-op-bar"><span></span></div>' +
+            '<div class="ag-op-note">Não feche esta janela enquanto a operação estiver em andamento.</div></div>';
+        modalBody.querySelector('h4').textContent = title;
+        modalBody.querySelector('p').textContent = note;
+        const bar = modalBody.querySelector('.ag-op-bar span');
+        bar.style.width = percent + '%';
+        bar.textContent = percent + '%';
+    };
+
+    const LABELS = {
+        START_COMPONENT: ['Iniciando o serviço', 'Início'],
+        RESTART_COMPONENT: ['Reiniciando o serviço', 'Reinício'],
+        REPAIR_COMPONENT: ['Reparando o componente', 'Reparo'],
+        CHECK_COMPONENT: ['Verificando o componente', 'Verificação'],
+    };
+    const delay = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+    const followAction = async (actionId, verb) => {
+        // O Guardian busca ações a cada 30 s, e o reparo baixa um pacote: por
+        // isso a espera é longa (até 20 min) antes de desistir.
+        const started = Date.now();
+        for (let attempt = 0; attempt < 800; attempt += 1) {
+            let data = null;
+            try {
+                const response = await fetch('action_status.php?id=' + encodeURIComponent(actionId), {
+                    credentials: 'same-origin', cache: 'no-store',
+                    headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+                });
+                data = await response.json().catch(() => null);
+            } catch (error) { /* rede instável: tenta de novo */ }
+
+            if (data?.finished) {
+                const ok = data.status === 'success';
+                renderOp(100, ok ? verb + ' concluído' : 'Não foi possível concluir',
+                    ok ? 'A máquina confirmou a execução.' : (data.message || 'A máquina reportou falha.'),
+                    ok ? 'done' : 'err');
+                unlockModal();
+                refresh(true);
+                return;
+            }
+            if (data?.status === 'running') {
+                renderOp(Math.min(92, 45 + Math.floor((Date.now() - started) / 4000)),
+                    'Executando na máquina', 'O Guardian recebeu a ação e está executando…');
+            } else {
+                renderOp(Math.min(40, 8 + Math.floor((Date.now() - started) / 1500)),
+                    'Aguardando a máquina', 'A ação está na fila; o Guardian busca a cada 30 segundos.');
+            }
+            await delay(1500);
+        }
+        renderOp(92, 'Sem resposta da máquina',
+            'A ação continua registrada no histórico. Verifique se o computador está ligado e com o Guardian em execução.', 'err');
+        unlockModal();
+    };
+
+    modalClose.addEventListener('click', closeModal);
+    modalDone.addEventListener('click', closeModal);
+    layer.addEventListener('click', (event) => { if (event.target === layer) closeModal(); });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeModal(); });
+
     document.addEventListener('click', async (event) => {
         const button = event.target.closest('[data-ag-action]');
         if (!button || button.disabled) return;
         event.preventDefault();
-        button.disabled = true;
+        closeMenus(null);
+
+        const [title, verb] = LABELS[button.dataset.agAction] || ['Executando ação', 'Ação'];
+        const machine = button.closest('tr')?.querySelector('.ag-machine strong')?.textContent || '';
+        openModal(title, machine + ' · ' + button.dataset.agComponent);
+        renderOp(5, 'Registrando a solicitação', 'Enviando a ação ao servidor…');
+
         try {
             const form = new FormData();
             form.append('machines_id', button.dataset.agMachine);
@@ -103,13 +208,12 @@ echo <<<'HTML'
                 headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrf()},
             });
             const data = await response.json().catch(() => null);
-            if (!response.ok || !data?.ok) throw new Error(data?.message || 'Falha ao enviar a acao.');
-            notify(data.message, true);
+            if (!response.ok || !data?.ok) throw new Error(data?.message || 'Falha ao enviar a ação.');
+            await followAction(data.action_id, verb);
         } catch (error) {
-            notify(error.message, false);
-            button.disabled = false;
+            renderOp(0, 'Não foi possível solicitar', error.message, 'err');
+            unlockModal();
         }
-        refresh(true);
     });
     // --- Busca, ordenação e menu de ações: tudo no cliente. A tabela tem uma
     // linha por máquina, então filtrar/ordenar aqui evita ida ao servidor e
