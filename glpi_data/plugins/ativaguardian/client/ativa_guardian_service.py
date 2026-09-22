@@ -51,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.1.0"
+GUARDIAN_VERSION = "1.1.1"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -447,6 +447,24 @@ def is_process_running(image_name: str) -> bool:
         kernel32.CloseHandle(snapshot)
 
 
+# Versoes mudam raramente, mas descobri-las custa caro (o GLPI Agent exige
+# varrer toda a arvore de desinstalacao). Como as verificacoes passaram a rodar
+# a cada 30 s, o resultado fica em cache; estado de servico/processo continua
+# sendo lido fresco a cada vez, que e o que muda de fato.
+VERSION_CACHE_SECONDS = 600
+_version_cache: dict[str, tuple[float, str]] = {}
+
+
+def _cached_version(key: str, producer) -> str:
+    cached = _version_cache.get(key)
+    now = time.time()
+    if cached is not None and (now - cached[0]) < VERSION_CACHE_SECONDS:
+        return cached[1]
+    value = producer()
+    _version_cache[key] = (now, value)
+    return value
+
+
 def registry_uninstall_version(subkey: str) -> str:
     """DisplayVersion de uma chave de desinstalacao conhecida."""
     if os.name != "nt":
@@ -621,7 +639,7 @@ def check_wallpaper() -> dict[str, str]:
 
 def check_remote() -> dict[str, str]:
     """Ativa Remote = RustDesk, instalado e mantido pelo Ativa Updater."""
-    version = registry_uninstall_version(RUSTDESK_UNINSTALL_KEY)
+    version = _cached_version("rustdesk", lambda: registry_uninstall_version(RUSTDESK_UNINSTALL_KEY))
 
     if not RUSTDESK_INSTALLED_EXE.is_file():
         return _component(STATUS_FILE_MISSING, version)
@@ -636,7 +654,7 @@ def check_remote() -> dict[str, str]:
 
 def check_glpi_agent() -> dict[str, str]:
     """GLPI Agent: instalado pelo MSI oficial, com nome de servico sondado."""
-    version = glpi_agent_version()
+    version = _cached_version("glpi_agent", glpi_agent_version)
     found = first_existing_service(GLPI_AGENT_SERVICE_CANDIDATES)
 
     if found is None:
@@ -911,6 +929,9 @@ def verify_updater_repair(logger: logging.Logger, sleep=time.sleep,
                           timeout: int = SERVICE_WAIT_SECONDS) -> tuple[bool, str]:
     """Health check apos o reparo: o componente precisa estar realmente de pe."""
     _safe_unlink(REPAIR_STATE_PATH)
+    # A reinstalacao troca a versao instalada: o cache precisa sair do caminho,
+    # senao o painel mostraria a versao antiga por ate VERSION_CACHE_SECONDS.
+    _version_cache.clear()
 
     if not UPDATER_EXE.is_file():
         # Cenario conhecido: o antivirus remove o executavel de novo. Nao
@@ -987,8 +1008,12 @@ def execute_action(component: str, action: str, logger: logging.Logger,
         return False, str(exc)[:400]
 
 
-def collect_components(logger: logging.Logger) -> dict[str, dict[str, str]]:
-    """Roda todas as verificacoes. Uma que falhe vira 'unknown' e nao afeta as outras."""
+def collect_components(logger: logging.Logger, quiet: bool = False) -> dict[str, dict[str, str]]:
+    """Roda todas as verificacoes. Uma que falhe vira 'unknown' e nao afeta as outras.
+
+    quiet=True nos ticks de 30 s: sem isso o log encheria de linhas repetidas.
+    O resultado e registrado normalmente quando o heartbeat sai.
+    """
     components: dict[str, dict[str, str]] = {}
     for name, check in COMPONENT_CHECKS.items():
         try:
@@ -996,8 +1021,9 @@ def collect_components(logger: logging.Logger) -> dict[str, dict[str, str]]:
         except Exception as exc:  # noqa: BLE001 - isolamento e o objetivo
             logger.warning("Falha ao verificar %s: %s", name, exc)
             components[name] = _component(STATUS_UNKNOWN)
-        logger.info("%s: %s%s", name, components[name]["status"],
-                    f" ({components[name]['version']})" if components[name]["version"] else "")
+        if not quiet:
+            logger.info("%s: %s%s", name, components[name]["status"],
+                        f" ({components[name]['version']})" if components[name]["version"] else "")
     return components
 
 
@@ -1114,10 +1140,12 @@ class GuardianRuntime:
     def __init__(self) -> None:
         self.stop_event = threading.Event()
 
-    def run_cycle(self, logger: logging.Logger, machine_id: str) -> None:
+    def run_cycle(self, logger: logging.Logger, machine_id: str,
+                  components: dict[str, dict[str, str]] | None = None) -> None:
         """Uma verificacao + um envio. Qualquer falha e registrada e engolida."""
-        logger.info("Checking components")
-        components = collect_components(logger)
+        if components is None:
+            logger.info("Checking components")
+            components = collect_components(logger)
         antivirus = "unknown"
         try:
             antivirus = detect_antivirus(logger)
@@ -1228,15 +1256,28 @@ class GuardianRuntime:
         except Exception:  # noqa: BLE001 - nunca impede o servico de subir
             logger.exception("Falha ao retomar o reparo pendente.")
         next_heartbeat = 0.0
+        last_reported: str | None = None
 
-        # Duas cadencias no mesmo laco: o heartbeat no intervalo configurado e a
-        # consulta de acoes a cada ACTION_POLL_SECONDS, para um clique no painel
-        # nao esperar o ciclo inteiro.
+        # As verificacoes sao locais e baratas, entao rodam a cada
+        # ACTION_POLL_SECONDS. O heartbeat sai no intervalo configurado OU assim
+        # que algum status muda - sem isso, parar um servico so aparecia no
+        # painel depois de ate 5 minutos, ainda como "Saudavel".
         while not self.stop_event.is_set():
-            now = time.monotonic()
-            if now >= next_heartbeat:
+            components: dict[str, dict[str, str]] | None = None
+            try:
+                components = collect_components(logger, quiet=True)
+            except Exception:  # noqa: BLE001
+                logger.exception("Falha inesperada ao verificar componentes.")
+
+            signature = json.dumps(components, sort_keys=True) if components is not None else None
+            changed = signature is not None and last_reported is not None and signature != last_reported
+            if changed:
+                logger.info("Mudanca de status detectada; enviando heartbeat imediato.")
+
+            if time.monotonic() >= next_heartbeat or changed:
                 try:
-                    self.run_cycle(logger, machine_id)
+                    self.run_cycle(logger, machine_id, components)
+                    last_reported = signature
                 except Exception:  # noqa: BLE001 - nenhum ciclo pode matar o loop
                     logger.exception("Falha inesperada no ciclo de verificacao.")
                 next_heartbeat = time.monotonic() + self.interval(logger)

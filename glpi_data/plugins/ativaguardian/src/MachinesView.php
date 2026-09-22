@@ -82,11 +82,17 @@ final class MachinesView
             return "<div class='ag-empty'><i class='fas fa-inbox me-2'></i>Nenhuma máquina enviou heartbeat ainda.</div>";
         }
 
-        $head = "<thead><tr><th>Máquina</th><th>Guardian</th>";
+        // Colunas ordenáveis no cliente: a tabela é pequena (uma linha por
+        // máquina), então ordenar e filtrar no navegador evita ida ao servidor.
+        $sortable = static fn(string $label): string =>
+            "<th><button type='button' class='ag-sort'>" . htmlescape($label)
+            . "<i class='fas fa-sort'></i></button></th>";
+
+        $head = '<thead><tr>' . $sortable('Máquina') . $sortable('Guardian');
         foreach (self::COLUMNS as $label) {
-            $head .= '<th>' . htmlescape($label) . '</th>';
+            $head .= $sortable($label);
         }
-        $head .= '<th>Último contato</th></tr></thead>';
+        $head .= $sortable('Último contato') . "<th class='ag-col-actions'>Ações</th></tr></thead>";
 
         $rows = '';
         foreach ($data['machines'] as $machine) {
@@ -97,7 +103,13 @@ final class MachinesView
             );
         }
 
-        return "<table class='ag-table'>{$head}<tbody>{$rows}</tbody></table>";
+        $total = count($data['machines']);
+        $footer = "<div class='ag-table-foot'>"
+            . "<span data-ag-count>Mostrando {$total} de {$total} " . ($total === 1 ? 'máquina' : 'máquinas') . '</span>'
+            . "<span class='ag-updated'><i class='fas fa-rotate'></i>Última atualização: "
+            . "<span data-ag-updated>" . htmlescape(date('d-m-Y H:i:s')) . '</span></span></div>';
+
+        return "<table class='ag-table'>{$head}<tbody>{$rows}</tbody></table>{$footer}";
     }
 
     private static function renderRow(array $machine, array $actions, bool $canManage): string
@@ -117,17 +129,13 @@ final class MachinesView
         $guardianStatus = $offline ? HealthStatus::OFFLINE : HealthStatus::HEALTHY;
         $guardianCell = self::componentCell($guardianStatus, (string) $machine['guardian_version']);
 
-        $machinesId = (int) $machine['id'];
         $componentCells = '';
         foreach (array_keys(self::COLUMNS) as $key) {
             $component = $machine['components'][$key] ?? null;
             $componentCells .= self::componentCell(
                 $component === null ? '' : (string) $component['status'],
                 $component === null ? '' : (string) $component['version'],
-                $machinesId,
-                $key,
                 $actions[$key] ?? null,
-                $canManage && !$offline,
                 $component !== null
             );
         }
@@ -136,17 +144,85 @@ final class MachinesView
         $lastCell = "<td class='ag-last'>" . htmlescape($age['label'])
             . "<small>" . htmlescape($age['absolute']) . '</small></td>';
 
-        return "<tr>{$machineCell}{$guardianCell}{$componentCells}{$lastCell}</tr>";
+        $actionsCell = self::actionsMenu($machine, $actions, $canManage && !$offline);
+
+        // data-ag-name alimenta a busca do cabeçalho sem precisar ler o DOM interno.
+        return "<tr data-ag-name='" . htmlescape(mb_strtolower($name)) . "'>"
+            . "{$machineCell}{$guardianCell}{$componentCells}{$lastCell}{$actionsCell}</tr>";
     }
 
-    /** Celula simples, sem acoes: usada para a coluna do proprio Guardian. */
+    /**
+     * Menu "⋮" da linha: reúne as ações disponíveis de todos os componentes.
+     *
+     * Substituiu os botões soltos em cada célula — eles poluíam a tabela e, no
+     * caso do "Verificar novamente", ofereciam manualmente algo que o Guardian
+     * já faz sozinho a cada 30 s.
+     */
+    private static function actionsMenu(array $machine, array $actions, bool $canManage): string
+    {
+        if (!$canManage) {
+            return "<td class='ag-col-actions'><span class='ag-comp-ver'>—</span></td>";
+        }
+
+        $machinesId = (int) $machine['id'];
+        $items = '';
+        foreach (self::COLUMNS as $key => $label) {
+            $component = $machine['components'][$key] ?? null;
+            if ($component === null || isset($actions[$key])) {
+                continue; // não reportado, ou já tem ação na fila
+            }
+            foreach (self::offeredActions($key, (string) $component['status']) as $action => [$text, $icon]) {
+                $items .= "<button type='button' class='ag-menu-item' data-ag-action='" . htmlescape($action)
+                    . "' data-ag-component='" . htmlescape($key) . "' data-ag-machine='{$machinesId}'>"
+                    . "<i class='fas {$icon}'></i>" . htmlescape($label . ' — ' . $text) . '</button>';
+            }
+        }
+
+        if ($items === '') {
+            return "<td class='ag-col-actions'><button type='button' class='ag-kebab' disabled"
+                . " title='Nenhuma ação disponível'><i class='fas fa-ellipsis-vertical'></i></button></td>";
+        }
+
+        return "<td class='ag-col-actions'><div class='ag-menu'>"
+            . "<button type='button' class='ag-kebab' data-ag-menu title='Ações'>"
+            . "<i class='fas fa-ellipsis-vertical'></i></button>"
+            . "<div class='ag-menu-list' hidden>{$items}</div></div></td>";
+    }
+
+    /** Ações oferecidas para um componente no estado atual. */
+    private static function offeredActions(string $component, string $status): array
+    {
+        $supported = ActionQueue::SUPPORTED[$component] ?? [];
+        $offer = [];
+
+        // Iniciar só faz sentido com o componente parado.
+        if (in_array($status, [HealthStatus::SERVICE_STOPPED, HealthStatus::PROCESS_STOPPED, HealthStatus::ERROR], true)) {
+            $offer[ActionQueue::START] = ['Iniciar', 'fa-play'];
+        }
+        if ($status !== HealthStatus::FILE_MISSING) {
+            $offer[ActionQueue::RESTART] = ['Reiniciar', 'fa-arrows-rotate'];
+        }
+        // Reparar reinstala: só quando iniciar/reiniciar não resolveria.
+        if (in_array($status, [HealthStatus::FILE_MISSING, HealthStatus::ERROR], true)) {
+            $offer[ActionQueue::REPAIR] = ['Reparar', 'fa-wrench'];
+        }
+
+        return array_filter(
+            $offer,
+            static fn(string $action): bool => in_array($action, $supported, true),
+            ARRAY_FILTER_USE_KEY
+        );
+    }
+
+    /**
+     * Badge + versão do componente, e o andamento quando há ação na fila.
+     *
+     * Não desenha botões: as ações vivem no menu "⋮" da linha.
+     */
     private static function componentCell(
         string $status,
         string $version,
-        int $machinesId = 0,
-        string $component = '',
         ?array $action = null,
-        bool $canManage = false,
         bool $reported = true
     ): string {
         if (!$reported) {
@@ -169,48 +245,10 @@ final class MachinesView
                     ? ($running ? 'Reparando…' : 'Reparo solicitado')
                     : ($running ? 'Executando…' : 'Solicitado'))
                 . '</span>';
-        } elseif ($canManage && $component !== '') {
-            $extra = self::actionButtons($machinesId, $component, $status);
         }
 
         return "<td><div class='ag-comp'><span class='ag-badge {$class}'>" . htmlescape($label)
             . "</span>{$versionLine}{$extra}</div></td>";
-    }
-
-    /** Botoes oferecidos para o componente, conforme o que ele suporta e o estado atual. */
-    private static function actionButtons(int $machinesId, string $component, string $status): string
-    {
-        $supported = ActionQueue::SUPPORTED[$component] ?? [];
-        if ($supported === []) {
-            return '';
-        }
-
-        $offer = [ActionQueue::CHECK => ['Verificar novamente', 'fa-rotate']];
-        // Iniciar so faz sentido com o componente parado; reiniciar, com ele de pe.
-        if (in_array($status, [HealthStatus::SERVICE_STOPPED, HealthStatus::PROCESS_STOPPED, HealthStatus::ERROR], true)) {
-            $offer[ActionQueue::START] = ['Iniciar', 'fa-play'];
-        }
-        if ($status !== HealthStatus::FILE_MISSING) {
-            $offer[ActionQueue::RESTART] = ['Reiniciar', 'fa-arrows-rotate'];
-        }
-        // Reparar reinstala o componente: so aparece quando ele esta quebrado
-        // de um jeito que iniciar/reiniciar nao resolve.
-        if (in_array($status, [HealthStatus::FILE_MISSING, HealthStatus::ERROR], true)) {
-            $offer[ActionQueue::REPAIR] = ['Reparar (reinstala o componente)', 'fa-wrench'];
-        }
-
-        $html = '';
-        foreach ($offer as $action => [$label, $icon]) {
-            if (!in_array($action, $supported, true)) {
-                continue;
-            }
-            $html .= "<button type='button' class='ag-act' data-ag-action='" . htmlescape($action)
-                . "' data-ag-component='" . htmlescape($component)
-                . "' data-ag-machine='{$machinesId}' title='" . htmlescape($label) . "'>"
-                . "<i class='fas {$icon}'></i></button>";
-        }
-
-        return $html !== '' ? "<span class='ag-actions'>{$html}</span>" : '';
     }
 
     /** @return array{label:string, absolute:string} */

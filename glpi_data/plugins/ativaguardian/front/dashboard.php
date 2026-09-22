@@ -23,7 +23,12 @@ echo MachinesView::renderKpis($metrics);
 
 echo "<section class='ag-card' id='ag-machines-card' data-endpoint='machines.php' data-signature='"
     . htmlescape(MachinesView::signature($data)) . "'>";
-echo "<header class='ag-card-header'><h2 class='ag-card-title'><i class='fas fa-desktop'></i>Computadores</h2></header>";
+echo "<header class='ag-card-head'>"
+    . "<div class='ag-card-head-text'><h2><i class='fas fa-desktop'></i>Máquinas</h2>"
+    . '<p>Status dos componentes Ativa instalados nas máquinas Windows</p></div>'
+    . "<div class='ag-search'><i class='fas fa-magnifying-glass'></i>"
+    . "<input type='search' id='ag-search' placeholder='Buscar máquina...' autocomplete='off'></div>"
+    . '</header>';
 echo "<div class='ag-card-body' id='ag-machines-body'>" . MachinesView::renderTable($data, $canManage) . '</div></section>';
 
 echo PageLayout::footer();
@@ -106,6 +111,64 @@ echo <<<'HTML'
         }
         refresh(true);
     });
+    // --- Busca, ordenação e menu de ações: tudo no cliente. A tabela tem uma
+    // linha por máquina, então filtrar/ordenar aqui evita ida ao servidor e
+    // sobrevive às trocas de HTML feitas pelo refresh ao vivo.
+    const rows = () => Array.from(body.querySelectorAll('tbody tr'));
+    const applyFilter = () => {
+        const term = (document.getElementById('ag-search')?.value || '').trim().toLowerCase();
+        let shown = 0;
+        rows().forEach((row) => {
+            const match = !term || (row.dataset.agName || '').includes(term);
+            row.hidden = !match;
+            if (match) shown += 1;
+        });
+        const counter = body.querySelector('[data-ag-count]');
+        const total = rows().length;
+        if (counter) counter.textContent = `Mostrando ${shown} de ${total} ` + (total === 1 ? 'máquina' : 'máquinas');
+    };
+    document.getElementById('ag-search')?.addEventListener('input', applyFilter);
+
+    let sortState = {index: null, asc: true};
+    const sortBy = (index) => {
+        const table = body.querySelector('table');
+        const tbody = table?.querySelector('tbody');
+        if (!tbody) return;
+        sortState = {index, asc: sortState.index === index ? !sortState.asc : true};
+        const text = (row) => (row.children[index]?.innerText || '').trim().toLowerCase();
+        Array.from(tbody.querySelectorAll('tr'))
+            .sort((a, b) => text(a).localeCompare(text(b), 'pt-BR', {numeric: true}) * (sortState.asc ? 1 : -1))
+            .forEach((row) => tbody.append(row));
+    };
+
+    const closeMenus = (except) => body.querySelectorAll('.ag-menu-list').forEach((list) => {
+        if (list !== except) list.hidden = true;
+    });
+
+    body.addEventListener('click', (event) => {
+        const sorter = event.target.closest('.ag-sort');
+        if (sorter) {
+            sortBy(Array.from(sorter.closest('tr').children).indexOf(sorter.closest('th')));
+            return;
+        }
+        const kebab = event.target.closest('[data-ag-menu]');
+        if (kebab) {
+            const list = kebab.parentElement.querySelector('.ag-menu-list');
+            closeMenus(list);
+            list.hidden = !list.hidden;
+        }
+    });
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('.ag-menu')) closeMenus(null);
+    });
+    // O refresh ao vivo troca o HTML da tabela: reaplica o filtro e a hora.
+    const observer = new MutationObserver(() => {
+        applyFilter();
+        const stamp = body.querySelector('[data-ag-updated]');
+        if (stamp) stamp.textContent = new Date().toLocaleString('pt-BR').replace(',', '');
+    });
+    observer.observe(body, {childList: true});
+
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(true); });
     window.setInterval(refresh, 5000);
 })();

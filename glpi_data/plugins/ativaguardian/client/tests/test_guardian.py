@@ -43,6 +43,9 @@ class ComponentStatusTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.addCleanup(self.tmp.cleanup)
+        # As versoes sao cacheadas por 10 min em producao; sem limpar, um teste
+        # herdaria a versao lida por outro.
+        guardian._version_cache.clear()
 
     def touch(self, name: str) -> Path:
         path = self.root / name

@@ -34,6 +34,12 @@ if ($isAjax) {
     return;
 }
 
+// A aba "Computadores" foi removida por mostrar a mesma tabela da Visão Geral.
+// Esta página continua existindo como endpoint da atualização ao vivo; um
+// acesso direto vai para a Visão Geral em vez de exibir a tabela duplicada.
+global $CFG_GLPI;
+Html::redirect($CFG_GLPI['root_doc'] . '/plugins/ativaguardian/front/dashboard.php');
+
 Html::header(__('Ativa Guardian', 'ativaguardian'), $_SERVER['PHP_SELF'], 'plugins', 'ativaguardian');
 
 echo PageLayout::header('machines', true);
