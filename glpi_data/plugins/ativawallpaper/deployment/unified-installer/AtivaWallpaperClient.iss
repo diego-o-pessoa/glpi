@@ -196,29 +196,28 @@ end;
 procedure InstallGuardian();
 var
   GuardianExe: String;
-  ConfigPath: String;
   ResultCode: Integer;
   Attempt: Integer;
 begin
   GuardianExe := ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe');
-  ConfigPath := ExpandConstant('{commonappdata}\AtivaLocacao\Guardian\config.json');
 
   ForceDirectories(ExpandConstant('{commonappdata}\AtivaLocacao\Guardian\logs'));
 
-  { Upgrade preserva a configuracao existente: config.json (token/API) e
-    machine.json (o machine_id) ficam em ProgramData e nao sao tocados. Só uma
-    instalacao limpa grava a configuracao que veio no pacote.
-    Consequencia a considerar: se o token for rotacionado no GLPI, maquinas ja
-    instaladas continuam com o antigo ate rodar --configure de novo. }
-  if FileExists(ConfigPath) then begin
-    Log('Ativa Guardian: config.json existente preservado (upgrade).');
-  end else begin
-    RunRequired(
-      'Configurando o Ativa Guardian...',
-      GuardianExe,
-      '--configure "' + ExpandConstant('{tmp}\ativaguardian-service-config.json') + '"'
-    );
-  end;
+  { A configuracao e SEMPRE regravada, inclusive em upgrade.
+
+    O que precisa sobreviver a uma atualizacao e a identidade da maquina, e ela
+    mora em machine.json - que este instalador nao toca. O config.json nao tem
+    nada especifico da maquina: e inteiramente fornecido pelo servidor (API,
+    token, intervalo, coordenadas do Updater para o reparo).
+
+    Preservar o config.json antigo, como era feito antes, significava que uma
+    rotacao de token ou um campo novo nunca chegavam a quem ja tinha o Guardian
+    instalado - o upgrade instalava o binario novo com configuracao velha. }
+  RunRequired(
+    'Configurando o Ativa Guardian...',
+    GuardianExe,
+    '--configure "' + ExpandConstant('{tmp}\ativaguardian-service-config.json') + '"'
+  );
 
   { --install-service cria ou reconfigura (sem duplicar), define startup
     automatico, aplica a recuperacao restart/restart/restart e inicia. }
