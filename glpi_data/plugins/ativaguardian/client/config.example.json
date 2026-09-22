@@ -2,5 +2,5 @@
   "api_url": "https://chamados.ativalocacao.com.br:8443/plugins/ativaguardian/api/v1",
   "api_token": "cole-aqui-o-token-de-64-caracteres-baixado-no-glpi",
   "verify_tls": true,
-  "heartbeat_interval_seconds": 300
+  "heartbeat_interval_seconds": 30
 }

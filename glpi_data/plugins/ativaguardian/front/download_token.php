@@ -34,7 +34,7 @@ $content = json_encode(
         'api_url'                    => rtrim((string) $CFG_GLPI['url_base'], '/') . '/plugins/ativaguardian/api/v1',
         'api_token'                  => $apiToken,
         'verify_tls'                 => true,
-        'heartbeat_interval_seconds' => 300,
+        'heartbeat_interval_seconds' => 30,
     ],
     JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
 );

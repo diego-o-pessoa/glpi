@@ -207,8 +207,8 @@ if ([string]$GuardianBootstrap.api_token -notmatch '^[a-fA-F0-9]{64}$') {
     throw "ativaguardian-service-config.json nao contem um token valido."
 }
 $GuardianInterval = [int]$GuardianBootstrap.heartbeat_interval_seconds
-if ($GuardianInterval -lt 60 -or $GuardianInterval -gt 86400) {
-    throw "O intervalo de heartbeat do Guardian deve estar entre 60 e 86400 segundos."
+if ($GuardianInterval -lt 30 -or $GuardianInterval -gt 86400) {
+    throw "O intervalo de heartbeat do Guardian deve estar entre 30 e 86400 segundos."
 }
 if (-not (Test-Path -LiteralPath $AgentMsi)) {
     $AgentDownloadUrl = "https://github.com/glpi-project/glpi-agent/releases/download/$AgentVersion/GLPI-Agent-$AgentVersion-x64.msi"

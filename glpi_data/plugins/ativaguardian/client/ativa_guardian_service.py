@@ -51,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.2.1"
+GUARDIAN_VERSION = "1.2.2"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -70,8 +70,8 @@ SERVICE_EXE = INSTALL_DIR / "AtivaGuardian.exe"
 
 MUTEX_NAME = r"Global\AtivaGuardianService"
 
-DEFAULT_INTERVAL_SECONDS = 300
-MIN_INTERVAL_SECONDS = 60
+DEFAULT_INTERVAL_SECONDS = 30
+MIN_INTERVAL_SECONDS = 30
 MAX_INTERVAL_SECONDS = 86400
 API_TIMEOUT_SECONDS = 30
 # Backoff between heartbeat attempts. The loop never gives up for good: after the
@@ -1227,6 +1227,9 @@ class ApiClient:
 class GuardianRuntime:
     def __init__(self) -> None:
         self.stop_event = threading.Event()
+        # Assinatura do ultimo status que o servidor confirmou ter recebido.
+        # Fica aqui (e nao no laco) porque run_actions tambem envia heartbeat.
+        self.last_signature: str | None = None
 
     def run_cycle(self, logger: logging.Logger, machine_id: str,
                   components: dict[str, dict[str, str]] | None = None) -> None:
@@ -1251,6 +1254,11 @@ class GuardianRuntime:
         try:
             ApiClient(config).send_heartbeat(payload)
             logger.info("Heartbeat sent")
+            # So marca como reportado quando o envio deu certo. Se a API estava
+            # fora, a mudanca continua pendente e o proximo tick tenta de novo -
+            # antes isso era registrado como enviado e o status novo se perdia
+            # ate o ciclo seguinte.
+            self.last_signature = json.dumps(components, sort_keys=True)
         except GuardianError as exc:
             logger.warning("Heartbeat failed: %s", exc)
         except Exception as exc:  # noqa: BLE001 - a API nunca derruba o servico
@@ -1360,7 +1368,6 @@ class GuardianRuntime:
         except Exception:  # noqa: BLE001 - nunca impede o servico de subir
             logger.exception("Falha ao retomar o reparo pendente.")
         next_heartbeat = 0.0
-        last_reported: str | None = None
 
         # As verificacoes sao locais e baratas, entao rodam a cada
         # ACTION_POLL_SECONDS. O heartbeat sai no intervalo configurado OU assim
@@ -1374,23 +1381,26 @@ class GuardianRuntime:
                 logger.exception("Falha inesperada ao verificar componentes.")
 
             signature = json.dumps(components, sort_keys=True) if components is not None else None
-            changed = signature is not None and last_reported is not None and signature != last_reported
+            changed = (
+                signature is not None
+                and self.last_signature is not None
+                and signature != self.last_signature
+            )
             if changed:
                 logger.info("Mudanca de status detectada; enviando heartbeat imediato.")
 
             if time.monotonic() >= next_heartbeat or changed:
                 try:
+                    # run_cycle grava self.last_signature quando o envio funciona.
                     self.run_cycle(logger, machine_id, components)
-                    last_reported = signature
                 except Exception:  # noqa: BLE001 - nenhum ciclo pode matar o loop
                     logger.exception("Falha inesperada no ciclo de verificacao.")
                 next_heartbeat = time.monotonic() + self.interval(logger)
 
             try:
                 if self.run_actions(logger, machine_id):
-                    # O status ja foi reenviado dentro de run_actions; zera a
-                    # referencia para o proximo tick nao repetir o envio.
-                    last_reported = None
+                    # run_actions ja reenviou o status (e atualizou
+                    # last_signature); so adia o proximo envio agendado.
                     next_heartbeat = time.monotonic() + self.interval(logger)
             except Exception:  # noqa: BLE001
                 logger.exception("Falha inesperada ao processar acoes.")

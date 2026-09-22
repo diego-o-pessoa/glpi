@@ -802,3 +802,65 @@ class SilentInstallTests(unittest.TestCase):
         flags = captured.get("creationflags", 0)
         self.assertTrue(flags & guardian.subprocess.DETACHED_PROCESS, "precisa ser destacado")
         self.assertTrue(flags & guardian.subprocess.CREATE_NO_WINDOW, "nao pode abrir janela")
+
+
+class StatusFreshnessTests(unittest.TestCase):
+    """Uma mudanca de status precisa chegar ao servidor no proximo tick."""
+
+    CONFIG = dict(ConfigurationTests.BASE)
+
+    def cycle(self, runtime, components, api):
+        with mock.patch.object(guardian, "detect_antivirus", return_value="Microsoft Defender"), \
+             mock.patch.object(guardian, "load_json", return_value=dict(self.CONFIG)), \
+             mock.patch.object(guardian, "ApiClient", return_value=api):
+            runtime.run_cycle(quiet_logger(), "maquina-1", components)
+
+    def test_signature_is_recorded_only_after_a_successful_send(self) -> None:
+        """API fora do ar nao pode marcar a mudanca como entregue."""
+        runtime = guardian.GuardianRuntime()
+        failing = mock.Mock()
+        failing.send_heartbeat.side_effect = guardian.GuardianError("offline")
+        self.cycle(runtime, {"updater": {"status": "service_stopped", "version": ""}}, failing)
+        self.assertIsNone(runtime.last_signature)
+
+        ok_api = mock.Mock()
+        self.cycle(runtime, {"updater": {"status": "service_stopped", "version": ""}}, ok_api)
+        self.assertIsNotNone(runtime.last_signature)
+
+    def test_change_is_resent_after_a_failed_heartbeat(self) -> None:
+        runtime = guardian.GuardianRuntime()
+        healthy = {"updater": {"status": "healthy", "version": "1.7.9"}}
+        stopped = {"updater": {"status": "service_stopped", "version": "1.7.9"}}
+
+        ok_api = mock.Mock()
+        self.cycle(runtime, healthy, ok_api)
+        baseline = runtime.last_signature
+
+        failing = mock.Mock()
+        failing.send_heartbeat.side_effect = guardian.GuardianError("offline")
+        self.cycle(runtime, stopped, failing)
+        # Continua valendo o status antigo: a mudanca ainda nao foi entregue.
+        self.assertEqual(runtime.last_signature, baseline)
+
+        self.cycle(runtime, stopped, ok_api)
+        self.assertNotEqual(runtime.last_signature, baseline)
+
+    def test_action_keeps_change_detection_armed(self) -> None:
+        """Depois de uma acao, mudar de status ainda dispara envio imediato."""
+        runtime = guardian.GuardianRuntime()
+        api = mock.Mock()
+        api.fetch_actions.return_value = [
+            {"id": 1, "component": "updater", "action": "FIX_COMPONENT"},
+        ]
+        with mock.patch.object(guardian, "load_json", return_value=dict(self.CONFIG)), \
+             mock.patch.object(guardian, "ApiClient", return_value=api), \
+             mock.patch.object(guardian, "execute_action", return_value=(True, "ok")), \
+             mock.patch.object(guardian, "collect_components",
+                               return_value={"updater": {"status": "healthy", "version": "1.7.9"}}), \
+             mock.patch.object(guardian, "detect_antivirus", return_value="Microsoft Defender"):
+            executed = runtime.run_actions(quiet_logger(), "maquina-1")
+
+        self.assertTrue(executed)
+        # A assinatura ficou registrada; antes era zerada e a deteccao de
+        # mudanca ficava desarmada ate o proximo ciclo de 5 minutos.
+        self.assertIsNotNone(runtime.last_signature)
