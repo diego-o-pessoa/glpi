@@ -35,6 +35,10 @@ $payload = [
     'verify_tls'                 => true,
     'heartbeat_interval_seconds' => 30,
 ];
+$maintenanceHash = (string) ConfigService::get('maintenance_password_hash', '');
+if ($maintenanceHash !== '') {
+    $payload['maintenance_password_hash'] = $maintenanceHash;
+}
 
 // Coordenadas da API do Ativa Updater, de onde o reparo baixa o pacote oficial.
 // Vão no config do Guardian de propósito: o serviço lia isso do service-config.json

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 from urllib import error
 
 
@@ -103,10 +104,10 @@ class ClientTests(unittest.TestCase):
         wc.user_key = lambda: "unit-test-exclusive-mutex"
         try:
             with wc.SingleInstance():
-                with self.assertRaises(wc.ClientError) as caught:
+                with self.assertRaises(SystemExit) as caught:
                     with wc.SingleInstance():
                         pass
-                self.assertEqual(caught.exception.code, "ALREADY_RUNNING")
+                self.assertEqual(caught.exception.code, 0)
         finally:
             wc.user_key = original_user_key
 
@@ -285,7 +286,9 @@ class ClientTests(unittest.TestCase):
 
             self.assertEqual(api.downloads, 0)
             self.assertEqual(applied, [(cached, "fill")])
-            self.assertEqual([entry[0] for entry in policies], [False, True])
+            # Restore the cached policy before the request, then temporarily
+            # release it for the explicit force-reapply and restore it again.
+            self.assertEqual([entry[0] for entry in policies], [True, False, True])
             self.assertEqual(api.reports[0]["rollout_id"], "rollout-42")
             self.assertEqual(api.reports[0]["apply_reason"], "forced_applied")
 
@@ -494,6 +497,75 @@ class ClientTests(unittest.TestCase):
             with self.assertRaises(wc.ClientError) as caught:
                 client.load_config()
             self.assertEqual(caught.exception.code, "TLS_VERIFICATION_DISABLED")
+
+
+class OfflineStartupTests(unittest.TestCase):
+    def test_cache_is_applied_and_saved_before_network_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = root / "wallpaper.jpg"
+            image.write_bytes(b"verified cached image")
+            calls = []
+            api = mock.Mock()
+            def offline(_etag):
+                calls.append("network")
+                raise wc.ClientError("NETWORK_ERROR", "offline")
+            api.get_config.side_effect = offline
+            client = wc.WallpaperClient(root, api_factory=lambda *_: api,
+                apply_function=lambda *_: calls.append("apply"), policy_function=lambda *_: None,
+                current_function=lambda *_: False)
+            client.identity = lambda: {}
+            wc.atomic_write_json(root / "client.json", {
+                "server": "https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1",
+                "client_token": "x" * 43,
+            })
+            wc.atomic_write_json(client.state_path, {"distribution_enabled": True,
+                "wallpaper_path": str(image), "sha256": wc.sha256_file(image),
+                "wallpaper_version": "v1", "style": "fill", "lock_change": True})
+            with self.assertRaises(wc.ClientError):
+                client.sync_once()
+            self.assertEqual(calls, ["apply", "network"])
+            self.assertTrue(wc.load_json(client.state_path)["status_pending"])
+            api.report.assert_not_called()
+
+    def test_disabled_or_corrupt_cache_is_not_applied(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = root / "image.jpg"
+            image.write_bytes(b"image")
+            apply = mock.Mock()
+            client = wc.WallpaperClient(root, apply_function=apply, policy_function=lambda *_: None)
+            state = {"distribution_enabled": False, "wallpaper_path": str(image), "sha256": wc.sha256_file(image)}
+            self.assertFalse(client.enforce_cached_wallpaper(state))
+            state.update(distribution_enabled=True, sha256="0" * 64, config_etag="old")
+            self.assertFalse(client.enforce_cached_wallpaper(state))
+            self.assertNotIn("config_etag", state)
+            apply.assert_not_called()
+
+    def test_normal_stop_preserves_policy_for_next_logon(self):
+        client = mock.Mock()
+        client.sync_once.return_value = (60, 0)
+        stop = mock.Mock()
+        stop.wait.return_value = True
+        stop.flag_path.exists.return_value = False
+        with mock.patch.object(wc, "current_session_id", return_value=1), \
+             mock.patch.object(wc, "ensure_supported_windows"), mock.patch.object(wc, "WallpaperClient", return_value=client), \
+             mock.patch.object(wc, "StopEvent", return_value=stop), mock.patch.object(wc, "SingleInstance"), \
+             mock.patch.object(wc, "protect_session_process"), mock.patch.object(wc, "UPDATE_RESTART_FLAG") as flag:
+            flag.exists.return_value = False
+            self.assertEqual(wc.run_client(False, False), 0)
+            client.policy_function.assert_not_called()
+
+    def test_logon_task_uses_interactive_user_and_no_network_dependency(self):
+        from xml.etree import ElementTree as ET
+        xml = wc.logon_task_xml(Path(r"C:\ProgramData\Ativa & Test\Client.exe"))
+        task = ET.fromstring(xml)
+        ns = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+        self.assertEqual(task.findtext("t:Principals/t:Principal/t:GroupId", namespaces=ns), "S-1-5-32-545")
+        self.assertEqual(task.findtext("t:Principals/t:Principal/t:RunLevel", namespaces=ns), "LeastPrivilege")
+        self.assertIn("Ativa & Test", task.findtext("t:Actions/t:Exec/t:Command", namespaces=ns))
+        self.assertIsNotNone(task.find("t:Triggers/t:LogonTrigger", ns))
+        self.assertNotIn("RunOnlyIfNetworkAvailable", xml)
 
 
 class SilentUpdateTests(unittest.TestCase):

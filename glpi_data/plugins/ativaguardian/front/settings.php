@@ -18,7 +18,20 @@ $self = $_SERVER['PHP_SELF'];
 // com "A acao que voce requisitou nao e permitida". Os formularios continuam
 // enviando _glpi_csrf_token, que e o que o listener exige.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['generate_token'])) {
+    if (isset($_POST['set_maintenance_password'])) {
+        $password = (string) ($_POST['maintenance_password'] ?? '');
+        $confirmation = (string) ($_POST['maintenance_confirmation'] ?? '');
+        try {
+            if (!hash_equals($password, $confirmation)) {
+                throw new InvalidArgumentException('As senhas nao coincidem.');
+            }
+            ConfigService::set(['maintenance_password_hash' => ConfigService::passwordVerifier($password)]);
+            Session::addMessageAfterRedirect('Senha salva. Baixe a configuracao do Guardian e gere um novo instalador unificado para aplicar nas maquinas.', false, INFO);
+        } catch (InvalidArgumentException $exception) {
+            Session::addMessageAfterRedirect($exception->getMessage(), false, ERROR);
+        }
+        unset($password, $confirmation, $_POST['maintenance_password'], $_POST['maintenance_confirmation']);
+    } elseif (isset($_POST['generate_token'])) {
         ConfigService::set(['api_token' => ConfigService::generateToken()]);
         Session::addMessageAfterRedirect('Novo token gerado. Atualize o serviço nas máquinas.', false, INFO);
     } elseif (isset($_POST['update'])) {
@@ -79,6 +92,17 @@ echo '</form></div>';
 echo "<hr><p class='small text-muted mb-0'><i class='fas fa-lock me-1'></i>O arquivo baixado é o <code>config.json</code> pronto do serviço (use com <code>AtivaGuardian.exe --configure</code>). Ele contém o token em texto e não deve ser enviado por canais públicos.</p>";
 echo '</div></article>';
 
+$hasMaintenancePassword = (string) ConfigService::get('maintenance_password_hash', '') !== '';
+echo "<article class='ag-card'><header class='ag-card-header'><h2 class='ag-card-title'>Senha de manutencao Ativa</h2></header><div class='ag-card-body' style='padding:16px'>";
+echo '<p>' . ($hasMaintenancePassword ? 'Senha configurada.' : 'Protecao por senha ainda nao configurada.') . '</p>';
+echo '<p>A senha libera uma janela de 15 minutos pelo atalho <strong>Manutencao Ativa</strong> no Windows. Atualizacoes automaticas executadas pelo sistema continuam autorizadas.</p>';
+echo '<p>Usuarios comuns recebem acesso negado ao parar servicos ou remover executaveis. O Windows nao exibe nossa senha no Gerenciador de Tarefas; utilize o atalho para manutencao. Administradores locais podem alterar permissoes do sistema.</p>';
+echo "<form method='post' action='" . htmlescape($self) . "'>";
+echo Html::hidden('_glpi_csrf_token', ['value' => Session::getNewCSRFToken()]);
+echo "<label class='form-label' for='maintenance_password'>Nova senha (minimo 12 caracteres)</label><input id='maintenance_password' name='maintenance_password' class='form-control mb-3' type='password' autocomplete='new-password' minlength='12' maxlength='128' required>";
+echo "<label class='form-label' for='maintenance_confirmation'>Confirmar senha</label><input id='maintenance_confirmation' name='maintenance_confirmation' class='form-control mb-3' type='password' autocomplete='new-password' minlength='12' maxlength='128' required>";
+echo "<button class='btn btn-primary' type='submit' name='set_maintenance_password'>Salvar senha</button>";
+echo '<p class="form-text">Depois de salvar ou trocar, baixe novamente a configuracao do servico e gere o pacote unificado. Maquinas antigas usam a senha anterior ate receberem o pacote. O arquivo inclui somente o verificador da senha, nunca a senha original.</p></form></div></article>';
 echo PageLayout::footer();
 
 Html::footer();

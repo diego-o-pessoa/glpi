@@ -30,10 +30,28 @@ def quiet_logger(name: str) -> logging.Logger:
     return logger
 
 
+class GuardianMaintenanceTests(unittest.TestCase):
+    def test_watchdog_respects_bounded_lease(self):
+        with mock.patch.object(updater, "load_json", return_value={"until": 1500}), \
+             mock.patch.object(updater.time, "time", return_value=1000):
+            self.assertTrue(updater.guardian_maintenance_active())
+            with mock.patch.object(updater, "query_service") as query:
+                self.assertEqual(updater.run_watchdog(quiet_logger("maintenance-watchdog")), 0)
+                query.assert_not_called()
+
+    def test_expired_missing_or_invalid_lease_does_not_disable_watchdog(self):
+        with mock.patch.object(updater.time, "time", return_value=1000):
+            for until in (0, 999, 999999, "invalid"):
+                with mock.patch.object(updater, "load_json", return_value={"until": until}):
+                    self.assertFalse(updater.guardian_maintenance_active())
+            with mock.patch.object(updater, "load_json", side_effect=FileNotFoundError):
+                self.assertFalse(updater.guardian_maintenance_active())
+
+
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.7.3")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 3))
+        self.assertEqual(updater.UPDATER_VERSION, "1.7.4")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 4))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:

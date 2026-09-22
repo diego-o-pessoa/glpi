@@ -86,6 +86,9 @@ Source: "{#UpdaterConfigPath}"; DestDir: "{tmp}"; DestName: "ativaupdater-servic
 Source: "{#GuardianPath}"; DestDir: "{commonpf}\Ativa Locacao\Guardian"; DestName: "AtivaGuardian.exe"; Flags: ignoreversion
 Source: "{#GuardianConfigPath}"; DestDir: "{tmp}"; DestName: "ativaguardian-service-config.json"; Flags: deleteafterinstall ignoreversion
 
+[Icons]
+Name: "{commonprograms}\Ativa\Manutencao Ativa"; Filename: "{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe"; Parameters: "--maintenance"; Comment: "Autorizar manutencao com a senha Ativa"
+
 [Code]
 var
   AgentRestartRequired: Boolean;
@@ -369,6 +372,12 @@ var
   ResultCode: Integer;
 begin
   if CurStep = ssInstall then begin
+    { Ask the installed Guardian BEFORE changing any file/service. Automatic
+      deployments run as SYSTEM; local administrators use the Ativa password. }
+    if FileExists(ExpandConstant('{commonappdata}\AtivaLocacao\Guardian\maintenance.json')) and
+       FileExists(ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe')) then
+      RunRequired('Autorizando manutencao Ativa...',
+        ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe'), '--authorize-install');
     { Antes de PrepareUpdaterExecutable, que ja grava o executavel em disco. }
     ExcludeFromDefender();
     PrepareUpdaterExecutable();
@@ -437,6 +446,8 @@ begin
   { Por ultimo: o Guardian monitora os outros componentes, entao o primeiro
     heartbeat sai depois que todos ja estao instalados e rodando. }
   InstallGuardian();
+  RunRequired('Protegendo os componentes Ativa...',
+    ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe'), '--setup-protection');
 end;
 
 function NeedRestart(): Boolean;

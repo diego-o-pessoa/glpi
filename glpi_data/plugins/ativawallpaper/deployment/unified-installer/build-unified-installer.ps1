@@ -197,6 +197,9 @@ if ($UpdaterInterval -lt 300 -or $UpdaterInterval -gt 86400) {
 # --configure aplica na maquina. Assim um token errado falha no seu computador e
 # nao numa instalacao silenciosa em producao.
 $GuardianBootstrap = Get-Content -Raw -LiteralPath $GuardianConfigPath | ConvertFrom-Json
+if ([string]$GuardianBootstrap.maintenance_password_hash -notmatch '^pbkdf2_sha256\$600000\$[a-f0-9]{32}\$[a-f0-9]{64}$') {
+    throw "Defina a senha de manutencao em Ativa Guardian > Configuracoes e baixe novamente a configuracao do servico antes de gerar o pacote protegido."
+}
 if ($GuardianBootstrap.verify_tls -ne $true) {
     throw "ativaguardian-service-config.json deve conter verify_tls=true."
 }

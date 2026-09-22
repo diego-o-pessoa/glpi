@@ -51,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.3.0"
+GUARDIAN_VERSION = "1.4.0"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -250,6 +250,60 @@ def hostname() -> str:
     return name[:255]
 
 
+WTS_CURRENT_SERVER_HANDLE = 0
+WTS_USER_NAME = 5
+WTS_DOMAIN_NAME = 7
+INVALID_SESSION = 0xFFFFFFFF
+
+
+def logged_on_user() -> str:
+    """Usuario da sessao de console (DOMINIO\\usuario), ou vazio se nao houver.
+
+    O Guardian roda como SYSTEM e nao enxerga o usuario por variavel de
+    ambiente. As APIs de Terminal Services respondem isso sem precisar de outro
+    componente instalado - so leitura, nada e alterado.
+    """
+    if os.name != "nt":
+        return ""
+
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        wtsapi32 = ctypes.WinDLL("wtsapi32", use_last_error=True)
+        kernel32.WTSGetActiveConsoleSessionId.restype = wintypes.DWORD
+        wtsapi32.WTSQuerySessionInformationW.argtypes = [
+            wintypes.HANDLE, wintypes.DWORD, ctypes.c_int,
+            ctypes.POINTER(ctypes.c_wchar_p), ctypes.POINTER(wintypes.DWORD),
+        ]
+        wtsapi32.WTSQuerySessionInformationW.restype = wintypes.BOOL
+        wtsapi32.WTSFreeMemory.argtypes = [ctypes.c_void_p]
+
+        session = kernel32.WTSGetActiveConsoleSessionId()
+        if session == INVALID_SESSION:
+            return ""  # nenhuma sessao de console ativa
+
+        def query(info_class: int) -> str:
+            buffer = ctypes.c_wchar_p()
+            size = wintypes.DWORD()
+            if not wtsapi32.WTSQuerySessionInformationW(
+                WTS_CURRENT_SERVER_HANDLE, session, info_class,
+                ctypes.byref(buffer), ctypes.byref(size)
+            ):
+                return ""
+            try:
+                return (buffer.value or "").strip()
+            finally:
+                wtsapi32.WTSFreeMemory(buffer)
+
+        user = query(WTS_USER_NAME)
+        if not user:
+            return ""  # sessao existe mas ninguem logado (tela de bloqueio/logon)
+        domain = query(WTS_DOMAIN_NAME)
+        full = f"{domain}\\{user}" if domain else user
+        return full[:255]
+    except Exception:  # noqa: BLE001 - nunca derruba o heartbeat
+        return ""
+
+
 def operating_system() -> str:
     try:
         import platform
@@ -301,6 +355,13 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
         "verify_tls": True,
         "heartbeat_interval_seconds": interval,
     }
+    from maintenance import validate_verifier
+    try:
+        verifier = validate_verifier(str(config.get("maintenance_password_hash", "")))
+    except ValueError as exc:
+        raise GuardianError(str(exc)) from exc
+    if verifier:
+        validated["maintenance_password_hash"] = verifier
 
     # Coordenadas da API do Ativa Updater, usadas para baixar o pacote no
     # reparo. Ficam AQUI, no config do Guardian, e nao na pasta do Updater:
@@ -346,6 +407,12 @@ def harden_product_dir(logger: logging.Logger) -> None:
 
 def write_configuration(source: Path, logger: logging.Logger) -> None:
     config = validate_config(load_json(source))
+    # An older bundle must not silently remove a configured maintenance password.
+    if CONFIG_PATH.exists() and not config.get("maintenance_password_hash"):
+        previous = load_json(CONFIG_PATH).get("maintenance_password_hash")
+        if previous:
+            from maintenance import validate_verifier
+            config["maintenance_password_hash"] = validate_verifier(str(previous))
     PRODUCT_DIR.mkdir(parents=True, exist_ok=True)
     harden_product_dir(logger)
     atomic_json(CONFIG_PATH, config)
@@ -1615,6 +1682,10 @@ def main() -> int:
     parser.add_argument("--configure", metavar="ARQUIVO", help="Grava config.json a partir de um JSON")
     parser.add_argument("--install-service", action="store_true", help="Registra o servico no Windows")
     parser.add_argument("--uninstall-service", action="store_true", help="Remove o servico do Windows")
+    parser.add_argument("--maintenance", action="store_true", help="Solicita a senha Ativa para manutencao local")
+    parser.add_argument("--authorize-install", action="store_true", help="Autoriza atualizacao do pacote")
+    parser.add_argument("--enforce-protection", action="store_true", help="Restaura a protecao apos manutencao")
+    parser.add_argument("--setup-protection", action="store_true", help="Configura protecao e tarefa de recuperacao")
     parser.add_argument("--debug", action="store_true", help="Tambem escreve o log no console")
     parser.add_argument("--version", action="store_true", help="Imprime a versao e sai")
     arguments = parser.parse_args()
@@ -1626,9 +1697,29 @@ def main() -> int:
     if arguments.service:
         return run_service_dispatcher()
 
+    # The unelevated shortcut cannot open protected logs/config before UAC.
+    if arguments.maintenance:
+        import maintenance
+        try:
+            return maintenance.launch_panel()
+        except Exception as exc:
+            maintenance.show_message(str(exc), error=True)
+            return 1
+
     logger = configure_logging(arguments.debug or arguments.check or arguments.run_once)
 
     try:
+        if arguments.authorize_install or arguments.enforce_protection or arguments.setup_protection:
+            import maintenance
+            if arguments.authorize_install:
+                maintenance.authorize(installation=True)
+            elif arguments.setup_protection:
+                maintenance.install_recovery_task()
+                maintenance.enforce(close=True)
+            else:
+                maintenance.enforce()
+            logger.info("Operacao de protecao/manutencao concluida.")
+            return 0
         if arguments.configure:
             write_configuration(Path(arguments.configure), logger)
             return 0
@@ -1646,7 +1737,7 @@ def main() -> int:
             with SingleInstance():
                 GuardianRuntime().run_cycle(logger, machine_identity(logger))
             return 0
-    except GuardianError as exc:
+    except (GuardianError, ValueError, OSError, RuntimeError) as exc:
         logger.error("%s", exc)
         print(f"Erro: {exc}", file=sys.stderr)
         return 1

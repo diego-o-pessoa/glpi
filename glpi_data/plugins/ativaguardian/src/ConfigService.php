@@ -36,6 +36,16 @@ class ConfigService
         return bin2hex(random_bytes(32));
     }
 
+    public static function passwordVerifier(string $password): string
+    {
+        if (strlen($password) < 12 || strlen($password) > 256) {
+            throw new \InvalidArgumentException('Use uma senha de 12 a 256 bytes.');
+        }
+        $salt = random_bytes(16);
+        return 'pbkdf2_sha256$600000$' . bin2hex($salt) . '$'
+            . hash_pbkdf2('sha256', $password, $salt, 600000, 64);
+    }
+
     public static function get(string $key, $default = null)
     {
         $config = Config::getConfigurationValues(self::CONTEXT);

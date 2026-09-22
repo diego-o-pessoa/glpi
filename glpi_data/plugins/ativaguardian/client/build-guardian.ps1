@@ -23,7 +23,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # Roda a suite antes de empacotar: um build que passa nos testes custa menos que
 # um servico quebrado distribuido para a frota.
-& $VenvPython -m unittest discover -s (Join-Path $ClientDirectory "tests") -p "test_guardian.py"
+& $VenvPython -m unittest discover -s (Join-Path $ClientDirectory "tests") -p "test_*.py"
 if ($LASTEXITCODE -ne 0) {
     throw "Os testes do Guardian falharam; build interrompido."
 }

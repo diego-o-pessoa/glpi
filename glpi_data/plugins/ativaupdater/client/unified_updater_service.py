@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.3"
+UPDATER_VERSION = "1.7.4"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -2036,9 +2036,22 @@ def restore_service_executable(logger: logging.Logger) -> bool:
         return False
 
 
+def guardian_maintenance_active() -> bool:
+    path = PRODUCT_DIR.parent / "Guardian" / "maintenance.json"
+    try:
+        until = float(load_json(path).get("until", 0))
+        now = time.time()
+        return now < until <= now + 905
+    except (OSError, ValueError, TypeError, UpdaterError):
+        return False
+
+
 def run_watchdog(logger: logging.Logger) -> int:
     """Keep the updater service alive and repair it after a broken installation."""
     if os.name != "nt":
+        return 0
+    if guardian_maintenance_active():
+        logger.info("Vigia aguardando o fim da manutencao autorizada pelo Guardian.")
         return 0
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateMutexW.restype = wintypes.HANDLE

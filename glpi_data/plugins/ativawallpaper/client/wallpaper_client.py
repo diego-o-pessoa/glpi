@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+from contextlib import contextmanager
 import hashlib
 import hmac
 import ipaddress
@@ -34,7 +35,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.6.3"
+CLIENT_VERSION = "1.6.4"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -42,6 +43,7 @@ UPDATER_EXECUTABLE_NAME = "AtivaWallpaperUpdater.exe"
 UPDATE_RESTART_FLAG = PRODUCT_DIR / "update-restart.flag"
 RUN_KEY = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE = "AtivaWallpaperClient"
+LOGON_TASK_NAME = "Ativa Wallpaper Logon"
 PRODUCT_KEY = r"SOFTWARE\AtivaLocacao\Wallpaper"
 STOP_EVENT_NAME = r"Global\AtivaWallpaperClientStop"
 MAX_JSON_BYTES = 1024 * 1024
@@ -733,15 +735,24 @@ class WallpaperClient:
         state.pop("apply_event_id", None)
 
     def sync_once(self) -> tuple[int, int]:
-        config = self.load_config()
         state = self.load_state()
+        # Reapply the last verified image BEFORE any network operation, including
+        # config validation. A laptop can log on without VPN/Internet for days.
+        corrected = False
+        try:
+            corrected = self.enforce_cached_wallpaper(state)
+        except (ClientError, OSError):
+            # A stale policy must not prevent fetching a corrected configuration.
+            self.logger.exception("Could not restore the locally cached wallpaper")
+        if state:
+            atomic_write_json(self.state_path, state)
+        config = self.load_config()
         identity = self.identity()
         api = self.api_factory(config["server"], config["client_token"])
         self.logger.info("Checking server configuration")
         server, response_etag = api.get_config(state.get("config_etag"))
         if server is None:
             self.logger.info("Configuration unchanged (HTTP 304)")
-            corrected = self.enforce_cached_wallpaper(state)
             state["last_cycle_action"] = "drift_corrected" if corrected else "already_current"
             if state.get("status_pending") and state.get("wallpaper_version") and state.get("sha256"):
                 atomic_write_json(self.state_path, state)
@@ -914,13 +925,59 @@ class SingleInstance:
             _kernel32.CloseHandle(self.handle)
 
 
+@contextmanager
+def windows_security_attributes(sddl: str):
+    class SecurityAttributes(ctypes.Structure):
+        _fields_ = [("length", wintypes.DWORD), ("descriptor", wintypes.LPVOID), ("inherit", wintypes.BOOL)]
+
+    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+    advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(wintypes.LPVOID), ctypes.POINTER(wintypes.DWORD),
+    ]
+    advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = wintypes.BOOL
+    descriptor = wintypes.LPVOID()
+    if not advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, ctypes.byref(descriptor), None):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        yield SecurityAttributes(ctypes.sizeof(SecurityAttributes), descriptor, False)
+    finally:
+        _kernel32.LocalFree.argtypes = [wintypes.LPVOID]
+        _kernel32.LocalFree.restype = wintypes.LPVOID
+        _kernel32.LocalFree(descriptor)
+
+
+def protect_session_process() -> None:
+    """Block Task Manager/taskkill by standard users, including the owner.
+
+    OWNER RIGHTS removes the owner's implicit WRITE_DAC. Elevated admins and
+    SYSTEM retain control; this does not pretend to protect against debug rights.
+    """
+    if os.name != "nt":
+        return
+    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+    advapi.SetKernelObjectSecurity.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPVOID]
+    advapi.SetKernelObjectSecurity.restype = wintypes.BOOL
+    _kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    with windows_security_attributes("D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;RC;;;OW)(A;;0x00101000;;;AU)") as attributes:
+        if not advapi.SetKernelObjectSecurity(_kernel32.GetCurrentProcess(), 0x4, attributes.descriptor):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+
 class StopEvent:
     def __init__(self, flag_path: Path = PRODUCT_DIR / "uninstall.flag") -> None:
         self.handle: int | None = None
         self.flag_path = flag_path
         if os.name == "nt":
             assert _kernel32 is not None
-            self.handle = _kernel32.CreateEventW(None, True, False, STOP_EVENT_NAME)
+            # Users may wait, but only SYSTEM/elevated administrators can signal
+            # the stop event. A standard user's OpenEvent(EVENT_MODIFY_STATE)
+            # must not be enough to close every user's wallpaper client.
+            with windows_security_attributes("D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;RC;;;OW)(A;;0x00100000;;;AU)") as attributes:
+                self.handle = _kernel32.CreateEventW(ctypes.byref(attributes), True, False, STOP_EVENT_NAME)
+            if not self.handle:
+                self.handle = _kernel32.OpenEventW(0x00100000, False, STOP_EVENT_NAME)
+            if not self.handle:
+                raise ClientError("STOP_EVENT_FAILED", "Cannot open protected stop event")
 
     def wait(self, seconds: int) -> bool:
         deadline = time.monotonic() + max(0, seconds)
@@ -1092,6 +1149,31 @@ def replace_executable(staged: Path, destination: Path, attempts: int = 30, dela
     raise ClientError("CLIENT_REPLACE_FAILED", f"Could not replace the running client: {last_error}", retriable=False)
 
 
+def logon_task_xml(executable: Path) -> str:
+    from xml.sax.saxutils import escape
+    return f'''<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>
+  <Principals><Principal id="User"><GroupId>S-1-5-32-545</GroupId><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
+  <Settings><MultipleInstancesPolicy>Parallel</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Enabled>true</Enabled></Settings>
+  <Actions Context="User"><Exec><Command>{escape(str(executable))}</Command></Exec></Actions>
+</Task>'''
+
+
+def install_logon_task(executable: Path) -> None:
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="ativa-logon-") as directory:
+        xml = Path(directory) / "logon.xml"
+        xml.write_text(logon_task_xml(executable), encoding="utf-16")
+        result = subprocess.run(["schtasks.exe", "/Create", "/F", "/TN", LOGON_TASK_NAME, "/XML", str(xml)],
+                                capture_output=True, timeout=60,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if result.returncode:
+            raise ClientError("LOGON_TASK_FAILED", "Could not register immediate wallpaper logon task")
+
+
 def install_client(args: argparse.Namespace) -> None:
     ensure_supported_windows(bool(args.allow_windows_server))
     if not is_admin():
@@ -1158,6 +1240,7 @@ def install_client(args: argparse.Namespace) -> None:
     with winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, PRODUCT_KEY, 0, winreg.KEY_SET_VALUE | winreg.KEY_WOW64_64KEY) as key:
         winreg.SetValueEx(key, "ClientVersion", 0, winreg.REG_SZ, CLIENT_VERSION)
         winreg.SetValueEx(key, "InstallPath", 0, winreg.REG_SZ, str(root))
+    install_logon_task(destination)
     logger.info("Installation completed")
 
 
@@ -1196,6 +1279,8 @@ def uninstall_client(remove_wallpaper: bool, debug: bool) -> None:
     (root / "uninstall.flag").touch(exist_ok=True)
     _signal_stop()
     time.sleep(2)
+    subprocess.run(["schtasks.exe", "/Delete", "/TN", LOGON_TASK_NAME, "/F"], check=False,
+                   capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     subprocess.run(
         ["schtasks.exe", "/Delete", "/TN", "Ativa Wallpaper Updater", "/F"],
         check=False,
@@ -1274,6 +1359,10 @@ def run_client(once: bool, debug: bool) -> int:
     try:
         with SingleInstance():
             client.logger.info("Client started, version %s", CLIENT_VERSION)
+            try:
+                protect_session_process()
+            except OSError:
+                client.logger.exception("Could not protect wallpaper process from standard-user termination")
             while True:
                 try:
                     interval, jitter = client.sync_once()
@@ -1296,7 +1385,10 @@ def run_client(once: bool, debug: bool) -> int:
                     if updateRestart:
                         _spawn_update_relauncher()
                     try:
-                        if not updateRestart:
+                        # A normal stop/logoff must preserve the persisted local
+                        # policy for Explorer's next logon. Only uninstall owns
+                        # the decision to remove it (not a process stop event).
+                        if stop.flag_path.exists():
                             state = client.load_state()
                             client.policy_function(False, None, "fill", state)
                             atomic_write_json(client.state_path, state)
