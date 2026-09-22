@@ -140,9 +140,10 @@ echo <<<'HTML'
     // O menu mostra só "Corrigir"; aqui o título diz o que está sendo feito de
     // fato, que depende do estado em que o componente estava.
     const LABELS = {
-        START_COMPONENT: ['Corrigindo: iniciando o serviço', 'Correção'],
-        RESTART_COMPONENT: ['Corrigindo: reiniciando o serviço', 'Correção'],
-        REPAIR_COMPONENT: ['Corrigindo: reinstalando o componente', 'Correção'],
+        FIX_COMPONENT: ['Corrigindo o componente', 'Correção'],
+        START_COMPONENT: ['Iniciando o serviço', 'Início'],
+        RESTART_COMPONENT: ['Reiniciando o serviço', 'Reinício'],
+        REPAIR_COMPONENT: ['Reinstalando o componente', 'Reinstalação'],
         CHECK_COMPONENT: ['Verificando o componente', 'Verificação'],
     };
     const delay = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -163,8 +164,10 @@ echo <<<'HTML'
 
             if (data?.finished) {
                 const ok = data.status === 'success';
-                renderOp(100, ok ? verb + ' concluído' : 'Não foi possível concluir',
-                    ok ? 'A máquina confirmou a execução.' : (data.message || 'A máquina reportou falha.'),
+                // A mensagem vem da máquina e diz o que foi feito de fato:
+                // "já estava rodando", "serviço iniciado", "reinstalado".
+                renderOp(100, ok ? verb + ' concluída' : 'Não foi possível concluir',
+                    data.message || (ok ? 'A máquina confirmou a execução.' : 'A máquina reportou falha.'),
                     ok ? 'done' : 'err');
                 unlockModal();
                 refresh(true);

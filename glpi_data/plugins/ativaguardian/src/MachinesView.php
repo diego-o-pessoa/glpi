@@ -203,23 +203,13 @@ final class MachinesView
     private static function offeredActions(string $component, string $status): array
     {
         $supported = ActionQueue::SUPPORTED[$component] ?? [];
-
-        $action = match (true) {
-            // Sumiu ou quebrou de um jeito que reiniciar não resolve: reinstala.
-            in_array($status, [HealthStatus::FILE_MISSING, HealthStatus::ERROR], true)
-                => ActionQueue::REPAIR,
-            in_array($status, [HealthStatus::SERVICE_STOPPED, HealthStatus::PROCESS_STOPPED], true)
-                => ActionQueue::START,
-            default => ActionQueue::RESTART,
-        };
-
-        // Componente que ainda não sabe se reinstalar (Wallpaper hoje) cai para
-        // reiniciar; se nem isso suportar, não oferece nada.
-        if (!in_array($action, $supported, true)) {
-            $action = in_array(ActionQueue::RESTART, $supported, true) ? ActionQueue::RESTART : null;
+        if (!in_array(ActionQueue::FIX, $supported, true)) {
+            return [];
         }
 
-        return $action === null ? [] : [$action => ['Corrigir', 'fa-wrench']];
+        // O status aqui serve só para decidir se vale oferecer o botão; quem
+        // escolhe o procedimento é a máquina, com uma verificação feita na hora.
+        return [ActionQueue::FIX => ['Corrigir', 'fa-wrench']];
     }
 
     /**

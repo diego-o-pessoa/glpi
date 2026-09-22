@@ -51,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.1.2"
+GUARDIAN_VERSION = "1.2.1"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -683,7 +683,8 @@ ACTION_CHECK = "CHECK_COMPONENT"
 ACTION_START = "START_COMPONENT"
 ACTION_RESTART = "RESTART_COMPONENT"
 ACTION_REPAIR = "REPAIR_COMPONENT"
-ALLOWED_ACTIONS = frozenset({ACTION_CHECK, ACTION_START, ACTION_RESTART, ACTION_REPAIR})
+ACTION_FIX = "FIX_COMPONENT"
+ALLOWED_ACTIONS = frozenset({ACTION_CHECK, ACTION_START, ACTION_RESTART, ACTION_REPAIR, ACTION_FIX})
 
 # O servidor manda apenas um par (componente, acao) de listas fechadas. Este
 # mapa - compilado dentro do executavel - e o unico lugar que traduz isso para
@@ -847,6 +848,16 @@ def _safe_unlink(path: Path) -> None:
         pass
 
 
+def is_elevated() -> bool:
+    """O processo tem privilegio administrativo? (SYSTEM tambem responde True.)"""
+    if os.name != "nt":
+        return False
+    try:
+        return bool(ctypes.WinDLL("shell32", use_last_error=True).IsUserAnAdmin())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def installer_command(package: Path, install_log: Path) -> list[str]:
     """Mesma linha silenciosa que o Ativa Updater e o Deploy ja usam."""
     return [
@@ -869,6 +880,15 @@ def repair_updater(logger: logging.Logger, action_id: int = 0) -> tuple[bool, st
     Wallpaper, mantem o config.json do Guardian e nao toca em machine.json.
     Nada e apagado aqui antes da instalacao.
     """
+    # O instalador unificado pede privilegio de administrador no manifesto. Sob
+    # o servico (SYSTEM) isso e concedido sem nenhuma janela. Rodando como
+    # usuario comum, o Windows abriria o pedido de permissao - o que quebraria a
+    # instalacao silenciosa. Entao aqui a gente recusa em vez de disparar o UAC.
+    if not is_elevated():
+        return False, ("O reparo so roda pelo servico Ativa Guardian (SYSTEM). "
+                       "Executado como usuario, o Windows pediria permissao e a "
+                       "instalacao deixaria de ser silenciosa.")
+
     api_url, token = updater_api_credentials()
 
     client = ApiClient({"api_url": api_url, "api_token": token})
@@ -904,17 +924,26 @@ def repair_updater(logger: logging.Logger, action_id: int = 0) -> tuple[bool, st
         })
 
     logger.info("Reparo: executando a instalacao silenciosa")
+    # Destacado, como o Ativa Updater faz: o instalador para o servico
+    # AtivaGuardian para trocar binarios, e um processo filho comum morreria
+    # junto, deixando a instalacao pela metade. Destacado ele sobrevive, e o
+    # marcador de reparo devolve o resultado quando o servico voltar.
+    detached = NO_WINDOW | getattr(subprocess, "DETACHED_PROCESS", 0) \
+        | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             installer_command(package, install_log),
-            timeout=INSTALL_TIMEOUT_SECONDS,
-            creationflags=NO_WINDOW,
+            close_fds=True,
+            creationflags=detached,
         )
-        exit_code = completed.returncode
+    except OSError as exc:
+        _safe_unlink(package)
+        return False, f"Nao foi possivel executar o instalador: {exc}"
+
+    try:
+        exit_code = process.wait(timeout=INSTALL_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
         return False, "O instalador excedeu o tempo limite."
-    except OSError as exc:
-        return False, f"Nao foi possivel executar o instalador: {exc}"
     finally:
         _safe_unlink(package)
 
@@ -956,6 +985,62 @@ def verify_updater_repair(logger: logging.Logger, sleep=time.sleep,
 REPAIR_HANDLERS = {"updater": repair_updater}
 
 
+def fix_component(component: str, logger: logging.Logger, action_id: int = 0,
+                  sleep=time.sleep, timeout: int = SERVICE_WAIT_SECONDS) -> tuple[bool, str]:
+    """Diagnostica na hora e aplica só o que o estado atual exige.
+
+    O painel manda apenas "corrigir"; quem decide o procedimento e a maquina,
+    com uma verificacao feita neste instante - nao com o status que o servidor
+    tinha guardado, que pode estar velho.
+
+    A escada e deliberadamente conservadora:
+      saudavel          -> nao faz nada
+      servico parado    -> inicia (os arquivos estao la; reinstalar seria inutil)
+      arquivo ausente   -> reinstala o pacote oficial
+      servico sumido    -> reinstala (so o instalador registra o servico de novo)
+    """
+    check = COMPONENT_CHECKS.get(component)
+    if check is None:
+        return False, f"Componente desconhecido: {component}"
+
+    status = check()["status"]
+    logger.info("Corrigir %s: estado atual e %s", component, status)
+
+    if status == STATUS_HEALTHY:
+        return True, f"{component} ja esta em execucao; nenhuma correcao foi necessaria."
+
+    if status in (STATUS_SERVICE_STOPPED, STATUS_PROCESS_STOPPED):
+        service = resolve_component_service(component)
+        if service is None:
+            return False, (f"{component} nao roda como servico do Windows nesta maquina; "
+                           "correcao automatica indisponivel.")
+        logger.info("Corrigir %s: arquivos presentes, apenas iniciando %s", component, service)
+        run_sc("start", service)
+        if not wait_for_service_state(service, SERVICE_STATE_RUNNING, timeout=timeout, sleep=sleep):
+            # Nao escala para reinstalacao: os arquivos estao no lugar, entao o
+            # problema e outro e reinstalar so mascararia a causa.
+            return False, (f"{service} nao entrou em execucao. Os arquivos estao no lugar, "
+                           "entao nenhuma reinstalacao foi feita.")
+        final = check()["status"]
+        if final == STATUS_HEALTHY:
+            return True, f"{service} estava parado e foi iniciado; agora esta saudavel."
+        return False, f"{service} iniciou, mas {component} segue com status {final}."
+
+    if status in (STATUS_FILE_MISSING, STATUS_ERROR):
+        handler = REPAIR_HANDLERS.get(component)
+        if handler is None:
+            return False, (f"{component} esta com status {status}, mas ainda nao sabe "
+                           "se reinstalar sozinho.")
+        motivo = ("o executavel nao esta em disco" if status == STATUS_FILE_MISSING
+                  else "o servico nao esta registrado")
+        logger.info("Corrigir %s: %s; reinstalando o pacote oficial", component, motivo)
+        ok, message = handler(logger, action_id)
+        return ok, f"Reinstalacao necessaria ({motivo}). {message}"
+
+    return False, (f"{component} esta com status {status}; nao ha correcao automatica "
+                   "definida para esse caso.")
+
+
 def execute_action(component: str, action: str, logger: logging.Logger,
                    sleep=time.sleep, timeout: int = SERVICE_WAIT_SECONDS,
                    action_id: int = 0) -> tuple[bool, str]:
@@ -972,6 +1057,9 @@ def execute_action(component: str, action: str, logger: logging.Logger,
         if action == ACTION_CHECK:
             result = COMPONENT_CHECKS[component]()
             return True, f"{component}: {result['status']}"
+
+        if action == ACTION_FIX:
+            return fix_component(component, logger, action_id, sleep, timeout)
 
         if action == ACTION_REPAIR:
             handler = REPAIR_HANDLERS.get(component)

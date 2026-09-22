@@ -661,3 +661,144 @@ class InterruptedRepairTests(unittest.TestCase):
                  mock.patch.object(guardian, "ApiClient") as client:
                 runtime.finish_pending_repair(quiet_logger(), "maquina-1")
         client.assert_not_called()
+
+
+class FixComponentTests(unittest.TestCase):
+    """A escada de correcao: so faz o minimo que o estado atual exige."""
+
+    def test_healthy_does_nothing(self) -> None:
+        with mock.patch.dict(guardian.COMPONENT_CHECKS,
+                             {"updater": lambda: {"status": "healthy", "version": "1.7.3"}}), \
+             mock.patch.object(guardian, "run_sc") as run_sc, \
+             mock.patch.dict(guardian.REPAIR_HANDLERS, {"updater": (repair := mock.Mock())}):
+            ok, message = guardian.fix_component("updater", quiet_logger())
+        self.assertTrue(ok)
+        self.assertIn("nenhuma correcao", message)
+        run_sc.assert_not_called()
+        repair.assert_not_called()
+
+    def test_stopped_service_is_started_without_reinstalling(self) -> None:
+        """Arquivos no lugar: iniciar basta, reinstalar seria desperdicio."""
+        states = iter(["service_stopped", "healthy"])
+        with mock.patch.dict(guardian.COMPONENT_CHECKS,
+                             {"updater": lambda: {"status": next(states), "version": ""}}), \
+             mock.patch.object(guardian, "resolve_component_service", return_value="AtivaUnifiedUpdater"), \
+             mock.patch.object(guardian, "wait_for_service_state", return_value=True), \
+             mock.patch.object(guardian, "repair_updater") as repair, \
+             mock.patch.object(guardian, "run_sc", return_value=0) as run_sc:
+            ok, message = guardian.fix_component("updater", quiet_logger(), sleep=lambda _s: None, timeout=1)
+        self.assertTrue(ok)
+        run_sc.assert_called_once_with("start", "AtivaUnifiedUpdater")
+        repair.assert_not_called()
+        self.assertIn("iniciado", message)
+
+    def test_service_that_refuses_to_start_does_not_escalate_to_reinstall(self) -> None:
+        with mock.patch.dict(guardian.COMPONENT_CHECKS,
+                             {"updater": lambda: {"status": "service_stopped", "version": ""}}), \
+             mock.patch.object(guardian, "resolve_component_service", return_value="AtivaUnifiedUpdater"), \
+             mock.patch.object(guardian, "wait_for_service_state", return_value=False), \
+             mock.patch.object(guardian, "repair_updater") as repair, \
+             mock.patch.object(guardian, "run_sc", return_value=0):
+            ok, message = guardian.fix_component("updater", quiet_logger(), sleep=lambda _s: None, timeout=1)
+        self.assertFalse(ok)
+        repair.assert_not_called()
+        self.assertIn("nenhuma reinstalacao", message)
+
+    def test_missing_file_triggers_reinstall(self) -> None:
+        with mock.patch.dict(guardian.COMPONENT_CHECKS,
+                             {"updater": lambda: {"status": "file_missing", "version": ""}}), \
+             mock.patch.object(guardian, "run_sc") as run_sc, \
+             mock.patch.dict(guardian.REPAIR_HANDLERS,
+                             {"updater": (repair := mock.Mock(return_value=(True, "reinstalado")))}):
+            ok, message = guardian.fix_component("updater", quiet_logger(), action_id=7)
+        self.assertTrue(ok)
+        repair.assert_called_once()
+        run_sc.assert_not_called()
+        self.assertIn("nao esta em disco", message)
+
+    def test_missing_service_registration_triggers_reinstall(self) -> None:
+        """Executavel existe mas o servico sumiu: so o instalador registra de novo."""
+        with mock.patch.dict(guardian.COMPONENT_CHECKS,
+                             {"updater": lambda: {"status": "error", "version": ""}}), \
+             mock.patch.dict(guardian.REPAIR_HANDLERS,
+                             {"updater": (repair := mock.Mock(return_value=(True, "reinstalado")))}):
+            ok, message = guardian.fix_component("updater", quiet_logger())
+        self.assertTrue(ok)
+        repair.assert_called_once()
+        self.assertIn("nao esta registrado", message)
+
+    def test_component_without_repair_support_explains_itself(self) -> None:
+        with mock.patch.dict(guardian.COMPONENT_CHECKS,
+                             {"wallpaper": lambda: {"status": "file_missing", "version": ""}}):
+            ok, message = guardian.fix_component("wallpaper", quiet_logger())
+        self.assertFalse(ok)
+        self.assertIn("ainda nao sabe", message)
+
+    def test_unknown_status_is_not_guessed(self) -> None:
+        with mock.patch.dict(guardian.COMPONENT_CHECKS,
+                             {"updater": lambda: {"status": "unknown", "version": ""}}), \
+             mock.patch.dict(guardian.REPAIR_HANDLERS, {"updater": (repair := mock.Mock())}):
+            ok, message = guardian.fix_component("updater", quiet_logger())
+        self.assertFalse(ok)
+        repair.assert_not_called()
+        self.assertIn("nao ha correcao automatica", message)
+
+    def test_fix_is_routed_by_execute_action(self) -> None:
+        with mock.patch.object(guardian, "fix_component", return_value=(True, "ok")) as fix:
+            ok, _ = guardian.execute_action("updater", guardian.ACTION_FIX, quiet_logger(), action_id=9)
+        self.assertTrue(ok)
+        fix.assert_called_once()
+
+
+class SilentInstallTests(unittest.TestCase):
+    """A instalacao nao pode abrir janela nem pedido de permissao."""
+
+    def test_repair_refuses_instead_of_triggering_uac(self) -> None:
+        """Sem privilegio, recusa: disparar o instalador abriria o UAC."""
+        with mock.patch.object(guardian, "is_elevated", return_value=False), \
+             mock.patch.object(guardian, "updater_api_credentials") as creds, \
+             mock.patch.object(guardian.subprocess, "Popen") as popen:
+            ok, message = guardian.repair_updater(quiet_logger())
+        self.assertFalse(ok)
+        popen.assert_not_called()
+        creds.assert_not_called()
+        self.assertIn("silenciosa", message)
+
+    def test_installer_flags_are_silent(self) -> None:
+        command = guardian.installer_command(Path("setup.exe"), Path("log.txt"))
+        for flag in ("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"):
+            self.assertIn(flag, command)
+
+    def test_installer_is_launched_detached_and_windowless(self) -> None:
+        """Destacado: sobrevive ao instalador parar o servico AtivaGuardian."""
+        captured = {}
+
+        class FakeProcess:
+            def wait(self, timeout=0):
+                return 0
+
+        def fake_popen(command, **kwargs):
+            captured.update(kwargs)
+            return FakeProcess()
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "pacote").write_text("x", encoding="utf-8")
+            with mock.patch.object(guardian, "is_elevated", return_value=True), \
+                 mock.patch.object(guardian, "updater_api_credentials",
+                                   return_value=("https://glpi/plugins/ativaupdater/api/v1", "a" * 64)), \
+                 mock.patch.object(guardian.ApiClient, "_json",
+                                   return_value={"version": "1.7.8", "sha256": "a" * 64,
+                                                 "file_name": "setup.exe", "size": 10}), \
+                 mock.patch.object(guardian, "download_package"), \
+                 mock.patch.object(guardian, "REPAIR_DIR", root), \
+                 mock.patch.object(guardian, "REPAIR_STATE_PATH", root / "state.json"), \
+                 mock.patch.object(guardian, "LOG_DIR", root), \
+                 mock.patch.object(guardian.subprocess, "Popen", side_effect=fake_popen), \
+                 mock.patch.object(guardian, "verify_updater_repair", return_value=(True, "ok")):
+                ok, _ = guardian.repair_updater(quiet_logger(), action_id=3)
+
+        self.assertTrue(ok)
+        flags = captured.get("creationflags", 0)
+        self.assertTrue(flags & guardian.subprocess.DETACHED_PROCESS, "precisa ser destacado")
+        self.assertTrue(flags & guardian.subprocess.CREATE_NO_WINDOW, "nao pode abrir janela")

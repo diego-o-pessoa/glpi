@@ -23,8 +23,15 @@ final class ActionQueue
     public const START   = 'START_COMPONENT';
     public const RESTART = 'RESTART_COMPONENT';
     public const REPAIR  = 'REPAIR_COMPONENT';
+    /**
+     * "Corrigir": o servidor não escolhe o procedimento. A máquina verifica o
+     * estado no momento da execução e aplica o mínimo necessário — iniciar o
+     * serviço se ele só estiver parado, reinstalar apenas se os arquivos
+     * faltarem. Evita reinstalação à toa e decisões sobre status velho.
+     */
+    public const FIX = 'FIX_COMPONENT';
 
-    public const ACTIONS = [self::CHECK, self::START, self::RESTART, self::REPAIR];
+    public const ACTIONS = [self::CHECK, self::START, self::RESTART, self::REPAIR, self::FIX];
 
     public const PENDING = 'pending';
     public const RUNNING = 'running';
@@ -42,10 +49,12 @@ final class ActionQueue
         // Só o Updater sabe se reinstalar por enquanto: ele é o caso validado
         // primeiro. Wallpaper, Remote e GLPI Agent entram depois; até lá o
         // Guardian recusa REPAIR neles com mensagem clara.
-        'updater'    => [self::CHECK, self::START, self::RESTART, self::REPAIR],
-        'remote'     => [self::CHECK, self::START, self::RESTART],
-        'glpi_agent' => [self::CHECK, self::START, self::RESTART],
-        'wallpaper'  => [self::CHECK],
+        'updater'    => [self::CHECK, self::START, self::RESTART, self::REPAIR, self::FIX],
+        'remote'     => [self::CHECK, self::START, self::RESTART, self::FIX],
+        'glpi_agent' => [self::CHECK, self::START, self::RESTART, self::FIX],
+        // O Wallpaper roda por usuário: o Guardian consegue diagnosticar, mas
+        // ainda não iniciar nem reinstalar. O FIX responde dizendo isso.
+        'wallpaper'  => [self::CHECK, self::FIX],
     ];
 
     /** Reparo baixa e instala pacote: leva bem mais que as demais ações. */
@@ -151,7 +160,11 @@ final class ActionQueue
             [
                 'status'        => $success ? self::SUCCESS : self::FAILED,
                 'result'        => $success ? self::SUCCESS : self::FAILED,
-                'error_message' => $success ? null : (mb_substr($message, 0, 500) ?: 'Falha sem detalhe.'),
+                // Guarda o relato também no sucesso: é ele que diz o que a
+                // máquina fez de fato ("já estava rodando", "serviço iniciado",
+                // "reinstalado"), e é isso que o modal e o histórico mostram.
+                'error_message' => mb_substr(trim($message), 0, 500)
+                    ?: ($success ? 'Concluído.' : 'Falha sem detalhe.'),
                 'finished_at'   => ServerClock::now(),
             ],
             ['id' => $actionId, 'machines_id' => $machinesId, 'status' => self::RUNNING]
