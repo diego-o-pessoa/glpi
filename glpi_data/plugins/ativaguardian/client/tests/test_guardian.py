@@ -533,13 +533,15 @@ class RepairSecurityTests(unittest.TestCase):
                 "api_token": "b" * 64,
             })
 
-    def test_repair_of_unsupported_component_is_refused(self) -> None:
-        ok, message = guardian.execute_action("wallpaper", guardian.ACTION_REPAIR, quiet_logger())
-        self.assertFalse(ok)
-        self.assertIn("ainda nao foi implementado", message)
+    def test_every_monitored_component_is_repairable(self) -> None:
+        """Todos reparam pelo mesmo pacote unificado (ver repair_component)."""
+        self.assertEqual(sorted(guardian.REPAIR_HANDLERS), sorted(guardian.COMPONENT_CHECKS))
+        self.assertEqual(sorted(guardian.REPAIRABLE_COMPONENTS), sorted(guardian.COMPONENT_CHECKS))
 
-    def test_only_updater_is_repairable_for_now(self) -> None:
-        self.assertEqual(tuple(guardian.REPAIR_HANDLERS), guardian.REPAIRABLE_COMPONENTS)
+    def test_repair_of_unknown_component_is_refused(self) -> None:
+        ok, message = guardian.execute_action("inventado", guardian.ACTION_REPAIR, quiet_logger())
+        self.assertFalse(ok)
+        self.assertIn("desconhecido", message)
 
 
 class DownloadValidationTests(unittest.TestCase):
@@ -600,7 +602,7 @@ class RepairOutcomeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with mock.patch.object(guardian, "REPAIR_STATE_PATH", Path(directory) / "s.json"), \
                  mock.patch.object(guardian, "UPDATER_EXE", Path(directory) / "ausente.exe"):
-                ok, message = guardian.verify_updater_repair(quiet_logger())
+                ok, message = guardian.verify_repair("updater", quiet_logger())
         self.assertFalse(ok)
         self.assertIn("antivirus", message.lower())
 
@@ -612,9 +614,9 @@ class RepairOutcomeTests(unittest.TestCase):
                  mock.patch.object(guardian, "UPDATER_EXE", exe), \
                  mock.patch.object(guardian, "resolve_component_service", return_value="AtivaUnifiedUpdater"), \
                  mock.patch.object(guardian, "query_service", return_value=guardian.SERVICE_STATE_STOPPED):
-                ok, message = guardian.verify_updater_repair(quiet_logger(), sleep=lambda _s: None, timeout=1)
+                ok, message = guardian.verify_repair("updater", quiet_logger(), sleep=lambda _s: None, timeout=1)
         self.assertFalse(ok)
-        self.assertIn("nao entrou em execucao", message)
+        self.assertIn("segue com status", message)
 
     def test_successful_repair_requires_healthy_status(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -625,7 +627,7 @@ class RepairOutcomeTests(unittest.TestCase):
                  mock.patch.object(guardian, "resolve_component_service", return_value="AtivaUnifiedUpdater"), \
                  mock.patch.object(guardian, "query_service", return_value=guardian.SERVICE_STATE_RUNNING), \
                  mock.patch.object(guardian, "check_updater", return_value={"status": "healthy", "version": "1.7.3"}):
-                ok, message = guardian.verify_updater_repair(quiet_logger(), sleep=lambda _s: None, timeout=1)
+                ok, message = guardian.verify_repair("updater", quiet_logger(), sleep=lambda _s: None, timeout=1)
         self.assertTrue(ok)
         self.assertIn("reinstalado", message)
 
@@ -649,7 +651,7 @@ class InterruptedRepairTests(unittest.TestCase):
 
             with mock.patch.object(guardian, "REPAIR_STATE_PATH", marker), \
                  mock.patch.object(guardian, "load_json", side_effect=fake_load), \
-                 mock.patch.object(guardian, "verify_updater_repair", return_value=(True, "ok")), \
+                 mock.patch.object(guardian, "verify_repair", return_value=(True, "ok")), \
                  mock.patch.object(guardian, "ApiClient", return_value=api):
                 runtime.finish_pending_repair(quiet_logger(), "maquina-1")
         api.report_action.assert_called_once_with(42, "maquina-1", True, "ok")
@@ -670,7 +672,7 @@ class FixComponentTests(unittest.TestCase):
         with mock.patch.dict(guardian.COMPONENT_CHECKS,
                              {"updater": lambda: {"status": "healthy", "version": "1.7.3"}}), \
              mock.patch.object(guardian, "run_sc") as run_sc, \
-             mock.patch.dict(guardian.REPAIR_HANDLERS, {"updater": (repair := mock.Mock())}):
+             mock.patch.dict(guardian.REPAIR_HANDLERS, {"updater": (repair := mock.Mock(return_value=(True, "x")))}):
             ok, message = guardian.fix_component("updater", quiet_logger())
         self.assertTrue(ok)
         self.assertIn("nenhuma correcao", message)
@@ -684,7 +686,7 @@ class FixComponentTests(unittest.TestCase):
                              {"updater": lambda: {"status": next(states), "version": ""}}), \
              mock.patch.object(guardian, "resolve_component_service", return_value="AtivaUnifiedUpdater"), \
              mock.patch.object(guardian, "wait_for_service_state", return_value=True), \
-             mock.patch.object(guardian, "repair_updater") as repair, \
+             mock.patch.dict(guardian.REPAIR_HANDLERS, {"updater": (repair := mock.Mock())}), \
              mock.patch.object(guardian, "run_sc", return_value=0) as run_sc:
             ok, message = guardian.fix_component("updater", quiet_logger(), sleep=lambda _s: None, timeout=1)
         self.assertTrue(ok)
@@ -697,7 +699,7 @@ class FixComponentTests(unittest.TestCase):
                              {"updater": lambda: {"status": "service_stopped", "version": ""}}), \
              mock.patch.object(guardian, "resolve_component_service", return_value="AtivaUnifiedUpdater"), \
              mock.patch.object(guardian, "wait_for_service_state", return_value=False), \
-             mock.patch.object(guardian, "repair_updater") as repair, \
+             mock.patch.dict(guardian.REPAIR_HANDLERS, {"updater": (repair := mock.Mock())}), \
              mock.patch.object(guardian, "run_sc", return_value=0):
             ok, message = guardian.fix_component("updater", quiet_logger(), sleep=lambda _s: None, timeout=1)
         self.assertFalse(ok)
@@ -727,17 +729,20 @@ class FixComponentTests(unittest.TestCase):
         repair.assert_called_once()
         self.assertIn("nao esta registrado", message)
 
-    def test_component_without_repair_support_explains_itself(self) -> None:
+    def test_wallpaper_missing_now_reinstalls(self) -> None:
+        """Antes o Wallpaper nao sabia se reinstalar; agora usa o pacote unificado."""
         with mock.patch.dict(guardian.COMPONENT_CHECKS,
-                             {"wallpaper": lambda: {"status": "file_missing", "version": ""}}):
+                             {"wallpaper": lambda: {"status": "file_missing", "version": ""}}),              mock.patch.dict(guardian.REPAIR_HANDLERS,
+                             {"wallpaper": (repair := mock.Mock(return_value=(True, "reinstalado")))}):
             ok, message = guardian.fix_component("wallpaper", quiet_logger())
-        self.assertFalse(ok)
-        self.assertIn("ainda nao sabe", message)
+        self.assertTrue(ok)
+        repair.assert_called_once()
+        self.assertIn("nao esta em disco", message)
 
     def test_unknown_status_is_not_guessed(self) -> None:
         with mock.patch.dict(guardian.COMPONENT_CHECKS,
                              {"updater": lambda: {"status": "unknown", "version": ""}}), \
-             mock.patch.dict(guardian.REPAIR_HANDLERS, {"updater": (repair := mock.Mock())}):
+             mock.patch.dict(guardian.REPAIR_HANDLERS, {"updater": (repair := mock.Mock(return_value=(True, "x")))}):
             ok, message = guardian.fix_component("updater", quiet_logger())
         self.assertFalse(ok)
         repair.assert_not_called()
@@ -758,7 +763,7 @@ class SilentInstallTests(unittest.TestCase):
         with mock.patch.object(guardian, "is_elevated", return_value=False), \
              mock.patch.object(guardian, "updater_api_credentials") as creds, \
              mock.patch.object(guardian.subprocess, "Popen") as popen:
-            ok, message = guardian.repair_updater(quiet_logger())
+            ok, message = guardian.repair_component("updater", quiet_logger())
         self.assertFalse(ok)
         popen.assert_not_called()
         creds.assert_not_called()
@@ -795,8 +800,8 @@ class SilentInstallTests(unittest.TestCase):
                  mock.patch.object(guardian, "REPAIR_STATE_PATH", root / "state.json"), \
                  mock.patch.object(guardian, "LOG_DIR", root), \
                  mock.patch.object(guardian.subprocess, "Popen", side_effect=fake_popen), \
-                 mock.patch.object(guardian, "verify_updater_repair", return_value=(True, "ok")):
-                ok, _ = guardian.repair_updater(quiet_logger(), action_id=3)
+                 mock.patch.object(guardian, "verify_repair", return_value=(True, "ok")):
+                ok, _ = guardian.repair_component("updater", quiet_logger(), action_id=3)
 
         self.assertTrue(ok)
         flags = captured.get("creationflags", 0)

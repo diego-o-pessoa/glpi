@@ -46,15 +46,13 @@ final class ActionQueue
      * Ativa Updater. Por isso ele aceita só verificação nesta etapa.
      */
     public const SUPPORTED = [
-        // Só o Updater sabe se reinstalar por enquanto: ele é o caso validado
-        // primeiro. Wallpaper, Remote e GLPI Agent entram depois; até lá o
-        // Guardian recusa REPAIR neles com mensagem clara.
+        // Todos reinstalam pelo mesmo pacote unificado, que é quem instala os
+        // quatro. O Wallpaper não aparece com START/RESTART porque roda na
+        // sessão do usuário (HKCU), não como serviço — mas pode ser reinstalado.
         'updater'    => [self::CHECK, self::START, self::RESTART, self::REPAIR, self::FIX],
-        'remote'     => [self::CHECK, self::START, self::RESTART, self::FIX],
-        'glpi_agent' => [self::CHECK, self::START, self::RESTART, self::FIX],
-        // O Wallpaper roda por usuário: o Guardian consegue diagnosticar, mas
-        // ainda não iniciar nem reinstalar. O FIX responde dizendo isso.
-        'wallpaper'  => [self::CHECK, self::FIX],
+        'remote'     => [self::CHECK, self::START, self::RESTART, self::REPAIR, self::FIX],
+        'glpi_agent' => [self::CHECK, self::START, self::RESTART, self::REPAIR, self::FIX],
+        'wallpaper'  => [self::CHECK, self::REPAIR, self::FIX],
     ];
 
     /** Reparo baixa e instala pacote: leva bem mais que as demais ações. */

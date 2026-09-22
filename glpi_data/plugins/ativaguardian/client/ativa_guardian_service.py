@@ -51,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.2.3"
+GUARDIAN_VERSION = "1.3.0"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -745,7 +745,7 @@ SHA256_RE = re.compile(r"^[a-fA-F0-9]{64}$")
 # Quais componentes sabem se reparar. Wallpaper, Remote e GLPI Agent entram
 # depois que o Updater estiver validado em campo; ate la a acao e recusada com
 # mensagem clara em vez de fingir que funciona.
-REPAIRABLE_COMPONENTS = ("updater",)
+REPAIRABLE_COMPONENTS = ("updater", "wallpaper", "remote", "glpi_agent")
 
 
 def resolve_component_service(component: str) -> str | None:
@@ -906,12 +906,20 @@ def installer_command(package: Path, install_log: Path) -> list[str]:
     ]
 
 
-def repair_updater(logger: logging.Logger, action_id: int = 0) -> tuple[bool, str]:
-    """Reinstala o Ativa Updater a partir do pacote oficial publicado no GLPI.
+def repair_component(component: str, logger: logging.Logger, action_id: int = 0) -> tuple[bool, str]:
+    """Reinstala um componente a partir do pacote oficial publicado no GLPI.
 
-    Preserva configuracao: o instalador unificado reaproveita o registro do
-    Wallpaper, mantem o config.json do Guardian e nao toca em machine.json.
-    Nada e apagado aqui antes da instalacao.
+    O pacote e o instalador unificado - o mesmo para todos, porque e ele que
+    instala GLPI Agent, Wallpaper, Updater e RustDesk. Nao existe pacote avulso
+    por componente: o MSI do Agent, por exemplo, e apagado da maquina depois da
+    instalacao, entao reinstalar so e possivel pelo pacote completo.
+
+    Na pratica um reparo restaura todos os quatro; a verificacao final olha o
+    componente que foi pedido.
+
+    Preserva configuracao: o instalador reaproveita o registro do Wallpaper,
+    regrava o config.json do Guardian e nao toca em machine.json. Nada e
+    apagado aqui antes da instalacao.
     """
     # O instalador unificado pede privilegio de administrador no manifesto. Sob
     # o servico (SYSTEM) isso e concedido sem nenhuma janela. Rodando como
@@ -951,7 +959,7 @@ def repair_updater(logger: logging.Logger, action_id: int = 0) -> tuple[bool, st
     if action_id > 0:
         atomic_json(REPAIR_STATE_PATH, {
             "action_id": action_id,
-            "component": "updater",
+            "component": component,
             "version": version,
             "started_at": time.time(),
         })
@@ -984,38 +992,51 @@ def repair_updater(logger: logging.Logger, action_id: int = 0) -> tuple[bool, st
     if exit_code not in (0, 1641, 3010):
         return False, f"O instalador terminou com codigo {exit_code}. Log: {install_log}"
 
-    return verify_updater_repair(logger)
+    return verify_repair(component, logger)
 
 
-def verify_updater_repair(logger: logging.Logger, sleep=time.sleep,
-                          timeout: int = SERVICE_WAIT_SECONDS) -> tuple[bool, str]:
+def verify_repair(component: str, logger: logging.Logger, sleep=time.sleep,
+                  timeout: int = SERVICE_WAIT_SECONDS) -> tuple[bool, str]:
     """Health check apos o reparo: o componente precisa estar realmente de pe."""
     _safe_unlink(REPAIR_STATE_PATH)
     # A reinstalacao troca a versao instalada: o cache precisa sair do caminho,
     # senao o painel mostraria a versao antiga por ate VERSION_CACHE_SECONDS.
     _version_cache.clear()
 
-    if not UPDATER_EXE.is_file():
+    check = COMPONENT_CHECKS.get(component)
+    if check is None:
+        return False, f"Componente desconhecido: {component}"
+
+    service = resolve_component_service(component)
+    if service is not None:
+        # Da tempo de o SCM subir o servico antes de julgar o resultado.
+        wait_for_service_state(service, SERVICE_STATE_RUNNING, timeout=timeout, sleep=sleep)
+
+    status = check()["status"]
+    if status == STATUS_HEALTHY:
+        logger.info("Reparo concluido: %s healthy", component)
+        return True, f"{component} reinstalado e em execucao."
+
+    if status == STATUS_FILE_MISSING:
         # Cenario conhecido: o antivirus remove o executavel de novo. Nao
         # tentamos desativar nem contornar o AV - so reportamos.
-        return False, ("O executavel do Updater sumiu logo apos a instalacao. "
+        return False, (f"O executavel de {component} sumiu logo apos a instalacao. "
                        "Um antivirus provavelmente o colocou em quarentena.")
 
-    service = resolve_component_service("updater")
-    if service is None:
-        return False, "O servico do Updater nao existe apos a instalacao."
-    if not wait_for_service_state(service, SERVICE_STATE_RUNNING, timeout=timeout, sleep=sleep):
-        return False, "O Updater foi instalado, mas o servico nao entrou em execucao."
+    if component == "wallpaper" and status == STATUS_PROCESS_STOPPED:
+        # O cliente roda na sessao do usuario: sem ninguem logado nao ha
+        # processo, e isso nao e falha do reparo.
+        return True, ("Ativa Wallpaper reinstalado. O cliente roda na sessao do "
+                      "usuario e sera iniciado no proximo logon.")
 
-    status = check_updater()["status"]
-    if status != STATUS_HEALTHY:
-        return False, f"Apos o reparo o Updater segue com status {status}."
-
-    logger.info("Reparo concluido: updater healthy")
-    return True, "Ativa Updater reinstalado e em execucao."
+    return False, f"Apos o reparo {component} segue com status {status}."
 
 
-REPAIR_HANDLERS = {"updater": repair_updater}
+# Todos reparam pelo mesmo pacote unificado (ver repair_component).
+REPAIR_HANDLERS = {
+    name: (lambda name: lambda logger, action_id=0: repair_component(name, logger, action_id))(name)
+    for name in COMPONENT_CHECKS
+}
 
 
 def fix_component(component: str, logger: logging.Logger, action_id: int = 0,
@@ -1380,8 +1401,9 @@ class GuardianRuntime:
             return
 
         action_id = int(state.get("action_id", 0) or 0)
-        logger.info("Retomando o reparo interrompido (acao %s)", action_id)
-        success, message = verify_updater_repair(logger)
+        component = str(state.get("component", "updater")).strip().lower()
+        logger.info("Retomando o reparo interrompido de %s (acao %s)", component, action_id)
+        success, message = verify_repair(component, logger)
         logger.info("Reparo %s: %s (%s)", action_id, "success" if success else "failed", message)
 
         if action_id <= 0:
