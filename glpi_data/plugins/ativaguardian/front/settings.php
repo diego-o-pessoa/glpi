@@ -11,7 +11,14 @@ if (!Session::haveRight(PluginAtivaguardianProfile::RIGHT_CONFIG, UPDATE)) {
     Session::checkRight('config', UPDATE);
 }
 
-$self = $_SERVER['PHP_SELF'];
+global $CFG_GLPI;
+
+// NAO usar $_SERVER['PHP_SELF'] aqui. Esta pagina e registrada como CONFIG_PAGE
+// e e aberta pela engrenagem em Configurar > Plugins; nesse caminho o GLPI 11
+// serve pelo front controller e PHP_SELF vira "/index.php". O formulario entao
+// postava em /index.php, que e o endpoint de inventario, e respondia
+// "XML not well formed!". A URL montada explicitamente vale nos dois caminhos.
+$self = $CFG_GLPI['root_doc'] . '/plugins/ativaguardian/front/settings.php';
 
 // Sem Session::checkCSRF aqui: o CheckCsrfListener do GLPI ja validou este POST
 // e consumiu o token (validateCSRF faz unset). Checar de novo recusaria o envio
@@ -59,7 +66,6 @@ $offline = ConfigService::getInt('offline_after_seconds', 7200);
 $apiEnabled = ConfigService::getBool('api_enabled', true);
 $checked = $apiEnabled ? ' checked' : '';
 
-global $CFG_GLPI;
 $apiBase = $CFG_GLPI['url_base'] . '/plugins/ativaguardian/api/v1';
 
 echo PageLayout::header('overview');

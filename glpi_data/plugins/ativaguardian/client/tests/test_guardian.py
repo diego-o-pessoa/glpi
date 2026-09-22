@@ -925,3 +925,36 @@ class UpdaterCredentialsInGuardianConfigTests(unittest.TestCase):
             with self.assertRaises(guardian.GuardianError) as caught:
                 guardian.updater_api_credentials()
         self.assertIn("--configure", str(caught.exception))
+
+
+class LoggedOnUserTests(unittest.TestCase):
+    """O Guardian roda como SYSTEM: descobre o usuario pela sessao de console."""
+
+    def test_heartbeat_carries_the_username(self) -> None:
+        with mock.patch.object(guardian, "logged_on_user", return_value="ATIVA\\diego"):
+            payload = guardian.build_heartbeat("m1", {}, "Microsoft Defender")
+        self.assertEqual(payload["username"], "ATIVA\\diego")
+
+    def test_empty_when_nobody_is_logged_in(self) -> None:
+        with mock.patch.object(guardian, "logged_on_user", return_value=""):
+            payload = guardian.build_heartbeat("m1", {}, "Microsoft Defender")
+        self.assertEqual(payload["username"], "")
+
+    def test_username_matches_the_api_contract(self) -> None:
+        """Mesma validacao que o ApiController aplica."""
+        pattern = re.compile(r"^[^\x00-\x1F]{1,255}$")
+        for value in ("ATIVA\\diego", "diego.pessoa", "Jose da Silva", "user@dominio"):
+            with mock.patch.object(guardian, "logged_on_user", return_value=value):
+                payload = guardian.build_heartbeat("m1", {}, "Defender")
+            self.assertRegex(payload["username"], pattern)
+            self.assertLessEqual(len(payload["username"]), 255)
+
+    def test_real_call_never_raises(self) -> None:
+        """Executa de verdade nesta maquina: pode vir vazio, mas nao pode explodir."""
+        value = guardian.logged_on_user()
+        self.assertIsInstance(value, str)
+        self.assertLessEqual(len(value), 255)
+
+    def test_failure_degrades_to_empty(self) -> None:
+        with mock.patch.object(guardian.ctypes, "WinDLL", side_effect=OSError("sem wtsapi32")):
+            self.assertEqual(guardian.logged_on_user(), "")

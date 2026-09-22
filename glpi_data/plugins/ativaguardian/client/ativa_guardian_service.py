@@ -1240,6 +1240,10 @@ def build_heartbeat(machine_id: str, components: dict[str, dict[str, str]], anti
     return {
         "machine_id": machine_id,
         "hostname": hostname(),
+        # Quem esta usando a maquina. O Updater mostra isso cruzando com a
+        # tabela do Wallpaper; aqui o proprio Guardian descobre pela sessao de
+        # console, entao nao depende de outro componente estar instalado.
+        "username": logged_on_user(),
         "guardian_version": GUARDIAN_VERSION,
         "antivirus": antivirus,
         "components": components,

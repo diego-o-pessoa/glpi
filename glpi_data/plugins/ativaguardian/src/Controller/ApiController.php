@@ -83,6 +83,14 @@ final class ApiController extends AbstractController
             return $this->error('INVALID_PAYLOAD', 'hostname invalido.', 422);
         }
 
+        // Usuario da sessao de console, no formato DOMINIO\usuario. Aceita
+        // letras acentuadas e espaco porque nomes de conta os permitem; vazio
+        // quando ninguem esta logado.
+        $username = trim((string) ($payload['username'] ?? ''));
+        if ($username !== '' && !preg_match('/^[\p{L}\p{N} ._\\\\@-]{1,255}$/uD', $username)) {
+            return $this->error('INVALID_PAYLOAD', 'username invalido.', 422);
+        }
+
         $guardianVersion = trim((string) ($payload['guardian_version'] ?? ''));
         if (!self::isValidVersion($guardianVersion)) {
             return $this->error('INVALID_VERSION', 'guardian_version invalido.', 422);
@@ -124,6 +132,7 @@ final class ApiController extends AbstractController
         $machinesId = MachineRepository::recordHeartbeat([
             'machine_id'       => $machineId,
             'hostname'         => $hostname,
+            'username'         => $username,
             'guardian_version' => $guardianVersion,
             'antivirus'        => $antivirus,
             'last_ip'          => mb_substr((string) ($request->getClientIp() ?? ''), 0, 64),

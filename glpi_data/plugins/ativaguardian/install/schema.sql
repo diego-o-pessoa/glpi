@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativaguardian_machines` (
   `machine_id` varchar(128) NOT NULL,
   `computers_id` int unsigned DEFAULT NULL,
   `hostname` varchar(255) NOT NULL DEFAULT '',
+  `username` varchar(255) NOT NULL DEFAULT '',
   `guardian_version` varchar(32) NOT NULL DEFAULT '',
   `antivirus` varchar(128) NOT NULL DEFAULT '',
   `overall_status` varchar(32) NOT NULL DEFAULT 'unknown',

@@ -36,6 +36,7 @@ final class MachineRepository
 
         $row = [
             'hostname'         => $data['hostname'],
+            'username'         => $data['username'] ?? '',
             'guardian_version' => $data['guardian_version'],
             'antivirus'        => $data['antivirus'],
             'overall_status'   => $overall,

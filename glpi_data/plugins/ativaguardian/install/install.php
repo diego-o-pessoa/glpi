@@ -14,6 +14,13 @@ function plugin_ativaguardian_do_install(): bool
     try {
         $DB->runFile(__DIR__ . '/schema.sql');
 
+        // Coluna adicionada depois da primeira versao: quem ja tinha a tabela
+        // precisa dela criada na atualizacao.
+        $machinesTable = 'glpi_plugin_ativaguardian_machines';
+        if ($DB->tableExists($machinesTable) && !$DB->fieldExists($machinesTable, 'username')) {
+            $migration->addField($machinesTable, 'username', "varchar(255) NOT NULL DEFAULT ''", ['after' => 'hostname']);
+        }
+
         require_once PLUGIN_ATIVAGUARDIAN_DIR . '/src/ConfigService.php';
         ConfigService::installDefaults();
         ConfigService::set(['schema_version' => PLUGIN_ATIVAGUARDIAN_VERSION]);

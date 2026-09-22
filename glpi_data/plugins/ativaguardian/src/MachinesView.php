@@ -50,6 +50,7 @@ final class MachinesView
                 (string) $machine['last_contact'],
                 (string) $machine['effective_status'],
                 (string) $machine['guardian_version'],
+                (string) ($machine['username'] ?? ''),
                 (string) $machine['antivirus'],
                 $machine['components'],
                 $data['actions'][(int) $machine['id']] ?? [],
@@ -119,8 +120,14 @@ final class MachinesView
         [$overallLabel, $overallClass] = HealthStatus::badge((string) $machine['effective_status']);
 
         $antivirus = trim((string) $machine['antivirus']);
+        $username = trim((string) ($machine['username'] ?? ''));
         $machineCell = "<td><div class='ag-machine'><i class='fas fa-desktop'></i><div>"
             . '<strong>' . htmlescape($name) . '</strong>'
+            // Quem está usando a máquina, como no Ativa Updater. Vazio quando
+            // ninguém está logado (tela de bloqueio ou máquina recém-ligada).
+            . ($username !== ''
+                ? "<small class='ag-user'><i class='fas fa-user'></i> " . htmlescape($username) . '</small>'
+                : '')
             . "<small><span class='ag-badge {$overallClass}'>" . htmlescape($overallLabel) . '</span>'
             . ($antivirus !== '' ? ' · ' . htmlescape($antivirus) : '') . '</small>'
             . '</div></div></td>';
@@ -146,8 +153,11 @@ final class MachinesView
 
         $actionsCell = self::actionsMenu($machine, $actions, $canManage && !$offline);
 
-        // data-ag-name alimenta a busca do cabeçalho sem precisar ler o DOM interno.
-        return "<tr data-ag-name='" . htmlescape(mb_strtolower($name)) . "'>"
+        // data-ag-name alimenta a busca do cabeçalho sem precisar ler o DOM
+        // interno. Inclui o usuário: procurar por quem usa a máquina é tão útil
+        // quanto procurar pelo nome dela.
+        $searchable = mb_strtolower(trim($name . ' ' . $username));
+        return "<tr data-ag-name='" . htmlescape($searchable) . "'>"
             . "{$machineCell}{$guardianCell}{$componentCells}{$lastCell}{$actionsCell}</tr>";
     }
 

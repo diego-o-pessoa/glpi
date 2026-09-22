@@ -7,6 +7,15 @@ use GlpiPlugin\Ativaupdater\PageLayout;
 
 include('../../../inc/includes.php');
 
+global $CFG_GLPI;
+
+// NAO usar $_SERVER['PHP_SELF'] aqui. O Apache do GLPI reescreve tudo para
+// public/index.php (RewriteRule ^(.*)$ index.php), e os arquivos de plugin ficam
+// fora de public/, entao PHP_SELF e SEMPRE "/index.php". Um formulario apontado
+// para ele posta no endpoint de inventario do Agent, que responde
+// "XML not well formed!". A URL montada explicitamente e a unica confiavel.
+$selfUrl = $CFG_GLPI['root_doc'] . '/plugins/ativaupdater/front/settings.php';
+
 if (!Session::haveRight(PluginAtivaupdaterProfile::RIGHT_CONFIG, READ)) {
     Session::checkRight('config', UPDATE);
 }
@@ -25,7 +34,7 @@ if (isset($_POST['update'])) {
         || $maxUpload === false || $maxUpload < 50 || $maxUpload > 2048
     ) {
         Session::addMessageAfterRedirect('Configuração inválida. Use HTTPS, intervalo entre 300 e 86400 segundos e limite entre 50 e 2048 MB.', false, ERROR);
-        Html::redirect($_SERVER['PHP_SELF']);
+        Html::redirect($selfUrl);
     }
     ConfigService::set([
         'api_enabled'            => isset($_POST['api_enabled']) ? '1' : '0',
@@ -34,7 +43,7 @@ if (isset($_POST['update'])) {
         'max_upload_mb'          => (string) $maxUpload,
     ]);
     Session::addMessageAfterRedirect('Configurações atualizadas.', true, INFO);
-    Html::redirect($_SERVER['PHP_SELF']);
+    Html::redirect($selfUrl);
 }
 
 if (isset($_POST['generate_token'])) {
@@ -43,7 +52,7 @@ if (isset($_POST['generate_token'])) {
     }
     ConfigService::set(['api_token' => ConfigService::generateToken()]);
     Session::addMessageAfterRedirect('Novo token gerado. Gere outro arquivo de configuração e atualize os instaladores.', true, INFO);
-    Html::redirect($_SERVER['PHP_SELF']);
+    Html::redirect($selfUrl);
 }
 
 Html::header(__('Ativa Updater', 'ativaupdater'), $_SERVER['PHP_SELF'], 'plugins', 'ativaupdater');
@@ -58,7 +67,7 @@ $token = (string) ConfigService::get('api_token', '');
 $maskedToken = strlen($token) >= 8
     ? substr($token, 0, 4) . str_repeat('*', strlen($token) - 8) . substr($token, -4)
     : 'não configurado';
-$self = htmlescape((string) $_SERVER['PHP_SELF']);
+$self = htmlescape($selfUrl);
 
 echo PageLayout::header('settings');
 echo "<div class='aw-help'><i class='fas fa-info-circle me-2'></i>O serviço Windows consulta esta API no intervalo configurado. O padrão é 3600 segundos (1 hora).</div>";
