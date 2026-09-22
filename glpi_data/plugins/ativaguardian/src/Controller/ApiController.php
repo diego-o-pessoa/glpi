@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace GlpiPlugin\Ativaguardian\Controller;
 
 use Glpi\Controller\AbstractController;
+use GlpiPlugin\Ativaguardian\ActionQueue;
 use GlpiPlugin\Ativaguardian\ConfigService;
 use GlpiPlugin\Ativaguardian\HealthStatus;
 use GlpiPlugin\Ativaguardian\MachineRepository;
@@ -138,5 +139,102 @@ final class ApiController extends AbstractController
     private static function isValidVersion(string $version): bool
     {
         return $version === '' || preg_match('/^[A-Za-z0-9.+_-]{1,64}$/D', $version) === 1;
+    }
+
+    /** Linha da máquina a partir do machine_id informado pelo serviço. */
+    private function machineRow(string $machineId): ?array
+    {
+        global $DB;
+
+        $iterator = $DB->request([
+            'SELECT' => ['id'],
+            'FROM'   => MachineRepository::MACHINES_TABLE,
+            'WHERE'  => ['machine_id' => $machineId],
+            'LIMIT'  => 1,
+        ]);
+
+        return count($iterator) === 1 ? $iterator->current() : null;
+    }
+
+    /**
+     * Ações pendentes da máquina. A própria leitura reivindica as ações
+     * (pending -> running), então uma ação nunca é entregue duas vezes, mesmo
+     * que duas coletas cheguem juntas.
+     */
+    #[Route(
+        '/api/v1/actions/{machineId}',
+        name: 'ativaguardian_api_actions',
+        requirements: ['machineId' => '[A-Za-z0-9._-]{1,128}'],
+        methods: ['GET']
+    )]
+    public function actions(Request $request, string $machineId): Response
+    {
+        if ($error = $this->checkAuth($request)) {
+            return $error;
+        }
+
+        $machine = $this->machineRow($machineId);
+        if ($machine === null) {
+            return $this->error('MACHINE_NOT_FOUND', 'Maquina ainda nao registrada.', 404);
+        }
+
+        return new JsonResponse([
+            'actions'            => ActionQueue::claim((int) $machine['id']),
+            'poll_after_seconds' => 30,
+        ]);
+    }
+
+    /** Resultado da execução. Só aceita ação em running que pertença à máquina. */
+    #[Route(
+        '/api/v1/actions/{actionId}/result',
+        name: 'ativaguardian_api_action_result',
+        requirements: ['actionId' => '\d{1,10}'],
+        methods: ['POST']
+    )]
+    public function actionResult(Request $request, string $actionId): Response
+    {
+        if ($error = $this->checkAuth($request)) {
+            return $error;
+        }
+        if (strlen($request->getContent()) > self::MAX_BODY_BYTES) {
+            return $this->error('PAYLOAD_TOO_LARGE', 'Resultado muito grande.', 413);
+        }
+
+        try {
+            $payload = json_decode($request->getContent(), true, 8, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return $this->error('INVALID_JSON', 'JSON invalido.', 400);
+        }
+        if (!is_array($payload)) {
+            return $this->error('INVALID_PAYLOAD', 'Conteudo invalido.', 400);
+        }
+
+        $machineId = trim((string) ($payload['machine_id'] ?? ''));
+        if (!preg_match('/^[A-Za-z0-9._-]{1,128}$/D', $machineId)) {
+            return $this->error('INVALID_PAYLOAD', 'machine_id ausente ou invalido.', 422);
+        }
+        $status = strtolower(trim((string) ($payload['status'] ?? '')));
+        if (!in_array($status, [ActionQueue::SUCCESS, ActionQueue::FAILED], true)) {
+            return $this->error('INVALID_PAYLOAD', 'status deve ser success ou failed.', 422);
+        }
+        $message = mb_substr(trim((string) ($payload['message'] ?? '')), 0, 500);
+
+        $machine = $this->machineRow($machineId);
+        if ($machine === null) {
+            return $this->error('MACHINE_NOT_FOUND', 'Maquina ainda nao registrada.', 404);
+        }
+
+        $recorded = ActionQueue::complete(
+            (int) $actionId,
+            (int) $machine['id'],
+            $status === ActionQueue::SUCCESS,
+            $message
+        );
+
+        // 409: a ação não estava running para esta máquina — resultado repetido,
+        // expirado por timeout, ou de outra máquina. Nada é gravado.
+        return $recorded
+            ? new JsonResponse(['ok' => true], 202)
+            : $this->error('ACTION_NOT_CLAIMABLE', 'Acao nao esta em execucao para esta maquina.', 409);
     }
 }

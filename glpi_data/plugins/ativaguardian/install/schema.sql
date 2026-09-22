@@ -18,6 +18,24 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_ativaguardian_machines` (
   KEY `computers_id` (`computers_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `glpi_plugin_ativaguardian_actions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `machines_id` int(11) NOT NULL,
+  `component` varchar(64) NOT NULL,
+  `action` varchar(32) NOT NULL,
+  `status` varchar(16) NOT NULL DEFAULT 'pending',
+  `created_at` datetime NOT NULL,
+  `created_by` int(11) NOT NULL DEFAULT '0',
+  `started_at` datetime NULL,
+  `finished_at` datetime NULL,
+  `result` varchar(32) NULL,
+  `error_message` varchar(500) NULL,
+  PRIMARY KEY (`id`),
+  KEY `machine_status` (`machines_id`,`status`),
+  KEY `status` (`status`),
+  KEY `created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `glpi_plugin_ativaguardian_components` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `machines_id` int(11) NOT NULL,

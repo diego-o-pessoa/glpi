@@ -16,10 +16,16 @@ final class MachinesView
         'glpi_agent' => 'GLPI Agent',
     ];
 
-    /** @return array{machines: array<int, array>} */
+    /** @return array{machines: array<int, array>, actions: array<int, array>} */
     public static function load(): array
     {
-        return ['machines' => MachineRepository::loadAll()];
+        $machines = MachineRepository::loadAll();
+        return [
+            'machines' => $machines,
+            // Acoes pendentes/em execucao, para a celula mostrar o andamento
+            // em vez de oferecer o botao de novo.
+            'actions'  => ActionQueue::activeByMachine(array_column($machines, 'id')),
+        ];
     }
 
     /** @param array{machines: array<int, array>} $data */
@@ -46,6 +52,7 @@ final class MachinesView
                 (string) $machine['guardian_version'],
                 (string) $machine['antivirus'],
                 $machine['components'],
+                $data['actions'][(int) $machine['id']] ?? [],
             ];
         }
         return sha1((string) json_encode([$shape, intdiv(time(), 30)], JSON_INVALID_UTF8_SUBSTITUTE));
@@ -69,7 +76,7 @@ final class MachinesView
     }
 
     /** @param array{machines: array<int, array>} $data */
-    public static function renderTable(array $data): string
+    public static function renderTable(array $data, bool $canManage = false): string
     {
         if ($data['machines'] === []) {
             return "<div class='ag-empty'><i class='fas fa-inbox me-2'></i>Nenhuma máquina enviou heartbeat ainda.</div>";
@@ -83,13 +90,17 @@ final class MachinesView
 
         $rows = '';
         foreach ($data['machines'] as $machine) {
-            $rows .= self::renderRow($machine);
+            $rows .= self::renderRow(
+                $machine,
+                $data['actions'][(int) $machine['id']] ?? [],
+                $canManage
+            );
         }
 
         return "<table class='ag-table'>{$head}<tbody>{$rows}</tbody></table>";
     }
 
-    private static function renderRow(array $machine): string
+    private static function renderRow(array $machine, array $actions, bool $canManage): string
     {
         $offline = (bool) $machine['offline'];
         $name = (string) $machine['hostname'] !== '' ? (string) $machine['hostname'] : (string) $machine['machine_id'];
@@ -106,12 +117,19 @@ final class MachinesView
         $guardianStatus = $offline ? HealthStatus::OFFLINE : HealthStatus::HEALTHY;
         $guardianCell = self::componentCell($guardianStatus, (string) $machine['guardian_version']);
 
+        $machinesId = (int) $machine['id'];
         $componentCells = '';
         foreach (array_keys(self::COLUMNS) as $key) {
             $component = $machine['components'][$key] ?? null;
-            $componentCells .= $component === null
-                ? "<td><span class='ag-comp-ver'>—</span></td>"
-                : self::componentCell((string) $component['status'], (string) $component['version']);
+            $componentCells .= self::componentCell(
+                $component === null ? '' : (string) $component['status'],
+                $component === null ? '' : (string) $component['version'],
+                $machinesId,
+                $key,
+                $actions[$key] ?? null,
+                $canManage && !$offline,
+                $component !== null
+            );
         }
 
         $age = self::relativeTime((string) $machine['last_contact']);
@@ -121,13 +139,69 @@ final class MachinesView
         return "<tr>{$machineCell}{$guardianCell}{$componentCells}{$lastCell}</tr>";
     }
 
-    private static function componentCell(string $status, string $version): string
-    {
+    /** Celula simples, sem acoes: usada para a coluna do proprio Guardian. */
+    private static function componentCell(
+        string $status,
+        string $version,
+        int $machinesId = 0,
+        string $component = '',
+        ?array $action = null,
+        bool $canManage = false,
+        bool $reported = true
+    ): string {
+        if (!$reported) {
+            return "<td><span class='ag-comp-ver'>—</span></td>";
+        }
+
         [$label, $class] = HealthStatus::badge($status);
         $versionLine = $version !== ''
             ? "<span class='ag-comp-ver'>" . htmlescape($version) . '</span>'
             : "<span class='ag-comp-ver'>—</span>";
-        return "<td><div class='ag-comp'><span class='ag-badge {$class}'>" . htmlescape($label) . "</span>{$versionLine}</div></td>";
+
+        $extra = '';
+        if ($action !== null) {
+            // Ja existe acao na fila: mostra o andamento em vez de novos botoes,
+            // para o operador nao empilhar cliques.
+            $extra = "<span class='ag-action-state'>"
+                . ($action['status'] === ActionQueue::RUNNING ? 'Executando…' : 'Solicitado')
+                . '</span>';
+        } elseif ($canManage && $component !== '') {
+            $extra = self::actionButtons($machinesId, $component, $status);
+        }
+
+        return "<td><div class='ag-comp'><span class='ag-badge {$class}'>" . htmlescape($label)
+            . "</span>{$versionLine}{$extra}</div></td>";
+    }
+
+    /** Botoes oferecidos para o componente, conforme o que ele suporta e o estado atual. */
+    private static function actionButtons(int $machinesId, string $component, string $status): string
+    {
+        $supported = ActionQueue::SUPPORTED[$component] ?? [];
+        if ($supported === []) {
+            return '';
+        }
+
+        $offer = [ActionQueue::CHECK => ['Verificar novamente', 'fa-rotate']];
+        // Iniciar so faz sentido com o componente parado; reiniciar, com ele de pe.
+        if (in_array($status, [HealthStatus::SERVICE_STOPPED, HealthStatus::PROCESS_STOPPED, HealthStatus::ERROR], true)) {
+            $offer[ActionQueue::START] = ['Iniciar', 'fa-play'];
+        }
+        if ($status !== HealthStatus::FILE_MISSING) {
+            $offer[ActionQueue::RESTART] = ['Reiniciar', 'fa-arrows-rotate'];
+        }
+
+        $html = '';
+        foreach ($offer as $action => [$label, $icon]) {
+            if (!in_array($action, $supported, true)) {
+                continue;
+            }
+            $html .= "<button type='button' class='ag-act' data-ag-action='" . htmlescape($action)
+                . "' data-ag-component='" . htmlescape($component)
+                . "' data-ag-machine='{$machinesId}' title='" . htmlescape($label) . "'>"
+                . "<i class='fas {$icon}'></i></button>";
+        }
+
+        return $html !== '' ? "<span class='ag-actions'>{$html}</span>" : '';
     }
 
     /** @return array{label:string, absolute:string} */

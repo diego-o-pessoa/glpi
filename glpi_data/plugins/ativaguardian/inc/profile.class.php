@@ -5,6 +5,7 @@ declare(strict_types=1);
 class PluginAtivaguardianProfile extends Profile
 {
     public const RIGHT_VIEW   = 'plugin_ativaguardian_view';
+    public const RIGHT_MANAGE = 'plugin_ativaguardian_manage';
     public const RIGHT_CONFIG = 'plugin_ativaguardian_config';
 
     public static $rightname = 'profile';
@@ -39,6 +40,11 @@ class PluginAtivaguardianProfile extends Profile
                 'rights' => [READ => __('Ler', 'ativaguardian')],
                 'label'  => 'Ativa Guardian - Visualizar',
                 'field'  => self::RIGHT_VIEW,
+            ],
+            [
+                'rights' => [READ => __('Ler', 'ativaguardian'), UPDATE => __('Atualizar', 'ativaguardian')],
+                'label'  => 'Ativa Guardian - Executar acoes',
+                'field'  => self::RIGHT_MANAGE,
             ],
             [
                 'rights' => [READ => __('Ler', 'ativaguardian'), UPDATE => __('Atualizar', 'ativaguardian')],
@@ -131,6 +137,7 @@ class PluginAtivaguardianProfile extends Profile
     {
         ProfileRight::deleteProfileRights([
             self::RIGHT_VIEW,
+            self::RIGHT_MANAGE,
             self::RIGHT_CONFIG,
         ]);
     }

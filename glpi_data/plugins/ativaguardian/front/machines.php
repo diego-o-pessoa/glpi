@@ -13,6 +13,8 @@ if (!Session::haveRight(PluginAtivaguardianProfile::RIGHT_VIEW, READ)) {
 
 $data = MachinesView::load();
 $metrics = MachinesView::metrics($data);
+$canManage = Session::haveRight(PluginAtivaguardianProfile::RIGHT_MANAGE, UPDATE)
+    || Session::haveRight('config', UPDATE);
 $signature = MachinesView::signature($data);
 
 // Live-refresh endpoint: the dashboard polls this with X-Requested-With and
@@ -27,7 +29,7 @@ if ($isAjax) {
         'signature' => $signature,
         'changed'   => $changed,
         'metrics'   => $metrics,
-        'html'      => $changed ? MachinesView::renderTable($data) : null,
+        'html'      => $changed ? MachinesView::renderTable($data, $canManage) : null,
     ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     return;
 }
@@ -40,7 +42,7 @@ echo MachinesView::renderKpis($metrics);
 echo "<section class='ag-card' id='ag-machines-card' data-endpoint='machines.php' data-signature='"
     . htmlescape($signature) . "'>";
 echo "<header class='ag-card-header'><h2 class='ag-card-title'><i class='fas fa-desktop'></i>Todos os computadores</h2></header>";
-echo "<div class='ag-card-body' id='ag-machines-body'>" . MachinesView::renderTable($data) . '</div></section>';
+echo "<div class='ag-card-body' id='ag-machines-body'>" . MachinesView::renderTable($data, $canManage) . '</div></section>';
 
 echo PageLayout::footer();
 
@@ -88,6 +90,40 @@ echo <<<'HTML'
             setIndicator(failures > 2 ? 'Sem conexão; tentando novamente' : 'Atualizando...', failures <= 2);
         } finally { refreshing = false; }
     };
+
+    const csrf = () => document.querySelector('meta[property="glpi:csrf_token"]')?.getAttribute('content') || '';
+    const notify = (text, ok) => {
+        let box = document.getElementById('ag-message');
+        if (!box) { box = document.createElement('div'); box.id = 'ag-message'; card.parentNode.insertBefore(box, card); }
+        box.innerHTML = '';
+        const alert = document.createElement('div');
+        alert.className = 'ag-alert ' + (ok ? 'ag-alert-info' : 'ag-alert-danger');
+        alert.textContent = text;
+        box.append(alert);
+    };
+    document.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-ag-action]');
+        if (!button || button.disabled) return;
+        event.preventDefault();
+        button.disabled = true;
+        try {
+            const form = new FormData();
+            form.append('machines_id', button.dataset.agMachine);
+            form.append('component', button.dataset.agComponent);
+            form.append('action', button.dataset.agAction);
+            const response = await fetch('action.php', {
+                method: 'POST', body: form, credentials: 'same-origin',
+                headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrf()},
+            });
+            const data = await response.json().catch(() => null);
+            if (!response.ok || !data?.ok) throw new Error(data?.message || 'Falha ao enviar a acao.');
+            notify(data.message, true);
+        } catch (error) {
+            notify(error.message, false);
+            button.disabled = false;
+        }
+        refresh(true);
+    });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(true); });
     window.setInterval(refresh, 5000);
 })();

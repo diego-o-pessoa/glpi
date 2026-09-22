@@ -1,9 +1,13 @@
 """Ativa Guardian - servico Windows de monitoramento de saude.
 
 Verifica os componentes Ativa instalados na maquina e envia um heartbeat para a
-API do plugin Ativa Guardian no GLPI. Esta etapa e SOMENTE de monitoramento: o
-servico nao repara, nao reinstala, nao reinicia componentes, nao baixa nada e
-nao altera antivirus. Ele apenas observa e reporta.
+API do plugin Ativa Guardian no GLPI, e executa acoes corretivas de nivel 1
+enfileiradas pelo painel: CHECK_COMPONENT, START_COMPONENT e RESTART_COMPONENT.
+
+O servico NAO reinstala, nao baixa nada, nao altera antivirus e nunca executa
+comando enviado como texto: o servidor manda apenas um par (componente, acao)
+de listas fechadas, e o mapeamento para servicos reais do Windows vive neste
+arquivo (COMPONENT_SERVICES).
 
 Caminhos e nomes de servico dos componentes nao foram inventados: vieram do
 codigo que ja os instala e gerencia (Ativa Updater / instalador unificado).
@@ -37,7 +41,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 GUARDIAN_VERSION = "1.0.0"
@@ -66,6 +70,11 @@ API_TIMEOUT_SECONDS = 30
 # Backoff between heartbeat attempts. The loop never gives up for good: after the
 # last delay it simply waits for the next cycle.
 API_RETRY_DELAYS_SECONDS = (5, 15, 45)
+# Teto de leitura das respostas da API; a fila de acoes e sempre pequena.
+MAX_RESPONSE_BYTES = 65536
+# Acoes sao consultadas entre um heartbeat e outro, para o clique no painel
+# nao esperar os 5 minutos do ciclo completo.
+ACTION_POLL_SECONDS = 30
 ANTIVIRUS_CACHE_SECONDS = 3600
 
 API_PATH_SUFFIX = "/plugins/ativaguardian/api/v1"
@@ -641,6 +650,105 @@ COMPONENT_CHECKS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Acoes corretivas (nivel 1: somente verificar / iniciar / reiniciar)
+# ---------------------------------------------------------------------------
+
+ACTION_CHECK = "CHECK_COMPONENT"
+ACTION_START = "START_COMPONENT"
+ACTION_RESTART = "RESTART_COMPONENT"
+ALLOWED_ACTIONS = frozenset({ACTION_CHECK, ACTION_START, ACTION_RESTART})
+
+# O servidor manda apenas um par (componente, acao) de listas fechadas. Este
+# mapa - compilado dentro do executavel - e o unico lugar que traduz isso para
+# um servico real do Windows. Nome de servico, caminho e comando NUNCA chegam
+# pela API: se o servidor mandar algo fora daqui, a acao e recusada.
+#
+# "wallpaper" nao aparece: ele roda por usuario (HKCU) e nao e servico, entao
+# iniciar/reiniciar exigiria lancar processo na sessao do usuario - hoje isso
+# pertence ao Ativa Updater. Ele aceita apenas CHECK_COMPONENT.
+COMPONENT_SERVICES: dict[str, tuple[str, ...]] = {
+    "updater": (UPDATER_SERVICE_NAME,),
+    "remote": (RUSTDESK_SERVICE_NAME,),
+    "glpi_agent": GLPI_AGENT_SERVICE_CANDIDATES,
+}
+
+SERVICE_WAIT_SECONDS = 45
+SERVICE_STATE_STOPPED = 1
+
+
+def resolve_component_service(component: str) -> str | None:
+    """Nome real do servico deste componente, ou None se nao houver."""
+    candidates = COMPONENT_SERVICES.get(component)
+    if not candidates:
+        return None
+    found = first_existing_service(candidates)
+    return found[0] if found else None
+
+
+def wait_for_service_state(name: str, expected: int, timeout: int = SERVICE_WAIT_SECONDS,
+                           sleep=time.sleep) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            state = query_service(name)
+        except OSError:
+            state = None
+        if state == expected:
+            return True
+        if expected == SERVICE_STATE_RUNNING and state == SERVICE_STATE_START_PENDING:
+            pass  # ainda subindo
+        sleep(1)
+    try:
+        return query_service(name) == expected
+    except OSError:
+        return False
+
+
+def execute_action(component: str, action: str, logger: logging.Logger,
+                   sleep=time.sleep, timeout: int = SERVICE_WAIT_SECONDS) -> tuple[bool, str]:
+    """Executa uma acao permitida. Retorna (sucesso, mensagem).
+
+    Nunca levanta: qualquer falha vira (False, motivo) para o GLPI registrar.
+    """
+    if action not in ALLOWED_ACTIONS:
+        return False, f"Acao nao permitida: {action}"
+    if component not in COMPONENT_CHECKS:
+        return False, f"Componente desconhecido: {component}"
+
+    try:
+        if action == ACTION_CHECK:
+            result = COMPONENT_CHECKS[component]()
+            return True, f"{component}: {result['status']}"
+
+        service = resolve_component_service(component)
+        if service is None:
+            return False, f"{component} nao e um servico do Windows nesta maquina."
+
+        if action == ACTION_START:
+            state = query_service(service)
+            if state in (SERVICE_STATE_RUNNING, SERVICE_STATE_START_PENDING):
+                return True, f"{service} ja estava em execucao."
+            logger.info("Acao: iniciando %s", service)
+            run_sc("start", service)
+
+        elif action == ACTION_RESTART:
+            logger.info("Acao: reiniciando %s", service)
+            run_sc("stop", service)
+            # Parada controlada: so inicia depois que o SCM confirmar STOPPED.
+            if not wait_for_service_state(service, SERVICE_STATE_STOPPED, timeout=timeout, sleep=sleep):
+                return False, f"{service} nao parou dentro do tempo previsto."
+            run_sc("start", service)
+
+        if wait_for_service_state(service, SERVICE_STATE_RUNNING, timeout=timeout, sleep=sleep):
+            return True, f"{service} em execucao."
+        return False, f"{service} nao ficou em execucao apos a acao."
+
+    except Exception as exc:  # noqa: BLE001 - uma acao nunca derruba o servico
+        logger.warning("Falha ao executar %s em %s: %s", action, component, exc)
+        return False, str(exc)[:400]
+
+
 def collect_components(logger: logging.Logger) -> dict[str, dict[str, str]]:
     """Roda todas as verificacoes. Uma que falhe vira 'unknown' e nao afeta as outras."""
     components: dict[str, dict[str, str]] = {}
@@ -722,6 +830,43 @@ class ApiClient:
         if last_error is not None:
             raise GuardianError(str(last_error))
 
+    def _json(self, url: str, method: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        data = json.dumps(body).encode("utf-8") if body is not None else None
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "Accept": "application/json",
+            "User-Agent": f"AtivaGuardian/{GUARDIAN_VERSION}",
+        }
+        if data is not None:
+            headers["Content-Type"] = "application/json"
+        request = Request(url, data=data, headers=headers, method=method)
+        try:
+            with self.opener.open(request, timeout=API_TIMEOUT_SECONDS) as response:
+                raw = response.read(MAX_RESPONSE_BYTES)
+                return json.loads(raw.decode("utf-8")) if raw else {}
+        except HTTPError as exc:
+            detail = exc.read(512).decode("utf-8", errors="replace")
+            raise GuardianError(f"HTTP {exc.code}: {detail}") from exc
+        except (URLError, OSError, ValueError) as exc:
+            raise GuardianError(f"Falha de rede: {exc}") from exc
+
+    def fetch_actions(self, machine_id: str) -> list[dict[str, Any]]:
+        """Acoes que o servidor ja reservou para esta maquina."""
+        payload = self._json(f"{self.base_url}/actions/{quote(machine_id, safe='')}", "GET")
+        actions = payload.get("actions")
+        return actions if isinstance(actions, list) else []
+
+    def report_action(self, action_id: int, machine_id: str, success: bool, message: str) -> None:
+        self._json(
+            f"{self.base_url}/actions/{int(action_id)}/result",
+            "POST",
+            {
+                "machine_id": machine_id,
+                "status": "success" if success else "failed",
+                "message": message[:500],
+            },
+        )
+
 
 # ---------------------------------------------------------------------------
 # Ciclo do servico
@@ -766,15 +911,70 @@ class GuardianRuntime:
             logger.debug("Intervalo padrao aplicado.")
             return DEFAULT_INTERVAL_SECONDS
 
+    def run_actions(self, logger: logging.Logger, machine_id: str) -> None:
+        """Busca e executa as acoes que o GLPI reservou para esta maquina.
+
+        O servidor ja marcou cada acao como running ao entrega-la, entao uma
+        acao nunca chega duas vezes. Falhas de rede sao registradas e a proxima
+        coleta tenta de novo; nada aqui derruba o servico.
+        """
+        try:
+            config = validate_config(load_json(CONFIG_PATH))
+        except GuardianError:
+            return  # sem configuracao valida nao ha o que consultar
+
+        try:
+            api = ApiClient(config)
+            actions = api.fetch_actions(machine_id)
+        except GuardianError as exc:
+            logger.debug("Nao foi possivel consultar acoes: %s", exc)
+            return
+
+        for item in actions:
+            if not isinstance(item, dict):
+                continue
+            try:
+                action_id = int(item.get("id", 0))
+            except (TypeError, ValueError):
+                continue
+            component = str(item.get("component", "")).strip().lower()
+            action = str(item.get("action", "")).strip().upper()
+            if action_id <= 0:
+                continue
+
+            logger.info("Acao %s recebida: %s em %s", action_id, action, component)
+            success, message = execute_action(component, action, logger)
+            logger.info("Acao %s: %s (%s)", action_id, "success" if success else "failed", message)
+
+            try:
+                api.report_action(action_id, machine_id, success, message)
+            except GuardianError as exc:
+                # O servidor expira sozinho o que ficar preso em running.
+                logger.warning("Nao foi possivel devolver o resultado da acao %s: %s", action_id, exc)
+
     def run(self, logger: logging.Logger) -> None:
         logger.info("Guardian started (versao %s)", GUARDIAN_VERSION)
         machine_id = machine_identity(logger)
+        next_heartbeat = 0.0
+
+        # Duas cadencias no mesmo laco: o heartbeat no intervalo configurado e a
+        # consulta de acoes a cada ACTION_POLL_SECONDS, para um clique no painel
+        # nao esperar o ciclo inteiro.
         while not self.stop_event.is_set():
+            now = time.monotonic()
+            if now >= next_heartbeat:
+                try:
+                    self.run_cycle(logger, machine_id)
+                except Exception:  # noqa: BLE001 - nenhum ciclo pode matar o loop
+                    logger.exception("Falha inesperada no ciclo de verificacao.")
+                next_heartbeat = time.monotonic() + self.interval(logger)
+
             try:
-                self.run_cycle(logger, machine_id)
-            except Exception:  # noqa: BLE001 - nenhum ciclo pode matar o loop
-                logger.exception("Falha inesperada no ciclo de verificacao.")
-            self.stop_event.wait(self.interval(logger))
+                self.run_actions(logger, machine_id)
+            except Exception:  # noqa: BLE001
+                logger.exception("Falha inesperada ao processar acoes.")
+
+            self.stop_event.wait(ACTION_POLL_SECONDS)
         logger.info("Guardian stopped")
 
 

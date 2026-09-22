@@ -7,6 +7,12 @@
 #ifndef RustDeskPath
   #error RustDeskPath is required
 #endif
+#ifndef GuardianPath
+  #error GuardianPath is required
+#endif
+#ifndef GuardianConfigPath
+  #error GuardianConfigPath is required
+#endif
 #ifndef UpdaterConfigPath
   #error UpdaterConfigPath is required
 #endif
@@ -34,6 +40,9 @@
 #ifndef UpdaterVersion
   #define UpdaterVersion "?"
 #endif
+#ifndef GuardianVersion
+  #define GuardianVersion "?"
+#endif
 
 [Setup]
 AppId={{9F8B7C6D-E5D4-4C32-8A1A-B445015310C1}
@@ -42,7 +51,7 @@ AppVersion={#BundleVersion}
 VersionInfoVersion={#BundleVersion}
 ; Shown in the file properties: the bundle number alone does not tell which components it carries.
 ; Inno Setup keeps this field short (about 60 characters).
-VersionInfoDescription=Ativa Agent: Wallpaper {#ClientVersion}, Updater {#UpdaterVersion}
+VersionInfoDescription=Ativa: Wallpaper {#ClientVersion}, Updater {#UpdaterVersion}, Guardian {#GuardianVersion}
 AppPublisher=Ativa Locacao
 AppPublisherURL=https://chamados.ativalocacao.com.br:8443/
 CreateAppDir=no
@@ -72,6 +81,10 @@ Source: "{#RustDeskPath}"; DestDir: "{commonappdata}\AtivaLocacao\UnifiedUpdater
 Source: "{#AgentMsiPath}"; DestDir: "{tmp}"; DestName: "GLPI-Agent-{#AgentVersion}-x64.msi"; Flags: deleteafterinstall ignoreversion
 Source: "{#BootstrapConfigPath}"; DestDir: "{tmp}"; DestName: "bootstrap-config.json"; Flags: deleteafterinstall ignoreversion
 Source: "{#UpdaterConfigPath}"; DestDir: "{tmp}"; DestName: "ativaupdater-service-config.json"; Flags: deleteafterinstall ignoreversion
+; O Guardian mora em Program Files (nao em ProgramData, onde ficam so os dados dele).
+; O servico e parado em ssInstall para o arquivo nao estar em uso nesta copia.
+Source: "{#GuardianPath}"; DestDir: "{commonpf}\Ativa Locacao\Guardian"; DestName: "AtivaGuardian.exe"; Flags: ignoreversion
+Source: "{#GuardianConfigPath}"; DestDir: "{tmp}"; DestName: "ativaguardian-service-config.json"; Flags: deleteafterinstall ignoreversion
 
 [Code]
 var
@@ -150,6 +163,84 @@ begin
   end;
   { O SCM informa STOPPED pouco antes de o processo liberar o executavel. }
   Sleep(3000);
+end;
+
+procedure StopGuardianService();
+var
+  Attempt: Integer;
+  ResultCode: Integer;
+begin
+  if not Exec(ExpandConstant('{sys}\sc.exe'), 'query AtivaGuardian', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then begin
+    Log('Servico AtivaGuardian ainda nao instalado.');
+    exit;
+  end;
+
+  { Upgrade: o executavel fica em uso enquanto o servico roda, e a secao [Files]
+    nao conseguiria substitui-lo. Ao contrario do Updater, o Guardian nunca e
+    quem executa esta instalacao, entao parar e suficiente - nao ha necessidade
+    de renomear o arquivo. }
+  RunOptional(ExpandConstant('{sys}\sc.exe'), 'stop AtivaGuardian');
+  for Attempt := 1 to 30 do begin
+    if Exec(ExpandConstant('{cmd}'),
+      '/C ""' + ExpandConstant('{sys}\sc.exe') + '" query AtivaGuardian | "' + ExpandConstant('{sys}\find.exe') + '" "STOPPED""',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then begin
+      Log('Servico AtivaGuardian parado para atualizacao.');
+      break;
+    end;
+    Sleep(1000);
+  end;
+  { O SCM informa STOPPED pouco antes de o processo liberar o executavel. }
+  Sleep(2000);
+end;
+
+procedure InstallGuardian();
+var
+  GuardianExe: String;
+  ConfigPath: String;
+  ResultCode: Integer;
+  Attempt: Integer;
+begin
+  GuardianExe := ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe');
+  ConfigPath := ExpandConstant('{commonappdata}\AtivaLocacao\Guardian\config.json');
+
+  ForceDirectories(ExpandConstant('{commonappdata}\AtivaLocacao\Guardian\logs'));
+
+  { Upgrade preserva a configuracao existente: config.json (token/API) e
+    machine.json (o machine_id) ficam em ProgramData e nao sao tocados. Só uma
+    instalacao limpa grava a configuracao que veio no pacote.
+    Consequencia a considerar: se o token for rotacionado no GLPI, maquinas ja
+    instaladas continuam com o antigo ate rodar --configure de novo. }
+  if FileExists(ConfigPath) then begin
+    Log('Ativa Guardian: config.json existente preservado (upgrade).');
+  end else begin
+    RunRequired(
+      'Configurando o Ativa Guardian...',
+      GuardianExe,
+      '--configure "' + ExpandConstant('{tmp}\ativaguardian-service-config.json') + '"'
+    );
+  end;
+
+  { --install-service cria ou reconfigura (sem duplicar), define startup
+    automatico, aplica a recuperacao restart/restart/restart e inicia. }
+  RunRequired(
+    'Registrando o servico Ativa Guardian...',
+    GuardianExe,
+    '--install-service'
+  );
+
+  { Confirma que ficou realmente Running; o SCM leva alguns segundos. }
+  for Attempt := 1 to 20 do begin
+    if Exec(ExpandConstant('{cmd}'),
+      '/C ""' + ExpandConstant('{sys}\sc.exe') + '" query AtivaGuardian | "' + ExpandConstant('{sys}\find.exe') + '" "RUNNING""',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then begin
+      Log('Servico AtivaGuardian em execucao.');
+      exit;
+    end;
+    Sleep(1000);
+  end;
+  { Nao aborta a instalacao: Agent, Wallpaper e Updater ja foram instalados com
+    sucesso e o Windows ainda tentara subir o servico pela politica de falha. }
+  Log('AVISO: o servico AtivaGuardian nao confirmou estado RUNNING.');
 end;
 
 function IsSupervisedByUpdater(): Boolean;
@@ -241,6 +332,7 @@ end;
 procedure ExcludeFromDefender();
 var
   ProductDir: String;
+  GuardianDir: String;
   Command: String;
 begin
   { A raiz do produto, e nao cada subpasta: abaixo dela ficam UnifiedUpdater (o
@@ -249,6 +341,10 @@ begin
     posto em quarentena antes de conseguir rodar). Uma entrada so cobre as tres e
     qualquer subpasta que venha depois. }
   ProductDir := ExpandConstant('{commonappdata}\AtivaLocacao');
+  { O Guardian e o unico componente que mora em Program Files; sem esta segunda
+    entrada o executavel dele ficaria fora da exclusao e seria posto em
+    quarentena pela mesma heuristica que ja removeu o Updater em producao. }
+  GuardianDir := ExpandConstant('{commonpf}\Ativa Locacao');
 
   { ExclusionPath cobre os executaveis que o proprio servico regrava a cada
     atualizacao; ExclusionProcess e o que desarma o Behavior:Win32/Persistence,
@@ -256,8 +352,8 @@ begin
   Command :=
     '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' +
     'try { ' +
-      'Add-MpPreference -ExclusionPath ''' + ProductDir + ''' -ErrorAction Stop; ' +
-      'Add-MpPreference -ExclusionProcess ''AtivaUnifiedUpdater.exe'',''AtivaWallpaperClient.exe'' -ErrorAction Stop; ' +
+      'Add-MpPreference -ExclusionPath ''' + ProductDir + ''',''' + GuardianDir + ''' -ErrorAction Stop; ' +
+      'Add-MpPreference -ExclusionProcess ''AtivaUnifiedUpdater.exe'',''AtivaWallpaperClient.exe'',''AtivaGuardian.exe'' -ErrorAction Stop; ' +
       'exit 0 ' +
     '} catch { exit 1 }"';
 
@@ -277,6 +373,8 @@ begin
     { Antes de PrepareUpdaterExecutable, que ja grava o executavel em disco. }
     ExcludeFromDefender();
     PrepareUpdaterExecutable();
+    { Libera AtivaGuardian.exe antes de [Files] tentar substitui-lo. }
+    StopGuardianService();
     exit;
   end;
 
@@ -336,6 +434,10 @@ begin
     'start AtivaUnifiedUpdater'
   );
   StartForInteractiveUser(UpdaterPath);
+
+  { Por ultimo: o Guardian monitora os outros componentes, entao o primeiro
+    heartbeat sai depois que todos ja estao instalados e rodando. }
+  InstallGuardian();
 end;
 
 function NeedRestart(): Boolean;

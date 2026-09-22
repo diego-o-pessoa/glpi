@@ -37,8 +37,9 @@ function plugin_ativaguardian_do_uninstall(): bool
     require_once PLUGIN_ATIVAGUARDIAN_DIR . '/inc/profile.class.php';
     PluginAtivaguardianProfile::uninstallRights();
 
-    // Components first: it references machines by id.
+    // Filhas primeiro: ambas referenciam machines por id.
     $tables = [
+        'glpi_plugin_ativaguardian_actions',
         'glpi_plugin_ativaguardian_components',
         'glpi_plugin_ativaguardian_machines',
     ];

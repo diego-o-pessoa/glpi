@@ -367,3 +367,111 @@ class ApiResilienceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class ActionSecurityTests(unittest.TestCase):
+    """O servidor manda so (componente, acao); o mapeamento mora aqui."""
+
+    def test_unknown_action_is_refused(self) -> None:
+        ok, message = guardian.execute_action("updater", "RUN_POWERSHELL", quiet_logger())
+        self.assertFalse(ok)
+        self.assertIn("nao permitida", message)
+
+    def test_unknown_component_is_refused(self) -> None:
+        ok, message = guardian.execute_action("qualquer_coisa", guardian.ACTION_START, quiet_logger())
+        self.assertFalse(ok)
+        self.assertIn("desconhecido", message)
+
+    def test_reinstall_is_not_supported_yet(self) -> None:
+        ok, _ = guardian.execute_action("updater", "REINSTALL_COMPONENT", quiet_logger())
+        self.assertFalse(ok)
+
+    def test_server_cannot_choose_the_service_name(self) -> None:
+        """Nao ha caminho de codigo que aceite nome de servico vindo da API."""
+        for component in guardian.COMPONENT_SERVICES:
+            self.assertIsInstance(guardian.COMPONENT_SERVICES[component], tuple)
+        self.assertNotIn("wallpaper", guardian.COMPONENT_SERVICES)
+
+    def test_wallpaper_accepts_only_check(self) -> None:
+        with mock.patch.object(guardian, "check_wallpaper", return_value={"status": "healthy", "version": ""}):
+            ok, _ = guardian.execute_action("wallpaper", guardian.ACTION_CHECK, quiet_logger())
+        self.assertTrue(ok)
+        ok, message = guardian.execute_action("wallpaper", guardian.ACTION_START, quiet_logger())
+        self.assertFalse(ok)
+        self.assertIn("nao e um servico", message)
+
+
+class ActionExecutionTests(unittest.TestCase):
+    def test_start_when_already_running_is_a_noop_success(self) -> None:
+        with mock.patch.object(guardian, "resolve_component_service", return_value="AtivaUnifiedUpdater"), \
+             mock.patch.object(guardian, "query_service", return_value=guardian.SERVICE_STATE_RUNNING), \
+             mock.patch.object(guardian, "run_sc") as run_sc:
+            ok, message = guardian.execute_action("updater", guardian.ACTION_START, quiet_logger())
+        self.assertTrue(ok)
+        run_sc.assert_not_called()
+        self.assertIn("ja estava em execucao", message)
+
+    def test_start_stopped_service_validates_running(self) -> None:
+        states = [guardian.SERVICE_STATE_STOPPED, guardian.SERVICE_STATE_RUNNING]
+        with mock.patch.object(guardian, "resolve_component_service", return_value="AtivaUnifiedUpdater"), \
+             mock.patch.object(guardian, "query_service", side_effect=lambda _n: states.pop(0) if states else guardian.SERVICE_STATE_RUNNING), \
+             mock.patch.object(guardian, "run_sc", return_value=0) as run_sc:
+            ok, _ = guardian.execute_action("updater", guardian.ACTION_START, quiet_logger(), sleep=lambda _s: None, timeout=1)
+        self.assertTrue(ok)
+        run_sc.assert_any_call("start", "AtivaUnifiedUpdater")
+
+    def test_restart_stops_before_starting(self) -> None:
+        calls: list[tuple] = []
+        states = iter([guardian.SERVICE_STATE_STOPPED, guardian.SERVICE_STATE_RUNNING])
+        with mock.patch.object(guardian, "resolve_component_service", return_value="RustDesk"), \
+             mock.patch.object(guardian, "query_service", side_effect=lambda _n: next(states, guardian.SERVICE_STATE_RUNNING)), \
+             mock.patch.object(guardian, "run_sc", side_effect=lambda *a: calls.append(a) or 0):
+            ok, _ = guardian.execute_action("remote", guardian.ACTION_RESTART, quiet_logger(), sleep=lambda _s: None, timeout=1)
+        self.assertTrue(ok)
+        self.assertEqual(calls[0], ("stop", "RustDesk"))
+        self.assertEqual(calls[1], ("start", "RustDesk"))
+
+    def test_failure_to_come_back_is_reported_not_raised(self) -> None:
+        with mock.patch.object(guardian, "resolve_component_service", return_value="AtivaUnifiedUpdater"), \
+             mock.patch.object(guardian, "query_service", return_value=guardian.SERVICE_STATE_STOPPED), \
+             mock.patch.object(guardian, "run_sc", return_value=0):
+            ok, message = guardian.execute_action("updater", guardian.ACTION_START, quiet_logger(), sleep=lambda _s: None, timeout=1)
+        self.assertFalse(ok)
+        self.assertIn("nao ficou em execucao", message)
+
+    def test_exception_inside_action_becomes_failure(self) -> None:
+        with mock.patch.object(guardian, "resolve_component_service", side_effect=OSError("SCM fora")):
+            ok, message = guardian.execute_action("updater", guardian.ACTION_RESTART, quiet_logger())
+        self.assertFalse(ok)
+        self.assertIn("SCM fora", message)
+
+
+class ActionPollingTests(unittest.TestCase):
+    CONFIG = dict(ConfigurationTests.BASE)
+
+    def test_api_offline_during_action_poll_is_silent(self) -> None:
+        runtime = guardian.GuardianRuntime()
+        failing = mock.Mock()
+        failing.fetch_actions.side_effect = guardian.GuardianError("offline")
+        with mock.patch.object(guardian, "load_json", return_value=dict(self.CONFIG)), \
+             mock.patch.object(guardian, "ApiClient", return_value=failing):
+            runtime.run_actions(quiet_logger(), "maquina-1")  # nao deve levantar
+
+    def test_result_is_reported_back(self) -> None:
+        runtime = guardian.GuardianRuntime()
+        api = mock.Mock()
+        api.fetch_actions.return_value = [{"id": 15, "component": "updater", "action": "START_COMPONENT"}]
+        with mock.patch.object(guardian, "load_json", return_value=dict(self.CONFIG)), \
+             mock.patch.object(guardian, "ApiClient", return_value=api), \
+             mock.patch.object(guardian, "execute_action", return_value=(True, "ok")):
+            runtime.run_actions(quiet_logger(), "maquina-1")
+        api.report_action.assert_called_once_with(15, "maquina-1", True, "ok")
+
+    def test_malformed_action_is_skipped(self) -> None:
+        runtime = guardian.GuardianRuntime()
+        api = mock.Mock()
+        api.fetch_actions.return_value = ["texto", {"id": 0}, {"component": "updater"}]
+        with mock.patch.object(guardian, "load_json", return_value=dict(self.CONFIG)), \
+             mock.patch.object(guardian, "ApiClient", return_value=api):
+            runtime.run_actions(quiet_logger(), "maquina-1")
+        api.report_action.assert_not_called()

@@ -2,6 +2,7 @@
 dist/
 bootstrap-config.json
 ativaupdater-service-config.json
+ativaguardian-service-config.json
 deploy-logs/
 computadores.txt
 Ativa-Unified-Agent-Setup-*.exe

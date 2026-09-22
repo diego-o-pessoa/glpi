@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$BootstrapConfig,
     [string]$UpdaterConfig = ".\ativaupdater-service-config.json",
+    [string]$GuardianConfig = ".\ativaguardian-service-config.json",
     [string]$OutputDirectory = ".\dist",
     [string]$Python = "py",
     [string]$BundleVersion = "",
@@ -24,7 +25,12 @@ if (-not (Test-Path -LiteralPath $UpdaterConfig -PathType Leaf)) {
     throw "Configuracao do Ativa Updater nao encontrada: $UpdaterConfig. Baixe-a em Ativa Updater > Configuracoes."
 }
 $UpdaterConfigPath = (Resolve-Path $UpdaterConfig).Path
+if (-not (Test-Path -LiteralPath $GuardianConfig -PathType Leaf)) {
+    throw "Configuracao do Ativa Guardian nao encontrada: $GuardianConfig. Baixe-a em Ativa Guardian > Configurar > Baixar configuracao do servico."
+}
+$GuardianConfigPath = (Resolve-Path $GuardianConfig).Path
 $UpdaterPluginRoot = (Resolve-Path (Join-Path $ScriptRoot "..\..\..\ativaupdater")).Path
+$GuardianPluginRoot = (Resolve-Path (Join-Path $ScriptRoot "..\..\..\ativaguardian")).Path
 $OutputPath = if ([IO.Path]::IsPathRooted($OutputDirectory)) {
     [IO.Path]::GetFullPath($OutputDirectory)
 } else {
@@ -37,11 +43,14 @@ $ClientExe = Join-Path $PluginRoot "client\dist\AtivaWallpaperClient.exe"
 $RustDeskExe = Join-Path $CacheDirectory "rustdesk.exe"
 $UnifiedUpdaterBuildScript = Join-Path $UpdaterPluginRoot "client\build-service.ps1"
 $UnifiedUpdaterExe = Join-Path $UpdaterPluginRoot "client\dist\AtivaUnifiedUpdater.exe"
+$GuardianBuildScript = Join-Path $GuardianPluginRoot "client\build-guardian.ps1"
+$GuardianExe = Join-Path $GuardianPluginRoot "client\dist\AtivaGuardian.exe"
 $ClientVersionFile = Join-Path $PluginRoot "client\dist\client-version.txt"
 $BundleVersionFile = Join-Path $ScriptRoot "unified-version.txt"
 $ClientIssFile = Join-Path $ScriptRoot "AtivaWallpaperClient.iss"
 $ExpectedWallpaperApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1"
 $ExpectedUpdaterApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativaupdater/api/v1"
+$ExpectedGuardianApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativaguardian/api/v1"
 $ExpectedAgentServer = "https://chamados.ativalocacao.com.br:8443/marketplace/glpiinventory/"
 
 function Find-InnoSetupCompiler {
@@ -183,6 +192,24 @@ $UpdaterInterval = [int]$UpdaterBootstrap.check_interval_seconds
 if ($UpdaterInterval -lt 300 -or $UpdaterInterval -gt 86400) {
     throw "O intervalo do Ativa Updater deve estar entre 300 e 86400 segundos."
 }
+
+# A configuracao do Guardian e validada aqui, no build, pelas mesmas regras que o
+# --configure aplica na maquina. Assim um token errado falha no seu computador e
+# nao numa instalacao silenciosa em producao.
+$GuardianBootstrap = Get-Content -Raw -LiteralPath $GuardianConfigPath | ConvertFrom-Json
+if ($GuardianBootstrap.verify_tls -ne $true) {
+    throw "ativaguardian-service-config.json deve conter verify_tls=true."
+}
+if ([string]$GuardianBootstrap.api_url -ne $ExpectedGuardianApi) {
+    throw "A API do Ativa Guardian deve ser $ExpectedGuardianApi"
+}
+if ([string]$GuardianBootstrap.api_token -notmatch '^[a-fA-F0-9]{64}$') {
+    throw "ativaguardian-service-config.json nao contem um token valido."
+}
+$GuardianInterval = [int]$GuardianBootstrap.heartbeat_interval_seconds
+if ($GuardianInterval -lt 60 -or $GuardianInterval -gt 86400) {
+    throw "O intervalo de heartbeat do Guardian deve estar entre 60 e 86400 segundos."
+}
 if (-not (Test-Path -LiteralPath $AgentMsi)) {
     $AgentDownloadUrl = "https://github.com/glpi-project/glpi-agent/releases/download/$AgentVersion/GLPI-Agent-$AgentVersion-x64.msi"
     Write-Host "Baixando GLPI Agent $AgentVersion da release oficial..."
@@ -260,6 +287,17 @@ if ($UnifiedUpdaterVersion -notmatch '^\d+\.\d+\.\d+$') {
     throw "Nao foi possivel identificar a versao do servico Ativa Unified Updater compilado."
 }
 
+Write-Host "Compilando o servico AtivaGuardian.exe..."
+& $GuardianBuildScript -Python $PythonExecutable
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $GuardianExe)) {
+    throw "Falha ao compilar o servico Ativa Guardian."
+}
+$GuardianVersion = ((& $GuardianExe --version) | Select-Object -First 1)
+$GuardianVersion = if ($GuardianVersion) { $GuardianVersion.ToString().Trim() } else { "" }
+if ($GuardianVersion -notmatch '^\d+\.\d+\.\d+$') {
+    throw "Nao foi possivel identificar a versao do servico Ativa Guardian compilado."
+}
+
 $Iscc = Find-InnoSetupCompiler
 if (-not $Iscc -and ($InstallInnoSetup -or $InstallBuildTools)) {
     $Winget = Get-WingetExecutable
@@ -281,6 +319,7 @@ New-Item -ItemType Directory -Path $WorkingDirectory | Out-Null
 try {
     $PreparedBootstrap = Join-Path $WorkingDirectory "bootstrap-config.json"
     $PreparedUpdaterConfig = Join-Path $WorkingDirectory "ativaupdater-service-config.json"
+    $PreparedGuardianConfig = Join-Path $WorkingDirectory "ativaguardian-service-config.json"
     $CompilerOutput = Join-Path $WorkingDirectory "output"
     New-Item -ItemType Directory -Path $CompilerOutput | Out-Null
     $Utf8WithoutBom = New-Object Text.UTF8Encoding($false)
@@ -294,11 +333,19 @@ try {
         ($UpdaterBootstrap | ConvertTo-Json -Depth 8),
         $Utf8WithoutBom
     )
+    [IO.File]::WriteAllText(
+        $PreparedGuardianConfig,
+        ($GuardianBootstrap | ConvertTo-Json -Depth 8),
+        $Utf8WithoutBom
+    )
 
-    Write-Host "Gerando um unico instalador com GLPI Agent, Wallpaper Client e Ativa Updater..."
+    Write-Host "Gerando um unico instalador com GLPI Agent, Wallpaper Client, Ativa Updater e Ativa Guardian..."
     & $Iscc `
         "/DWallpaperClientPath=$ClientExe" `
         "/DUnifiedUpdaterPath=$UnifiedUpdaterExe" `
+        "/DGuardianPath=$GuardianExe" `
+        "/DGuardianConfigPath=$PreparedGuardianConfig" `
+        "/DGuardianVersion=$GuardianVersion" `
         "/DRustDeskPath=$RustDeskExe" `
         "/DAgentMsiPath=$AgentMsi" `
         "/DAgentVersion=$AgentVersion" `

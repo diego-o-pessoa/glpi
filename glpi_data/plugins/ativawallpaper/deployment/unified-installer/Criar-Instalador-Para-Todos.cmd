@@ -22,11 +22,22 @@ if not exist "%~dp0ativaupdater-service-config.json" (
     exit /b 1
 )
 
+if not exist "%~dp0ativaguardian-service-config.json" (
+    echo.
+    echo ERRO: ativaguardian-service-config.json nao encontrado.
+    echo Baixe o arquivo em Ativa Guardian ^> Configurar ^> Baixar configuracao do servico
+    echo e coloque-o nesta mesma pasta.
+    echo.
+    pause
+    exit /b 1
+)
+
 echo Gerando o instalador unificado Ativa para todos os computadores...
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass ^
   -File "%~dp0build-unified-installer.ps1" ^
   -BootstrapConfig "%~dp0bootstrap-config.json" ^
   -UpdaterConfig "%~dp0ativaupdater-service-config.json" ^
+  -GuardianConfig "%~dp0ativaguardian-service-config.json" ^
   -OutputDirectory "%~dp0dist" ^
   -AllComputers ^
   -InstallBuildTools
