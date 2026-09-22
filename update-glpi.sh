@@ -11,8 +11,6 @@ if ! docker exec glpi_db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqladmin ping
     exit 1
 fi
 
-bash "${project_dir}/backup.sh"
-
 echo "Atualizando o repositorio..."
 git pull --ff-only
 docker compose config --quiet
