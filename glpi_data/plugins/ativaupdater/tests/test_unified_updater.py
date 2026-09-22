@@ -50,8 +50,8 @@ class GuardianMaintenanceTests(unittest.TestCase):
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.7.4")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 4))
+        self.assertEqual(updater.UPDATER_VERSION, "1.7.5")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 5))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -1468,3 +1468,57 @@ class RemoteAccessTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WallpaperWatchdogTests(unittest.TestCase):
+    """Religa o Wallpaper Client onde o usuario o encerrou; nunca duplica."""
+
+    def _run(self, running_sessions, user_sessions, is_file=True, session0=True):
+        launched = []
+        with mock.patch.object(updater.os, "name", "nt"), \
+             mock.patch.object(updater, "current_session_id", return_value=0 if session0 else 1), \
+             mock.patch.object(type(updater.WALLPAPER_CLIENT_PATH), "is_file", return_value=is_file), \
+             mock.patch.object(updater, "process_session_ids", return_value=set(running_sessions)), \
+             mock.patch.object(updater, "enumerate_sessions", return_value=[]), \
+             mock.patch.object(updater, "select_user_sessions", return_value=list(user_sessions)), \
+             mock.patch.object(updater, "launch_in_session", side_effect=lambda s, e: launched.append(s)):
+            count = updater.ensure_wallpaper_running(quiet_logger("wallpaper-watchdog"))
+        return count, launched
+
+    def test_relaunches_only_missing_sessions(self):
+        count, launched = self._run(running_sessions={1}, user_sessions={1, 2})
+        self.assertEqual(count, 1)
+        self.assertEqual(launched, [2])  # sessao 1 ja rodava, so a 2 e religada
+
+    def test_no_relaunch_when_all_running(self):
+        count, launched = self._run(running_sessions={1, 2}, user_sessions={1, 2})
+        self.assertEqual(count, 0)
+        self.assertEqual(launched, [])
+
+    def test_relaunches_after_user_killed_it(self):
+        """Usuario matou o cliente: nenhuma sessao tem processo, religa todas."""
+        count, launched = self._run(running_sessions=set(), user_sessions={2})
+        self.assertEqual(count, 1)
+        self.assertEqual(launched, [2])
+
+    def test_only_runs_in_session_zero(self):
+        """Fora do servico (sessao != 0) nao age: nao ha como lancar em outra sessao."""
+        count, launched = self._run(running_sessions=set(), user_sessions={2}, session0=False)
+        self.assertEqual(count, 0)
+        self.assertEqual(launched, [])
+
+    def test_noop_when_client_not_installed(self):
+        count, launched = self._run(running_sessions=set(), user_sessions={2}, is_file=False)
+        self.assertEqual(count, 0)
+        self.assertEqual(launched, [])
+
+    def test_launch_failure_does_not_raise(self):
+        with mock.patch.object(updater.os, "name", "nt"), \
+             mock.patch.object(updater, "current_session_id", return_value=0), \
+             mock.patch.object(type(updater.WALLPAPER_CLIENT_PATH), "is_file", return_value=True), \
+             mock.patch.object(updater, "process_session_ids", return_value=set()), \
+             mock.patch.object(updater, "enumerate_sessions", return_value=[]), \
+             mock.patch.object(updater, "select_user_sessions", return_value=[2]), \
+             mock.patch.object(updater, "launch_in_session", side_effect=OSError("sem acesso")):
+            count = updater.ensure_wallpaper_running(quiet_logger("wallpaper-watchdog"))
+        self.assertEqual(count, 0)  # falhou mas nao levantou

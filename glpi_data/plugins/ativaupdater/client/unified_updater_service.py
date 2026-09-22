@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.4"
+UPDATER_VERSION = "1.7.5"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -740,6 +740,62 @@ def launch_in_session(session_id: int, executable: Path) -> None:
         for handle in (primary_token, user_token):
             if handle:
                 kernel32.CloseHandle(handle)
+
+
+def process_session_ids(image: Path) -> set[int]:
+    """Sessoes de logon em que este executavel esta rodando agora.
+
+    Serve para o watchdog saber onde o Wallpaper Client ja esta vivo e so
+    relancar onde ele caiu, sem duplicar em sessoes que estao ok.
+    """
+    if os.name != "nt":
+        return set()
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.ProcessIdToSessionId.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.ProcessIdToSessionId.restype = wintypes.BOOL
+    sessions: set[int] = set()
+    for pid in process_ids_by_image(image):
+        session = wintypes.DWORD()
+        if kernel32.ProcessIdToSessionId(pid, ctypes.byref(session)):
+            sessions.add(int(session.value))
+    return sessions
+
+
+def ensure_wallpaper_running(logger: logging.Logger) -> int:
+    """Relanca o Wallpaper Client nas sessoes de usuario onde ele nao esta rodando.
+
+    O cliente roda na sessao do usuario (troca o papel de parede via HKCU), entao
+    um usuario comum consegue encerra-lo pelo Gerenciador de Tarefas - ao contrario
+    dos servicos SYSTEM, que o Windows ja protege. Este servico roda como SYSTEM e
+    apenas reinicia o que caiu: sem hook, sem impedir o encerramento, sem qualquer
+    tecnica anti-kill. E o mesmo padrao do watchdog que ja recupera este servico.
+
+    So age quando executado na sessao 0 (o servico), que e de onde da para lancar
+    em outras sessoes. Retorna quantas sessoes foram religadas.
+    """
+    if os.name != "nt" or current_session_id() != 0:
+        return 0
+    if not WALLPAPER_CLIENT_PATH.is_file():
+        return 0  # cliente nao instalado: nada a vigiar
+
+    try:
+        running = process_session_ids(WALLPAPER_CLIENT_PATH)
+        wanted = select_user_sessions(enumerate_sessions())
+    except OSError as exc:
+        logger.debug("Watchdog do wallpaper: nao foi possivel inspecionar sessoes: %s", exc)
+        return 0
+
+    relaunched = 0
+    for session_id in wanted:
+        if session_id in running:
+            continue  # ja esta de pe nesta sessao
+        try:
+            launch_in_session(session_id, WALLPAPER_CLIENT_PATH)
+            relaunched += 1
+            logger.info("Wallpaper Client religado na sessao %s (havia sido encerrado).", session_id)
+        except OSError as exc:
+            logger.debug("Nao foi possivel religar o wallpaper na sessao %s: %s", session_id, exc)
+    return relaunched
 
 
 def start_wallpaper_clients(logger: logging.Logger) -> int:
@@ -2542,6 +2598,13 @@ class ServiceRuntime:
                 self.handle_command_response(api.commands(), api, logger)
             except Exception as exc:
                 logger.warning("Nao foi possivel consultar comandos agora: %s", exc)
+            # Vigia o Wallpaper Client (roda na sessao do usuario e por isso pode
+            # ser encerrado pelo Gerenciador de Tarefas): religa o que caiu, sem
+            # impedir o encerramento. Falha aqui nunca derruba o poll.
+            try:
+                ensure_wallpaper_running(logger)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Watchdog do wallpaper falhou neste ciclo: %s", exc)
             self.stop_event.wait(COMMAND_POLL_SECONDS)
 
     def run(self, logger: logging.Logger, start_poller: bool = True) -> None:
