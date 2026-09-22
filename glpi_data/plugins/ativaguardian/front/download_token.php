@@ -29,13 +29,27 @@ if ($apiToken === '') {
     throw new RuntimeException('O token do Ativa Guardian ainda nao foi gerado.');
 }
 
+$payload = [
+    'api_url'                    => rtrim((string) $CFG_GLPI['url_base'], '/') . '/plugins/ativaguardian/api/v1',
+    'api_token'                  => $apiToken,
+    'verify_tls'                 => true,
+    'heartbeat_interval_seconds' => 30,
+];
+
+// Coordenadas da API do Ativa Updater, de onde o reparo baixa o pacote oficial.
+// Vão no config do Guardian de propósito: o serviço lia isso do service-config.json
+// do Updater, mas essa pasta some exatamente no caso em que o reparo é necessário
+// (executável removido pelo antivírus, pasta apagada), e aí o reparo falhava.
+$updaterConfig = Config::getConfigurationValues('plugin:ativaupdater');
+$updaterUrl = rtrim((string) ($updaterConfig['api_base_url'] ?? ''), '/');
+$updaterToken = (string) ($updaterConfig['api_token'] ?? '');
+if ($updaterUrl !== '' && preg_match('/^[a-fA-F0-9]{64}$/D', $updaterToken)) {
+    $payload['updater_api_url'] = $updaterUrl;
+    $payload['updater_api_token'] = $updaterToken;
+}
+
 $content = json_encode(
-    [
-        'api_url'                    => rtrim((string) $CFG_GLPI['url_base'], '/') . '/plugins/ativaguardian/api/v1',
-        'api_token'                  => $apiToken,
-        'verify_tls'                 => true,
-        'heartbeat_interval_seconds' => 30,
-    ],
+    $payload,
     JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
 );
 

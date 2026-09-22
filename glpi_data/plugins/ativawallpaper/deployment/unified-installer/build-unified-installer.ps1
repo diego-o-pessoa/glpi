@@ -210,6 +210,15 @@ $GuardianInterval = [int]$GuardianBootstrap.heartbeat_interval_seconds
 if ($GuardianInterval -lt 30 -or $GuardianInterval -gt 86400) {
     throw "O intervalo de heartbeat do Guardian deve estar entre 30 e 86400 segundos."
 }
+# Sem estas credenciais o Guardian nao consegue baixar o pacote para reparar o
+# Updater quando a pasta dele for apagada - que e justamente quando o reparo
+# importa. Falhar aqui, no build, e melhor que descobrir na maquina.
+if ([string]$GuardianBootstrap.updater_api_url -ne $ExpectedUpdaterApi) {
+    throw "ativaguardian-service-config.json deve trazer updater_api_url = $ExpectedUpdaterApi. Baixe a configuracao novamente em Ativa Guardian > Configurar."
+}
+if ([string]$GuardianBootstrap.updater_api_token -notmatch '^[a-fA-F0-9]{64}$') {
+    throw "ativaguardian-service-config.json deve trazer updater_api_token valido. Baixe a configuracao novamente em Ativa Guardian > Configurar."
+}
 if (-not (Test-Path -LiteralPath $AgentMsi)) {
     $AgentDownloadUrl = "https://github.com/glpi-project/glpi-agent/releases/download/$AgentVersion/GLPI-Agent-$AgentVersion-x64.msi"
     Write-Host "Baixando GLPI Agent $AgentVersion da release oficial..."

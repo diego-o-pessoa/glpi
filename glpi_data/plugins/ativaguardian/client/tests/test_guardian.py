@@ -864,3 +864,59 @@ class StatusFreshnessTests(unittest.TestCase):
         # A assinatura ficou registrada; antes era zerada e a deteccao de
         # mudanca ficava desarmada ate o proximo ciclo de 5 minutos.
         self.assertIsNotNone(runtime.last_signature)
+
+
+class UpdaterCredentialsInGuardianConfigTests(unittest.TestCase):
+    """O reparo nao pode depender da pasta que ele existe para restaurar."""
+
+    BASE = dict(ConfigurationTests.BASE)
+    UPDATER_URL = "https://glpi.exemplo.com/plugins/ativaupdater/api/v1"
+
+    def test_validate_config_keeps_updater_credentials(self) -> None:
+        """Antes elas eram descartadas, e o servico caia sempre no fallback."""
+        config = dict(self.BASE, updater_api_url=self.UPDATER_URL, updater_api_token="c" * 64)
+        result = guardian.validate_config(config)
+        self.assertEqual(result["updater_api_url"], self.UPDATER_URL)
+        self.assertEqual(result["updater_api_token"], "c" * 64)
+
+    def test_config_without_updater_credentials_stays_valid(self) -> None:
+        result = guardian.validate_config(dict(self.BASE))
+        self.assertNotIn("updater_api_url", result)
+
+    def test_rejects_http_updater_url(self) -> None:
+        with self.assertRaises(guardian.GuardianError):
+            guardian.validate_config(dict(
+                self.BASE,
+                updater_api_url="http://glpi.exemplo.com/plugins/ativaupdater/api/v1",
+                updater_api_token="c" * 64,
+            ))
+
+    def test_rejects_bad_updater_token(self) -> None:
+        with self.assertRaises(guardian.GuardianError):
+            guardian.validate_config(dict(self.BASE, updater_api_url=self.UPDATER_URL,
+                                          updater_api_token="curto"))
+
+    def test_credentials_resolved_without_the_updater_folder(self) -> None:
+        """Cenario do teste real: a pasta do Updater foi apagada."""
+        config = dict(self.BASE, updater_api_url=self.UPDATER_URL, updater_api_token="c" * 64)
+
+        def fake_load(path):
+            if path == guardian.CONFIG_PATH:
+                return config
+            raise guardian.GuardianError("No such file or directory")
+
+        with mock.patch.object(guardian, "load_json", side_effect=fake_load):
+            url, token = guardian.updater_api_credentials()
+        self.assertEqual(url, self.UPDATER_URL)
+        self.assertEqual(token, "c" * 64)
+
+    def test_missing_everything_explains_how_to_fix(self) -> None:
+        def fake_load(path):
+            if path == guardian.CONFIG_PATH:
+                return dict(self.BASE)
+            raise guardian.GuardianError("No such file or directory")
+
+        with mock.patch.object(guardian, "load_json", side_effect=fake_load):
+            with self.assertRaises(guardian.GuardianError) as caught:
+                guardian.updater_api_credentials()
+        self.assertIn("--configure", str(caught.exception))

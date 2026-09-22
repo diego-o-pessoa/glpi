@@ -51,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.2.2"
+GUARDIAN_VERSION = "1.2.3"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -295,12 +295,35 @@ def validate_config(config: dict[str, Any]) -> dict[str, Any]:
             f"heartbeat_interval_seconds deve ficar entre {MIN_INTERVAL_SECONDS} e {MAX_INTERVAL_SECONDS}."
         )
 
-    return {
+    validated = {
         "api_url": api_url,
         "api_token": token,
         "verify_tls": True,
         "heartbeat_interval_seconds": interval,
     }
+
+    # Coordenadas da API do Ativa Updater, usadas para baixar o pacote no
+    # reparo. Ficam AQUI, no config do Guardian, e nao na pasta do Updater:
+    # quando ele e apagado (que e exatamente quando o reparo importa), aquela
+    # pasta some junto. Opcionais: sem elas ainda existe o fallback de ler o
+    # service-config.json do Updater, se ele estiver no lugar.
+    updater_url = str(config.get("updater_api_url", "")).rstrip("/")
+    updater_token = str(config.get("updater_api_token", ""))
+    if updater_url or updater_token:
+        parsed_updater = urlsplit(updater_url)
+        if (
+            parsed_updater.scheme.lower() != "https"
+            or not parsed_updater.path.endswith(UPDATER_API_SUFFIX)
+            or parsed_updater.query
+            or parsed_updater.fragment
+        ):
+            raise GuardianError(f"updater_api_url deve apontar por HTTPS para {UPDATER_API_SUFFIX}.")
+        if not re.fullmatch(r"[a-fA-F0-9]{64}", updater_token):
+            raise GuardianError("updater_api_token invalido.")
+        validated["updater_api_url"] = updater_url
+        validated["updater_api_token"] = updater_token
+
+    return validated
 
 
 def harden_product_dir(logger: logging.Logger) -> None:
@@ -770,7 +793,17 @@ def updater_api_credentials() -> tuple[str, str]:
     token = str(guardian.get("updater_api_token", ""))
 
     if not api_url or not token:
-        updater = load_json(UPDATER_CONFIG_PATH)  # levanta GuardianError se faltar
+        # Fallback: a config do proprio Updater. So funciona se a pasta dele
+        # ainda existir - se ela foi apagada, cai na mensagem abaixo.
+        try:
+            updater = load_json(UPDATER_CONFIG_PATH)
+        except GuardianError as exc:
+            raise GuardianError(
+                "Nao ha como saber de onde baixar o pacote: o config.json do Guardian nao traz "
+                "updater_api_url/updater_api_token e a pasta do Ativa Updater nao existe mais. "
+                "Baixe a configuracao do servico novamente no GLPI (Ativa Guardian > Configurar) "
+                "e aplique com --configure."
+            ) from exc
         api_url = str(updater.get("api_url", "")).rstrip("/")
         token = str(updater.get("api_token", ""))
 
