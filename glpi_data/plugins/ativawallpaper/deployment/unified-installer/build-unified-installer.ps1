@@ -4,6 +4,10 @@ param(
     [string]$BootstrapConfig,
     [string]$UpdaterConfig = ".\ativaupdater-service-config.json",
     [string]$GuardianConfig = ".\ativaguardian-service-config.json",
+    # Opcional: config do Ativa Workspace (executor da etapa ENTRA_LOGIN).
+    # Baixe em Ativa Workspace > Configuracoes > Baixar configuracao. Sem ela,
+    # o instalador nao grava a config do Workspace (o Entra fica inativo).
+    [string]$WorkspaceConfig = ".\ativaworkspace-service-config.json",
     [string]$OutputDirectory = ".\dist",
     [string]$Python = "py",
     [string]$BundleVersion = "",
@@ -51,6 +55,7 @@ $ClientIssFile = Join-Path $ScriptRoot "AtivaWallpaperClient.iss"
 $ExpectedWallpaperApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1"
 $ExpectedUpdaterApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativaupdater/api/v1"
 $ExpectedGuardianApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativaguardian/api/v1"
+$ExpectedWorkspaceApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativaworkspace/api/v1"
 $ExpectedAgentServer = "https://chamados.ativalocacao.com.br:8443/marketplace/glpiinventory/"
 
 function Find-InnoSetupCompiler {
@@ -222,6 +227,25 @@ if ([string]$GuardianBootstrap.updater_api_url -ne $ExpectedUpdaterApi) {
 if ([string]$GuardianBootstrap.updater_api_token -notmatch '^[a-fA-F0-9]{64}$') {
     throw "ativaguardian-service-config.json deve trazer updater_api_token valido. Baixe a configuracao novamente em Ativa Guardian > Configurar."
 }
+# Ativa Workspace (opcional): se a config existir, valida como o Guardian.
+# Sem ela, o pacote e gerado sem o Workspace e a etapa ENTRA_LOGIN fica inativa.
+$WorkspaceConfigPath = $null
+if (Test-Path -LiteralPath $WorkspaceConfig) {
+    $WorkspaceBootstrap = Get-Content -Raw -LiteralPath $WorkspaceConfig | ConvertFrom-Json
+    if ($WorkspaceBootstrap.verify_tls -ne $true) {
+        throw "ativaworkspace-service-config.json deve conter verify_tls=true."
+    }
+    if ([string]$WorkspaceBootstrap.api_url -ne $ExpectedWorkspaceApi) {
+        throw "A API do Ativa Workspace deve ser $ExpectedWorkspaceApi. Baixe a configuracao novamente em Ativa Workspace > Configuracoes."
+    }
+    if ([string]$WorkspaceBootstrap.api_token -notmatch '^[a-fA-F0-9]{64}$') {
+        throw "ativaworkspace-service-config.json nao contem um token valido."
+    }
+    $WorkspaceConfigPath = $WorkspaceConfig
+} else {
+    Write-Warning "Sem ativaworkspace-service-config.json: o pacote sai sem o executor do Entra (etapa ENTRA_LOGIN inativa)."
+}
+
 if (-not (Test-Path -LiteralPath $AgentMsi)) {
     $AgentDownloadUrl = "https://github.com/glpi-project/glpi-agent/releases/download/$AgentVersion/GLPI-Agent-$AgentVersion-x64.msi"
     Write-Host "Baixando GLPI Agent $AgentVersion da release oficial..."
@@ -332,6 +356,7 @@ try {
     $PreparedBootstrap = Join-Path $WorkingDirectory "bootstrap-config.json"
     $PreparedUpdaterConfig = Join-Path $WorkingDirectory "ativaupdater-service-config.json"
     $PreparedGuardianConfig = Join-Path $WorkingDirectory "ativaguardian-service-config.json"
+    $PreparedWorkspaceConfig = Join-Path $WorkingDirectory "ativaworkspace-service-config.json"
     $CompilerOutput = Join-Path $WorkingDirectory "output"
     New-Item -ItemType Directory -Path $CompilerOutput | Out-Null
     $Utf8WithoutBom = New-Object Text.UTF8Encoding($false)
@@ -345,6 +370,13 @@ try {
         ($UpdaterBootstrap | ConvertTo-Json -Depth 8),
         $Utf8WithoutBom
     )
+    if ($WorkspaceConfigPath) {
+        [IO.File]::WriteAllText(
+            $PreparedWorkspaceConfig,
+            ($WorkspaceBootstrap | ConvertTo-Json -Depth 8),
+            $Utf8WithoutBom
+        )
+    }
     [IO.File]::WriteAllText(
         $PreparedGuardianConfig,
         ($GuardianBootstrap | ConvertTo-Json -Depth 8),
@@ -352,7 +384,10 @@ try {
     )
 
     Write-Host "Gerando um unico instalador com GLPI Agent, Wallpaper Client, Ativa Updater e Ativa Guardian..."
+    # Define do Workspace so quando ha config (o .iss trata a ausencia).
+    $WorkspaceDefine = if ($WorkspaceConfigPath) { "/DWorkspaceConfigPath=$PreparedWorkspaceConfig" } else { "/DSkipWorkspace=1" }
     & $Iscc `
+        $WorkspaceDefine `
         "/DWallpaperClientPath=$ClientExe" `
         "/DUnifiedUpdaterPath=$UnifiedUpdaterExe" `
         "/DGuardianPath=$GuardianExe" `

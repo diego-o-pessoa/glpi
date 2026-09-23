@@ -69,13 +69,23 @@
                     </div>
                 </div>
                 {% if can_configure %}
-                    <div class="col-md-4 d-flex gap-2">
+                    <div class="col-md-4 d-flex flex-wrap gap-2">
+                        <form method="post" action="{{ config_download_url }}" class="m-0">
+                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+                            <button type="submit" class="btn btn-primary"><i class="ti ti-download"></i> Baixar configuração</button>
+                        </form>
                         <button type="button" class="btn btn-outline-secondary" data-aw-copy="#aw-api-token"><i class="ti ti-copy"></i> Copiar</button>
                         <form method="post" action="{{ action_url }}" class="m-0"
                               onsubmit="return confirm('Regenerar o token invalida o atual. O serviço das máquinas precisará do token novo. Continuar?');">
                             <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
                             <button type="submit" name="regenerate_token" value="1" class="btn btn-outline-danger"><i class="ti ti-refresh"></i> Regenerar</button>
                         </form>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-hint">
+                            "Baixar configuração" gera o <code>ativaworkspace-service-config.json</code> que vai no build do pacote unificado.
+                            O serviço nas máquinas passa a reportar o Entra sozinho — sem digitar token na máquina.
+                        </div>
                     </div>
                 {% endif %}
             </div>

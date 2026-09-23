@@ -28,6 +28,7 @@ final class Page
         'job_action'       => 'job.action.php',
         'job_data'         => 'job.data.php',
         'overview_data'    => 'overview.data.php',
+        'config_download'  => 'download_config.php',
     ];
 
     /** Intervalo da atualizacao em tempo real das telas (ms). */

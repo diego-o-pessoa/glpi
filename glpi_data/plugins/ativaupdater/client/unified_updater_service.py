@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.7"
+UPDATER_VERSION = "1.7.8"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -785,6 +785,16 @@ def _load_workspace_entra() -> Any:
     if _workspace_entra_loaded:
         return _workspace_entra_module
     _workspace_entra_loaded = True
+
+    # Preferencia: modulo embutido no proprio exe (bundle do PyInstaller). Assim
+    # instalar o pacote unificado ja traz o executor, sem arquivo solto.
+    try:
+        import ativa_workspace_entra as bundled  # type: ignore
+        _workspace_entra_module = bundled
+        return _workspace_entra_module
+    except Exception:  # noqa: BLE001 - nao embutido: tenta o arquivo em disco
+        pass
+
     import importlib.util
 
     for path in WORKSPACE_ENTRA_MODULE_PATHS:
@@ -2909,10 +2919,18 @@ def main() -> int:
     parser.add_argument("--installed-version", default="")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--version", action="store_true")
+    # Helper interativo da etapa ENTRA_LOGIN, rodado na sessao do usuario. No exe
+    # congelado o proprio servico e o "python": este entrypoint executa o helper.
+    parser.add_argument("--workspace-entra-helper", type=Path, metavar="SIGNAL_JSON")
     args = parser.parse_args()
     if args.version:
         print(UPDATER_VERSION)
         return 0
+    if args.workspace_entra_helper is not None:
+        module = _load_workspace_entra()
+        if module is None or not hasattr(module, "helper_main"):
+            return 1
+        return int(module.helper_main(args.workspace_entra_helper))
     if args.install_package is not None:
         version_tuple(args.package_version)
         if not re.fullmatch(r"[a-fA-F0-9]{64}", args.package_sha256):

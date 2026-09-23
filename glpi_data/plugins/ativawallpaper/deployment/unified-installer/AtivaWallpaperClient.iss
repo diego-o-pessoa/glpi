@@ -85,6 +85,11 @@ Source: "{#UpdaterConfigPath}"; DestDir: "{tmp}"; DestName: "ativaupdater-servic
 ; O servico e parado em ssInstall para o arquivo nao estar em uso nesta copia.
 Source: "{#GuardianPath}"; DestDir: "{commonpf}\Ativa Locacao\Guardian"; DestName: "AtivaGuardian.exe"; Flags: ignoreversion
 Source: "{#GuardianConfigPath}"; DestDir: "{tmp}"; DestName: "ativaguardian-service-config.json"; Flags: deleteafterinstall ignoreversion
+#ifdef WorkspaceConfigPath
+; Config do Ativa Workspace (executor da etapa ENTRA_LOGIN). Opcional: so entra
+; quando o build recebe a config baixada em Ativa Workspace > Configuracoes.
+Source: "{#WorkspaceConfigPath}"; DestDir: "{tmp}"; DestName: "ativaworkspace-service-config.json"; Flags: deleteafterinstall ignoreversion
+#endif
 
 [Icons]
 Name: "{commonprograms}\Ativa\Manutencao Ativa"; Filename: "{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe"; Parameters: "--maintenance"; Comment: "Autorizar manutencao com a senha Ativa"
@@ -363,6 +368,31 @@ begin
   RunOptional(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Command);
 end;
 
+{ Grava a config do Workspace (api_url + token) em ProgramData, com acesso
+  restrito a SYSTEM e Administradores. O modulo do executor (embutido no servico)
+  le esse arquivo. Sem a config no pacote, nao faz nada. }
+procedure InstallWorkspaceConfig();
+var
+  Src, Dir, Dst: String;
+begin
+  Src := ExpandConstant('{tmp}\ativaworkspace-service-config.json');
+  if not FileExists(Src) then
+    exit;
+  Dir := ExpandConstant('{commonappdata}\AtivaLocacao\Workspace');
+  ForceDirectories(Dir);
+  Dst := Dir + '\config.json';
+  if not FileCopy(Src, Dst, False) then begin
+    Log('Nao foi possivel gravar a config do Ativa Workspace.');
+    exit;
+  end;
+  { SIDs conhecidos (independem de idioma): S-1-5-18 = SYSTEM, S-1-5-32-544 = Administradores. }
+  RunOptional(
+    ExpandConstant('{sys}\icacls.exe'),
+    '"' + Dir + '" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" /grant:r "*S-1-5-32-544:(OI)(CI)F"'
+  );
+  Log('Config do Ativa Workspace instalada.');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   UpdaterPath: String;
@@ -448,6 +478,9 @@ begin
   InstallGuardian();
   RunRequired('Protegendo os componentes Ativa...',
     ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe'), '--setup-protection');
+
+  { Config do Workspace por ultimo: o servico ja esta rodando e le no proximo ciclo. }
+  InstallWorkspaceConfig();
 end;
 
 function NeedRestart(): Boolean;

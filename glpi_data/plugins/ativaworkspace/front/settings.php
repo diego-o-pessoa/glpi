@@ -55,4 +55,5 @@ Page::render('settings', 'settings.html.twig', [
     'api_token'          => $canConfigure ? $token : ($token !== '' ? '••••••••' : ''),
     'can_configure'      => $canConfigure,
     'action_url'         => Page::href('settings'),
+    'config_download_url'=> Page::href('config_download'),
 ]);

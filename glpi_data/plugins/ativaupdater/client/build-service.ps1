@@ -21,6 +21,20 @@ if ($LASTEXITCODE -ne 0) {
     }
 }
 
+# O executor da etapa ENTRA_LOGIN do Ativa Workspace mora no plugin ativaworkspace.
+# Copiamos o modulo para ca antes do build, para ele ser embutido no exe do
+# servico (import normal). uiautomation e a lib da automacao da interface.
+$WorkspaceEntraModule = (Resolve-Path (Join-Path $ClientDirectory "..\..\ativaworkspace\client\ativa_workspace_entra.py")).Path
+$WorkspaceEntraLocal = Join-Path $ClientDirectory "ativa_workspace_entra.py"
+if (-not (Test-Path -LiteralPath $WorkspaceEntraModule)) {
+    throw "Modulo do executor Entra nao encontrado: $WorkspaceEntraModule"
+}
+Copy-Item -LiteralPath $WorkspaceEntraModule -Destination $WorkspaceEntraLocal -Force
+& $VenvPython -m pip install uiautomation
+if ($LASTEXITCODE -ne 0) {
+    throw "Nao foi possivel instalar uiautomation (automacao da interface do Entra)."
+}
+
 # Console subsystem on purpose. In windowed (--noconsole) builds the PyInstaller
 # bootloader reports warnings such as "Failed to remove temporary directory"
 # with a blocking MessageBox. As SYSTEM in session 0 nobody can close it, so
@@ -35,6 +49,10 @@ if ($LASTEXITCODE -ne 0) {
     --distpath $DistDirectory `
     --workpath $BuildDirectory `
     --specpath $BuildDirectory `
+    --hidden-import ativa_workspace_entra `
+    --collect-all uiautomation `
+    --collect-all comtypes `
+    --paths $ClientDirectory `
     (Join-Path $ClientDirectory "unified_updater_service.py")
 
 $Executable = Join-Path $DistDirectory "AtivaUnifiedUpdater.exe"

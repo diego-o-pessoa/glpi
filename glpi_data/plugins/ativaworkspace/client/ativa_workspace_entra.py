@@ -228,7 +228,12 @@ def launch_helper_in_session(session_id: int, python_exe: Path, script: Path, si
         si.lpDesktop = "winsta0\\default"
         pi = PROCESS_INFORMATION()
 
-        command = f'"{python_exe}" "{script}" --helper "{signal_path}"'
+        # Exe congelado (servico empacotado): o proprio exe roda o helper via
+        # --workspace-entra-helper. Modo desenvolvimento (.py): python script --helper.
+        if getattr(sys, "frozen", False):
+            command = f'"{python_exe}" --workspace-entra-helper "{signal_path}"'
+        else:
+            command = f'"{python_exe}" "{script}" --helper "{signal_path}"'
         CREATE_UNICODE_ENVIRONMENT = 0x00000400
         CREATE_NO_WINDOW = 0x08000000
         created = advapi32.CreateProcessAsUserW(
