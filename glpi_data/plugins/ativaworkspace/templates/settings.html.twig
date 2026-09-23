@@ -1,6 +1,35 @@
 {% extends '@ativaworkspace/_layout.html.twig' %}
 
 {% block content %}
+    <div class="card aw-simulation mb-3">
+        <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+                <div class="fw-bold"><i class="ti ti-flask me-1"></i>Modo de simulação do Job Engine (desenvolvimento)</div>
+                <div class="small">
+                    Liga, na tela de cada provisionamento, botões para marcar a etapa atual como SUCCESS, FAILED,
+                    WAITING_HUMAN ou SKIPPED. Serve só para testar o fluxo: nada é executado nos computadores.
+                    Exige também o direito "Provisionar → Gerenciar".
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                {% if simulation_enabled %}
+                    <span class="badge bg-warning">Ligado</span>
+                {% else %}
+                    <span class="badge bg-secondary">Desligado</span>
+                {% endif %}
+                {% if can_configure %}
+                    <form method="post" action="{{ action_url }}" class="m-0">
+                        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+                        <button type="submit" name="simulation" value="{{ simulation_enabled ? '0' : '1' }}"
+                                class="btn btn-sm {{ simulation_enabled ? 'btn-outline-secondary' : 'btn-warning' }}">
+                            {{ simulation_enabled ? 'Desligar' : 'Ligar' }}
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
     <div class="row row-cards">
         <div class="col-lg-5">
             <div class="card">

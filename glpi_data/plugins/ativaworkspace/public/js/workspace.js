@@ -179,14 +179,12 @@
     function actionsCell(job) {
         var box = el('div', 'd-inline-flex gap-1');
 
-        var view = el('button', 'btn btn-icon btn-sm ' + (job.status === 'failed' ? 'btn-outline-danger' : 'btn-outline-secondary'));
-        view.type = 'button';
-        view.title = job.status === 'failed' ? 'Ver o motivo da falha' : 'Ver detalhes e log';
+        var failed = job.status_state === 'failed';
+        var view = el('a', 'btn btn-icon btn-sm ' + (failed ? 'btn-outline-danger' : 'btn-outline-secondary'));
+        view.href = urls.jobPage + '?id=' + encodeURIComponent(job.id);
+        view.title = failed ? 'Ver o motivo da falha' : 'Abrir o provisionamento';
         view.setAttribute('aria-label', view.title);
-        view.appendChild(icon(job.status === 'failed' ? 'ti-alert-circle' : 'ti-eye'));
-        view.addEventListener('click', function () {
-            openDetails(job.id);
-        });
+        view.appendChild(icon(failed ? 'ti-alert-circle' : 'ti-eye'));
         box.appendChild(view);
 
         var dropdown = el('div', 'dropdown');
@@ -245,7 +243,7 @@
         }
 
         jobs.forEach(function (job) {
-            var tr = el('tr', job.status === 'failed' ? 'aw-row-failed' : '');
+            var tr = el('tr', job.status_state === 'failed' ? 'aw-row-failed' : '');
 
             var computerTd = el('td');
             if (job.computers_id > 0) {
@@ -270,6 +268,7 @@
 
             tr.appendChild(el('td', 'text-nowrap', formatDate(job.date_start || job.date_creation)));
             tr.appendChild(el('td', '', job.requester || '—'));
+            tr.appendChild(el('td', 'text-nowrap small text-muted', formatDate(job.date_mod)));
 
             var actionsTd = el('td', 'text-end');
             actionsTd.appendChild(actionsCell(job));
@@ -358,6 +357,10 @@
         }
         var url = urls.data + '?jobs=' + encodeURIComponent(config.jobsLimit || 10)
             + '&events=' + encodeURIComponent(config.eventsLimit || 0);
+        var filters = config.filters || {};
+        Object.keys(filters).forEach(function (key) {
+            url += '&' + encodeURIComponent(key) + '=' + encodeURIComponent(filters[key]);
+        });
         request(url).then(function (data) {
             render(data);
             setLive(true);
@@ -391,14 +394,6 @@
         return window.bootstrap.Modal.getOrCreateInstance(node);
     }
 
-    var STEP_TONES = {
-        completed: ['success', 'ti-check', 'Concluída'],
-        skipped: ['secondary', 'ti-player-skip-forward', 'Ignorada'],
-        running: ['blue', 'ti-loader-2', 'Em execução'],
-        waiting_intervention: ['warning', 'ti-hand-stop', 'Aguardando intervenção'],
-        failed: ['danger', 'ti-x', 'Falhou'],
-        pending: ['secondary', 'ti-clock', 'Pendente']
-    };
 
     function detailRow(label, value) {
         var col = el('div', 'col-sm-6 col-lg-4');
@@ -430,9 +425,9 @@
         top.appendChild(progress);
         body.appendChild(top);
 
-        if (job.status === 'failed' || job.status === 'waiting_intervention') {
-            var alert = el('div', 'alert ' + (job.status === 'failed' ? 'alert-danger' : 'alert-warning'));
-            alert.appendChild(el('div', 'fw-bold mb-1', job.status === 'failed' ? 'Motivo da falha' : 'Por que está aguardando'));
+        if (job.status_state === 'failed' || job.status_state === 'waiting') {
+            var alert = el('div', 'alert ' + (job.status_state === 'failed' ? 'alert-danger' : 'alert-warning'));
+            alert.appendChild(el('div', 'fw-bold mb-1', job.status_state === 'failed' ? 'Motivo da falha' : 'Por que está aguardando'));
             alert.appendChild(el('div', '', job.message || 'Nenhuma mensagem registrada.'));
             body.appendChild(alert);
         } else if (job.message) {
@@ -454,7 +449,7 @@
         } else {
             var steps = el('ol', 'aw-steps mb-4');
             data.steps.forEach(function (step) {
-                var tone = STEP_TONES[step.status] || STEP_TONES.pending;
+                var tone = [step.tone || 'secondary', step.icon || 'ti-circle', step.status_label || step.status];
                 var li = el('li', 'aw-step aw-step-' + tone[0]);
                 var dot = el('span', 'aw-timeline-dot aw-dot-' + tone[0]);
                 dot.appendChild(icon(tone[1]));
@@ -465,7 +460,7 @@
                 head.appendChild(el('span', 'text-muted small', tone[2]));
                 info.appendChild(head);
                 if (step.message) {
-                    info.appendChild(el('div', step.status === 'failed' ? 'text-danger small' : 'text-muted small', step.message));
+                    info.appendChild(el('div', step.status === 'FAILED' ? 'text-danger small' : 'text-muted small', step.message));
                 }
                 li.appendChild(info);
                 steps.appendChild(li);
@@ -541,6 +536,35 @@
     var newModal = document.getElementById('aw-new-provisioning');
     var newForm = newModal ? newModal.querySelector('[data-aw-new-form]') : null;
     if (newForm) {
+        var upnProfiles = [];
+        try {
+            upnProfiles = JSON.parse(newForm.getAttribute('data-aw-upn-profiles') || '[]').map(Number);
+        } catch (e) {
+            upnProfiles = [];
+        }
+        var profileSelect = newForm.querySelector('[name="plugin_ativaworkspace_provisioningprofiles_id"]');
+        var upnInput = newForm.querySelector('[name="upn"]');
+        var syncUpn = function () {
+            if (!profileSelect || !upnInput) {
+                return;
+            }
+            var needed = upnProfiles.indexOf(Number(profileSelect.value)) !== -1;
+            upnInput.required = needed;
+            var label = upnInput.id ? newForm.querySelector('label[for="' + upnInput.id + '"]') : null;
+            if (label) {
+                label.classList.toggle('required', needed);
+            }
+        };
+        if (profileSelect) {
+            // O GLPI usa select2: o "change" dele e disparado pelo jQuery.
+            if (window.jQuery) {
+                window.jQuery(profileSelect).on('change', syncUpn);
+            } else {
+                profileSelect.addEventListener('change', syncUpn);
+            }
+            syncUpn();
+        }
+
         newForm.addEventListener('submit', function (event) {
             event.preventDefault();
 
@@ -554,9 +578,17 @@
             }
 
             var formData = new FormData(newForm);
+            var missing = '';
             if (!Number(formData.get('computers_id'))) {
+                missing = 'Escolha o computador.';
+            } else if (!String(formData.get('employee_name') || '').trim()) {
+                missing = 'Informe o funcionário.';
+            } else if (upnInput && upnInput.required && !String(formData.get('upn') || '').trim()) {
+                missing = 'Informe a conta Microsoft do funcionário.';
+            }
+            if (missing) {
                 if (errorBox) {
-                    errorBox.textContent = 'Escolha o computador.';
+                    errorBox.textContent = missing;
                     errorBox.classList.remove('d-none');
                 }
                 return;
@@ -573,8 +605,9 @@
                     modal.hide();
                 }
                 newForm.reset();
-                if (typeof window.glpi_toast_info === 'function') {
-                    window.glpi_toast_info(result.message || 'Provisionamento colocado na fila.');
+                if (result.url) {
+                    window.location.href = result.url;
+                    return;
                 }
                 lastJobsKey = '';
                 schedule(0);

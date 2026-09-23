@@ -23,6 +23,7 @@ Page::render('overview', 'overview.html.twig', [
     'all_active'    => Environment::allRelatedActive($plugins),
     'can_provision' => $canProvision,
     'profiles'      => $canProvision ? ProvisioningProfile::activeChoices() : [],
+    'upn_profiles'  => $canProvision ? ProvisioningProfile::entraProfileIds() : [],
     'provisioning'  => Page::href('provisioning'),
     'logs'          => Page::href('logs'),
     'profiles_url'  => Page::href('profiles'),

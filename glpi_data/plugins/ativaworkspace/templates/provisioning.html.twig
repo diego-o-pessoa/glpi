@@ -2,6 +2,51 @@
 
 {% block content %}
 <div data-aw-live="{{ live|json_encode }}">
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="get" action="{{ base_url }}" class="row g-2 align-items-end">
+                <div class="col-sm-6 col-lg-2">
+                    <label class="form-label" for="aw-f-status">Status</label>
+                    <select class="form-select" id="aw-f-status" name="status">
+                        <option value="">Todos</option>
+                        {% for key, label in statuses %}
+                            <option value="{{ key }}" {{ filters.status == key ? 'selected' : '' }}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-2">
+                    <label class="form-label" for="aw-f-computer">Computador</label>
+                    <input type="search" class="form-control" id="aw-f-computer" name="computer" value="{{ filters.computer }}" placeholder="PC-FIN" />
+                </div>
+                <div class="col-sm-6 col-lg-2">
+                    <label class="form-label" for="aw-f-employee">Funcionário</label>
+                    <input type="search" class="form-control" id="aw-f-employee" name="employee" value="{{ filters.employee }}" />
+                </div>
+                <div class="col-sm-6 col-lg-2">
+                    <label class="form-label" for="aw-f-profile">Perfil</label>
+                    <select class="form-select" id="aw-f-profile" name="profile">
+                        <option value="0">Todos</option>
+                        {% for id, name in all_profiles %}
+                            <option value="{{ id }}" {{ filters.profile == id ? 'selected' : '' }}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-lg-1">
+                    <label class="form-label" for="aw-f-from">De</label>
+                    <input type="date" class="form-control" id="aw-f-from" name="date_from" value="{{ filters.date_from }}" />
+                </div>
+                <div class="col-6 col-lg-1">
+                    <label class="form-label" for="aw-f-to">Até</label>
+                    <input type="date" class="form-control" id="aw-f-to" name="date_to" value="{{ filters.date_to }}" />
+                </div>
+                <div class="col-lg-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-fill"><i class="ti ti-filter"></i> Filtrar</button>
+                    <a href="{{ base_url }}" class="btn btn-outline-secondary" title="Limpar filtros"><i class="ti ti-x"></i></a>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="card">
         <div class="card-header">
             <h3 class="card-title"><i class="ti ti-rocket me-2 text-primary"></i>Provisionamentos</h3>

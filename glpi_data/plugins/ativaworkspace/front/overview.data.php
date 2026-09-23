@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use GlpiPlugin\Ativaworkspace\Job;
 use GlpiPlugin\Ativaworkspace\Overview;
 use GlpiPlugin\Ativaworkspace\Page;
 
@@ -14,6 +15,6 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
 echo json_encode(
-    Overview::payload((int) ($_GET['jobs'] ?? 10), (int) ($_GET['events'] ?? 0)),
+    Overview::payload((int) ($_GET['jobs'] ?? 10), (int) ($_GET['events'] ?? 0), Job::filtersFrom($_GET)),
     JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
 );

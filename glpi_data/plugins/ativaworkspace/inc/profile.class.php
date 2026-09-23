@@ -57,7 +57,8 @@ class PluginAtivaworkspaceProfile extends Profile
                 'field'  => self::RIGHT_VIEW,
             ],
             [
-                'rights' => [READ => __('Read'), CREATE => __('Create')],
+                // UPDATE: cancelar, tentar de novo e confirmar intervencao.
+                'rights' => [READ => __('Read'), CREATE => __('Create'), UPDATE => 'Gerenciar'],
                 'label'  => 'Provisionar',
                 'field'  => self::RIGHT_PROVISION,
             ],

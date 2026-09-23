@@ -4,7 +4,7 @@
 {% if can_provision %}
 <div class="modal fade" id="aw-new-provisioning" tabindex="-1" aria-labelledby="aw-new-provisioning-title" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
-        <form class="modal-content" data-aw-new-form>
+        <form class="modal-content" data-aw-new-form data-aw-upn-profiles="{{ (upn_profiles ?? [])|json_encode }}">
             <div class="modal-header">
                 <h5 class="modal-title" id="aw-new-provisioning-title">
                     <i class="ti ti-rocket me-2 text-primary"></i>Novo provisionamento
@@ -33,13 +33,19 @@
                         }) }}
                         {{ fields.textField('employee_name', '', 'Funcionário', {
                             'full_width': true,
-                            'helper': 'Quem vai usar a máquina. Opcional.'
+                            'required': true,
+                            'helper': 'Quem vai usar a máquina.'
+                        }) }}
+                        {{ fields.emailField('upn', '', 'Conta Microsoft (UPN)', {
+                            'full_width': true,
+                            'helper': 'Ex.: joao.silva@ativalocacao.com.br. Obrigatória em perfis com Autenticação Microsoft. Nenhuma senha é pedida.',
+                            'additional_attributes': {'autocomplete': 'off', 'data-aw-upn': '1'}
                         }) }}
                     </div>
                     <div class="text-muted small mt-2">
                         <i class="ti ti-info-circle me-1"></i>
-                        O provisionamento entra na fila com as etapas ativas do perfil.
-                        A execução automática das etapas chega numa próxima versão do Workspace.
+                        As etapas do perfil são copiadas para o provisionamento: mudar o perfil depois não altera este provisionamento.
+                        Nenhuma ação é executada no computador nesta versão do Workspace.
                     </div>
                 {% endif %}
             </div>
@@ -47,7 +53,7 @@
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
                 {% if profiles|length > 0 %}
                     <button type="submit" class="btn btn-primary" data-aw-new-submit>
-                        <i class="ti ti-player-play"></i> Colocar na fila
+                        <i class="ti ti-player-play"></i> Iniciar provisionamento
                     </button>
                 {% endif %}
             </div>

@@ -24,6 +24,8 @@ final class Page
         'application_form' => 'application.form.php',
         'step_form'        => 'step.form.php',
         'job_form'         => 'job.form.php',
+        'job'              => 'job.php',
+        'job_action'       => 'job.action.php',
         'job_data'         => 'job.data.php',
         'overview_data'    => 'overview.data.php',
     ];
@@ -135,7 +137,7 @@ final class Page
      * @param array<string, mixed> $initial dados do primeiro paint (Overview::payload)
      * @return array<string, mixed>
      */
-    public static function liveConfig(array $initial, int $jobsLimit, int $eventsLimit): array
+    public static function liveConfig(array $initial, int $jobsLimit, int $eventsLimit, array $filters = []): array
     {
         global $CFG_GLPI;
 
@@ -144,10 +146,13 @@ final class Page
             'refreshMs'  => self::REFRESH_MS,
             'jobsLimit'  => $jobsLimit,
             'eventsLimit'=> $eventsLimit,
+            // Filtros da listagem: o polling pede a mesma selecao.
+            'filters'    => array_filter($filters, static fn ($v) => $v !== '' && $v !== 0),
             'urls'       => [
                 'data'     => self::href('overview_data'),
                 'job'      => self::href('job_data'),
                 'jobForm'  => self::href('job_form'),
+                'jobPage'  => self::href('job'),
                 'computer' => $CFG_GLPI['root_doc'] . '/front/computer.form.php',
                 'logs'     => self::href('logs'),
             ],

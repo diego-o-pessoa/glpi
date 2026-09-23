@@ -5,37 +5,36 @@ declare(strict_types=1);
 namespace GlpiPlugin\Ativaworkspace;
 
 use CommonDBTM;
-use Computer;
 use PluginAtivaworkspaceProfile;
-use Session;
 
 /**
  * Provisionamento de um computador com um perfil (glpi_plugin_ativaworkspace_jobs).
- * Criar um job so o coloca na fila: a execucao (Job Engine) entra numa proxima etapa.
+ * Estados e transicoes ficam no ProvisioningEngine; aqui ficam consultas e o
+ * formato de exibicao.
  */
 final class Job extends CommonDBTM
 {
-    public const STATUS_PENDING   = 'pending';
-    public const STATUS_RUNNING   = 'running';
-    public const STATUS_WAITING   = 'waiting_intervention';
-    public const STATUS_FAILED    = 'failed';
-    public const STATUS_COMPLETED = 'completed';
-    public const STATUS_CANCELLED = 'cancelled';
+    public const QUEUED               = 'QUEUED';
+    public const RUNNING              = 'RUNNING';
+    public const WAITING_INTERVENTION = 'WAITING_INTERVENTION';
+    public const FAILED               = 'FAILED';
+    public const COMPLETED            = 'COMPLETED';
+    public const CANCELED             = 'CANCELED';
 
-    /** Situacoes em que o computador ainda esta "ocupado" com um provisionamento. */
-    public const OPEN_STATUSES = [self::STATUS_PENDING, self::STATUS_RUNNING, self::STATUS_WAITING];
+    /** Provisionamento "ativo": o computador esta ocupado. */
+    public const ACTIVE = [self::QUEUED, self::RUNNING, self::WAITING_INTERVENTION];
 
-    public const STATUS_LABELS = [
-        self::STATUS_PENDING   => ['Na fila', 'queued'],
-        self::STATUS_RUNNING   => ['Em andamento', 'running'],
-        self::STATUS_WAITING   => ['Aguardando intervenção', 'waiting'],
-        self::STATUS_FAILED    => ['Falha', 'failed'],
-        self::STATUS_COMPLETED => ['Concluído', 'completed'],
-        self::STATUS_CANCELLED => ['Cancelado', 'cancelled'],
+    /** status => [rotulo, estado visual (classes aw-pill-*)] */
+    public const LABELS = [
+        self::QUEUED               => ['Na fila', 'queued'],
+        self::RUNNING              => ['Em andamento', 'running'],
+        self::WAITING_INTERVENTION => ['Aguardando intervenção', 'waiting'],
+        self::FAILED               => ['Falha', 'failed'],
+        self::COMPLETED            => ['Concluído', 'completed'],
+        self::CANCELED             => ['Cancelado', 'cancelled'],
     ];
 
-    /** Etapas que contam como feitas no progresso. */
-    private const DONE_STEP_STATUSES = ['completed', 'skipped'];
+    public const FK = 'plugin_ativaworkspace_jobs_id';
 
     public static $rightname = PluginAtivaworkspaceProfile::RIGHT_PROVISION;
 
@@ -56,139 +55,143 @@ final class Job extends CommonDBTM
         $today  = date('Y-m-d 00:00:00', strtotime($_SESSION['glpi_currenttime'] ?? 'now'));
 
         return [
-            'active'          => countElementsInTable($table, $entity + ['status' => [self::STATUS_PENDING, self::STATUS_RUNNING]]),
-            'waiting'         => countElementsInTable($table, $entity + ['status' => self::STATUS_WAITING]),
-            'failed'          => countElementsInTable($table, $entity + ['status' => self::STATUS_FAILED]),
+            'active'          => countElementsInTable($table, $entity + ['status' => [self::QUEUED, self::RUNNING]]),
+            'waiting'         => countElementsInTable($table, $entity + ['status' => self::WAITING_INTERVENTION]),
+            'failed'          => countElementsInTable($table, $entity + ['status' => self::FAILED]),
             'completed_today' => countElementsInTable($table, $entity + [
-                'status'   => self::STATUS_COMPLETED,
+                'status'   => self::COMPLETED,
                 'date_end' => ['>=', $today],
             ]),
         ];
     }
 
     /**
-     * Provisionamentos para as telas, com nomes e progresso resolvidos.
-     * Ordem: abertos primeiro (o que esta acontecendo agora), depois os mais recentes.
+     * Filtros aceitos na listagem (vindos da query string), ja validados.
      *
+     * @return array{status: string, computer: string, employee: string, profile: int, date_from: string, date_to: string}
+     */
+    public static function filtersFrom(array $query): array
+    {
+        $date = static fn ($value): string => is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/D', $value) ? $value : '';
+        $status = strtoupper((string) ($query['status'] ?? ''));
+
+        return [
+            'status'    => array_key_exists($status, self::LABELS) || $status === 'ACTIVE' ? $status : '',
+            'computer'  => mb_substr(trim((string) ($query['computer'] ?? '')), 0, 100),
+            'employee'  => mb_substr(trim((string) ($query['employee'] ?? '')), 0, 100),
+            'profile'   => max(0, (int) ($query['profile'] ?? 0)),
+            'date_from' => $date($query['date_from'] ?? ''),
+            'date_to'   => $date($query['date_to'] ?? ''),
+        ];
+    }
+
+    /** Escapa curingas do LIKE (o texto do usuario e literal). */
+    private static function like(string $value): string
+    {
+        return '%' . addcslashes($value, '%_\\') . '%';
+    }
+
+    /**
+     * Provisionamentos para as telas, com nomes e progresso resolvidos.
+     * Ordem: ativos primeiro (o que esta acontecendo agora), depois os mais recentes.
+     *
+     * @param array<string, mixed> $filters saida de filtersFrom()
      * @return list<array<string, mixed>>
      */
-    public static function listForPage(int $limit): array
+    public static function listForPage(int $limit, array $filters = []): array
     {
         global $DB;
 
-        $table   = self::getTable();
-        $profile = ProvisioningProfile::getTable();
-        $rows    = [];
+        $table = self::getTable();
+        $where = getEntitiesRestrictCriteria($table, '', '', false);
+
+        $status = (string) ($filters['status'] ?? '');
+        if ($status === 'ACTIVE') {
+            $where["$table.status"] = self::ACTIVE;
+        } elseif ($status !== '') {
+            $where["$table.status"] = $status;
+        }
+        if (($filters['computer'] ?? '') !== '') {
+            $where['glpi_computers.name'] = ['LIKE', self::like($filters['computer'])];
+        }
+        if (($filters['employee'] ?? '') !== '') {
+            $where["$table.employee_name"] = ['LIKE', self::like($filters['employee'])];
+        }
+        if ((int) ($filters['profile'] ?? 0) > 0) {
+            $where["$table." . ProfileStep::PROFILE_FK] = (int) $filters['profile'];
+        }
+        if (($filters['date_from'] ?? '') !== '') {
+            $where[] = ["$table.date_creation" => ['>=', $filters['date_from'] . ' 00:00:00']];
+        }
+        if (($filters['date_to'] ?? '') !== '') {
+            $where[] = ["$table.date_creation" => ['<=', $filters['date_to'] . ' 23:59:59']];
+        }
+
+        $rows = [];
         foreach ($DB->request([
-            'SELECT'    => [
-                "$table.*",
-                'glpi_computers.name AS computer_name',
-                "$profile.name AS profile_name",
-            ],
+            'SELECT'    => ["$table.*", 'glpi_computers.name AS computer_name'],
             'FROM'      => $table,
             'LEFT JOIN' => [
-                'glpi_computers' => [
-                    'ON' => ['glpi_computers' => 'id', $table => 'computers_id'],
-                ],
-                $profile => [
-                    'ON' => [$profile => 'id', $table => 'plugin_ativaworkspace_provisioningprofiles_id'],
-                ],
+                'glpi_computers' => ['ON' => ['glpi_computers' => 'id', $table => 'computers_id']],
             ],
-            'WHERE'     => getEntitiesRestrictCriteria($table, '', '', false),
+            'WHERE'     => $where,
             'ORDER'     => ["$table.id DESC"],
             'LIMIT'     => max(1, min(200, $limit)),
         ]) as $row) {
             $rows[] = $row;
         }
 
-        $progress = self::progressFor(array_map(static fn ($row) => (int) $row['id'], $rows));
-
-        $open = [];
-        $closed = [];
+        $active = [];
+        $others = [];
         foreach ($rows as $row) {
-            $item = self::present($row, $progress[(int) $row['id']] ?? null);
-            if (in_array($row['status'], self::OPEN_STATUSES, true)) {
-                $open[] = $item;
+            $item = self::present($row);
+            if ($item['is_active']) {
+                $active[] = $item;
             } else {
-                $closed[] = $item;
+                $others[] = $item;
             }
         }
-        return array_merge($open, $closed);
+        return array_merge($active, $others);
     }
 
     /**
      * Formato exposto para as telas e para o JSON de tempo real.
      *
-     * @param array{done: int, total: int}|null $progress
      * @return array<string, mixed>
      */
-    public static function present(array $row, ?array $progress): array
+    public static function present(array $row): array
     {
-        [$label, $state] = self::STATUS_LABELS[$row['status']] ?? [(string) $row['status'], 'queued'];
-
-        if ($row['status'] === self::STATUS_COMPLETED) {
-            $percent = 100;
-        } elseif ($progress !== null && $progress['total'] > 0) {
-            $percent = (int) floor(100 * $progress['done'] / $progress['total']);
-        } else {
-            $percent = 0;
-        }
+        [$label, $state] = self::LABELS[$row['status']] ?? [(string) $row['status'], 'queued'];
+        $progress = max(0, min(100, (int) ($row['progress'] ?? 0)));
 
         return [
-            'id'            => (int) $row['id'],
-            'computers_id'  => (int) $row['computers_id'],
-            'computer_name' => (string) ($row['computer_name'] ?? '') !== ''
+            'id'              => (int) $row['id'],
+            'computers_id'    => (int) $row['computers_id'],
+            'computer_name'   => (string) ($row['computer_name'] ?? '') !== ''
                 ? (string) $row['computer_name']
                 : ((int) $row['computers_id'] > 0 ? '#' . (int) $row['computers_id'] : '—'),
-            'employee_name' => (string) ($row['employee_name'] ?? ''),
-            'profile_name'  => (string) ($row['profile_name'] ?? ''),
-            'status'        => (string) $row['status'],
-            'status_label'  => $label,
-            'status_state'  => $state,
-            'is_open'       => in_array($row['status'], self::OPEN_STATUSES, true),
-            'progress'      => $percent,
-            'steps_done'    => $progress['done'] ?? 0,
-            'steps_total'   => $progress['total'] ?? 0,
-            'message'       => (string) ($row['message'] ?? ''),
-            'date_start'    => $row['date_start'] ?? null,
-            'date_end'      => $row['date_end'] ?? null,
-            'date_creation' => $row['date_creation'] ?? null,
-            'requester'     => (int) $row['users_id'] > 0 ? getUserName((int) $row['users_id']) : 'Sistema',
+            'employee_name'   => (string) ($row['employee_name'] ?? ''),
+            'upn'             => (string) ($row['upn'] ?? ''),
+            'profile_name'    => (string) ($row['profile_name'] ?? ''),
+            'status'          => (string) $row['status'],
+            'status_label'    => $label,
+            'status_state'    => $state,
+            'is_active'       => in_array($row['status'], self::ACTIVE, true),
+            // Compatibilidade com o JS da Etapa 2 (modal "Ver log").
+            'is_open'         => in_array($row['status'], self::ACTIVE, true),
+            'progress'        => $progress,
+            'current_step_id' => (int) ($row['plugin_ativaworkspace_jobsteps_id'] ?? 0),
+            'message'         => (string) ($row['message'] ?? ''),
+            'date_start'      => $row['date_start'] ?? null,
+            'date_end'        => $row['date_end'] ?? null,
+            'date_creation'   => $row['date_creation'] ?? null,
+            'date_mod'        => $row['date_mod'] ?? null,
+            'requester'       => (int) $row['users_id'] > 0 ? getUserName((int) $row['users_id']) : 'Sistema',
         ];
     }
 
     /**
-     * Etapas feitas/total por job, numa consulta so.
-     *
-     * @param list<int> $jobIds
-     * @return array<int, array{done: int, total: int}>
-     */
-    private static function progressFor(array $jobIds): array
-    {
-        global $DB;
-
-        if ($jobIds === []) {
-            return [];
-        }
-
-        $result = [];
-        foreach ($DB->request([
-            'SELECT' => ['plugin_ativaworkspace_jobs_id', 'status'],
-            'FROM'   => JobStep::getTable(),
-            'WHERE'  => ['plugin_ativaworkspace_jobs_id' => $jobIds],
-        ]) as $step) {
-            $id = (int) $step['plugin_ativaworkspace_jobs_id'];
-            $result[$id] ??= ['done' => 0, 'total' => 0];
-            $result[$id]['total']++;
-            if (in_array($step['status'], self::DONE_STEP_STATUSES, true)) {
-                $result[$id]['done']++;
-            }
-        }
-        return $result;
-    }
-
-    /**
-     * Detalhes de um job para o modal de log: dados, etapas e eventos.
+     * Detalhes de um job: dados, etapas (snapshot) e eventos.
      * Retorna null se o job nao existe ou esta fora das entidades do usuario.
      *
      * @return array{job: array<string, mixed>, steps: list<array<string, mixed>>, events: list<array<string, mixed>>}|null
@@ -197,14 +200,12 @@ final class Job extends CommonDBTM
     {
         global $DB;
 
-        $table   = self::getTable();
-        $profile = ProvisioningProfile::getTable();
+        $table = self::getTable();
         $row = $DB->request([
-            'SELECT'    => ["$table.*", 'glpi_computers.name AS computer_name', "$profile.name AS profile_name"],
+            'SELECT'    => ["$table.*", 'glpi_computers.name AS computer_name'],
             'FROM'      => $table,
             'LEFT JOIN' => [
                 'glpi_computers' => ['ON' => ['glpi_computers' => 'id', $table => 'computers_id']],
-                $profile         => ['ON' => [$profile => 'id', $table => 'plugin_ativaworkspace_provisioningprofiles_id']],
             ],
             'WHERE'     => ["$table.id" => $id] + getEntitiesRestrictCriteria($table, '', '', false),
             'LIMIT'     => 1,
@@ -214,114 +215,16 @@ final class Job extends CommonDBTM
             return null;
         }
 
-        $steps = [];
-        foreach ($DB->request([
-            'FROM'  => JobStep::getTable(),
-            'WHERE' => ['plugin_ativaworkspace_jobs_id' => $id],
-            'ORDER' => ['step_order ASC', 'id ASC'],
-        ]) as $step) {
-            $steps[] = [
-                'name'       => (string) $step['name'],
-                'step_type'  => (string) $step['step_type'],
-                'status'     => (string) $step['status'],
-                'message'    => (string) ($step['message'] ?? ''),
-                'date_start' => $step['date_start'],
-                'date_end'   => $step['date_end'],
-            ];
-        }
-
-        $progress = ['done' => 0, 'total' => count($steps)];
-        foreach ($steps as $step) {
-            if (in_array($step['status'], self::DONE_STEP_STATUSES, true)) {
-                $progress['done']++;
-            }
-        }
+        $job = self::present($row);
+        $steps = array_map(
+            static fn (array $step): array => JobStep::present($step, $job['current_step_id']),
+            JobStep::forJob($id)
+        );
 
         return [
-            'job'    => self::present($row, $progress),
+            'job'    => $job,
             'steps'  => $steps,
-            'events' => Event::recent(100, null, 0, $id),
+            'events' => Event::recent(200, null, 0, $id),
         ];
-    }
-
-    /**
-     * Coloca um provisionamento na fila. Nao executa nada.
-     * As permissoes (direito de provisionar, computador e perfil visiveis)
-     * sao conferidas aqui, no backend.
-     *
-     * @return int id do job criado
-     * @throws \RuntimeException mensagem pronta para o usuario
-     */
-    public static function enqueue(int $computersId, int $profileId, string $employeeName): int
-    {
-        global $DB;
-
-        if (!Session::haveRight(self::$rightname, CREATE)) {
-            throw new \RuntimeException('Você não tem permissão para provisionar.');
-        }
-
-        $computer = new Computer();
-        if ($computersId <= 0 || !$computer->getFromDB($computersId) || !$computer->can($computersId, READ)) {
-            throw new \RuntimeException('Computador não encontrado ou fora das suas entidades.');
-        }
-
-        $profile = new ProvisioningProfile();
-        if (
-            $profileId <= 0
-            || !$profile->getFromDB($profileId)
-            || (int) $profile->fields['is_active'] !== 1
-            || !Session::haveAccessToEntity((int) $profile->fields['entities_id'], (bool) $profile->fields['is_recursive'])
-        ) {
-            throw new \RuntimeException('Perfil de provisionamento inválido ou inativo.');
-        }
-
-        $employeeName = trim($employeeName);
-        if (mb_strlen($employeeName) > 255) {
-            throw new \RuntimeException('Nome do funcionário muito longo.');
-        }
-
-        if (countElementsInTable(self::getTable(), ['computers_id' => $computersId, 'status' => self::OPEN_STATUSES]) > 0) {
-            throw new \RuntimeException('Este computador já tem um provisionamento em aberto.');
-        }
-
-        $job = new self();
-        $jobId = (int) $job->add([
-            'entities_id'   => (int) $computer->fields['entities_id'],
-            'computers_id'  => $computersId,
-            'plugin_ativaworkspace_provisioningprofiles_id' => $profileId,
-            'status'        => self::STATUS_PENDING,
-            'employee_name' => $employeeName,
-            'users_id'      => (int) Session::getLoginUserID(),
-            'message'       => 'Na fila: aguardando o executor do Workspace.',
-        ]);
-        if ($jobId <= 0) {
-            throw new \RuntimeException('Não foi possível criar o provisionamento.');
-        }
-
-        // Congela as etapas ativas do perfil no job: editar o perfil depois nao
-        // muda um provisionamento que ja comecou.
-        $stepModel = new JobStep();
-        foreach ($DB->request([
-            'FROM'  => ProfileStep::getTable(),
-            'WHERE' => ['plugin_ativaworkspace_provisioningprofiles_id' => $profileId, 'is_active' => 1],
-            'ORDER' => ['step_order ASC', 'id ASC'],
-        ]) as $step) {
-            $stepModel->add([
-                'plugin_ativaworkspace_jobs_id'         => $jobId,
-                'plugin_ativaworkspace_profilesteps_id' => (int) $step['id'],
-                'name'                                  => (string) $step['name'],
-                'step_type'                             => (string) $step['step_type'],
-                'step_order'                            => (int) $step['step_order'],
-                'status'                                => 'pending',
-            ]);
-        }
-
-        Event::log(Event::LEVEL_INFO, 'provisioning', 'Provisionamento criado', [
-            'computer' => (string) $computer->fields['name'],
-            'profile'  => (string) $profile->fields['name'],
-            'employee' => $employeeName,
-        ], $jobId);
-
-        return $jobId;
     }
 }

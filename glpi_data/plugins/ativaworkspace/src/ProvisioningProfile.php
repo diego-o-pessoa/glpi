@@ -47,6 +47,49 @@ final class ProvisioningProfile extends CommonDBTM
     }
 
     /**
+     * Todos os perfis visiveis (inclusive inativos), para filtros.
+     *
+     * @return array<int, string>
+     */
+    public static function allChoices(): array
+    {
+        global $DB;
+
+        $table   = self::getTable();
+        $choices = [];
+        foreach ($DB->request([
+            'SELECT' => ['id', 'name', 'is_active'],
+            'FROM'   => $table,
+            'WHERE'  => getEntitiesRestrictCriteria($table, '', '', true),
+            'ORDER'  => ['name ASC'],
+        ]) as $row) {
+            $choices[(int) $row['id']] = (string) $row['name'] . ((int) $row['is_active'] === 1 ? '' : ' (inativo)');
+        }
+        return $choices;
+    }
+
+    /**
+     * Perfis ativos com etapa de Autenticacao Microsoft (exigem o UPN).
+     *
+     * @return list<int>
+     */
+    public static function entraProfileIds(): array
+    {
+        global $DB;
+
+        $ids = [];
+        foreach ($DB->request([
+            'SELECT'   => [ProfileStep::PROFILE_FK],
+            'DISTINCT' => true,
+            'FROM'     => ProfileStep::getTable(),
+            'WHERE'    => ['step_type' => StepType::ENTRA_LOGIN, 'is_active' => 1],
+        ]) as $row) {
+            $ids[] = (int) $row[ProfileStep::PROFILE_FK];
+        }
+        return $ids;
+    }
+
+    /**
      * Numero de etapas por perfil, numa consulta so.
      *
      * @param list<int> $ids

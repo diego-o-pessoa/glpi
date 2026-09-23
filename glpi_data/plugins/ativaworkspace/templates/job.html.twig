@@ -1,0 +1,238 @@
+{% extends '@ativaworkspace/_layout.html.twig' %}
+
+{% block header %}{% endblock %}
+
+{% block content %}
+{% set level_badges = {'INFO': 'bg-blue-lt', 'WARNING': 'bg-warning-lt', 'ERROR': 'bg-danger-lt', 'SECURITY': 'bg-purple-lt'} %}
+<div data-aw-job-page data-url="{{ data_url }}" data-refresh="{{ refresh_ms }}"
+     data-signature="{{ job.status ~ '|' ~ (job.date_mod ?? '') ~ '|' ~ job.progress }}">
+
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <a href="{{ list_url }}" class="btn btn-outline-secondary btn-sm"><i class="ti ti-arrow-left"></i> Provisionamentos</a>
+        {% if can_cancel %}
+            <form method="post" action="{{ action_url }}" class="m-0"
+                  onsubmit="return confirm('Cancelar o provisionamento #{{ job.id }}? As etapas ainda não concluídas serão canceladas.');">
+                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+                <input type="hidden" name="job" value="{{ job.id }}" />
+                <input type="hidden" name="action" value="cancel" />
+                <button type="submit" class="btn btn-outline-danger btn-sm"><i class="ti ti-ban"></i> Cancelar provisionamento</button>
+            </form>
+        {% endif %}
+    </div>
+
+    {# Cabecalho do job #}
+    <div class="card aw-hero mb-3">
+        <div class="card-body">
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <span class="aw-hero-icon"><i class="ti ti-device-desktop"></i></span>
+                <div class="flex-fill min-w-0">
+                    <div class="aw-hero-kicker">Provisionamento #{{ job.id }}</div>
+                    <h1 class="aw-hero-title mb-1 text-break">{{ job.computer_name }}</h1>
+                    <div class="aw-hero-subtitle">{{ job.employee_name ?: '—' }}{% if job.upn %} · <span class="text-break">{{ job.upn }}</span>{% endif %}</div>
+                </div>
+                <div class="text-end">
+                    <span class="aw-pill aw-pill-{{ job.status_state }} aw-pill-lg">{{ job.status_label }}</span>
+                </div>
+            </div>
+            <div class="mt-3">
+                <div class="d-flex justify-content-between small mb-1">
+                    <span class="fw-semibold">Progresso</span>
+                    <span class="fw-semibold">{{ job.progress }}%</span>
+                </div>
+                <div class="aw-progress aw-progress-{{ job.status_state }} aw-progress-lg">
+                    <div class="aw-progress-bar" style="width: {{ job.progress }}%"></div>
+                </div>
+                {% if job.message %}<div class="text-muted small mt-2">{{ job.message }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if job.status == 'WAITING_INTERVENTION' and current %}
+        <div class="alert alert-warning">
+            <div class="d-flex gap-2">
+                <i class="ti ti-hand-stop fs-2"></i>
+                <div>
+                    <div class="fw-bold">Aguardando intervenção do TI: {{ current.name }}</div>
+                    {% if current.message %}<div>{{ current.message }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    {% elseif job.status == 'FAILED' and current %}
+        <div class="alert alert-danger">
+            <div class="fw-bold">Falhou em "{{ current.name }}"</div>
+            <div>{{ current.message ?: 'Nenhuma mensagem registrada.' }}</div>
+            {% if current.retry_exhausted %}
+                <div class="small mt-1">Limite de tentativas atingido ({{ current.attempts }} de {{ current.max_attempts }}).</div>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <div class="row row-cards">
+        <div class="col-xl-8">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-list-numbers me-2 text-primary"></i>Etapas</h3>
+                    <div class="card-actions">
+                        <span class="aw-live-dot" data-aw-job-live title="Atualização em tempo real">Ao vivo</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <ol class="aw-job-steps">
+                        {% for step in steps %}
+                            <li class="aw-job-step aw-job-step-{{ step.tone }} {{ step.is_current ? 'aw-job-step-current' : '' }}">
+                                <span class="aw-timeline-dot aw-dot-{{ step.tone }}"><i class="ti {{ step.icon }}"></i></span>
+                                <div class="flex-fill min-w-0">
+                                    <div class="d-flex flex-wrap justify-content-between gap-2">
+                                        <span class="fw-semibold text-break">{{ step.step_order }}. {{ step.name }}</span>
+                                        <span class="small {{ step.tone == 'danger' ? 'text-danger' : (step.tone == 'warning' ? 'text-warning' : 'text-muted') }}">{{ step.status_label }}</span>
+                                    </div>
+                                    <div class="d-flex flex-wrap align-items-center gap-2 mt-1 small text-muted">
+                                        <span class="aw-type-badge">{{ step.step_type }}</span>
+                                        {% if step.application %}<span><i class="ti ti-package"></i> {{ step.application.name }}{{ step.application.version ? ' ' ~ step.application.version : '' }}</span>{% endif %}
+                                        <span>Tentativas {{ step.attempts }}/{{ step.max_attempts }}</span>
+                                        {% if step.timeout_minutes > 0 %}<span>Timeout {{ step.timeout_minutes }} min</span>{% endif %}
+                                        {% if step.continue_on_error %}<span><i class="ti ti-arrow-forward"></i> continua se falhar</span>{% endif %}
+                                        {% if not step.is_mandatory %}<span>opcional</span>{% endif %}
+                                    </div>
+                                    {% if step.message and step.message != '[simulação]' %}
+                                        <div class="small mt-1 {{ step.status == 'FAILED' ? 'text-danger' : 'text-muted' }} text-break">{{ step.message }}</div>
+                                    {% endif %}
+
+                                    {% if step.can_confirm or step.can_retry %}
+                                        <form method="post" action="{{ action_url }}" class="mt-2 d-flex gap-2">
+                                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+                                            <input type="hidden" name="job" value="{{ job.id }}" />
+                                            <input type="hidden" name="step" value="{{ step.id }}" />
+                                            {% if step.can_confirm %}
+                                                <button type="submit" name="action" value="confirm" class="btn btn-sm btn-warning"
+                                                        onclick="return confirm('Confirmar que a intervenção &quot;{{ step.name|e('js') }}&quot; foi concluída?');">
+                                                    <i class="ti ti-check"></i> Confirmar intervenção concluída
+                                                </button>
+                                            {% endif %}
+                                            {% if step.can_retry %}
+                                                <button type="submit" name="action" value="retry" class="btn btn-sm btn-outline-primary">
+                                                    <i class="ti ti-refresh"></i> Tentar novamente ({{ step.attempts + 1 }}/{{ step.max_attempts }})
+                                                </button>
+                                            {% endif %}
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </li>
+                        {% endfor %}
+                    </ol>
+                </div>
+            </div>
+
+            {% if can_simulate and current %}
+                {# Ferramenta de DESENVOLVIMENTO: so com o modo de simulacao ligado. #}
+                <div class="card aw-simulation mb-3">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="ti ti-flask me-2"></i>Modo de simulação (desenvolvimento)</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="small mb-2">
+                            Ferramenta só para validar o fluxo interno do Job Engine. <strong>Não executa nada no computador</strong>
+                            e não é o comportamento de produção. Etapa atual: <strong>{{ current.name }}</strong>.
+                        </p>
+                        <form method="post" action="{{ action_url }}" class="d-flex flex-wrap gap-2">
+                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+                            <input type="hidden" name="job" value="{{ job.id }}" />
+                            <input type="hidden" name="step" value="{{ current.id }}" />
+                            <input type="hidden" name="action" value="simulate" />
+                            <button type="submit" name="result" value="SUCCESS" class="btn btn-sm btn-success"><i class="ti ti-check"></i> Marcar SUCCESS</button>
+                            <button type="submit" name="result" value="FAILED" class="btn btn-sm btn-danger"><i class="ti ti-x"></i> Marcar FAILED</button>
+                            {% if current.status != 'WAITING_HUMAN' %}
+                                <button type="submit" name="result" value="WAITING_HUMAN" class="btn btn-sm btn-warning"><i class="ti ti-hand-stop"></i> Marcar WAITING_HUMAN</button>
+                            {% endif %}
+                            <button type="submit" name="result" value="SKIPPED" class="btn btn-sm btn-secondary"><i class="ti ti-player-skip-forward"></i> Marcar SKIPPED</button>
+                        </form>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="col-xl-4">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-info-circle me-2 text-primary"></i>Dados</h3>
+                </div>
+                <div class="card-body">
+                    <dl class="aw-dl mb-0">
+                        <dt>Computador</dt>
+                        <dd>{% if job.computers_id %}<a href="{{ computer_url }}">{{ job.computer_name }}</a>{% else %}—{% endif %}</dd>
+                        <dt>Funcionário</dt><dd>{{ job.employee_name ?: '—' }}</dd>
+                        <dt>Conta Microsoft</dt><dd class="text-break">{{ job.upn ?: '—' }}</dd>
+                        <dt>Perfil utilizado</dt><dd>{{ job.profile_name ?: '—' }}</dd>
+                        <dt>Iniciado por</dt><dd>{{ job.requester }}</dd>
+                        <dt>Criado em</dt><dd>{{ job.date_creation ? job.date_creation|formatted_datetime : '—' }}</dd>
+                        <dt>Iniciado em</dt><dd>{{ job.date_start ? job.date_start|formatted_datetime : '—' }}</dd>
+                        <dt>Concluído em</dt><dd>{{ job.date_end ? job.date_end|formatted_datetime : '—' }}</dd>
+                        <dt>Atualizado em</dt><dd>{{ job.date_mod ? job.date_mod|formatted_datetime : '—' }}</dd>
+                    </dl>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-file-text me-2 text-primary"></i>Eventos</h3>
+                </div>
+                <div class="card-body p-0">
+                    {% if events|length == 0 %}
+                        <div class="text-muted p-3">Nenhum evento.</div>
+                    {% else %}
+                        <div class="aw-log aw-log-embedded">
+                            {% for event in events %}
+                                <div class="aw-log-line aw-log-{{ event.level|lower }}">
+                                    <span class="aw-log-date">{{ event.date ? event.date|formatted_datetime : '' }}</span>
+                                    <span class="badge {{ level_badges[event.level] ?? 'bg-secondary-lt' }}">{{ event.level }}</span>
+                                    <span class="aw-log-message">{{ event.message }}{% if event.user_name %} <span class="text-muted">· {{ event.user_name }}</span>{% endif %}</span>
+                                    {% if event.context %}
+                                        <details class="w-100"><summary class="small text-muted">Metadados</summary><pre class="aw-log-context">{{ event.context }}</pre></details>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    // Tempo real: consulta o job e recarrega a pagina quando algo muda
+    // (sem recarregar com um formulario/confirmacao em uso).
+    var root = document.querySelector('[data-aw-job-page]');
+    if (!root) {
+        return;
+    }
+    var url = root.getAttribute('data-url');
+    var refresh = Math.max(2000, Number(root.getAttribute('data-refresh')) || 5000);
+    var signature = root.getAttribute('data-signature');
+    var live = root.querySelector('[data-aw-job-live]');
+
+    function tick() {
+        if (document.hidden) {
+            return setTimeout(tick, refresh);
+        }
+        fetch(url, {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'}})
+            .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
+            .then(function (data) {
+                if (live) { live.classList.remove('aw-live-off'); live.textContent = 'Ao vivo'; }
+                var current = data.job.status + '|' + (data.job.date_mod || '') + '|' + data.job.progress;
+                if (current !== signature && !document.querySelector('details[open]')) {
+                    window.location.reload();
+                    return;
+                }
+                setTimeout(tick, refresh);
+            })
+            .catch(function () {
+                if (live) { live.classList.add('aw-live-off'); live.textContent = 'Reconectando…'; }
+                setTimeout(tick, refresh * 2);
+            });
+    }
+    setTimeout(tick, refresh);
+})();
+</script>
+{% endblock %}

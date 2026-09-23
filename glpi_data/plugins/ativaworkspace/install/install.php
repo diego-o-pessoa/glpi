@@ -201,11 +201,95 @@ function plugin_ativaworkspace_do_install(): bool
             $migration->addKey($appsTable, 'category');
         }
 
+        // 0.4.0 (Etapa 3): Job Engine. Job e etapas guardam um snapshot
+        // completo do perfil; eventos ligam tambem a etapa do job.
+        $engineFields = [
+            'glpi_plugin_ativaworkspace_jobs' => [
+                'upn'                              => "varchar(255) NOT NULL DEFAULT ''",
+                'profile_name'                     => "varchar(255) NOT NULL DEFAULT ''",
+                'plugin_ativaworkspace_jobsteps_id'=> "int {$sign} NOT NULL DEFAULT '0'",
+                'progress'                         => "int NOT NULL DEFAULT '0'",
+            ],
+            'glpi_plugin_ativaworkspace_jobsteps' => [
+                'plugin_ativaworkspace_applications_id' => "int {$sign} NOT NULL DEFAULT '0'",
+                'config'            => 'longtext',
+                // Copia do aplicativo/perfil no momento da criacao do job.
+                'snapshot'          => 'longtext',
+                'is_mandatory'      => "tinyint NOT NULL DEFAULT '1'",
+                'continue_on_error' => "tinyint NOT NULL DEFAULT '0'",
+                'timeout_minutes'   => "int NOT NULL DEFAULT '0'",
+                'max_attempts'      => "int NOT NULL DEFAULT '1'",
+                'attempts'          => "int NOT NULL DEFAULT '0'",
+            ],
+            'glpi_plugin_ativaworkspace_events' => [
+                'plugin_ativaworkspace_jobsteps_id' => "int {$sign} NOT NULL DEFAULT '0'",
+            ],
+        ];
+        foreach ($engineFields as $table => $fields) {
+            foreach ($fields as $field => $definition) {
+                if (!$DB->fieldExists($table, $field)) {
+                    $migration->addField($table, $field, $definition);
+                    if (str_ends_with($field, '_id')) {
+                        $migration->addKey($table, $field);
+                    }
+                }
+            }
+        }
+
         $migration->executeMigration();
+
+        // 0.4.0: status passam a ser os do Job Engine (maiusculos). Linhas de
+        // versoes anteriores sao convertidas; nenhuma e apagada.
+        $statusMap = [
+            'glpi_plugin_ativaworkspace_jobs' => [
+                'pending' => 'QUEUED', 'running' => 'RUNNING', 'waiting_intervention' => 'WAITING_INTERVENTION',
+                'failed' => 'FAILED', 'completed' => 'COMPLETED', 'cancelled' => 'CANCELED',
+            ],
+            'glpi_plugin_ativaworkspace_jobsteps' => [
+                'pending' => 'PENDING', 'running' => 'RUNNING', 'waiting_intervention' => 'WAITING_HUMAN',
+                'failed' => 'FAILED', 'completed' => 'SUCCESS', 'skipped' => 'SKIPPED', 'cancelled' => 'CANCELED',
+            ],
+        ];
+        foreach ($statusMap as $table => $map) {
+            foreach ($map as $old => $new) {
+                $DB->update($table, ['status' => $new], ['status' => $old]);
+            }
+        }
+        // Jobs de versoes anteriores: grava o nome do perfil no proprio job.
+        foreach ($DB->request([
+            'SELECT'    => ['j.id', 'p.name'],
+            'FROM'      => 'glpi_plugin_ativaworkspace_jobs AS j',
+            'INNER JOIN' => [
+                'glpi_plugin_ativaworkspace_provisioningprofiles AS p' => [
+                    'ON' => ['p' => 'id', 'j' => 'plugin_ativaworkspace_provisioningprofiles_id'],
+                ],
+            ],
+            'WHERE'     => ['j.profile_name' => ''],
+        ]) as $row) {
+            $DB->update('glpi_plugin_ativaworkspace_jobs', ['profile_name' => (string) $row['name']], ['id' => (int) $row['id']]);
+        }
+
+        if ($DB->fieldExists('glpi_plugin_ativaworkspace_jobs', 'status')) {
+            $DB->doQuery("ALTER TABLE `glpi_plugin_ativaworkspace_jobs` ALTER `status` SET DEFAULT 'QUEUED'");
+            $DB->doQuery("ALTER TABLE `glpi_plugin_ativaworkspace_jobsteps` ALTER `status` SET DEFAULT 'PENDING'");
+        }
 
         Config::setConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, [
             'schema_version' => PLUGIN_ATIVAWORKSPACE_VERSION,
         ]);
+        // Modo de simulacao do Job Engine: sempre nasce desligado.
+        $current = Config::getConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, ['simulation_enabled']);
+        if (!array_key_exists('simulation_enabled', $current)) {
+            Config::setConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, ['simulation_enabled' => 0]);
+        }
+
+        // Reconciliacao periodica dos jobs ativos (timeouts, etapa atual).
+        CronTask::register(
+            'GlpiPlugin\\Ativaworkspace\\ProvisioningEngine',
+            'ProcessJobs',
+            MINUTE_TIMESTAMP,
+            ['state' => CronTask::STATE_WAITING, 'comment' => 'Ativa Workspace - Job Engine']
+        );
 
         require_once PLUGIN_ATIVAWORKSPACE_DIR . '/inc/profile.class.php';
         PluginAtivaworkspaceProfile::installRights();
@@ -234,7 +318,8 @@ function plugin_ativaworkspace_do_uninstall(): bool
         }
     }
 
-    Config::deleteConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, ['schema_version']);
+    Config::deleteConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, ['schema_version', 'simulation_enabled']);
+    CronTask::unregister('ativaworkspace');
 
     // Os instaladores so fazem sentido com as tabelas; saem juntos.
     require_once PLUGIN_ATIVAWORKSPACE_DIR . '/src/InstallerStorage.php';

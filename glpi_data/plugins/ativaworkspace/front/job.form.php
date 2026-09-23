@@ -2,15 +2,14 @@
 
 declare(strict_types=1);
 
-use GlpiPlugin\Ativaworkspace\Event;
-use GlpiPlugin\Ativaworkspace\Job;
 use GlpiPlugin\Ativaworkspace\Page;
+use GlpiPlugin\Ativaworkspace\ProvisioningEngine;
 
 include('../../../inc/includes.php');
 
-// Cria um provisionamento (so coloca na fila). Chamado por AJAX pelo modal
-// "Novo provisionamento": o CSRF vem no header X-Glpi-Csrf-Token e ja foi
-// validado pelo GLPI (CheckCsrfListener) antes de chegar aqui.
+// Cria e inicia um provisionamento. Chamado por AJAX pelo modal "Novo
+// provisionamento": o CSRF vem no header X-Glpi-Csrf-Token e ja foi validado
+// pelo GLPI (CheckCsrfListener) antes de chegar aqui.
 Page::requireAccess('provisioning');
 PluginAtivaworkspaceProfile::requireRight(PluginAtivaworkspaceProfile::RIGHT_PROVISION, CREATE);
 
@@ -25,15 +24,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 try {
-    $id = Job::enqueue(
+    $id = ProvisioningEngine::create(
         (int) ($_POST['computers_id'] ?? 0),
         (int) ($_POST['plugin_ativaworkspace_provisioningprofiles_id'] ?? 0),
-        (string) ($_POST['employee_name'] ?? '')
+        (string) ($_POST['employee_name'] ?? ''),
+        (string) ($_POST['upn'] ?? '')
     );
 } catch (RuntimeException $exception) {
-    Event::log(Event::LEVEL_WARNING, 'provisioning', 'Provisionamento recusado: ' . $exception->getMessage(), [
-        'computers_id' => (int) ($_POST['computers_id'] ?? 0),
-    ]);
     http_response_code(422);
     echo json_encode(['ok' => false, 'message' => $exception->getMessage()], JSON_UNESCAPED_UNICODE);
     return;
@@ -42,5 +39,6 @@ try {
 echo json_encode([
     'ok'      => true,
     'id'      => $id,
-    'message' => 'Provisionamento colocado na fila.',
-], JSON_UNESCAPED_UNICODE);
+    'url'     => Page::href('job', ['id' => $id]),
+    'message' => 'Provisionamento #' . $id . ' iniciado.',
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

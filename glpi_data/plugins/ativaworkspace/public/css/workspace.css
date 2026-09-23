@@ -627,6 +627,87 @@
     min-width: 0;
 }
 
+/* ------------------------------------------------------ tela do job */
+
+.ativaworkspace .aw-pill-lg {
+    font-size: 0.9rem;
+    padding: 0.35rem 0.9rem;
+}
+
+.ativaworkspace .aw-progress-lg {
+    height: 10px;
+}
+
+.ativaworkspace .aw-job-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.ativaworkspace .aw-job-step {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    padding: 0.7rem 0.6rem;
+    border-radius: 8px;
+    border-bottom: 1px solid var(--tblr-border-color, rgba(108, 122, 145, 0.15));
+}
+
+.ativaworkspace .aw-job-step:last-child {
+    border-bottom: 0;
+}
+
+/* Pendentes em cinza claro ("○"), a atual destacada ("●"). */
+.ativaworkspace .aw-job-step-secondary .aw-timeline-dot {
+    background: transparent;
+    color: var(--aw-gray);
+    border: 2px solid rgba(108, 122, 145, 0.45);
+}
+
+.ativaworkspace .aw-job-step-current {
+    background: rgba(31, 111, 224, 0.06);
+    box-shadow: inset 3px 0 0 var(--aw-blue);
+}
+
+.ativaworkspace .aw-job-step-current.aw-job-step-warning {
+    background: rgba(240, 140, 0, 0.07);
+    box-shadow: inset 3px 0 0 var(--aw-orange);
+}
+
+.ativaworkspace .aw-job-step-current.aw-job-step-danger {
+    background: rgba(214, 57, 57, 0.06);
+    box-shadow: inset 3px 0 0 var(--aw-red);
+}
+
+.ativaworkspace .aw-simulation {
+    border: 2px dashed rgba(174, 62, 201, 0.55);
+    background: rgba(174, 62, 201, 0.05);
+}
+
+.ativaworkspace .aw-simulation .card-header,
+.ativaworkspace .aw-simulation .fw-bold {
+    color: var(--aw-purple);
+}
+
+.ativaworkspace .aw-dl dt {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--tblr-muted, var(--aw-gray));
+}
+
+.ativaworkspace .aw-dl dd {
+    margin-bottom: 0.6rem;
+    font-weight: 500;
+}
+
+.ativaworkspace .aw-log-embedded {
+    border: 0;
+    border-radius: 0;
+    max-height: 520px;
+}
+
 /* --------------------------------------------------------- outras telas */
 
 .ativaworkspace .aw-truncate {
