@@ -13,6 +13,17 @@ class PluginAtivaworkspaceMenu extends CommonGLPI
         return 'Ativa Workspace';
     }
 
+    /** Icone da secao na barra lateral (lido pelo Html::generateMenuSession). */
+    public static function getIcon(): string
+    {
+        return 'ti ti-device-desktop';
+    }
+
+    /**
+     * Menu multi-entradas: cada secao vira um subitem da secao "Ativa Workspace".
+     * A chave 'title' so da nome a secao; o template do menu ignora o que nao
+     * tem 'page'. As chaves das entradas sao as que o Html::header recebe.
+     */
     public static function getMenuContent(): array
     {
         if (!PluginAtivaworkspaceProfile::canViewWorkspace()) {
@@ -20,22 +31,21 @@ class PluginAtivaworkspaceMenu extends CommonGLPI
         }
 
         $menu = [
-            'title' => self::getMenuName(),
-            'page'  => Page::url('overview'),
-            'icon'  => 'ti ti-rocket',
+            'title'            => self::getMenuName(),
+            'is_multi_entries' => true,
         ];
 
         foreach (Page::sections() as $key => $section) {
             if (!Page::canAccess($key)) {
                 continue;
             }
-            $menu['options'][$key] = [
+            $menu[$key] = [
                 'title' => $section['title'],
                 'page'  => Page::url($key),
                 'icon'  => $section['icon'],
             ];
             if (isset($section['form']) && Session::haveRight($section['right'], CREATE)) {
-                $menu['options'][$key]['links']['add'] = Page::url($section['form']);
+                $menu[$key]['links']['add'] = Page::url($section['form']);
             }
         }
 

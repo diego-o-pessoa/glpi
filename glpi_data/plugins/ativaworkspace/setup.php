@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_ATIVAWORKSPACE_VERSION', '0.1.0');
+define('PLUGIN_ATIVAWORKSPACE_VERSION', '0.2.0');
 define('PLUGIN_ATIVAWORKSPACE_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVAWORKSPACE_MAX_GLPI', '11.1.0');
 define('PLUGIN_ATIVAWORKSPACE_DIR', __DIR__);
@@ -44,7 +44,11 @@ function plugin_init_ativaworkspace(): void
     Plugin::registerClass(PluginAtivaworkspaceProfile::class, ['addtabon' => [Profile::class]]);
 
     if (PluginAtivaworkspaceProfile::canViewWorkspace()) {
-        $PLUGIN_HOOKS['menu_toadd']['ativaworkspace']['admin'] = PluginAtivaworkspaceMenu::class;
+        // Chave nova + valor em array = secao propria na barra lateral
+        // (Html::generateMenuSession), com os subitens do menu multi-entradas.
+        $PLUGIN_HOOKS['menu_toadd']['ativaworkspace'] = [
+            'ativaworkspace' => [PluginAtivaworkspaceMenu::class],
+        ];
     }
 
     if (Session::haveRight(PluginAtivaworkspaceProfile::RIGHT_CONFIG, READ)) {

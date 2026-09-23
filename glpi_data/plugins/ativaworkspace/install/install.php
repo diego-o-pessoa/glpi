@@ -68,6 +68,7 @@ function plugin_ativaworkspace_tables(): array
             `computers_id` int {$sign} NOT NULL DEFAULT '0',
             `plugin_ativaworkspace_provisioningprofiles_id` int {$sign} NOT NULL DEFAULT '0',
             `status` varchar(32) NOT NULL DEFAULT 'pending',
+            `employee_name` varchar(255) NOT NULL DEFAULT '',
             `users_id` int {$sign} NOT NULL DEFAULT '0',
             `message` varchar(255) NOT NULL DEFAULT '',
             `date_start` timestamp NULL DEFAULT NULL,
@@ -145,6 +146,13 @@ function plugin_ativaworkspace_do_install(): bool
                     PRIMARY KEY (`id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} ROW_FORMAT=DYNAMIC"
             );
+        }
+
+        // 0.2.0: funcionario que vai usar a maquina (texto: o funcionario novo
+        // pode ainda nao existir como usuario do GLPI).
+        $jobsTable = 'glpi_plugin_ativaworkspace_jobs';
+        if (!$DB->fieldExists($jobsTable, 'employee_name')) {
+            $migration->addField($jobsTable, 'employee_name', "varchar(255) NOT NULL DEFAULT ''", ['after' => 'status']);
         }
 
         $migration->executeMigration();

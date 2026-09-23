@@ -1,21 +1,17 @@
-{# Layout comum: navegacao entre as secoes do Workspace + conteudo da secao. #}
+{# Layout comum. A navegacao entre secoes fica na barra lateral do GLPI
+   (secao "Ativa Workspace"). A Visao Geral substitui o bloco header. #}
 <div class="ativaworkspace">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-        <h2 class="page-title mb-0">
-            <i class="ti ti-rocket me-2 text-primary"></i>Ativa Workspace
-        </h2>
-    </div>
-
-    <ul class="nav nav-pills aw-nav mb-3">
-        {% for entry in nav %}
-            <li class="nav-item">
-                <a class="nav-link {{ entry.active ? 'active' : '' }}" href="{{ entry.href }}"
-                   {% if entry.active %}aria-current="page"{% endif %}>
-                    <i class="{{ entry.icon }} me-1"></i>{{ entry.title }}
-                </a>
-            </li>
-        {% endfor %}
-    </ul>
+    {% block header %}
+        <div class="card aw-hero aw-hero-compact mb-3">
+            <div class="card-body d-flex align-items-center gap-3">
+                <span class="aw-hero-icon"><i class="{{ section_icon }}"></i></span>
+                <div>
+                    <div class="aw-hero-kicker">Ativa Workspace</div>
+                    <h2 class="aw-hero-title mb-0">{{ section_title }}</h2>
+                </div>
+            </div>
+        </div>
+    {% endblock %}
 
     {% block content %}{% endblock %}
 </div>

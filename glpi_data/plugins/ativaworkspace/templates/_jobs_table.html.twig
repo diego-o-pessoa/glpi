@@ -1,0 +1,29 @@
+{# Tabela de provisionamentos. As linhas sao montadas e atualizadas pelo
+   workspace.js a partir do JSON (mesmo formato de Job::present()). #}
+<div class="table-responsive">
+    <table class="table table-vcenter card-table aw-jobs-table mb-0">
+        <thead>
+            <tr>
+                <th>Computador</th>
+                <th>Funcionário</th>
+                <th>Perfil</th>
+                <th>Status</th>
+                <th class="aw-col-progress">Progresso</th>
+                <th>Início</th>
+                <th>Responsável</th>
+                <th class="text-end">Ações</th>
+            </tr>
+        </thead>
+        <tbody data-aw-jobs>
+            <tr class="aw-empty-row">
+                <td colspan="8">
+                    <div class="empty py-4">
+                        <div class="empty-icon"><i class="ti ti-device-desktop-off"></i></div>
+                        <p class="empty-title">Nenhum provisionamento ainda</p>
+                        <p class="empty-subtitle text-muted">Use "Novo provisionamento" para colocar um computador na fila.</p>
+                    </div>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>

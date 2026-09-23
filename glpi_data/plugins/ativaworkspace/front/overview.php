@@ -2,17 +2,28 @@
 
 declare(strict_types=1);
 
-use GlpiPlugin\Ativaworkspace\Event;
-use GlpiPlugin\Ativaworkspace\Job;
+use GlpiPlugin\Ativaworkspace\Environment;
+use GlpiPlugin\Ativaworkspace\Overview;
 use GlpiPlugin\Ativaworkspace\Page;
+use GlpiPlugin\Ativaworkspace\ProvisioningProfile;
 
 include('../../../inc/includes.php');
 
 Page::requireAccess('overview');
 
+$jobsLimit   = 8;
+$eventsLimit = 8;
+
+$plugins      = Environment::relatedPlugins();
+$canProvision = (bool) Session::haveRight(PluginAtivaworkspaceProfile::RIGHT_PROVISION, CREATE);
+
 Page::render('overview', 'overview.html.twig', [
-    'counts'       => Job::overviewCounts(),
-    'events'       => Event::recent(10),
-    'provisioning' => Page::href('provisioning'),
-    'logs'         => Page::href('logs'),
+    'live'          => Page::liveConfig(Overview::payload($jobsLimit, $eventsLimit), $jobsLimit, $eventsLimit),
+    'plugins'       => $plugins,
+    'all_active'    => Environment::allRelatedActive($plugins),
+    'can_provision' => $canProvision,
+    'profiles'      => $canProvision ? ProvisioningProfile::activeChoices() : [],
+    'provisioning'  => Page::href('provisioning'),
+    'logs'          => Page::href('logs'),
+    'profiles_url'  => Page::href('profiles'),
 ]);

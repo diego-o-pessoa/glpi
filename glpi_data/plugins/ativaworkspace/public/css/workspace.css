@@ -1,8 +1,527 @@
-/* Ativa Workspace - complementos ao Tabler do GLPI (escopo .ativaworkspace). */
+/*
+ * Ativa Workspace - complementos ao Tabler do GLPI (escopo .ativaworkspace).
+ * Cores em rgba sobre as variaveis do Tabler para funcionar nos temas escuros.
+ */
 
-.ativaworkspace .aw-nav .nav-link {
+.ativaworkspace {
+    --aw-blue: #1f6fe0;
+    --aw-orange: #f08c00;
+    --aw-red: #d63939;
+    --aw-green: #2fb344;
+    --aw-purple: #ae3ec9;
+    --aw-gray: #6c7a91;
+    --aw-radius: 10px;
+}
+
+.ativaworkspace .card {
+    border-radius: var(--aw-radius);
+}
+
+/* ---------------------------------------------------------------- hero */
+
+.ativaworkspace .aw-hero .card-body {
+    padding: 1.25rem 1.5rem;
+}
+
+.ativaworkspace .aw-hero-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    flex: 0 0 56px;
+    border-radius: 12px;
+    background: rgba(31, 111, 224, 0.1);
+    color: var(--aw-blue);
+    font-size: 2rem;
+}
+
+.ativaworkspace .aw-hero-compact .aw-hero-icon {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+    font-size: 1.5rem;
+}
+
+.ativaworkspace .aw-hero-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.ativaworkspace .aw-hero-compact .aw-hero-title {
+    font-size: 1.35rem;
+}
+
+.ativaworkspace .aw-hero-kicker {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--tblr-muted, var(--aw-gray));
+}
+
+.ativaworkspace .aw-hero-subtitle {
+    color: var(--tblr-muted, var(--aw-gray));
+    font-size: 1rem;
+}
+
+.ativaworkspace .aw-hero-action {
+    padding-inline: 1.25rem;
+    font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- banner */
+
+.ativaworkspace .aw-banner {
+    overflow: hidden;
+    background: linear-gradient(120deg, rgba(31, 111, 224, 0.06), rgba(31, 111, 224, 0.14));
+}
+
+.ativaworkspace .aw-banner .card-body {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: 112px;
+    padding: 1rem 1.25rem;
+}
+
+.ativaworkspace .aw-banner-text {
+    position: relative;
+    z-index: 1;
+    max-width: 58%;
+}
+
+.ativaworkspace .aw-banner-title {
+    font-weight: 700;
+    color: var(--aw-blue);
+    margin-bottom: 0.35rem;
+}
+
+.ativaworkspace .aw-banner-subtitle {
+    font-size: 0.85rem;
+    color: var(--tblr-muted, var(--aw-gray));
+}
+
+.ativaworkspace .aw-banner-art {
+    position: absolute;
+    right: -6px;
+    bottom: 0;
+    width: 52%;
+    max-width: 230px;
+    height: auto;
+}
+
+/* ------------------------------------------------------------------- kpi */
+
+.ativaworkspace .aw-kpi {
+    border-width: 1px;
+}
+
+.ativaworkspace .aw-kpi .card-body {
+    padding: 1.1rem 1.25rem;
+}
+
+.ativaworkspace .aw-kpi-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border-radius: 50%;
+    font-size: 1.4rem;
+    color: #fff;
+}
+
+.ativaworkspace .aw-kpi-label {
+    font-weight: 600;
+}
+
+.ativaworkspace .aw-kpi-value {
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1.15;
+}
+
+.ativaworkspace .aw-kpi-hint {
+    font-size: 0.8rem;
+    color: var(--tblr-muted, var(--aw-gray));
+}
+
+.ativaworkspace .aw-kpi-blue   { background: rgba(31, 111, 224, 0.06); border-color: rgba(31, 111, 224, 0.18); }
+.ativaworkspace .aw-kpi-orange { background: rgba(240, 140, 0, 0.08); border-color: rgba(240, 140, 0, 0.22); }
+.ativaworkspace .aw-kpi-red    { background: rgba(214, 57, 57, 0.07); border-color: rgba(214, 57, 57, 0.2); }
+.ativaworkspace .aw-kpi-green  { background: rgba(47, 179, 68, 0.07); border-color: rgba(47, 179, 68, 0.2); }
+
+.ativaworkspace .aw-kpi-blue .aw-kpi-icon   { background: var(--aw-blue); }
+.ativaworkspace .aw-kpi-orange .aw-kpi-icon { background: var(--aw-orange); }
+.ativaworkspace .aw-kpi-red .aw-kpi-icon    { background: var(--aw-red); }
+.ativaworkspace .aw-kpi-green .aw-kpi-icon  { background: var(--aw-green); }
+
+.ativaworkspace .aw-kpi-blue .aw-kpi-label   { color: var(--aw-blue); }
+.ativaworkspace .aw-kpi-orange .aw-kpi-label { color: var(--aw-orange); }
+.ativaworkspace .aw-kpi-red .aw-kpi-label    { color: var(--aw-red); }
+.ativaworkspace .aw-kpi-green .aw-kpi-label  { color: var(--aw-green); }
+
+/* ------------------------------------------------------------ cabecalhos */
+
+.ativaworkspace .card-header .card-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+.ativaworkspace .aw-see-all {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.ativaworkspace .aw-live-dot {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--tblr-muted, var(--aw-gray));
+}
+
+.ativaworkspace .aw-live-dot::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--aw-green);
+    box-shadow: 0 0 0 0 rgba(47, 179, 68, 0.6);
+    animation: aw-pulse 2s infinite;
+}
+
+.ativaworkspace .aw-live-dot.aw-live-off::before {
+    background: var(--aw-orange);
+    animation: none;
+}
+
+@keyframes aw-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(47, 179, 68, 0.55); }
+    70%  { box-shadow: 0 0 0 6px rgba(47, 179, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(47, 179, 68, 0); }
+}
+
+/* --------------------------------------------------------------- tabela */
+
+.ativaworkspace .aw-jobs-table thead th {
+    background: rgba(108, 122, 145, 0.07);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+
+.ativaworkspace .aw-jobs-table td {
+    vertical-align: middle;
+}
+
+.ativaworkspace .aw-computer {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ativaworkspace .aw-row-failed {
+    background: rgba(214, 57, 57, 0.035);
+}
+
+.ativaworkspace .aw-col-progress {
+    min-width: 150px;
+}
+
+.ativaworkspace .aw-progress-value {
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.ativaworkspace .aw-progress {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(108, 122, 145, 0.18);
+    overflow: hidden;
+    margin-top: 0.2rem;
+}
+
+.ativaworkspace .aw-progress-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--aw-gray);
+    transition: width 0.6s ease;
+}
+
+.ativaworkspace .aw-progress-running .aw-progress-bar {
+    background-color: var(--aw-blue);
+    background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.25) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.25) 50%, rgba(255, 255, 255, 0.25) 75%, transparent 75%, transparent);
+    background-size: 12px 12px;
+    animation: aw-stripes 1s linear infinite;
+}
+
+.ativaworkspace .aw-progress-waiting .aw-progress-bar   { background: var(--aw-orange); }
+.ativaworkspace .aw-progress-failed .aw-progress-bar    { background: var(--aw-red); }
+.ativaworkspace .aw-progress-completed .aw-progress-bar { background: var(--aw-green); }
+
+@keyframes aw-stripes {
+    from { background-position: 12px 0; }
+    to   { background-position: 0 0; }
+}
+
+.ativaworkspace .aw-progress-steps {
+    font-size: 0.72rem;
+    color: var(--tblr-muted, var(--aw-gray));
+    margin-top: 0.15rem;
+}
+
+/* ------------------------------------------------------------------ pill */
+
+.ativaworkspace .aw-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ativaworkspace .aw-pill-running   { background: rgba(31, 111, 224, 0.12); color: var(--aw-blue); }
+.ativaworkspace .aw-pill-waiting   { background: rgba(240, 140, 0, 0.14); color: #c26d00; }
+.ativaworkspace .aw-pill-completed { background: rgba(47, 179, 68, 0.14); color: #228a36; }
+.ativaworkspace .aw-pill-failed    { background: rgba(214, 57, 57, 0.13); color: var(--aw-red); }
+.ativaworkspace .aw-pill-queued,
+.ativaworkspace .aw-pill-cancelled { background: rgba(108, 122, 145, 0.14); color: var(--aw-gray); }
+
+/* ------------------------------------------------------------- timeline */
+
+.ativaworkspace .aw-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    position: relative;
+}
+
+.ativaworkspace .aw-timeline-item {
+    position: relative;
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.55rem 0.35rem;
+    border-bottom: 1px solid var(--tblr-border-color, rgba(108, 122, 145, 0.15));
+}
+
+.ativaworkspace .aw-timeline-item:last-child {
+    border-bottom: 0;
+}
+
+/* Linha vertical ligando os pontos. */
+.ativaworkspace .aw-timeline-item:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    left: calc(0.35rem + 14px);
+    top: calc(0.55rem + 30px);
+    bottom: -0.55rem;
+    width: 2px;
+    background: rgba(108, 122, 145, 0.18);
+}
+
+.ativaworkspace .aw-clickable {
+    cursor: pointer;
+    border-radius: 8px;
+}
+
+.ativaworkspace .aw-clickable:hover {
+    background: rgba(31, 111, 224, 0.05);
+}
+
+.ativaworkspace .aw-timeline-dot {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 0.95rem;
+}
+
+.ativaworkspace .aw-dot-success   { background: var(--aw-green); }
+.ativaworkspace .aw-dot-warning   { background: var(--aw-orange); }
+.ativaworkspace .aw-dot-danger    { background: var(--aw-red); }
+.ativaworkspace .aw-dot-purple    { background: var(--aw-purple); }
+.ativaworkspace .aw-dot-blue      { background: var(--aw-blue); }
+.ativaworkspace .aw-dot-secondary { background: var(--aw-gray); }
+
+.ativaworkspace .aw-timeline-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.ativaworkspace .aw-timeline-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.ativaworkspace .aw-timeline-title {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.ativaworkspace .aw-timeline-time {
+    flex: 0 0 auto;
+    font-size: 0.78rem;
+    color: var(--tblr-muted, var(--aw-gray));
+    white-space: nowrap;
+}
+
+.ativaworkspace .aw-timeline-meta {
+    font-size: 0.8rem;
+    color: var(--tblr-muted, var(--aw-gray));
+}
+
+/* --------------------------------------------------------------- modulos */
+
+.ativaworkspace .aw-module {
+    height: 100%;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--tblr-border-color, rgba(108, 122, 145, 0.2));
+    border-radius: var(--aw-radius);
+}
+
+.ativaworkspace .aw-module-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    border-radius: 50%;
+    background: rgba(31, 111, 224, 0.1);
+    color: var(--aw-blue);
+    font-size: 1.3rem;
+}
+
+.ativaworkspace .aw-module-missing .aw-module-icon,
+.ativaworkspace .aw-module-inactive .aw-module-icon {
+    background: rgba(108, 122, 145, 0.12);
+    color: var(--aw-gray);
+}
+
+.ativaworkspace .aw-module-name {
+    font-weight: 600;
+    margin-bottom: 0.2rem;
+}
+
+.ativaworkspace .aw-module-link {
+    color: var(--aw-blue);
+    font-size: 1.1rem;
+}
+
+.ativaworkspace .aw-module-desc {
+    margin-top: 0.6rem;
+    font-size: 0.8rem;
+    color: var(--tblr-muted, var(--aw-gray));
+}
+
+/* ------------------------------------------------------ modal de detalhes */
+
+.aw-detail-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--tblr-muted, #6c7a91);
+}
+
+.aw-detail-value {
     font-weight: 500;
 }
+
+.aw-detail-section {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.6rem;
+}
+
+.aw-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.aw-step {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    padding: 0.45rem 0;
+    border-bottom: 1px solid var(--tblr-border-color, rgba(108, 122, 145, 0.15));
+}
+
+.aw-step:last-child {
+    border-bottom: 0;
+}
+
+.aw-log {
+    font-family: var(--tblr-font-monospace, monospace);
+    font-size: 0.78rem;
+    border: 1px solid var(--tblr-border-color, rgba(108, 122, 145, 0.2));
+    border-radius: 8px;
+    max-height: 320px;
+    overflow: auto;
+}
+
+.aw-log-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    border-bottom: 1px solid var(--tblr-border-color, rgba(108, 122, 145, 0.12));
+}
+
+.aw-log-line:last-child {
+    border-bottom: 0;
+}
+
+.aw-log-date {
+    color: var(--tblr-muted, #6c7a91);
+}
+
+.aw-log-level {
+    font-weight: 700;
+    min-width: 5.5em;
+}
+
+.aw-log-info .aw-log-level     { color: #1f6fe0; }
+.aw-log-warning .aw-log-level  { color: #c26d00; }
+.aw-log-error .aw-log-level    { color: #d63939; }
+.aw-log-security .aw-log-level { color: #ae3ec9; }
+
+.aw-log-error {
+    background: rgba(214, 57, 57, 0.05);
+}
+
+.aw-log-message {
+    flex: 1;
+    min-width: 12em;
+}
+
+.aw-log-context {
+    flex-basis: 100%;
+    margin: 0;
+    padding: 0.35rem 0.5rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: rgba(108, 122, 145, 0.08);
+    border-radius: 6px;
+}
+
+/* --------------------------------------------------------- outras telas */
 
 .ativaworkspace .aw-truncate {
     max-width: 420px;
@@ -15,4 +534,13 @@
     white-space: pre-wrap;
     word-break: break-word;
     font-size: 0.75rem;
+}
+
+@media (max-width: 575.98px) {
+    .ativaworkspace .aw-banner-text {
+        max-width: 100%;
+    }
+    .ativaworkspace .aw-banner-art {
+        display: none;
+    }
 }

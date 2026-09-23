@@ -23,6 +23,29 @@ final class ProvisioningProfile extends CommonDBTM
         return $nb > 1 ? 'Perfis de provisionamento' : 'Perfil de provisionamento';
     }
 
+    /**
+     * Perfis ativos que o usuario pode usar num provisionamento (entidades
+     * ativas, incluindo perfis recursivos das entidades pai).
+     *
+     * @return array<int, string> id => nome
+     */
+    public static function activeChoices(): array
+    {
+        global $DB;
+
+        $table   = self::getTable();
+        $choices = [];
+        foreach ($DB->request([
+            'SELECT' => ['id', 'name'],
+            'FROM'   => $table,
+            'WHERE'  => ['is_active' => 1] + getEntitiesRestrictCriteria($table, '', '', true),
+            'ORDER'  => ['name ASC'],
+        ]) as $row) {
+            $choices[(int) $row['id']] = (string) $row['name'];
+        }
+        return $choices;
+    }
+
     public function prepareInputForAdd($input)
     {
         $input = $this->normalize($input, true);

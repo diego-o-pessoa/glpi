@@ -12,11 +12,23 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 /**
  * Secoes do Workspace: titulo, icone, arquivo e direito exigido. Menu,
- * navegacao das paginas e validacao de acesso saem daqui, para nao divergirem.
+ * navegacao e validacao de acesso saem daqui, para nao divergirem.
  */
 final class Page
 {
     private const BASE = '/plugins/ativaworkspace/front/';
+
+    /** Arquivos que nao sao secoes do menu, mas tem URL propria. */
+    private const EXTRA_FILES = [
+        'profile_form'     => 'profile.form.php',
+        'application_form' => 'application.form.php',
+        'job_form'         => 'job.form.php',
+        'job_data'         => 'job.data.php',
+        'overview_data'    => 'overview.data.php',
+    ];
+
+    /** Intervalo da atualizacao em tempo real das telas (ms). */
+    public const REFRESH_MS = 5000;
 
     /**
      * @return array<string, array{title: string, icon: string, file: string, right: string, form?: string}>
@@ -38,7 +50,7 @@ final class Page
             ],
             'profiles' => [
                 'title' => 'Perfis',
-                'icon'  => 'ti ti-list-details',
+                'icon'  => 'ti ti-users',
                 'file'  => 'profiles.php',
                 'right' => PluginAtivaworkspaceProfile::RIGHT_PROFILES,
                 'form'  => 'profile_form',
@@ -65,12 +77,6 @@ final class Page
         ];
     }
 
-    /** Arquivos que nao sao secoes do menu, mas tem URL propria. */
-    private const EXTRA_FILES = [
-        'profile_form'     => 'profile.form.php',
-        'application_form' => 'application.form.php',
-    ];
-
     /**
      * Caminho relativo ao GLPI (sem root_doc). E o formato que o menu espera:
      * o layout do GLPI aplica path() e prefixa o root_doc sozinho.
@@ -93,6 +99,15 @@ final class Page
         return $query === [] ? $url : $url . '?' . http_build_query($query);
     }
 
+    /** URL de um arquivo estatico do plugin (public/), com cache-bust pela versao. */
+    public static function asset(string $path): string
+    {
+        global $CFG_GLPI;
+
+        return $CFG_GLPI['root_doc'] . '/plugins/ativaworkspace/' . ltrim($path, '/')
+            . '?v=' . rawurlencode(PLUGIN_ATIVAWORKSPACE_VERSION);
+    }
+
     public static function canAccess(string $key): bool
     {
         $section = self::sections()[$key] ?? null;
@@ -113,6 +128,32 @@ final class Page
     }
 
     /**
+     * Configuracao do JS de tempo real (workspace.js), comum a Visao Geral e
+     * ao Provisionamento.
+     *
+     * @param array<string, mixed> $initial dados do primeiro paint (Overview::payload)
+     * @return array<string, mixed>
+     */
+    public static function liveConfig(array $initial, int $jobsLimit, int $eventsLimit): array
+    {
+        global $CFG_GLPI;
+
+        return [
+            'initial'    => $initial,
+            'refreshMs'  => self::REFRESH_MS,
+            'jobsLimit'  => $jobsLimit,
+            'eventsLimit'=> $eventsLimit,
+            'urls'       => [
+                'data'     => self::href('overview_data'),
+                'job'      => self::href('job_data'),
+                'jobForm'  => self::href('job_form'),
+                'computer' => $CFG_GLPI['root_doc'] . '/front/computer.form.php',
+                'logs'     => self::href('logs'),
+            ],
+        ];
+    }
+
+    /**
      * Cabecalho do GLPI + template da secao + rodape.
      *
      * @param array<string, mixed> $vars
@@ -121,25 +162,14 @@ final class Page
     {
         $section = self::sections()[$key];
 
-        Html::header('Ativa Workspace - ' . $section['title'], '', 'admin', 'pluginativaworkspacemenu', $key);
-
-        $nav = [];
-        foreach (self::sections() as $navKey => $navSection) {
-            if (self::canAccess($navKey)) {
-                $nav[] = [
-                    'key'    => $navKey,
-                    'title'  => $navSection['title'],
-                    'icon'   => $navSection['icon'],
-                    'href'   => self::href($navKey),
-                    'active' => $navKey === $key,
-                ];
-            }
-        }
+        // Secao propria "ativaworkspace" na barra lateral; o item ativo e a chave
+        // da entrada no menu multi-entradas (PluginAtivaworkspaceMenu).
+        Html::header('Ativa Workspace - ' . $section['title'], '', 'ativaworkspace', $key);
 
         TemplateRenderer::getInstance()->display('@ativaworkspace/' . $template, $vars + [
-            'nav'           => $nav,
             'section_title' => $section['title'],
             'section_icon'  => $section['icon'],
+            'script_url'    => self::asset('js/workspace.js'),
         ]);
 
         Html::footer();

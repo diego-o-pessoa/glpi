@@ -68,35 +68,62 @@ final class Event extends CommonDBTM
      *
      * @return list<array<string, mixed>>
      */
-    public static function recent(int $limit, ?string $level = null, int $offset = 0): array
+    public static function recent(int $limit, ?string $level = null, int $offset = 0, int $jobsId = 0): array
     {
         global $DB;
 
-        $where = [];
-        if ($level !== null && in_array($level, self::LEVELS, true)) {
-            $where['level'] = $level;
+        $table = self::getTable();
+        $jobs  = Job::getTable();
+        $where = self::where($level);
+        if ($jobsId > 0) {
+            $where["$table.plugin_ativaworkspace_jobs_id"] = $jobsId;
         }
 
         $rows = [];
         foreach ($DB->request([
-            'FROM'   => self::getTable(),
-            'WHERE'  => $where,
-            'ORDER'  => ['date DESC', 'id DESC'],
-            'START'  => max(0, $offset),
-            'LIMIT'  => max(1, min(200, $limit)),
+            'SELECT'    => ["$table.*", 'glpi_computers.name AS computer_name'],
+            'FROM'      => $table,
+            'LEFT JOIN' => [
+                $jobs            => ['ON' => [$jobs => 'id', $table => 'plugin_ativaworkspace_jobs_id']],
+                'glpi_computers' => ['ON' => ['glpi_computers' => 'id', $jobs => 'computers_id']],
+            ],
+            'WHERE'     => $where,
+            'ORDER'     => ["$table.date DESC", "$table.id DESC"],
+            'START'     => max(0, $offset),
+            'LIMIT'     => max(1, min(200, $limit)),
         ]) as $row) {
-            $row['user_name'] = (int) $row['users_id'] > 0 ? getUserName((int) $row['users_id']) : '';
-            $rows[] = $row;
+            $rows[] = [
+                'id'            => (int) $row['id'],
+                'date'          => $row['date'],
+                'level'         => (string) $row['level'],
+                'source'        => (string) $row['source'],
+                'message'       => (string) $row['message'],
+                'context'       => $row['context'],
+                'jobs_id'       => (int) $row['plugin_ativaworkspace_jobs_id'],
+                'computer_name' => (string) ($row['computer_name'] ?? ''),
+                'user_name'     => (int) $row['users_id'] > 0 ? getUserName((int) $row['users_id']) : '',
+            ];
         }
         return $rows;
     }
 
     public static function countByLevel(?string $level = null): int
     {
-        $where = [];
+        return countElementsInTable(self::getTable(), self::where($level));
+    }
+
+    /**
+     * Filtro comum: nivel (opcional) + entidades que o usuario enxerga.
+     *
+     * @return array<string, mixed>
+     */
+    private static function where(?string $level): array
+    {
+        $table = self::getTable();
+        $where = getEntitiesRestrictCriteria($table, '', '', false);
         if ($level !== null && in_array($level, self::LEVELS, true)) {
-            $where['level'] = $level;
+            $where["$table.level"] = $level;
         }
-        return countElementsInTable(self::getTable(), $where);
+        return $where;
     }
 }

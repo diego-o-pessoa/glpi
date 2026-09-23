@@ -1,26 +1,76 @@
 {% extends '@ativaworkspace/_layout.html.twig' %}
 
-{% block content %}
-    {% set kpis = [
-        {'label': 'Provisionamentos ativos', 'value': counts.active, 'icon': 'ti ti-player-play', 'color': 'bg-blue'},
-        {'label': 'Aguardando intervenção', 'value': counts.waiting, 'icon': 'ti ti-hand-stop', 'color': 'bg-warning'},
-        {'label': 'Com falha', 'value': counts.failed, 'icon': 'ti ti-alert-triangle', 'color': 'bg-danger'},
-        {'label': 'Concluídos hoje', 'value': counts.completed_today, 'icon': 'ti ti-circle-check', 'color': 'bg-success'}
-    ] %}
+{% block header %}{% endblock %}
 
+{% block content %}
+<div data-aw-live="{{ live|json_encode }}">
+
+    {# Cabecalho + banner #}
+    <div class="row row-cards mb-3">
+        <div class="col-xl-8">
+            <div class="card aw-hero h-100">
+                <div class="card-body d-flex flex-wrap align-items-center gap-3">
+                    <span class="aw-hero-icon"><i class="ti ti-device-desktop"></i></span>
+                    <div class="flex-fill">
+                        <h1 class="aw-hero-title mb-1">Ativa Workspace</h1>
+                        <div class="aw-hero-subtitle">Orquestração de provisionamento e preparação de máquinas</div>
+                    </div>
+                    {% if can_provision %}
+                        <button type="button" class="btn btn-primary btn-lg aw-hero-action"
+                                data-bs-toggle="modal" data-bs-target="#aw-new-provisioning">
+                            <i class="ti ti-plus me-1"></i> Novo provisionamento
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card aw-banner h-100">
+                <div class="card-body">
+                    <div class="aw-banner-text">
+                        <div class="aw-banner-title">Automatize. Padronize. Simplifique.</div>
+                        <div class="aw-banner-subtitle">Ambientes prontos para pessoas que fazem a sua empresa acontecer.</div>
+                    </div>
+                    <svg class="aw-banner-art" viewBox="0 0 220 130" aria-hidden="true" focusable="false">
+                        <defs>
+                            <linearGradient id="aw-screen" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0" stop-color="#5b9cf5"/>
+                                <stop offset="1" stop-color="#1f5fcf"/>
+                            </linearGradient>
+                            <linearGradient id="aw-wave" x1="0" y1="0" x2="1" y2="0">
+                                <stop offset="0" stop-color="#dbe7fb" stop-opacity="0"/>
+                                <stop offset="1" stop-color="#dbe7fb"/>
+                            </linearGradient>
+                        </defs>
+                        <path d="M0 110 C60 70 120 130 220 70 L220 130 L0 130 Z" fill="url(#aw-wave)"/>
+                        <rect x="58" y="10" width="140" height="92" rx="7" fill="#2b3445"/>
+                        <rect x="64" y="16" width="128" height="80" rx="3" fill="url(#aw-screen)"/>
+                        <text x="128" y="62" text-anchor="middle" font-size="17" font-weight="700" fill="#ffffff" font-family="inherit" letter-spacing="1">ATIVA</text>
+                        <path d="M40 104 H216 L206 114 H50 Z" fill="#c9d3e3"/>
+                        <rect x="112" y="104" width="32" height="3" rx="1.5" fill="#9aa8bf"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Indicadores #}
+    {% set kpis = [
+        {'key': 'active', 'label': 'Provisionamentos ativos', 'hint': 'Em execução no momento', 'icon': 'ti ti-player-play-filled', 'tone': 'blue'},
+        {'key': 'waiting', 'label': 'Aguardando intervenção', 'hint': 'Necessitam de ação manual', 'icon': 'ti ti-clock-filled', 'tone': 'orange'},
+        {'key': 'failed', 'label': 'Com falha', 'hint': 'Falharam na execução', 'icon': 'ti ti-alert-triangle-filled', 'tone': 'red'},
+        {'key': 'completed_today', 'label': 'Concluídos hoje', 'hint': 'Finalizados com sucesso', 'icon': 'ti ti-check', 'tone': 'green'}
+    ] %}
     <div class="row row-cards mb-3">
         {% for kpi in kpis %}
-            <div class="col-sm-6 col-lg-3">
-                <div class="card card-sm">
-                    <div class="card-body">
-                        <div class="row align-items-center">
-                            <div class="col-auto">
-                                <span class="{{ kpi.color }} text-white avatar"><i class="{{ kpi.icon }}"></i></span>
-                            </div>
-                            <div class="col">
-                                <div class="h1 mb-0">{{ kpi.value }}</div>
-                                <div class="text-muted">{{ kpi.label }}</div>
-                            </div>
+            <div class="col-sm-6 col-xl-3">
+                <div class="card aw-kpi aw-kpi-{{ kpi.tone }} h-100">
+                    <div class="card-body d-flex align-items-center gap-3">
+                        <span class="aw-kpi-icon"><i class="{{ kpi.icon }}"></i></span>
+                        <div>
+                            <div class="aw-kpi-label">{{ kpi.label }}</div>
+                            <div class="aw-kpi-value" data-aw-count="{{ kpi.key }}">{{ live.initial.counts[kpi.key] }}</div>
+                            <div class="aw-kpi-hint">{{ kpi.hint }}</div>
                         </div>
                     </div>
                 </div>
@@ -28,13 +78,85 @@
         {% endfor %}
     </div>
 
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h3 class="card-title"><i class="ti ti-activity me-2"></i>Atividade recente</h3>
-            <a href="{{ logs }}" class="btn btn-sm btn-outline-secondary"><i class="ti ti-file-text"></i> Ver todos os logs</a>
+    <div class="row row-cards">
+        <div class="col-xl-8">
+            {# Provisionamentos recentes #}
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-device-desktop me-2 text-primary"></i>Provisionamentos recentes</h3>
+                    <div class="card-actions">
+                        <span class="aw-live-dot me-3" data-aw-live-status title="Atualização em tempo real">Ao vivo</span>
+                        <a href="{{ provisioning }}" class="aw-see-all">Ver todos <i class="ti ti-arrow-right"></i></a>
+                    </div>
+                </div>
+                {{ include('@ativaworkspace/_jobs_table.html.twig') }}
+            </div>
+
+            {# Integracoes e modulos #}
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h3 class="card-title"><i class="ti ti-plug me-2 text-primary"></i>Integrações e módulos</h3>
+                        <div class="text-muted small">Módulos do ecossistema ATIVA detectados e operacionais</div>
+                    </div>
+                    <div class="card-actions">
+                        {% if all_active %}
+                            <span class="text-success fw-medium"><i class="ti ti-circle-check-filled me-1"></i>Todos os módulos operacionais</span>
+                        {% else %}
+                            <span class="text-warning fw-medium"><i class="ti ti-alert-circle-filled me-1"></i>Há módulos indisponíveis</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        {% for plugin in plugins %}
+                            <div class="col-sm-6 col-xxl-3">
+                                <div class="aw-module aw-module-{{ plugin.state }}">
+                                    <div class="d-flex align-items-start gap-2">
+                                        <span class="aw-module-icon"><i class="{{ plugin.icon }}"></i></span>
+                                        <div class="flex-fill">
+                                            <div class="aw-module-name">{{ plugin.name }}</div>
+                                            {% if plugin.state == 'active' %}
+                                                <span class="aw-pill aw-pill-completed"><i class="ti ti-circle-check-filled"></i> {{ plugin.label }}</span>
+                                            {% elseif plugin.state == 'inactive' %}
+                                                <span class="aw-pill aw-pill-waiting"><i class="ti ti-alert-circle-filled"></i> {{ plugin.label }}</span>
+                                            {% else %}
+                                                <span class="aw-pill aw-pill-cancelled"><i class="ti ti-circle-x"></i> {{ plugin.label }}</span>
+                                            {% endif %}
+                                        </div>
+                                        {% if plugin.url %}
+                                            <a href="{{ plugin.url }}" class="aw-module-link" title="Abrir {{ plugin.name }}"><i class="ti ti-external-link"></i></a>
+                                        {% endif %}
+                                    </div>
+                                    <div class="aw-module-desc">{{ plugin.description }}</div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="card-body p-0">
-            {{ include('@ativaworkspace/_events_table.html.twig', {'events': events}) }}
+
+        <div class="col-xl-4">
+            {# Atividade recente #}
+            <div class="card h-100">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-activity me-2 text-primary"></i>Atividade recente</h3>
+                    <div class="card-actions">
+                        <a href="{{ logs }}" class="aw-see-all">Ver todos <i class="ti ti-arrow-right"></i></a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <ul class="aw-timeline" data-aw-events>
+                        <li class="aw-timeline-empty text-muted">Nenhuma atividade registrada.</li>
+                    </ul>
+                </div>
+            </div>
         </div>
     </div>
+
+    {{ include('@ativaworkspace/_modals.html.twig') }}
+</div>
+
+<script src="{{ script_url }}"></script>
 {% endblock %}
