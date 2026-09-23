@@ -1,0 +1,40 @@
+{% extends '@ativaworkspace/_layout.html.twig' %}
+
+{% block content %}
+    {% set kpis = [
+        {'label': 'Provisionamentos ativos', 'value': counts.active, 'icon': 'ti ti-player-play', 'color': 'bg-blue'},
+        {'label': 'Aguardando intervenção', 'value': counts.waiting, 'icon': 'ti ti-hand-stop', 'color': 'bg-warning'},
+        {'label': 'Com falha', 'value': counts.failed, 'icon': 'ti ti-alert-triangle', 'color': 'bg-danger'},
+        {'label': 'Concluídos hoje', 'value': counts.completed_today, 'icon': 'ti ti-circle-check', 'color': 'bg-success'}
+    ] %}
+
+    <div class="row row-cards mb-3">
+        {% for kpi in kpis %}
+            <div class="col-sm-6 col-lg-3">
+                <div class="card card-sm">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-auto">
+                                <span class="{{ kpi.color }} text-white avatar"><i class="{{ kpi.icon }}"></i></span>
+                            </div>
+                            <div class="col">
+                                <div class="h1 mb-0">{{ kpi.value }}</div>
+                                <div class="text-muted">{{ kpi.label }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h3 class="card-title"><i class="ti ti-activity me-2"></i>Atividade recente</h3>
+            <a href="{{ logs }}" class="btn btn-sm btn-outline-secondary"><i class="ti ti-file-text"></i> Ver todos os logs</a>
+        </div>
+        <div class="card-body p-0">
+            {{ include('@ativaworkspace/_events_table.html.twig', {'events': events}) }}
+        </div>
+    </div>
+{% endblock %}

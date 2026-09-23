@@ -1,0 +1,36 @@
+{% extends '@ativaworkspace/_layout.html.twig' %}
+{% import 'components/form/fields_macros.html.twig' as fields %}
+
+{% block content %}
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="ti ti-apps me-2"></i>{{ is_new ? 'Novo aplicativo' : 'Editar aplicativo' }}
+            </h3>
+        </div>
+        <form method="post" action="{{ action_url }}">
+            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+            {% if not is_new %}<input type="hidden" name="id" value="{{ item.id }}" />{% endif %}
+            <div class="card-body">
+                <div class="row">
+                    {{ fields.textField('name', item.name, 'Nome', {'required': true, 'disabled': not can_edit}) }}
+                    {{ fields.dropdownArrayField('provider', item.provider, providers, 'Provider', {'disabled': not can_edit}) }}
+                    {{ fields.textField('desired_version', item.desired_version, 'Versão desejada', {
+                        'disabled': not can_edit,
+                        'helper': 'Deixe em branco para a versão mais recente.'
+                    }) }}
+                    {{ fields.dropdownYesNo('is_active', item.is_active, 'Ativo', {'disabled': not can_edit}) }}
+                    {{ fields.textareaField('comment', item.comment, 'Descrição', {'disabled': not can_edit}) }}
+                </div>
+            </div>
+            <div class="card-footer d-flex justify-content-between">
+                <a href="{{ list_url }}" class="btn btn-outline-secondary"><i class="ti ti-arrow-left"></i> Voltar</a>
+                {% if can_edit %}
+                    <button type="submit" name="{{ is_new ? 'add' : 'update' }}" value="1" class="btn btn-primary">
+                        <i class="ti ti-device-floppy"></i> Salvar
+                    </button>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+{% endblock %}

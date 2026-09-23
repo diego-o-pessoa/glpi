@@ -1,0 +1,46 @@
+{# Tabela de eventos, usada na Visao Geral e em Logs. Espera: events #}
+{% set level_badges = {
+    'INFO': 'bg-blue-lt',
+    'WARNING': 'bg-warning-lt',
+    'ERROR': 'bg-danger-lt',
+    'SECURITY': 'bg-purple-lt'
+} %}
+{% if events|length == 0 %}
+    <div class="empty py-4">
+        <div class="empty-icon"><i class="ti ti-file-off"></i></div>
+        <p class="empty-title">Nenhum evento registrado</p>
+    </div>
+{% else %}
+    <div class="table-responsive">
+        <table class="table table-hover table-striped align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Nível</th>
+                    <th>Origem</th>
+                    <th>Mensagem</th>
+                    <th>Usuário</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for event in events %}
+                <tr>
+                    <td class="text-nowrap">{{ event.date ? event.date|formatted_datetime : '—' }}</td>
+                    <td><span class="badge {{ level_badges[event.level] ?? 'bg-secondary-lt' }}">{{ event.level }}</span></td>
+                    <td><code>{{ event.source }}</code></td>
+                    <td>
+                        {{ event.message }}
+                        {% if event.context %}
+                            <details class="small text-muted mt-1">
+                                <summary>Detalhes</summary>
+                                <pre class="mb-0 aw-context">{{ event.context }}</pre>
+                            </details>
+                        {% endif %}
+                    </td>
+                    <td>{{ event.user_name ?: '—' }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}

@@ -1,0 +1,21 @@
+{# Layout comum: navegacao entre as secoes do Workspace + conteudo da secao. #}
+<div class="ativaworkspace">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <h2 class="page-title mb-0">
+            <i class="ti ti-rocket me-2 text-primary"></i>Ativa Workspace
+        </h2>
+    </div>
+
+    <ul class="nav nav-pills aw-nav mb-3">
+        {% for entry in nav %}
+            <li class="nav-item">
+                <a class="nav-link {{ entry.active ? 'active' : '' }}" href="{{ entry.href }}"
+                   {% if entry.active %}aria-current="page"{% endif %}>
+                    <i class="{{ entry.icon }} me-1"></i>{{ entry.title }}
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
+
+    {% block content %}{% endblock %}
+</div>

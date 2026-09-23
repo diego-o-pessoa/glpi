@@ -1,0 +1,67 @@
+{% extends '@ativaworkspace/_layout.html.twig' %}
+
+{% block content %}
+    {% if show_new %}
+        <div class="alert alert-info">
+            <div class="d-flex">
+                <i class="ti ti-info-circle me-2"></i>
+                <div>
+                    <strong>Novo provisionamento</strong> ainda não está disponível.
+                    A execução (escolher o computador, o perfil e rodar as etapas) entra na próxima etapa do Workspace.
+                    <div class="mt-2"><a href="{{ list_url }}" class="btn btn-sm btn-outline-secondary">Voltar</a></div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h3 class="card-title"><i class="ti ti-rocket me-2"></i>Provisionamentos</h3>
+            {% if can_provision %}
+                <a href="{{ new_url }}" class="btn btn-primary btn-sm"><i class="ti ti-plus"></i> Novo provisionamento</a>
+            {% endif %}
+        </div>
+        <div class="card-body p-0">
+            {% if jobs|length == 0 %}
+                <div class="empty py-4">
+                    <div class="empty-icon"><i class="ti ti-rocket-off"></i></div>
+                    <p class="empty-title">Nenhum provisionamento ainda</p>
+                </div>
+            {% else %}
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Computador</th>
+                                <th>Perfil</th>
+                                <th>Situação</th>
+                                <th>Início</th>
+                                <th>Fim</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for job in jobs %}
+                            <tr>
+                                <td>{{ job.id }}</td>
+                                <td>
+                                    {% if job.computers_id %}
+                                        <a href="{{ computer_url }}?id={{ job.computers_id }}">{{ job.computer_name ?: ('#' ~ job.computers_id) }}</a>
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td>{{ job.profile_name ?: '—' }}</td>
+                                <td>
+                                    <span class="badge {{ job.status_badge }}">{{ job.status_label }}</span>
+                                    {% if job.message %}<div class="small text-muted">{{ job.message }}</div>{% endif %}
+                                </td>
+                                <td>{{ job.date_start ? job.date_start|formatted_datetime : '—' }}</td>
+                                <td>{{ job.date_end ? job.date_end|formatted_datetime : '—' }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

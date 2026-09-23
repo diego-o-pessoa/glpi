@@ -1,0 +1,43 @@
+{% extends '@ativaworkspace/_layout.html.twig' %}
+
+{% block content %}
+    {% set level_badges = {
+        'INFO': 'bg-blue-lt',
+        'WARNING': 'bg-warning-lt',
+        'ERROR': 'bg-danger-lt',
+        'SECURITY': 'bg-purple-lt'
+    } %}
+
+    <div class="card">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h3 class="card-title"><i class="ti ti-file-text me-2"></i>Eventos</h3>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Filtrar por nível">
+                <a href="{{ base_url }}" class="btn {{ level is null ? 'btn-primary' : 'btn-outline-secondary' }}">
+                    Todos <span class="badge bg-secondary-lt ms-1">{{ all_count }}</span>
+                </a>
+                {% for name in levels %}
+                    <a href="{{ base_url }}?level={{ name }}" class="btn {{ level == name ? 'btn-primary' : 'btn-outline-secondary' }}">
+                        {{ name }} <span class="badge {{ level_badges[name] }} ms-1">{{ counts[name] }}</span>
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card-body p-0">
+            {{ include('@ativaworkspace/_events_table.html.twig', {'events': events}) }}
+        </div>
+        {% if pages > 1 %}
+            <div class="card-footer d-flex justify-content-between align-items-center">
+                <span class="text-muted">{{ total }} eventos · página {{ page }} de {{ pages }}</span>
+                <div class="btn-group btn-group-sm">
+                    {% set filter = level ? '&level=' ~ level : '' %}
+                    {% if page > 1 %}
+                        <a class="btn btn-outline-secondary" href="{{ base_url }}?page={{ page - 1 }}{{ filter }}"><i class="ti ti-chevron-left"></i></a>
+                    {% endif %}
+                    {% if page < pages %}
+                        <a class="btn btn-outline-secondary" href="{{ base_url }}?page={{ page + 1 }}{{ filter }}"><i class="ti ti-chevron-right"></i></a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

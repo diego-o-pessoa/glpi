@@ -1,0 +1,48 @@
+{% extends '@ativaworkspace/_layout.html.twig' %}
+
+{% block content %}
+    <div class="row row-cards">
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-info-circle me-2"></i>Ambiente</h3>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-vcenter mb-0">
+                        <tbody>
+                            <tr><th class="w-50">Versão do Workspace</th><td><code>{{ versions.workspace }}</code></td></tr>
+                            <tr><th>Versão do GLPI</th><td><code>{{ versions.glpi }}</code></td></tr>
+                            <tr><th>Versão do PHP</th><td><code>{{ versions.php }}</code></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-plug-connected me-2"></i>Integrações detectadas</h3>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-vcenter mb-0">
+                        <thead>
+                            <tr><th>Plugin</th><th>Situação</th><th>Versão</th></tr>
+                        </thead>
+                        <tbody>
+                        {% for plugin in plugins %}
+                            <tr>
+                                <td>{{ plugin.name }} <div class="small text-muted"><code>{{ plugin.directory }}</code></div></td>
+                                <td><span class="badge {{ plugin.badge }}">{{ plugin.label }}</span></td>
+                                <td>{{ plugin.version ?: '—' }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-footer text-muted small">
+                    Só detecção. Nenhuma integração com esses plugins é feita nesta etapa.
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
