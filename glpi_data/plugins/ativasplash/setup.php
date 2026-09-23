@@ -7,7 +7,7 @@ define('PLUGIN_ATIVASPLASH_VERSION', '2.1.2');
 /**
  * Init the hooks of the plugin
  */
-function plugin_init_ati'vasplash(): void
+function plugin_init_ativasplash(): void
 {
     global $PLUGIN_HOOKS;
 
