@@ -708,6 +708,14 @@
     max-height: 520px;
 }
 
+.ativaworkspace .aw-entra {
+    border-left: 4px solid #0067b8; /* azul Microsoft */
+}
+
+.ativaworkspace .aw-entra .card-title {
+    color: #0067b8;
+}
+
 /* --------------------------------------------------------- outras telas */
 
 .ativaworkspace .aw-truncate {

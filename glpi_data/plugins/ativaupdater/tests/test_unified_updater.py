@@ -50,8 +50,8 @@ class GuardianMaintenanceTests(unittest.TestCase):
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.7.6")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 6))
+        self.assertEqual(updater.UPDATER_VERSION, "1.7.7")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 7))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:

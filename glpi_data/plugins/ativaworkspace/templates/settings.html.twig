@@ -30,6 +30,58 @@
         </div>
     </div>
 
+    {# Microsoft Entra ID + API do executor #}
+    <div class="card mb-3">
+        <div class="card-header">
+            <h3 class="card-title"><i class="ti ti-brand-windows me-2 text-primary"></i>Microsoft Entra ID e executor</h3>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{{ action_url }}" class="row g-3">
+                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+                <div class="col-md-6">
+                    <label class="form-label" for="aw-entra-domain">Domínio do tenant</label>
+                    <input type="text" class="form-control" id="aw-entra-domain" name="entra_domain" value="{{ entra_domain }}"
+                           placeholder="ativalocacao.com.br" {{ can_configure ? '' : 'disabled' }} />
+                    <div class="form-hint">Domínio Microsoft da empresa. Usado para validar o ingresso.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="aw-entra-tenant">Tenant ID (opcional)</label>
+                    <input type="text" class="form-control font-monospace" id="aw-entra-tenant" name="entra_tenant_id" value="{{ entra_tenant_id }}"
+                           placeholder="00000000-0000-0000-0000-000000000000" {{ can_configure ? '' : 'disabled' }} />
+                    <div class="form-hint">GUID do tenant. Se preenchido, o ingresso só é aceito neste tenant (mais seguro que o domínio).</div>
+                </div>
+                {% if can_configure %}
+                    <div class="col-12">
+                        <button type="submit" name="save_entra" value="1" class="btn btn-primary"><i class="ti ti-device-floppy"></i> Salvar Entra</button>
+                    </div>
+                {% endif %}
+            </form>
+
+            <hr>
+
+            <div class="row g-2 align-items-end">
+                <div class="col-md-8">
+                    <label class="form-label" for="aw-api-token">Token da API do executor</label>
+                    <input type="text" class="form-control font-monospace" id="aw-api-token" value="{{ api_token }}" readonly />
+                    <div class="form-hint">
+                        O serviço nas máquinas usa este token para reportar o Entra ao Workspace.
+                        {% if not api_enabled %}<span class="text-warning">API desabilitada.</span>{% endif %}
+                    </div>
+                </div>
+                {% if can_configure %}
+                    <div class="col-md-4 d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" data-aw-copy="#aw-api-token"><i class="ti ti-copy"></i> Copiar</button>
+                        <form method="post" action="{{ action_url }}" class="m-0"
+                              onsubmit="return confirm('Regenerar o token invalida o atual. O serviço das máquinas precisará do token novo. Continuar?');">
+                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+                            <button type="submit" name="regenerate_token" value="1" class="btn btn-outline-danger"><i class="ti ti-refresh"></i> Regenerar</button>
+                        </form>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
     <div class="row row-cards">
         <div class="col-lg-5">
             <div class="card">
@@ -110,4 +162,20 @@
             </div>
         </div>
     </div>
+
+    <script>
+    (function () {
+        document.querySelectorAll('[data-aw-copy]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var target = document.querySelector(btn.getAttribute('data-aw-copy'));
+                if (target && navigator.clipboard) {
+                    navigator.clipboard.writeText(target.value || '').then(function () {
+                        btn.classList.add('btn-success');
+                        setTimeout(function () { btn.classList.remove('btn-success'); }, 1200);
+                    });
+                }
+            });
+        });
+    })();
+    </script>
 {% endblock %}

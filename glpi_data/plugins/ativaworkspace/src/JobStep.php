@@ -107,6 +107,7 @@ final class JobStep extends CommonDBTM
             'timeout_minutes'   => (int) ($row['timeout_minutes'] ?? 0),
             'is_mandatory'      => (int) ($row['is_mandatory'] ?? 1) === 1,
             'continue_on_error' => (int) ($row['continue_on_error'] ?? 0) === 1,
+            'runtime'           => (string) ($row['runtime'] ?? ''),
             'application'       => $snapshot['application'] ?? null,
             'date_start'        => $row['date_start'] ?? null,
             'date_end'          => $row['date_end'] ?? null,

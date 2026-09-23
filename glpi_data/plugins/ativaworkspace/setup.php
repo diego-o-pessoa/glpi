@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
+use Glpi\Http\SessionManager;
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_ATIVAWORKSPACE_VERSION', '0.4.0');
+define('PLUGIN_ATIVAWORKSPACE_VERSION', '0.5.0');
 define('PLUGIN_ATIVAWORKSPACE_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVAWORKSPACE_MAX_GLPI', '11.1.0');
 define('PLUGIN_ATIVAWORKSPACE_DIR', __DIR__);
@@ -34,6 +35,9 @@ function plugin_init_ativaworkspace(): void
     global $PLUGIN_HOOKS;
 
     $PLUGIN_HOOKS[Hooks::CSRF_COMPLIANT]['ativaworkspace'] = true;
+
+    // API do executor (servico nas maquinas): token Bearer proprio, sem sessao.
+    SessionManager::registerPluginStatelessPath('ativaworkspace', '#^/api/v1(?:/|$)#');
 
     $plugin = new Plugin();
     if (!$plugin->isActivated('ativaworkspace')) {

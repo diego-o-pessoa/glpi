@@ -225,6 +225,11 @@ function plugin_ativaworkspace_do_install(): bool
                 'plugin_ativaworkspace_jobsteps_id' => "int {$sign} NOT NULL DEFAULT '0'",
             ],
         ];
+        // 0.5.0 (etapa ENTRA_LOGIN): estado interno do executor por etapa
+        // (subestado, DeviceId/TenantId observados, log tecnico). Sem segredos.
+        if (!$DB->fieldExists('glpi_plugin_ativaworkspace_jobsteps', 'runtime')) {
+            $migration->addField('glpi_plugin_ativaworkspace_jobsteps', 'runtime', 'longtext');
+        }
         foreach ($engineFields as $table => $fields) {
             foreach ($fields as $field => $definition) {
                 if (!$DB->fieldExists($table, $field)) {
@@ -277,10 +282,31 @@ function plugin_ativaworkspace_do_install(): bool
         Config::setConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, [
             'schema_version' => PLUGIN_ATIVAWORKSPACE_VERSION,
         ]);
-        // Modo de simulacao do Job Engine: sempre nasce desligado.
-        $current = Config::getConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, ['simulation_enabled']);
-        if (!array_key_exists('simulation_enabled', $current)) {
-            Config::setConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, ['simulation_enabled' => 0]);
+        // Defaults que so sao gravados na primeira vez (nao sobrescrevem).
+        require_once PLUGIN_ATIVAWORKSPACE_DIR . '/src/WorkspaceConfig.php';
+        $existing = Config::getConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, [
+            'simulation_enabled', 'entra_domain', 'entra_tenant_id', 'api_enabled', 'api_token',
+        ]);
+        $defaults = [];
+        if (!array_key_exists('simulation_enabled', $existing)) {
+            $defaults['simulation_enabled'] = 0;
+        }
+        if (!array_key_exists('entra_domain', $existing)) {
+            // Dominio do tenant Entra da empresa (valida o ingresso).
+            $defaults['entra_domain'] = 'ativalocacao.com.br';
+        }
+        if (!array_key_exists('entra_tenant_id', $existing)) {
+            $defaults['entra_tenant_id'] = '';
+        }
+        if (!array_key_exists('api_enabled', $existing)) {
+            // API do executor (servico nas maquinas). Nasce ligada.
+            $defaults['api_enabled'] = 1;
+        }
+        if (empty($existing['api_token'])) {
+            $defaults['api_token'] = bin2hex(random_bytes(32));
+        }
+        if ($defaults !== []) {
+            Config::setConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, $defaults);
         }
 
         // Reconciliacao periodica dos jobs ativos (timeouts, etapa atual).
@@ -318,7 +344,9 @@ function plugin_ativaworkspace_do_uninstall(): bool
         }
     }
 
-    Config::deleteConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, ['schema_version', 'simulation_enabled']);
+    Config::deleteConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, [
+        'schema_version', 'simulation_enabled', 'entra_domain', 'entra_tenant_id', 'api_enabled', 'api_token',
+    ]);
     CronTask::unregister('ativaworkspace');
 
     // Os instaladores so fazem sentido com as tabelas; saem juntos.

@@ -24,8 +24,11 @@ use Throwable;
  */
 final class ProvisioningEngine
 {
-    /** Tipos que param o job esperando o TI (sem executor). */
-    private const HUMAN_TYPES = [StepType::ENTRA_LOGIN, StepType::MANUAL_INTERVENTION];
+    /** Tipos que param o job esperando o TI sem executor (so mensagem + confirmar). */
+    private const HUMAN_TYPES = [StepType::MANUAL_INTERVENTION];
+
+    /** Tipos conduzidos pelo executor (servico na maquina). */
+    public const EXECUTOR_TYPES = [StepType::ENTRA_LOGIN];
 
     /** Resultados aceitos para a etapa atual. */
     public const RESULTS = [JobStep::SUCCESS, JobStep::FAILED, JobStep::WAITING_HUMAN, JobStep::SKIPPED];
@@ -287,6 +290,10 @@ final class ProvisioningEngine
             if ($step['status'] !== JobStep::WAITING_HUMAN) {
                 throw new RuntimeException('Esta etapa não está aguardando intervenção.');
             }
+            // Etapas do executor (Entra) so concluem com a prova do servico.
+            if (in_array($step['step_type'], self::EXECUTOR_TYPES, true)) {
+                throw new RuntimeException('Esta etapa é concluída automaticamente pelo serviço, não manualmente.');
+            }
         });
         self::recordResult($jobId, $stepId, JobStep::SUCCESS, 'Intervenção confirmada pelo TI.', ['confirmado_por' => (int) Session::getLoginUserID()]);
     }
@@ -321,6 +328,198 @@ final class ProvisioningEngine
             ], $jobId, (int) $step['id']);
 
             self::advance($jobId);
+        });
+    }
+
+    // ---------------------------------------------------- executor (servico)
+
+    /**
+     * Etapa que o executor da maquina deve tratar agora, ou null se nao ha.
+     * So devolve etapas de tipo conduzido pelo executor (ex.: ENTRA_LOGIN) que
+     * estao como etapa atual do job e ainda em andamento/aguardando.
+     *
+     * @return array{job: array<string,mixed>, step: array<string,mixed>, payload: array<string,mixed>}|null
+     */
+    public static function executorNextStep(int $computersId): ?array
+    {
+        global $DB;
+
+        $job = $DB->request([
+            'FROM'  => Job::getTable(),
+            'WHERE' => ['computers_id' => $computersId, 'status' => [Job::RUNNING, Job::WAITING_INTERVENTION]],
+            'ORDER' => ['id ASC'],
+            'LIMIT' => 1,
+        ])->current();
+        if (!is_array($job)) {
+            return null;
+        }
+
+        $stepId = (int) $job['plugin_ativaworkspace_jobsteps_id'];
+        if ($stepId <= 0) {
+            return null;
+        }
+        $step = $DB->request(['FROM' => JobStep::getTable(), 'WHERE' => ['id' => $stepId], 'LIMIT' => 1])->current();
+        if (
+            !is_array($step)
+            || !in_array($step['step_type'], self::EXECUTOR_TYPES, true)
+            || !in_array($step['status'], [JobStep::QUEUED, JobStep::RUNNING, JobStep::WAITING_HUMAN], true)
+        ) {
+            return null;
+        }
+
+        return [
+            'job'     => $job,
+            'step'    => $step,
+            'payload' => self::entraPayload($job, $step),
+        ];
+    }
+
+    /**
+     * Dados que o executor precisa para a etapa ENTRA_LOGIN. Sem segredos: so a
+     * conta esperada (UPN) e o tenant esperado. Nunca inclui senha.
+     *
+     * @return array<string, mixed>
+     */
+    private static function entraPayload(array $job, array $step): array
+    {
+        return [
+            'step_type'       => (string) $step['step_type'],
+            'upn'             => (string) ($job['upn'] ?? ''),
+            'expected_domain' => WorkspaceConfig::entraDomain(),
+            'expected_tenant' => WorkspaceConfig::entraTenantId(),
+            'status'          => (string) $step['status'],
+            'substate'        => (string) (EntraStep::runtime($step['runtime'] ?? null)['substate'] ?? ''),
+            // Verificar sem abrir UI a cada N segundos (timeout maior fica no servico).
+            'poll_seconds'    => 15,
+        ];
+    }
+
+    /**
+     * O executor reporta um subestado (PRECHECK, OPENING_*, VERIFYING_JOIN...).
+     * So atualiza a etapa atual conduzida por executor; nao muda o resultado.
+     */
+    public static function executorProgress(int $jobId, int $stepId, string $substate, string $log = ''): void
+    {
+        if (!EntraStep::isValidSubstate($substate)) {
+            throw new RuntimeException('Subestado inválido.');
+        }
+
+        self::locked($jobId, static function (array $job) use ($jobId, $stepId, $substate, $log): void {
+            $step = self::currentStep($job, $stepId);
+            if (!in_array($step['step_type'], self::EXECUTOR_TYPES, true)) {
+                throw new RuntimeException('Esta etapa não é conduzida pelo executor.');
+            }
+            if (!in_array($step['status'], [JobStep::QUEUED, JobStep::RUNNING, JobStep::WAITING_HUMAN], true)) {
+                throw new RuntimeException('A etapa não está em andamento.');
+            }
+
+            $runtime = EntraStep::runtime($step['runtime'] ?? null);
+            $changed = ($runtime['substate'] ?? '') !== $substate;
+            $runtime['substate'] = $substate;
+            $runtime['updated']  = self::now();
+            if ($log !== '') {
+                $lines = is_array($runtime['log'] ?? null) ? $runtime['log'] : [];
+                $lines[] = ['t' => self::now(), 'm' => mb_substr($log, 0, 200)];
+                $runtime['log'] = array_slice($lines, -50); // segura o tamanho
+            }
+
+            // Enquanto o executor trabalha (antes de aguardar o TI), a etapa fica RUNNING.
+            $terminalWait = in_array($substate, [EntraStep::WAITING_HUMAN, EntraStep::WAITING_CREDENTIAL_UI], true);
+            $stepStatus = $step['status'];
+            if ($step['status'] === JobStep::QUEUED && !$terminalWait) {
+                $stepStatus = JobStep::RUNNING;
+            }
+
+            self::updateStep($stepId, ['status' => $stepStatus, 'runtime' => json_encode($runtime, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+            self::updateJob($jobId, [
+                'status'   => $job['status'] === Job::WAITING_INTERVENTION ? Job::WAITING_INTERVENTION : Job::RUNNING,
+                'message'  => EntraStep::message($substate),
+            ]);
+
+            if ($changed) {
+                Event::log(Event::LEVEL_INFO, 'entra', EntraStep::message($substate), array_filter([
+                    'subestado' => $substate,
+                    'detalhe'   => $log,
+                ]), $jobId, $stepId);
+            }
+        });
+    }
+
+    /**
+     * O executor reporta o resultado da etapa ENTRA_LOGIN.
+     * WAITING_HUMAN -> job aguarda o TI (tela de login pronta).
+     * SUCCESS -> exige a prova de ingresso (DeviceId + TenantId esperado).
+     *
+     * @param array<string, mixed> $meta so metadados nao sensiveis (DeviceId, TenantId, motivo)
+     */
+    public static function executorResult(int $jobId, int $stepId, string $result, string $message, array $meta = []): void
+    {
+        if (!in_array($result, [JobStep::SUCCESS, JobStep::FAILED, JobStep::WAITING_HUMAN], true)) {
+            throw new RuntimeException('Resultado inválido para a etapa Entra.');
+        }
+
+        // SUCCESS so com a prova de ingresso no tenant esperado.
+        if ($result === JobStep::SUCCESS) {
+            $reason = self::entraJoinRejectionReason($meta);
+            if ($reason !== null) {
+                // Nao concluir: registra e mantem aguardando o TI.
+                self::executorProgress($jobId, $stepId, EntraStep::VERIFYING_JOIN, $reason);
+                Event::log(Event::LEVEL_WARNING, 'entra', 'Ingresso recusado: ' . $reason, array_filter([
+                    'tenant_id' => (string) ($meta['tenant_id'] ?? ''),
+                ]), $jobId, $stepId);
+                return;
+            }
+        }
+
+        // Guarda a prova no runtime (sem segredos) antes de mudar o estado.
+        self::mergeRuntime($jobId, $stepId, [
+            'substate'  => $result === JobStep::SUCCESS ? EntraStep::SUCCESS : ($result === JobStep::FAILED ? EntraStep::FAILED : EntraStep::WAITING_HUMAN),
+            'device_id' => isset($meta['device_id']) ? preg_replace('/[^0-9a-fA-F-]/', '', (string) $meta['device_id']) : null,
+            'tenant_id' => isset($meta['tenant_id']) ? mb_strtolower((string) $meta['tenant_id']) : null,
+        ]);
+
+        self::recordResult($jobId, $stepId, $result, $message !== '' ? $message : EntraStep::message(
+            $result === JobStep::SUCCESS ? EntraStep::SUCCESS : ($result === JobStep::FAILED ? EntraStep::FAILED : EntraStep::WAITING_HUMAN)
+        ), array_filter(['device_id' => $meta['device_id'] ?? null, 'tenant_id' => $meta['tenant_id'] ?? null], static fn ($v) => $v !== null && $v !== ''));
+    }
+
+    /**
+     * Motivo para NAO aceitar o ingresso, ou null se esta tudo certo.
+     * O executor manda azure_ad_joined + tenant_id (+ device_id); a decisao
+     * final e do servidor.
+     *
+     * @param array<string, mixed> $meta
+     */
+    private static function entraJoinRejectionReason(array $meta): ?string
+    {
+        if (($meta['azure_ad_joined'] ?? null) !== true) {
+            return 'AzureAdJoined não é YES.';
+        }
+        $tenantId = mb_strtolower(trim((string) ($meta['tenant_id'] ?? '')));
+        if ($tenantId === '' || !WorkspaceConfig::isGuid($tenantId)) {
+            return 'TenantId ausente ou inválido.';
+        }
+        $expectedTenant = WorkspaceConfig::entraTenantId();
+        if ($expectedTenant !== '' && $tenantId !== $expectedTenant) {
+            return 'Ingressado em tenant diferente do esperado.';
+        }
+        // Sem Tenant ID configurado, valida ao menos que HA um tenant. O dominio
+        // esperado e checado pelo executor (o dsregcmd nao expoe o dominio direto).
+        return null;
+    }
+
+    /** @param array<string, mixed> $patch */
+    private static function mergeRuntime(int $jobId, int $stepId, array $patch): void
+    {
+        self::locked($jobId, static function (array $job) use ($stepId, $patch): void {
+            $step = self::currentStep($job, $stepId);
+            $runtime = EntraStep::runtime($step['runtime'] ?? null);
+            foreach ($patch as $key => $value) {
+                if ($value !== null) {
+                    $runtime[$key] = $value;
+                }
+            }
+            self::updateStep($stepId, ['runtime' => json_encode($runtime, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
         });
     }
 
