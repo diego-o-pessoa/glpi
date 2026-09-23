@@ -56,4 +56,7 @@ Page::render('settings', 'settings.html.twig', [
     'can_configure'      => $canConfigure,
     'action_url'         => Page::href('settings'),
     'config_download_url'=> Page::href('config_download'),
+    // Token proprio (standalone): o download devolve um arquivo e nao recarrega
+    // a pagina, entao ele nao pode consumir o token compartilhado dos outros forms.
+    'download_csrf'      => Session::getNewCSRFToken(true),
 ]);

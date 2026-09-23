@@ -71,7 +71,7 @@
                 {% if can_configure %}
                     <div class="col-md-4 d-flex flex-wrap gap-2">
                         <form method="post" action="{{ config_download_url }}" class="m-0">
-                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+                            <input type="hidden" name="_glpi_csrf_token" value="{{ download_csrf }}" />
                             <button type="submit" class="btn btn-primary"><i class="ti ti-download"></i> Baixar configuração</button>
                         </form>
                         <button type="button" class="btn btn-outline-secondary" data-aw-copy="#aw-api-token"><i class="ti ti-copy"></i> Copiar</button>
