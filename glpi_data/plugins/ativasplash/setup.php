@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-define('PLUGIN_ATIVASPLASH_VERSION', '2.1.1');
+define('PLUGIN_ATIVASPLASH_VERSION', '2.1.2');
 
 /**
  * Init the hooks of the plugin
  */
-function plugin_init_ativasplash(): void
+function plugin_init_ati'vasplash(): void
 {
     global $PLUGIN_HOOKS;
 

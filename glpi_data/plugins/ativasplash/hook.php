@@ -33,7 +33,20 @@ function plugin_ativasplash_display_login(): void
     $version = PLUGIN_ATIVASPLASH_VERSION;
     $plugin_url = Plugin::getWebDir('ativasplash');
 
-    // Inject CSS
+    // CSS critico INLINE: o overlay precisa cobrir a tela ja no primeiro paint.
+    // Sem isso, o splash.css externo entra na fila atras de todo o CSS do GLPI
+    // e, ate baixar, o login aparece normal (com a logo GLPI) por alguns
+    // segundos antes da animacao. Inline aplica na hora de parsear a marcacao.
+    echo '<style>'
+        . '#ativa-splash{position:fixed;inset:0;width:100vw;height:100vh;'
+        . 'z-index:2147483647;background:#fff;display:flex;align-items:center;'
+        . 'justify-content:center;overflow:hidden}'
+        . '#ativa-intro-video{position:absolute;inset:0;width:100%;height:100%;'
+        . 'object-fit:contain;background:#fff}'
+        . '#ativa-stage{opacity:0}'
+        . '</style>';
+
+    // CSS completo (transicoes, estados da animacao, logo permanente).
     echo '<link rel="stylesheet" type="text/css" href="' . $plugin_url . '/css/splash.css?v=' . $version . '">';
 
     // Inject HTML structure for the splash screen.
