@@ -17,13 +17,22 @@ body.welcome-anonymous span.glpi-logo {
     height: 172px !important;
 }
 
-/* Cobertura branca enquanto a splash ainda nao assumiu. A classe e posta pelo
+/* Esconde o login enquanto a splash ainda nao assumiu. A classe e posta pelo
    splash-head.js so quando a splash vai rodar, e removida pelo splash.js ao
-   terminar (ou por timeout de seguranca). Fica logo abaixo do overlay. */
-html.ativa-splash-pending body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background: #ffffff;
-    z-index: 2147483646;
+   terminar (ou por timeout de seguranca).
+   Nao usar uma camada por cima (ex.: body::before): o overlay fica dentro do
+   card de login, que cria outro contexto de empilhamento, e a camada cobriria
+   o video. visibility:hidden no conteudo + visible no overlay funciona porque
+   um descendente pode voltar a ser visivel; o layout continua no lugar, entao
+   o FLIP mede a posicao real da logo. */
+html.ativa-splash-pending body {
+    background: #ffffff !important;
+}
+
+html.ativa-splash-pending #page {
+    visibility: hidden;
+}
+
+html.ativa-splash-pending #ativa-splash {
+    visibility: visible;
 }

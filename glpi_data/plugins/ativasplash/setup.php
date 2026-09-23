@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-define('PLUGIN_ATIVASPLASH_VERSION', '2.2.0');
+define('PLUGIN_ATIVASPLASH_VERSION', '2.2.1');
 
 /**
  * Init the hooks of the plugin
