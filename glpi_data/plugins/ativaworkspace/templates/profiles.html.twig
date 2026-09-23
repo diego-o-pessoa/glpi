@@ -2,27 +2,31 @@
 
 {% block content %}
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h3 class="card-title"><i class="ti ti-list-details me-2"></i>Perfis de provisionamento</h3>
-            {% if can_create %}
-                <a href="{{ form_url }}" class="btn btn-primary btn-sm"><i class="ti ti-plus"></i> Novo perfil</a>
-            {% endif %}
+        <div class="card-header">
+            <h3 class="card-title"><i class="ti ti-users me-2 text-primary"></i>Perfis de provisionamento</h3>
+            <div class="card-actions">
+                {% if can_create %}
+                    <a href="{{ form_url }}" class="btn btn-primary btn-sm"><i class="ti ti-plus"></i> Novo perfil</a>
+                {% endif %}
+            </div>
         </div>
         <div class="card-body p-0">
             {% if rows|length == 0 %}
                 <div class="empty py-4">
-                    <div class="empty-icon"><i class="ti ti-list-details"></i></div>
+                    <div class="empty-icon"><i class="ti ti-users"></i></div>
                     <p class="empty-title">Nenhum perfil cadastrado</p>
-                    <p class="empty-subtitle text-muted">Um perfil reúne as etapas de provisionamento de um tipo de máquina (ex.: "Notebook Comercial").</p>
+                    <p class="empty-subtitle text-muted">Um perfil define como uma máquina é preparada (ex.: "Funcionário Padrão": Chrome, OpenVPN, Teams...).</p>
                 </div>
             {% else %}
                 <form method="post" action="{{ form_url }}">
                     <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
                     <div class="table-responsive">
-                        <table class="table table-hover table-striped align-middle mb-0">
+                        <table class="table table-vcenter card-table aw-jobs-table mb-0">
                             <thead>
                                 <tr>
                                     <th>Nome</th>
+                                    <th>Descrição</th>
+                                    <th class="text-center">Etapas</th>
                                     <th>Entidade</th>
                                     <th>Situação</th>
                                     <th>Alterado em</th>
@@ -32,32 +36,36 @@
                             <tbody>
                             {% for row in rows %}
                                 <tr>
-                                    <td>
-                                        <a href="{{ form_url }}?id={{ row.id }}"><strong>{{ row.name }}</strong></a>
-                                        {% if row.comment %}<div class="small text-muted text-truncate aw-truncate">{{ row.comment }}</div>{% endif %}
-                                    </td>
+                                    <td><a href="{{ form_url }}?id={{ row.id }}" class="fw-semibold">{{ row.name }}</a></td>
+                                    <td><div class="small text-muted text-truncate aw-truncate">{{ row.comment ?: '—' }}</div></td>
+                                    <td class="text-center"><span class="badge bg-blue-lt">{{ row.step_count }}</span></td>
                                     <td>
                                         {{ row.entity_name }}
                                         {% if row.is_recursive %}<span class="badge bg-secondary-lt ms-1" title="Vale também para as subentidades">+ sub</span>{% endif %}
                                     </td>
                                     <td>
                                         {% if row.is_active %}
-                                            <span class="badge bg-success">Ativo</span>
+                                            <span class="aw-pill aw-pill-completed">Ativo</span>
                                         {% else %}
-                                            <span class="badge bg-secondary">Inativo</span>
+                                            <span class="aw-pill aw-pill-cancelled">Inativo</span>
                                         {% endif %}
                                     </td>
-                                    <td>{{ row.date_mod ? row.date_mod|formatted_datetime : '—' }}</td>
+                                    <td class="text-nowrap">{{ row.date_mod ? row.date_mod|formatted_datetime : '—' }}</td>
                                     <td class="text-end text-nowrap">
-                                        <a href="{{ form_url }}?id={{ row.id }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="ti ti-pencil"></i></a>
+                                        <a href="{{ form_url }}?id={{ row.id }}" class="btn btn-icon btn-sm btn-outline-secondary" title="Editar e etapas"><i class="ti ti-pencil"></i></a>
+                                        {% if can_create %}
+                                            <button type="submit" name="duplicate" value="{{ row.id }}" class="btn btn-icon btn-sm btn-outline-secondary" title="Duplicar">
+                                                <i class="ti ti-copy"></i>
+                                            </button>
+                                        {% endif %}
                                         {% if can_update %}
-                                            <button type="submit" name="toggle" value="{{ row.id }}" class="btn btn-sm btn-outline-secondary"
+                                            <button type="submit" name="toggle" value="{{ row.id }}" class="btn btn-icon btn-sm btn-outline-secondary"
                                                     title="{{ row.is_active ? 'Desativar' : 'Ativar' }}">
                                                 <i class="ti {{ row.is_active ? 'ti-toggle-right' : 'ti-toggle-left' }}"></i>
                                             </button>
                                         {% endif %}
                                         {% if can_purge %}
-                                            <button type="submit" name="purge" value="{{ row.id }}" class="btn btn-sm btn-outline-danger" title="Excluir"
+                                            <button type="submit" name="purge" value="{{ row.id }}" class="btn btn-icon btn-sm btn-outline-danger" title="Excluir"
                                                     onclick="return confirm('Excluir o perfil &quot;{{ row.name|e('js') }}&quot; e suas etapas?');">
                                                 <i class="ti ti-trash"></i>
                                             </button>

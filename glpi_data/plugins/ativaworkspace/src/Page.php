@@ -22,6 +22,7 @@ final class Page
     private const EXTRA_FILES = [
         'profile_form'     => 'profile.form.php',
         'application_form' => 'application.form.php',
+        'step_form'        => 'step.form.php',
         'job_form'         => 'job.form.php',
         'job_data'         => 'job.data.php',
         'overview_data'    => 'overview.data.php',

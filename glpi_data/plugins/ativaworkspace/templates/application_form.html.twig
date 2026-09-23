@@ -2,35 +2,169 @@
 {% import 'components/form/fields_macros.html.twig' as fields %}
 
 {% block content %}
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">
-                <i class="ti ti-apps me-2"></i>{{ is_new ? 'Novo aplicativo' : 'Editar aplicativo' }}
-            </h3>
-        </div>
-        <form method="post" action="{{ action_url }}">
-            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
-            {% if not is_new %}<input type="hidden" name="id" value="{{ item.id }}" />{% endif %}
-            <div class="card-body">
-                <div class="row">
-                    {{ fields.textField('name', item.name, 'Nome', {'required': true, 'disabled': not can_edit}) }}
-                    {{ fields.dropdownArrayField('provider', item.provider, providers, 'Provider', {'disabled': not can_edit}) }}
-                    {{ fields.textField('desired_version', item.desired_version, 'Versão desejada', {
-                        'disabled': not can_edit,
-                        'helper': 'Deixe em branco para a versão mais recente.'
-                    }) }}
-                    {{ fields.dropdownYesNo('is_active', item.is_active, 'Ativo', {'disabled': not can_edit}) }}
-                    {{ fields.textareaField('comment', item.comment, 'Descrição', {'disabled': not can_edit}) }}
+    <form method="post" action="{{ action_url }}" enctype="multipart/form-data" data-aw-app-form data-max-bytes="{{ max_bytes }}">
+        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+        {% if not is_new %}<input type="hidden" name="id" value="{{ item.id }}" />{% endif %}
+
+        <div class="row row-cards">
+            <div class="col-xl-8">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="ti ti-apps me-2 text-primary"></i>{{ is_new ? 'Novo aplicativo' : item.name }}</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            {{ fields.textField('name', item.name, 'Nome', {'required': true, 'disabled': not can_edit}) }}
+                            {{ fields.dropdownArrayField('category', item.category, categories, 'Categoria', {'disabled': not can_edit}) }}
+                            {{ fields.dropdownArrayField('icon', item.icon, icons, 'Ícone', {'disabled': not can_edit}) }}
+                            {{ fields.textField('desired_version', item.desired_version, 'Versão', {
+                                'disabled': not can_edit,
+                                'helper': 'Ex.: 140.x. Em branco = a do arquivo enviado.'
+                            }) }}
+                            {{ fields.dropdownYesNo('is_active', item.is_active, 'Ativo', {'disabled': not can_edit}) }}
+                            {{ fields.textareaField('comment', item.comment, 'Descrição', {'disabled': not can_edit}) }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="ti ti-file-upload me-2 text-primary"></i>Instalador</h3>
+                    </div>
+                    <div class="card-body">
+                        {% if file %}
+                            <div class="aw-file-box mb-3 {{ file.missing ? 'aw-file-missing' : '' }}">
+                                <div class="d-flex align-items-start gap-3">
+                                    <span class="aw-app-icon"><i class="ti ti-file-check"></i></span>
+                                    <div class="flex-fill min-w-0">
+                                        <div class="fw-semibold text-break">{{ file.name }}</div>
+                                        <div class="small text-muted">{{ file.size }} · enviado {{ file.date ? file.date|formatted_datetime : '—' }}{{ file.user ? ' por ' ~ file.user : '' }}</div>
+                                        <div class="small mt-1"><span class="text-muted">SHA-256:</span> <code class="aw-hash">{{ file.sha256 }}</code></div>
+                                        <div class="small mt-1">
+                                            <span class="text-muted">Assinatura digital:</span>
+                                            <span class="{{ file.signed ? 'text-success' : (file.unsigned ? 'text-warning' : 'text-muted') }}">{{ file.signature }}</span>
+                                        </div>
+                                        {% if file.missing %}
+                                            <div class="text-danger small mt-1"><i class="ti ti-alert-triangle me-1"></i>O arquivo não foi encontrado no servidor. Envie de novo.</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+
+                        <div class="row">
+                            {{ fields.dropdownArrayField('installer_type', item.installer_type, types, 'Tipo do instalador', {'disabled': not can_edit}) }}
+                            {{ fields.dropdownArrayField('architecture', item.architecture, architectures, 'Arquitetura', {'disabled': not can_edit}) }}
+                        </div>
+
+                        {% if can_edit %}
+                            <div class="mb-2">
+                                <label class="form-label" for="aw-installer">{{ file ? 'Substituir arquivo' : 'Arquivo do instalador' }}</label>
+                                <input type="file" class="form-control" id="aw-installer" name="installer" accept="{{ accept }}" data-aw-installer />
+                                <div class="form-hint">
+                                    Tamanho máximo: {{ max_label }}. O arquivo fica guardado no servidor, fora da área pública, e não é executado aqui.
+                                    {% if file %}Enviar um arquivo novo substitui o atual.{% endif %}
+                                </div>
+                                <div class="text-danger small mt-1 d-none" data-aw-installer-error></div>
+                            </div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
-            <div class="card-footer d-flex justify-content-between">
-                <a href="{{ list_url }}" class="btn btn-outline-secondary"><i class="ti ti-arrow-left"></i> Voltar</a>
-                {% if can_edit %}
-                    <button type="submit" name="{{ is_new ? 'add' : 'update' }}" value="1" class="btn btn-primary">
-                        <i class="ti ti-device-floppy"></i> Salvar
-                    </button>
+
+            <div class="col-xl-4">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="ti ti-settings-automation me-2 text-primary"></i>Instalação futura</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            {{ fields.numberField('timeout_minutes', item.timeout_minutes, 'Timeout (min)', {'min': 1, 'max': 240, 'full_width': true, 'disabled': not can_edit}) }}
+                            {{ fields.numberField('max_attempts', item.max_attempts, 'Máx. de tentativas', {'min': 1, 'max': 10, 'full_width': true, 'disabled': not can_edit}) }}
+                            {{ fields.dropdownYesNo('requires_reboot', item.requires_reboot, 'Exige reinicialização', {'full_width': true, 'disabled': not can_edit}) }}
+                            {{ fields.textField('expected_signer', item.expected_signer, 'Assinante esperado', {
+                                'full_width': true,
+                                'disabled': not can_edit,
+                                'helper': 'Opcional. Ex.: Google LLC. O executor poderá conferir a assinatura.'
+                            }) }}
+                            {{ fields.textareaField('notes', item.notes, 'Observações', {'full_width': true, 'disabled': not can_edit}) }}
+                        </div>
+                        <div class="text-muted small">
+                            <i class="ti ti-info-circle me-1"></i>
+                            Não é preciso informar comando ou parâmetros: o Workspace tratará cada tipo de instalador automaticamente.
+                        </div>
+                    </div>
+                </div>
+
+                {% if not is_new and usage > 0 %}
+                    <div class="alert alert-info">
+                        <i class="ti ti-list-details me-1"></i>
+                        Usado em <strong>{{ usage }}</strong> etapa(s) de perfil.
+                    </div>
                 {% endif %}
             </div>
-        </form>
-    </div>
+        </div>
+
+        <div class="card">
+            <div class="card-footer d-flex justify-content-between">
+                <a href="{{ list_url }}" class="btn btn-outline-secondary"><i class="ti ti-arrow-left"></i> Voltar</a>
+                <div class="d-flex gap-2">
+                    {% if can_purge %}
+                        <button type="submit" name="purge" value="{{ item.id }}" class="btn btn-outline-danger" formnovalidate
+                                onclick="return confirm('Excluir o aplicativo &quot;{{ item.name|e('js') }}&quot; e o instalador dele?');">
+                            <i class="ti ti-trash"></i> Excluir
+                        </button>
+                    {% endif %}
+                    {% if can_edit %}
+                        <button type="submit" name="{{ is_new ? 'add' : 'update' }}" value="1" class="btn btn-primary" data-aw-app-submit>
+                            <i class="ti ti-device-floppy"></i> Salvar
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <script>
+    (function () {
+        // Confere o tamanho antes de enviar: acima do limite do PHP o servidor
+        // descarta o POST inteiro (inclusive o token) e o erro fica confuso.
+        var form = document.querySelector('[data-aw-app-form]');
+        var input = form ? form.querySelector('[data-aw-installer]') : null;
+        if (!input) {
+            return;
+        }
+        var max = Number(form.getAttribute('data-max-bytes')) || 0;
+        var errorBox = form.querySelector('[data-aw-installer-error]');
+        function check() {
+            var file = input.files && input.files[0];
+            var tooBig = !!(file && max > 0 && file.size > max);
+            errorBox.textContent = tooBig ? 'Este arquivo passa do limite do servidor.' : '';
+            errorBox.classList.toggle('d-none', !tooBig);
+            return !tooBig;
+        }
+        input.addEventListener('change', check);
+        form.addEventListener('submit', function (event) {
+            var submitter = event.submitter;
+            if (submitter && submitter.name === 'purge') {
+                return;
+            }
+            if (!check()) {
+                event.preventDefault();
+                return;
+            }
+            var button = form.querySelector('[data-aw-app-submit]');
+            if (button && input.files && input.files.length) {
+                button.disabled = true;
+                button.textContent = 'Enviando…';
+                // Mantem o nome do botao no POST (desabilitado ele nao e enviado).
+                var hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = button.name;
+                hidden.value = '1';
+                form.appendChild(hidden);
+            }
+        });
+    })();
+    </script>
 {% endblock %}

@@ -2,35 +2,122 @@
 {% import 'components/form/fields_macros.html.twig' as fields %}
 
 {% block content %}
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">
-                <i class="ti ti-list-details me-2"></i>{{ is_new ? 'Novo perfil' : 'Editar perfil' }}
-            </h3>
+    <div class="row row-cards">
+        <div class="{{ is_new ? 'col-12' : 'col-xl-5' }}">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="ti ti-users me-2 text-primary"></i>{{ is_new ? 'Novo perfil' : 'Dados do perfil' }}
+                    </h3>
+                </div>
+                <form method="post" action="{{ action_url }}">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+                    {% if not is_new %}<input type="hidden" name="id" value="{{ item.id }}" />{% endif %}
+                    <div class="card-body">
+                        <div class="row">
+                            {{ fields.textField('name', item.name, 'Nome', {'required': true, 'disabled': not can_edit, 'full_width': not is_new}) }}
+                            {{ fields.dropdownField('Entity', 'entities_id', item.entities_id, 'Entidade', {
+                                'entity': session('glpiactiveentities'),
+                                'disabled': not can_edit,
+                                'full_width': not is_new
+                            }) }}
+                            {{ fields.dropdownYesNo('is_recursive', item.is_recursive, 'Subentidades', {'disabled': not can_edit, 'full_width': not is_new}) }}
+                            {{ fields.dropdownYesNo('is_active', item.is_active, 'Ativo', {'disabled': not can_edit, 'full_width': not is_new}) }}
+                            {{ fields.textareaField('comment', item.comment, 'Descrição', {'disabled': not can_edit, 'full_width': not is_new}) }}
+                        </div>
+                        {% if is_new %}
+                            <div class="text-muted small"><i class="ti ti-info-circle me-1"></i>Depois de salvar, você adiciona as etapas do provisionamento.</div>
+                        {% endif %}
+                    </div>
+                    <div class="card-footer d-flex flex-wrap justify-content-between gap-2">
+                        <a href="{{ list_url }}" class="btn btn-outline-secondary"><i class="ti ti-arrow-left"></i> Voltar</a>
+                        <div class="d-flex gap-2">
+                            {% if not is_new and can_create %}
+                                <button type="submit" name="duplicate" value="{{ item.id }}" class="btn btn-outline-secondary" formnovalidate>
+                                    <i class="ti ti-copy"></i> Duplicar
+                                </button>
+                            {% endif %}
+                            {% if can_edit %}
+                                <button type="submit" name="{{ is_new ? 'add' : 'update' }}" value="1" class="btn btn-primary">
+                                    <i class="ti ti-device-floppy"></i> Salvar
+                                </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </form>
+            </div>
         </div>
-        <form method="post" action="{{ action_url }}">
-            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
-            {% if not is_new %}<input type="hidden" name="id" value="{{ item.id }}" />{% endif %}
-            <div class="card-body">
-                <div class="row">
-                    {{ fields.textField('name', item.name, 'Nome', {'required': true, 'disabled': not can_edit}) }}
-                    {{ fields.dropdownField('Entity', 'entities_id', item.entities_id, 'Entidade', {
-                        'entity': session('glpiactiveentities'),
-                        'disabled': not can_edit
-                    }) }}
-                    {{ fields.dropdownYesNo('is_recursive', item.is_recursive, 'Subentidades', {'disabled': not can_edit}) }}
-                    {{ fields.dropdownYesNo('is_active', item.is_active, 'Ativo', {'disabled': not can_edit}) }}
-                    {{ fields.textareaField('comment', item.comment, 'Descrição', {'disabled': not can_edit}) }}
+
+        {% if not is_new %}
+            <div class="col-xl-7">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title"><i class="ti ti-list-numbers me-2 text-primary"></i>Etapas do provisionamento</h3>
+                            <div class="text-muted small text-uppercase fw-semibold">{{ item.name }}</div>
+                        </div>
+                        <div class="card-actions">
+                            {% if can_edit %}
+                                <a href="{{ step_url }}?profile={{ item.id }}" class="btn btn-primary btn-sm"><i class="ti ti-plus"></i> Adicionar etapa</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        {% if steps|length == 0 %}
+                            <div class="empty py-3">
+                                <div class="empty-icon"><i class="ti ti-list-numbers"></i></div>
+                                <p class="empty-title">Nenhuma etapa ainda</p>
+                                <p class="empty-subtitle text-muted">Ex.: Google Chrome, OpenVPN, VPN Ativa, Autenticação Microsoft, Teams, Wallpaper.</p>
+                            </div>
+                        {% else %}
+                            <form method="post" action="{{ step_url }}">
+                                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+                                <input type="hidden" name="profile" value="{{ item.id }}" />
+                                <ol class="aw-step-list">
+                                    {% for step in steps %}
+                                        <li class="aw-step-item">
+                                            <span class="aw-step-pos">{{ step.step_order }}</span>
+                                            <span class="aw-app-icon"><i class="{{ step.type_icon }}"></i></span>
+                                            <div class="flex-fill min-w-0">
+                                                <div class="fw-semibold text-break">{{ step.name }}</div>
+                                                <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
+                                                    <span class="aw-type-badge">{{ step.step_type }}</span>
+                                                    {% if step.is_mandatory %}
+                                                        <span class="small text-muted"><i class="ti ti-asterisk"></i> obrigatória</span>
+                                                    {% endif %}
+                                                    {% if step.continue_on_error %}
+                                                        <span class="small text-muted"><i class="ti ti-arrow-forward"></i> continua se falhar</span>
+                                                    {% endif %}
+                                                    {% if step.application_name and step.step_type == 'SOFTWARE' %}
+                                                        <span class="small text-muted"><i class="ti ti-package"></i> {{ step.application_name }}</span>
+                                                    {% endif %}
+                                                </div>
+                                                {% if step.summary %}<div class="small text-muted mt-1 text-break">{{ step.summary }}</div>{% endif %}
+                                                {% if step.warning %}<div class="small text-warning mt-1"><i class="ti ti-alert-triangle me-1"></i>{{ step.warning }}</div>{% endif %}
+                                            </div>
+                                            {% if can_edit %}
+                                                <div class="aw-step-actions">
+                                                    <a href="{{ step_url }}?profile={{ item.id }}&id={{ step.id }}" class="btn btn-icon btn-sm btn-outline-secondary" title="Editar"><i class="ti ti-pencil"></i></a>
+                                                    <button type="submit" name="move_up" value="{{ step.id }}" class="btn btn-icon btn-sm btn-outline-secondary" title="Mover para cima" {{ loop.first ? 'disabled' : '' }}>
+                                                        <i class="ti ti-arrow-up"></i>
+                                                    </button>
+                                                    <button type="submit" name="move_down" value="{{ step.id }}" class="btn btn-icon btn-sm btn-outline-secondary" title="Mover para baixo" {{ loop.last ? 'disabled' : '' }}>
+                                                        <i class="ti ti-arrow-down"></i>
+                                                    </button>
+                                                    <button type="submit" name="delete" value="{{ step.id }}" class="btn btn-icon btn-sm btn-outline-danger" title="Excluir"
+                                                            onclick="return confirm('Excluir a etapa &quot;{{ step.name|e('js') }}&quot;?');">
+                                                        <i class="ti ti-trash"></i>
+                                                    </button>
+                                                </div>
+                                            {% endif %}
+                                        </li>
+                                    {% endfor %}
+                                </ol>
+                            </form>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
-            <div class="card-footer d-flex justify-content-between">
-                <a href="{{ list_url }}" class="btn btn-outline-secondary"><i class="ti ti-arrow-left"></i> Voltar</a>
-                {% if can_edit %}
-                    <button type="submit" name="{{ is_new ? 'add' : 'update' }}" value="1" class="btn btn-primary">
-                        <i class="ti ti-device-floppy"></i> Salvar
-                    </button>
-                {% endif %}
-            </div>
-        </form>
+        {% endif %}
     </div>
 {% endblock %}

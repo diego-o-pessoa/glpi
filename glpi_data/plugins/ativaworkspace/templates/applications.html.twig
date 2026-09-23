@@ -2,30 +2,35 @@
 
 {% block content %}
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h3 class="card-title"><i class="ti ti-apps me-2"></i>Aplicativos</h3>
-            {% if can_create %}
-                <a href="{{ form_url }}" class="btn btn-primary btn-sm"><i class="ti ti-plus"></i> Novo aplicativo</a>
-            {% endif %}
+        <div class="card-header">
+            <h3 class="card-title"><i class="ti ti-apps me-2 text-primary"></i>Catálogo de aplicativos</h3>
+            <div class="card-actions">
+                {% if can_create %}
+                    <a href="{{ form_url }}" class="btn btn-primary btn-sm"><i class="ti ti-plus"></i> Novo aplicativo</a>
+                {% endif %}
+            </div>
         </div>
         <div class="card-body p-0">
             {% if rows|length == 0 %}
                 <div class="empty py-4">
                     <div class="empty-icon"><i class="ti ti-apps"></i></div>
                     <p class="empty-title">Nenhum aplicativo cadastrado</p>
-                    <p class="empty-subtitle text-muted">Catálogo dos programas que os perfis poderão instalar. Nesta etapa é só cadastro: nada é instalado.</p>
+                    <p class="empty-subtitle text-muted">Cadastre os programas (ex.: Google Chrome, OpenVPN) e envie o instalador de cada um. Nada é instalado nesta etapa.</p>
                 </div>
             {% else %}
                 <form method="post" action="{{ form_url }}">
                     <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
                     <div class="table-responsive">
-                        <table class="table table-hover table-striped align-middle mb-0">
+                        <table class="table table-vcenter card-table aw-jobs-table mb-0">
                             <thead>
                                 <tr>
-                                    <th>Nome</th>
-                                    <th>Provider</th>
-                                    <th>Versão desejada</th>
+                                    <th>Aplicativo</th>
+                                    <th>Categoria</th>
+                                    <th>Versão</th>
+                                    <th>Tipo</th>
+                                    <th>Arquivo</th>
                                     <th>Situação</th>
+                                    <th>Alterado em</th>
                                     <th class="text-end">Ações</th>
                                 </tr>
                             </thead>
@@ -33,29 +38,44 @@
                             {% for row in rows %}
                                 <tr>
                                     <td>
-                                        <a href="{{ form_url }}?id={{ row.id }}"><strong>{{ row.name }}</strong></a>
-                                        {% if row.comment %}<div class="small text-muted text-truncate aw-truncate">{{ row.comment }}</div>{% endif %}
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="aw-app-icon"><i class="{{ row.icon_class }}"></i></span>
+                                            <div>
+                                                <a href="{{ form_url }}?id={{ row.id }}" class="fw-semibold">{{ row.name }}</a>
+                                                {% if row.comment %}<div class="small text-muted text-truncate aw-truncate">{{ row.comment }}</div>{% endif %}
+                                            </div>
+                                        </div>
                                     </td>
-                                    <td><span class="badge bg-azure-lt">{{ row.provider_label }}</span></td>
-                                    <td>{{ row.desired_version ?: 'Mais recente' }}</td>
+                                    <td>{{ row.category_label }}</td>
+                                    <td>{{ row.desired_version ?: '—' }}</td>
+                                    <td><span class="aw-pill aw-pill-queued">{{ row.type_label }}</span></td>
                                     <td>
-                                        {% if row.is_active %}
-                                            <span class="badge bg-success">Ativo</span>
+                                        {% if row.file_stored_name %}
+                                            <div class="text-truncate aw-truncate-sm" title="{{ row.file_name }}"><i class="ti ti-file me-1"></i>{{ row.file_name }}</div>
+                                            <div class="small text-muted">{{ row.size_label }}</div>
                                         {% else %}
-                                            <span class="badge bg-secondary">Inativo</span>
+                                            <span class="text-warning small"><i class="ti ti-alert-triangle me-1"></i>Sem instalador</span>
                                         {% endif %}
                                     </td>
+                                    <td>
+                                        {% if row.is_active %}
+                                            <span class="aw-pill aw-pill-completed">Ativo</span>
+                                        {% else %}
+                                            <span class="aw-pill aw-pill-cancelled">Inativo</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-nowrap">{{ row.date_mod ? row.date_mod|formatted_datetime : '—' }}</td>
                                     <td class="text-end text-nowrap">
-                                        <a href="{{ form_url }}?id={{ row.id }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="ti ti-pencil"></i></a>
+                                        <a href="{{ form_url }}?id={{ row.id }}" class="btn btn-icon btn-sm btn-outline-secondary" title="Editar"><i class="ti ti-pencil"></i></a>
                                         {% if can_update %}
-                                            <button type="submit" name="toggle" value="{{ row.id }}" class="btn btn-sm btn-outline-secondary"
+                                            <button type="submit" name="toggle" value="{{ row.id }}" class="btn btn-icon btn-sm btn-outline-secondary"
                                                     title="{{ row.is_active ? 'Desativar' : 'Ativar' }}">
                                                 <i class="ti {{ row.is_active ? 'ti-toggle-right' : 'ti-toggle-left' }}"></i>
                                             </button>
                                         {% endif %}
                                         {% if can_purge %}
-                                            <button type="submit" name="purge" value="{{ row.id }}" class="btn btn-sm btn-outline-danger" title="Excluir"
-                                                    onclick="return confirm('Excluir o aplicativo &quot;{{ row.name|e('js') }}&quot;?');">
+                                            <button type="submit" name="purge" value="{{ row.id }}" class="btn btn-icon btn-sm btn-outline-danger" title="Excluir"
+                                                    onclick="return confirm('Excluir o aplicativo &quot;{{ row.name|e('js') }}&quot; e o instalador dele?');">
                                                 <i class="ti ti-trash"></i>
                                             </button>
                                         {% endif %}

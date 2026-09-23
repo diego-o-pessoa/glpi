@@ -23,6 +23,12 @@ foreach ($DB->request([
     $rows[] = $row;
 }
 
+$counts = ProvisioningProfile::stepCounts(array_map(static fn ($row) => (int) $row['id'], $rows));
+foreach ($rows as &$row) {
+    $row['step_count'] = $counts[(int) $row['id']] ?? 0;
+}
+unset($row);
+
 $right = PluginAtivaworkspaceProfile::RIGHT_PROFILES;
 Page::render('profiles', 'profiles.html.twig', [
     'rows'       => $rows,

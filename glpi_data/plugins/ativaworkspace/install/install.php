@@ -155,6 +155,52 @@ function plugin_ativaworkspace_do_install(): bool
             $migration->addField($jobsTable, 'employee_name', "varchar(255) NOT NULL DEFAULT ''", ['after' => 'status']);
         }
 
+        // 0.3.0 (Etapa 2): catalogo de aplicativos com instalador e etapas
+        // completas nos perfis. So adiciona colunas: nenhum dado e perdido.
+        $newFields = [
+            'glpi_plugin_ativaworkspace_applications' => [
+                'icon'                  => "varchar(64) NOT NULL DEFAULT ''",
+                'category'              => "varchar(64) NOT NULL DEFAULT ''",
+                'installer_type'        => "varchar(16) NOT NULL DEFAULT 'OTHER'",
+                'architecture'          => "varchar(16) NOT NULL DEFAULT 'any'",
+                'timeout_minutes'       => "int NOT NULL DEFAULT '30'",
+                'max_attempts'          => "int NOT NULL DEFAULT '3'",
+                'requires_reboot'       => "tinyint NOT NULL DEFAULT '0'",
+                'expected_signer'       => "varchar(255) NOT NULL DEFAULT ''",
+                'notes'                 => 'text',
+                // Configuracao interna de instalacao por tipo (preparada; o
+                // tecnico nao digita linha de comando).
+                'install_config'        => 'longtext',
+                // Instalador armazenado (fora da area publica, em GLPI_PLUGIN_DOC_DIR).
+                'file_name'             => "varchar(255) NOT NULL DEFAULT ''",
+                'file_stored_name'      => "varchar(128) NOT NULL DEFAULT ''",
+                'file_size'             => "bigint NOT NULL DEFAULT '0'",
+                'file_sha256'           => "char(64) NOT NULL DEFAULT ''",
+                'file_signature_status' => "varchar(32) NOT NULL DEFAULT 'not_checked'",
+                'file_uploaded_at'      => 'timestamp NULL DEFAULT NULL',
+                'file_users_id'         => "int {$sign} NOT NULL DEFAULT '0'",
+            ],
+            'glpi_plugin_ativaworkspace_profilesteps' => [
+                'is_mandatory'      => "tinyint NOT NULL DEFAULT '1'",
+                'continue_on_error' => "tinyint NOT NULL DEFAULT '0'",
+                // 0 = usa o padrao do aplicativo (SOFTWARE) ou do tipo de etapa.
+                'timeout_minutes'   => "int NOT NULL DEFAULT '0'",
+                'max_attempts'      => "int NOT NULL DEFAULT '0'",
+            ],
+        ];
+        foreach ($newFields as $table => $fields) {
+            foreach ($fields as $field => $definition) {
+                if (!$DB->fieldExists($table, $field)) {
+                    $migration->addField($table, $field, $definition);
+                }
+            }
+        }
+        $appsTable = 'glpi_plugin_ativaworkspace_applications';
+        if (!$DB->fieldExists($appsTable, 'file_sha256')) {
+            $migration->addKey($appsTable, 'file_sha256');
+            $migration->addKey($appsTable, 'category');
+        }
+
         $migration->executeMigration();
 
         Config::setConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, [
@@ -163,6 +209,10 @@ function plugin_ativaworkspace_do_install(): bool
 
         require_once PLUGIN_ATIVAWORKSPACE_DIR . '/inc/profile.class.php';
         PluginAtivaworkspaceProfile::installRights();
+
+        // Diretorio dos instaladores (fora do public/ do plugin).
+        require_once PLUGIN_ATIVAWORKSPACE_DIR . '/src/InstallerStorage.php';
+        GlpiPlugin\Ativaworkspace\InstallerStorage::ensureDirectory();
     } catch (Throwable $exception) {
         $migration->displayMessage('Falha na instalacao: ' . $exception->getMessage());
         return false;
@@ -185,6 +235,10 @@ function plugin_ativaworkspace_do_uninstall(): bool
     }
 
     Config::deleteConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, ['schema_version']);
+
+    // Os instaladores so fazem sentido com as tabelas; saem juntos.
+    require_once PLUGIN_ATIVAWORKSPACE_DIR . '/src/InstallerStorage.php';
+    GlpiPlugin\Ativaworkspace\InstallerStorage::removeAll();
 
     return true;
 }

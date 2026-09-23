@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_ATIVAWORKSPACE_VERSION', '0.2.0');
+define('PLUGIN_ATIVAWORKSPACE_VERSION', '0.3.0');
 define('PLUGIN_ATIVAWORKSPACE_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVAWORKSPACE_MAX_GLPI', '11.1.0');
 define('PLUGIN_ATIVAWORKSPACE_DIR', __DIR__);

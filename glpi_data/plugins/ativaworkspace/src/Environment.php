@@ -94,6 +94,26 @@ final class Environment
     }
 
     /**
+     * Situacao do armazenamento dos instaladores e dos limites de upload do PHP.
+     *
+     * @return array{directory: string, writable: bool, max_label: string, upload_max: string, post_max: string, low_limit: bool}
+     */
+    public static function storage(): array
+    {
+        $dir = InstallerStorage::directory();
+        $max = InstallerStorage::effectiveMaxBytes();
+        return [
+            'directory'  => $dir,
+            'writable'   => is_dir($dir) ? is_writable($dir) : is_writable(dirname($dir)),
+            'max_label'  => \Toolbox::getSize($max),
+            'upload_max' => (string) ini_get('upload_max_filesize'),
+            'post_max'   => (string) ini_get('post_max_size'),
+            // Instaladores comuns (Chrome ~130 MB) nao cabem em limites baixos.
+            'low_limit'  => $max < 256 * 1024 * 1024,
+        ];
+    }
+
+    /**
      * @return array{workspace: string, glpi: string, php: string}
      */
     public static function versions(): array

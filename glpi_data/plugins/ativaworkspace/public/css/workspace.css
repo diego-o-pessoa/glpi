@@ -539,6 +539,94 @@
     border-radius: 6px;
 }
 
+/* ------------------------------------------------- catalogo e etapas */
+
+.ativaworkspace .aw-app-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    border-radius: 9px;
+    background: rgba(31, 111, 224, 0.1);
+    color: var(--aw-blue);
+    font-size: 1.2rem;
+}
+
+.ativaworkspace .aw-truncate-sm {
+    max-width: 220px;
+}
+
+.ativaworkspace .aw-file-box {
+    padding: 0.85rem 1rem;
+    border: 1px solid rgba(47, 179, 68, 0.3);
+    background: rgba(47, 179, 68, 0.05);
+    border-radius: var(--aw-radius);
+}
+
+.ativaworkspace .aw-file-box.aw-file-missing {
+    border-color: rgba(214, 57, 57, 0.35);
+    background: rgba(214, 57, 57, 0.05);
+}
+
+.ativaworkspace .aw-hash {
+    word-break: break-all;
+    font-size: 0.75rem;
+}
+
+.ativaworkspace .aw-step-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.ativaworkspace .aw-step-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 0.25rem;
+    border-bottom: 1px solid var(--tblr-border-color, rgba(108, 122, 145, 0.15));
+}
+
+.ativaworkspace .aw-step-item:last-child {
+    border-bottom: 0;
+}
+
+.ativaworkspace .aw-step-pos {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    border-radius: 50%;
+    background: rgba(108, 122, 145, 0.14);
+    font-weight: 700;
+    font-size: 0.8rem;
+}
+
+.ativaworkspace .aw-type-badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 6px;
+    background: rgba(31, 111, 224, 0.1);
+    color: var(--aw-blue);
+    font-family: var(--tblr-font-monospace, monospace);
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.ativaworkspace .aw-step-actions {
+    display: inline-flex;
+    gap: 0.25rem;
+    flex: 0 0 auto;
+}
+
+.ativaworkspace .min-w-0 {
+    min-width: 0;
+}
+
 /* --------------------------------------------------------- outras telas */
 
 .ativaworkspace .aw-truncate {

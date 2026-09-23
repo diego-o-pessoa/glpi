@@ -1,0 +1,131 @@
+{% extends '@ativaworkspace/_layout.html.twig' %}
+
+{% block content %}
+    <form method="post" action="{{ action_url }}" data-aw-step-form>
+        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+        <input type="hidden" name="profile" value="{{ profile.id }}" />
+        {% if not is_new %}<input type="hidden" name="id" value="{{ step.id }}" />{% endif %}
+
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <h3 class="card-title"><i class="ti ti-list-numbers me-2 text-primary"></i>{{ is_new ? 'Nova etapa' : 'Editar etapa' }}</h3>
+                    <div class="text-muted small">Perfil: <strong>{{ profile.name }}</strong></div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label required" for="aw-step-type">Tipo</label>
+                        <select class="form-select" id="aw-step-type" name="step_type" data-aw-step-type>
+                            {% for key, type in types %}
+                                <option value="{{ key }}" {{ step.step_type == key ? 'selected' : '' }}>{{ type.label }} ({{ key }})</option>
+                            {% endfor %}
+                        </select>
+                        {% for key, type in types %}
+                            <div class="form-hint" data-aw-for-type="{{ key }}">{{ type.description }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label" for="aw-step-name">Nome</label>
+                        <input type="text" class="form-control" id="aw-step-name" name="name" maxlength="255" value="{{ step.name }}"
+                               placeholder="Ex.: VPN Ativa" autocomplete="off" />
+                        <div class="form-hint" data-aw-for-type="SOFTWARE">Em branco, usa o nome do aplicativo.</div>
+                    </div>
+
+                    {# SOFTWARE: aplicativo do catalogo #}
+                    <div class="col-md-6" data-aw-for-type="SOFTWARE">
+                        <label class="form-label required" for="aw-step-app">Aplicativo</label>
+                        {% if applications|length == 0 %}
+                            <div class="alert alert-warning mb-0">
+                                Nenhum aplicativo ativo no catálogo. <a href="{{ catalog_url }}">Cadastre um aplicativo</a>.
+                            </div>
+                        {% else %}
+                            <select class="form-select" id="aw-step-app" name="{{ app_fk }}">
+                                <option value="0">— Escolha —</option>
+                                {% for id, label in applications %}
+                                    <option value="{{ id }}" {{ step[app_fk] == id ? 'selected' : '' }}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        {% endif %}
+                    </div>
+
+                    {# Configuracao especifica de cada tipo (config[TIPO][campo]) #}
+                    {% for key, type in types %}
+                        {% for field_key, field in type.config %}
+                            {% set value = step.step_type == key ? (step.config_values[field_key] ?? '') : '' %}
+                            {% set value = value ?: (field.default ?? '') %}
+                            {% set field_id = 'aw-cfg-' ~ key|lower ~ '-' ~ field_key %}
+                            <div class="{{ field.type == 'textarea' ? 'col-12' : 'col-md-6' }}" data-aw-for-type="{{ key }}">
+                                <label class="form-label {{ field.required ?? false ? 'required' : '' }}" for="{{ field_id }}">{{ field.label }}</label>
+                                {% if field.type == 'select' %}
+                                    <select class="form-select" id="{{ field_id }}" name="config[{{ key }}][{{ field_key }}]">
+                                        <option value="">— Escolha —</option>
+                                        {% for choice_key, choice_label in field.choices %}
+                                            <option value="{{ choice_key }}" {{ value == choice_key ? 'selected' : '' }}>{{ choice_label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                {% else %}
+                                    <textarea class="form-control" id="{{ field_id }}" name="config[{{ key }}][{{ field_key }}]" rows="3" maxlength="2000">{{ value }}</textarea>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    {% endfor %}
+
+                    <div class="col-12"><hr class="my-1"></div>
+
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-check form-switch mt-md-4">
+                            <input class="form-check-input" type="checkbox" name="is_mandatory" value="1" {{ step.is_mandatory ? 'checked' : '' }} />
+                            <span class="form-check-label">Obrigatória</span>
+                        </label>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-check form-switch mt-md-4">
+                            <input class="form-check-input" type="checkbox" name="continue_on_error" value="1" {{ step.continue_on_error ? 'checked' : '' }} />
+                            <span class="form-check-label">Continuar em caso de erro</span>
+                        </label>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label" for="aw-step-timeout">Timeout (min)</label>
+                        <input type="number" class="form-control" id="aw-step-timeout" name="timeout_minutes" min="0" max="{{ timeout_max }}" value="{{ step.timeout_minutes }}" />
+                        <div class="form-hint">0 = padrão do aplicativo/tipo.</div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label" for="aw-step-attempts">Máx. de tentativas</label>
+                        <input type="number" class="form-control" id="aw-step-attempts" name="max_attempts" min="0" max="{{ attempts_max }}" value="{{ step.max_attempts }}" />
+                        <div class="form-hint">0 = padrão do aplicativo/tipo.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer d-flex justify-content-between">
+                <a href="{{ profile_url }}" class="btn btn-outline-secondary"><i class="ti ti-arrow-left"></i> Voltar ao perfil</a>
+                <button type="submit" name="save" value="1" class="btn btn-primary"><i class="ti ti-device-floppy"></i> Salvar etapa</button>
+            </div>
+        </div>
+    </form>
+
+    <script>
+    (function () {
+        // Mostra so os campos do tipo escolhido e desabilita os demais
+        // (campo desabilitado nao vai no POST).
+        var form = document.querySelector('[data-aw-step-form]');
+        var select = form ? form.querySelector('[data-aw-step-type]') : null;
+        if (!select) {
+            return;
+        }
+        function apply() {
+            form.querySelectorAll('[data-aw-for-type]').forEach(function (node) {
+                var visible = node.getAttribute('data-aw-for-type') === select.value;
+                node.classList.toggle('d-none', !visible);
+                node.querySelectorAll('input, select, textarea').forEach(function (input) {
+                    input.disabled = !visible;
+                });
+            });
+        }
+        select.addEventListener('change', apply);
+        apply();
+    })();
+    </script>
+{% endblock %}

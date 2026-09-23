@@ -17,6 +17,42 @@
                     </table>
                 </div>
             </div>
+
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="ti ti-database me-2"></i>Instaladores</h3>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-vcenter mb-0">
+                        <tbody>
+                            <tr>
+                                <th class="w-50">Diretório</th>
+                                <td class="text-break"><code>{{ storage.directory }}</code></td>
+                            </tr>
+                            <tr>
+                                <th>Gravação</th>
+                                <td>
+                                    {% if storage.writable %}
+                                        <span class="badge bg-success">Permitida</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Sem permissão</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr><th>Limite efetivo de upload</th><td><strong>{{ storage.max_label }}</strong></td></tr>
+                            <tr><th>PHP upload_max_filesize</th><td><code>{{ storage.upload_max }}</code></td></tr>
+                            <tr><th>PHP post_max_size</th><td><code>{{ storage.post_max }}</code></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                {% if storage.low_limit %}
+                    <div class="card-footer text-warning small">
+                        <i class="ti ti-alert-triangle me-1"></i>
+                        Limite baixo para instaladores (ex.: Chrome ~130 MB). Aumente <code>upload_max_filesize</code> e
+                        <code>post_max_size</code> no PHP do servidor.
+                    </div>
+                {% endif %}
+            </div>
         </div>
         <div class="col-lg-7">
             <div class="card">

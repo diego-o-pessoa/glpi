@@ -12,4 +12,5 @@ Page::requireAccess('settings');
 Page::render('settings', 'settings.html.twig', [
     'versions' => Environment::versions(),
     'plugins'  => Environment::relatedPlugins(),
+    'storage'  => Environment::storage(),
 ]);

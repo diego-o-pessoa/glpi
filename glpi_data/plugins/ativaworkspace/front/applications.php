@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use GlpiPlugin\Ativaworkspace\Application;
+use GlpiPlugin\Ativaworkspace\InstallerStorage;
 use GlpiPlugin\Ativaworkspace\Page;
 
 include('../../../inc/includes.php');
@@ -16,7 +17,10 @@ foreach ($DB->request([
     'FROM'  => Application::getTable(),
     'ORDER' => ['name ASC'],
 ]) as $row) {
-    $row['provider_label'] = Application::providerLabel((string) $row['provider']);
+    $row['icon_class']     = Application::iconFor($row);
+    $row['category_label'] = Application::CATEGORIES[(string) $row['category']] ?? '—';
+    $row['type_label']     = InstallerStorage::TYPES[(string) $row['installer_type']]['label'] ?? (string) $row['installer_type'];
+    $row['size_label']     = (int) $row['file_size'] > 0 ? Toolbox::getSize((int) $row['file_size']) : '';
     $rows[] = $row;
 }
 
