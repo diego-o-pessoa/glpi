@@ -1,8 +1,10 @@
-/* 
-    GLPI Ativa Splash Screen 
-    Refatorado para reprodução nativa de vídeo
+/*
+    GLPI Ativa Splash Screen
+    Video -> logo horizontal -> logo vertical -> encolhe/sobe -> lugar da logo GLPI
+    Motion: apenas transform/opacity. Easing: cubic-bezier(.22,1,.36,1).
 */
 
+/* ---------- Overlay ---------- */
 #ativa-splash {
     position: fixed;
     inset: 0;
@@ -14,19 +16,15 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: opacity 0.3s ease-out; /* Fade out final da splash (300ms) */
+    transition: opacity 0.3s ease-out; /* fade-out final da splash */
 }
 
-/* Ocultar splash no modo reduzido de movimento */
-@media (prefers-reduced-motion: reduce) {
-    #ativa-splash {
-        display: flex;
-    }
-    #ativa-intro-video {
-        display: none !important;
-    }
+#ativa-splash.ativa-fade-out {
+    opacity: 0;
+    pointer-events: none;
 }
 
+/* ---------- Video ---------- */
 #ativa-intro-video {
     position: absolute;
     top: 0;
@@ -38,25 +36,89 @@
     transition: opacity 0.15s ease-out;
 }
 
-#ativa-final-logo {
+/* ---------- Palco da animacao (simbolo + wordmark) ---------- */
+/* Box fixo centralizado; o conteudo vertical fica simetrico ao centro,
+   o que mantem a matematica do FLIP simples (centro do conteudo = centro do palco). */
+#ativa-stage {
     position: absolute;
-    width: 100%;
-    max-width: 450px;
-    height: auto;
+    left: 50%;
+    top: 50%;
+    width: 460px;
+    height: 240px;
+    margin-left: -230px;
+    margin-top: -120px;
     opacity: 0;
-    object-fit: contain;
-    user-select: none;
-    pointer-events: none;
-    transition: opacity 0.15s ease-in;
+    /* opacity para revelar; transform para o FLIP final (encolher/subir) */
+    transition: opacity 0.25s ease-out,
+                transform 0.5s cubic-bezier(.22, 1, .36, 1);
+    transform-origin: center center;
 }
 
-/* Quando ativado via JS */
-#ativa-final-logo.ativa-show-logo {
+#ativa-stage.ativa-show {
     opacity: 1;
 }
 
-/* Para o fade-out final e transição de saída do DOM */
-#ativa-splash.ativa-fade-out {
-    opacity: 0;
+#ativa-stage img {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    height: 116px;
+    width: auto;
+    user-select: none;
     pointer-events: none;
+    will-change: transform;
+    transition: transform 0.6s cubic-bezier(.22, 1, .36, 1);
+}
+
+/* Estado horizontal (default): simbolo a esquerda, wordmark a direita.
+   margin-left = -metade da largura intrinseca em 116px de altura
+   (simbolo 213x185 -> 134w; wordmark 453x183 -> 287w). */
+#ativa-symbol {
+    margin-left: -67px;
+    margin-top: -58px;
+    transform: translate3d(-151.5px, 0, 0);
+}
+
+#ativa-wordmark {
+    margin-left: -143.5px;
+    margin-top: -58px;
+    transform: translate3d(75px, 0, 0);
+}
+
+/* Estado vertical: simbolo em cima (centro), wordmark embaixo e menor.
+   Conteudo simetrico ao centro do palco: topo -106px, base +106px (altura 212px). */
+#ativa-stage.ativa-vertical #ativa-symbol {
+    transform: translate3d(0, -48px, 0);
+}
+
+#ativa-stage.ativa-vertical #ativa-wordmark {
+    transform: translate3d(0, 69px, 0) scale(0.638);
+}
+
+/* ---------- Reduced motion: sem video, sem animacao ---------- */
+@media (prefers-reduced-motion: reduce) {
+    #ativa-intro-video {
+        display: none !important;
+    }
+    #ativa-stage {
+        transition: none !important;
+    }
+    #ativa-stage img {
+        transition: none !important;
+    }
+}
+
+/* ---------- Logo Ativa PERMANENTE no lugar da logo GLPI ----------
+   Repinta o span.glpi-logo (centralizado acima do card de login) com a logo
+   vertical da Ativa. Vence o CSS da entidade (visibility:hidden) por
+   especificidade + !important, entao aparece SEMPRE: splash pulada, erro de
+   video, autoplay bloqueado, reduced-motion ou sessionStorage. */
+body.welcome-anonymous span.glpi-logo {
+    visibility: visible !important;
+    background-image: url("../assets/img/ativa-vertical.webp") !important;
+    background-repeat: no-repeat !important;
+    background-position: center center !important;
+    background-size: contain !important;
+    width: 200px !important;
+    height: 172px !important;
 }
