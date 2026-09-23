@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-define('PLUGIN_ATIVASPLASH_VERSION', '2.1.2');
+define('PLUGIN_ATIVASPLASH_VERSION', '2.2.0');
 
 /**
  * Init the hooks of the plugin
@@ -15,6 +15,12 @@ function plugin_init_ativasplash(): void
 
     // Use display_login hook to inject our splash HTML/CSS/JS only on the login screen
     $PLUGIN_HOOKS['display_login']['ativasplash'] = 'plugin_ativasplash_display_login';
+
+    // <head> das paginas anonimas: vale desde o primeiro paint (logo Ativa no
+    // lugar da GLPI + cobertura branca ate a splash assumir). O display_login
+    // so e chamado no meio do formulario, tarde demais para isso.
+    $PLUGIN_HOOKS[\Glpi\Plugin\Hooks::ADD_CSS_ANONYMOUS_PAGE]['ativasplash'] = ['css/splash-head.css'];
+    $PLUGIN_HOOKS[\Glpi\Plugin\Hooks::ADD_JAVASCRIPT_ANONYMOUS_PAGE]['ativasplash'] = ['js/splash-head.js'];
 }
 
 /**

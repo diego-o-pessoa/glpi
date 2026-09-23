@@ -1,0 +1,29 @@
+/*
+    Ativa Splash - CSS do <head> (paginas anonimas).
+    Carregado antes do primeiro paint via add_css_anonymous_page. O hook
+    display_login so e chamado no meio do formulario, depois da logo; por isso
+    o que precisa valer desde o primeiro paint fica aqui.
+*/
+
+/* Logo Ativa PERMANENTE no lugar da logo GLPI.
+   No login o GLPI desenha a logo com `content: var(--logo)` (substitui o
+   elemento pela imagem - css/includes/_base.scss, .page-anonymous .glpi-logo).
+   Usamos o mesmo mecanismo. Proporcao 200x172 = a da imagem (296x254). */
+body.welcome-anonymous span.glpi-logo {
+    content: url("../assets/img/ativa-vertical.webp") !important;
+    visibility: visible !important;
+    background: none !important;
+    width: 200px !important;
+    height: 172px !important;
+}
+
+/* Cobertura branca enquanto a splash ainda nao assumiu. A classe e posta pelo
+   splash-head.js so quando a splash vai rodar, e removida pelo splash.js ao
+   terminar (ou por timeout de seguranca). Fica logo abaixo do overlay. */
+html.ativa-splash-pending body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: #ffffff;
+    z-index: 2147483646;
+}

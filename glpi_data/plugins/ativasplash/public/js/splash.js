@@ -8,9 +8,15 @@
     "use strict";
 
     // Sessao ja vista: nao anima de novo (a logo permanente ja esta via CSS).
+    // Cobertura branca do <head> (splash-head.css/js): sai junto com a splash.
+    function releaseCover() {
+        document.documentElement.classList.remove("ativa-splash-pending");
+    }
+
     if (sessionStorage.getItem("ativaSplashViewed") === "true") {
         var seen = document.getElementById("ativa-splash");
         if (seen) seen.remove();
+        releaseCover();
         return;
     }
 
@@ -19,7 +25,10 @@
     var stage = document.getElementById("ativa-stage");
     var symbol = document.getElementById("ativa-symbol");
 
-    if (!splash || !stage) return;
+    if (!splash || !stage) {
+        releaseCover();
+        return;
+    }
 
     var isFinished = false;
     var started = false;
@@ -117,6 +126,8 @@
         clearTimeout(fallbackTimeout);
         sessionStorage.setItem("ativaSplashViewed", "true");
 
+        // O fade do overlay revela o login: a cobertura sai junto.
+        releaseCover();
         splash.classList.add("ativa-fade-out");
         setTimeout(function () {
             splash.remove();
@@ -130,6 +141,7 @@
         clearTimeout(fallbackTimeout);
         sessionStorage.setItem("ativaSplashViewed", "true");
         splash.remove();
+        releaseCover();
     }
 
     // Aguarda o fim da transicao de transform, com timeout de seguranca.
