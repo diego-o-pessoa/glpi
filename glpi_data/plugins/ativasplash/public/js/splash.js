@@ -28,8 +28,16 @@
     // -106 -> base +106). Usada para calcular a escala do FLIP.
     var VERTICAL_CONTENT_H = 212;
 
-    // Timeout de seguranca: se qualquer etapa travar, encerra.
-    var fallbackTimeout = setTimeout(finishImmediately, 6000);
+    // Timeout de seguranca. Se o video travar/demorar, pula direto para a
+    // animacao da logo (que tem seu proprio timeout); se ja estiver animando
+    // e algo travar, encerra.
+    var fallbackTimeout = setTimeout(function () {
+        if (!started) {
+            startLogoAnimation();
+        } else {
+            finishImmediately();
+        }
+    }, 8000);
 
     var prefersReducedMotion =
         window.matchMedia &&
@@ -57,6 +65,10 @@
     function startLogoAnimation() {
         if (isFinished || started) return;
         started = true;
+
+        // Nova janela de seguranca so para a animacao da logo (~1.6s normais).
+        clearTimeout(fallbackTimeout);
+        fallbackTimeout = setTimeout(finishImmediately, 4000);
 
         stage.classList.add("ativa-show");
         video.style.opacity = "0";
@@ -124,7 +136,9 @@
     function onTransformEnd(el, timeoutMs, cb) {
         var done = false;
         function handler(e) {
-            if (e && e.propertyName && e.propertyName !== "transform") return;
+            // So o proprio elemento: o transitionend dos filhos (simbolo/wordmark)
+            // borbulha ate o palco e encerrava a subida antes de comecar.
+            if (e.target !== el || e.propertyName !== "transform") return;
             if (done) return;
             done = true;
             el.removeEventListener("transitionend", handler);

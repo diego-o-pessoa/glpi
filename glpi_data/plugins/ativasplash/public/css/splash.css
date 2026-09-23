@@ -109,16 +109,15 @@
 }
 
 /* ---------- Logo Ativa PERMANENTE no lugar da logo GLPI ----------
-   Repinta o span.glpi-logo (centralizado acima do card de login) com a logo
-   vertical da Ativa. Vence o CSS da entidade (visibility:hidden) por
-   especificidade + !important, entao aparece SEMPRE: splash pulada, erro de
-   video, autoplay bloqueado, reduced-motion ou sessionStorage. */
+   No login o GLPI desenha a logo com `content: var(--logo)` (substitui o
+   elemento pela imagem - css/includes/_base.scss, .page-anonymous .glpi-logo).
+   Usamos o mesmo mecanismo para trocar pela logo vertical da Ativa. Aparece
+   SEMPRE: splash pulada, erro de video, autoplay bloqueado, reduced-motion ou
+   sessionStorage. Proporcao 200x172 = a da imagem (296x254). */
 body.welcome-anonymous span.glpi-logo {
+    content: url("../assets/img/ativa-vertical.webp") !important;
     visibility: visible !important;
-    background-image: url("../assets/img/ativa-vertical.webp") !important;
-    background-repeat: no-repeat !important;
-    background-position: center center !important;
-    background-size: contain !important;
+    background: none !important;
     width: 200px !important;
     height: 172px !important;
 }
