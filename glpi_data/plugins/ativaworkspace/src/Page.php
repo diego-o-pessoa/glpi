@@ -166,7 +166,21 @@ final class Page
         // da entrada no menu multi-entradas (PluginAtivaworkspaceMenu).
         Html::header('Ativa Workspace - ' . $section['title'], '', 'ativaworkspace', $key);
 
+        // Abas entre as secoes (so as que o usuario pode acessar).
+        $nav = [];
+        foreach (self::sections() as $navKey => $navSection) {
+            if (self::canAccess($navKey)) {
+                $nav[] = [
+                    'title'  => $navSection['title'],
+                    'icon'   => $navSection['icon'],
+                    'href'   => self::href($navKey),
+                    'active' => $navKey === $key,
+                ];
+            }
+        }
+
         TemplateRenderer::getInstance()->display('@ativaworkspace/' . $template, $vars + [
+            'nav'           => $nav,
             'section_title' => $section['title'],
             'section_icon'  => $section['icon'],
             'script_url'    => self::asset('js/workspace.js'),

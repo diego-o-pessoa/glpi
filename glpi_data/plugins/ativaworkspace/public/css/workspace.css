@@ -17,6 +17,24 @@
     border-radius: var(--aw-radius);
 }
 
+/* ----------------------------------------------------------------- abas */
+
+.ativaworkspace .aw-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.ativaworkspace .aw-tabs .nav-link {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.ativaworkspace .aw-tabs .nav-link.active {
+    color: var(--aw-blue);
+    font-weight: 600;
+}
+
 /* ---------------------------------------------------------------- hero */
 
 .ativaworkspace .aw-hero .card-body {
