@@ -36,7 +36,7 @@ import ativa_workspace_entra as lib
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.1.1"
+WORKSPACE_AGENT_VERSION = "1.2.0"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -241,6 +241,32 @@ def open_workplace_settings(logger: logging.Logger) -> bool:
     return opened
 
 
+# Troca com o helper (sessao do usuario): fica FORA da pasta Workspace (restrita
+# a SYSTEM/Admins). Guarda o TAP - de uso unico e curta duracao - so ate o helper
+# ler e apagar. O helper roda como o usuario, por isso precisa de acesso.
+HELPER_DIR = PROGRAM_DATA / "AtivaLocacao" / "WorkspaceHelper"
+HELPER_PAYLOAD = HELPER_DIR / "entra.json"
+
+
+def write_helper_payload(data: dict[str, Any], logger: logging.Logger) -> None:
+    import subprocess
+    try:
+        HELPER_DIR.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["icacls", str(HELPER_DIR), "/inheritance:r",
+             "/grant:r", "*S-1-5-18:(OI)(CI)F", "/grant:r", "*S-1-5-32-544:(OI)(CI)F",
+             "/grant:r", "*S-1-5-32-545:(OI)(CI)M"],
+            capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        HELPER_PAYLOAD.write_text(json.dumps(data), encoding="utf-8")
+    except (OSError, subprocess.SubprocessError):
+        logger.exception("Nao foi possivel preparar os dados do helper.")
+
+
+def clear_helper_payload() -> None:
+    HELPER_PAYLOAD.unlink(missing_ok=True)
+
+
 # --------------------------------------------------------------------------- #
 #  Loop do servico
 # --------------------------------------------------------------------------- #
@@ -332,15 +358,24 @@ class WorkspaceRuntime:
             return
 
         if time.time() - float(state.get("last_open", 0.0)) > OPEN_UI_MIN_INTERVAL:
+            # Gera o TAP (senha temporaria de uso unico) e entrega ao helper, que
+            # roda na sessao do usuario e digita conta + TAP na tela do Entra.
+            tap = api.request_tap(step_id)
+            if tap and tap.get("tap"):
+                write_helper_payload({"upn": tap.get("upn", ""), "tap": tap["tap"]}, logger)
+                logger.info("Entra: TAP obtido; abrindo o fluxo automatico.")
+            else:
+                clear_helper_payload()
+                logger.warning("Entra: sem TAP (Graph nao configurado?); abrindo so a tela.")
             opened = open_workplace_settings(logger)
             state["last_open"] = time.time()
-            logger.info("Entra: abertura de 'Acessar trabalho ou escola' %s.", "solicitada" if opened else "falhou")
+            logger.info("Entra: abertura automatica %s.", "solicitada" if opened else "falhou")
         state["started_at"] = time.time()
         save_json(STATE_PATH, state)
 
-        api.progress(step_id, OPENING_SETTINGS, "Abrindo Acessar trabalho ou escola")
+        api.progress(step_id, OPENING_SETTINGS, "Abrindo o ingresso no Microsoft Entra ID")
         api.result(step_id, WAITING_HUMAN,
-                   "Acesse o computador pelo Ativa Remote e conclua a autenticacao Microsoft.",
+                   "Ingressando no Microsoft Entra ID automaticamente. Se pedir confirmacao, acompanhe pelo Ativa Remote.",
                    {"azure_ad_joined": False})
 
 
@@ -365,10 +400,29 @@ class _StopEvent:
 #  Componente da sessao do usuario
 # --------------------------------------------------------------------------- #
 
+def _read_helper_payload() -> dict[str, str]:
+    """Le e APAGA o arquivo de troca (conta + TAP). O TAP so vive aqui na memoria."""
+    try:
+        data = json.loads(HELPER_PAYLOAD.read_text("utf-8"))
+    except (OSError, ValueError):
+        return {}
+    finally:
+        HELPER_PAYLOAD.unlink(missing_ok=True)
+    return data if isinstance(data, dict) else {}
+
+
 def open_workplace_now() -> int:
-    """Roda NA SESSAO DO USUARIO: abre a pagina, clica Conectar -> Ingressar no
-    Entra e para na tela de login da Microsoft. NUNCA le ou digita credenciais."""
+    """
+    Roda NA SESSAO DO USUARIO. Abre "Acessar trabalho ou escola", clica em
+    Conectar -> Ingressar no Microsoft Entra ID e, se houver um TAP entregue
+    pelo servico, digita a CONTA e o TAP (senha temporaria de uso unico) na tela
+    da Microsoft. O TAP nunca e registrado em log.
+    """
     logger = configure_logging(False)
+    payload = _read_helper_payload()
+    upn = str(payload.get("upn", "")).strip()
+    tap = str(payload.get("tap", ""))
+
     try:
         os.startfile("ms-settings:workplace")  # noqa: S606 - URI oficial do Windows
     except OSError:
@@ -378,16 +432,11 @@ def open_workplace_now() -> int:
     try:
         import uiautomation as auto  # type: ignore
     except ImportError:
-        # Sem a lib: a tela abriu; os cliques ficam manuais (via Ativa Remote).
-        logger.warning("uiautomation ausente: cliques manuais.")
+        logger.warning("uiautomation ausente: fluxo manual.")
         return 0
 
-    # Textos equivalentes por idioma. Busca por NOME do controle, sem coordenadas.
     connect_texts = ("conectar", "connect")
-    join_texts = (
-        "microsoft entra id", "azure active directory",  # o link muda de nome por versao
-    )
-    credential_hints = ("sign in", "entrar", "trabalho ou escola", "work or school", "conta")
+    join_texts = ("microsoft entra id", "azure active directory")
 
     def click_by_text(control_type, texts, timeout):
         deadline = time.time() + timeout
@@ -398,7 +447,7 @@ def open_workplace_now() -> int:
                     if name and any(t in name for t in texts):
                         try:
                             ctrl.GetInvokePattern().Invoke()
-                        except Exception:  # noqa: BLE001 - alguns so aceitam Click
+                        except Exception:  # noqa: BLE001
                             ctrl.Click(simulateMove=False)
                         return True
             except Exception:  # noqa: BLE001
@@ -406,33 +455,64 @@ def open_workplace_now() -> int:
             time.sleep(1)
         return False
 
+    def type_into_edit(hints, value, timeout, is_secret):
+        """Acha um campo de texto (por nome/placeholder) e digita, sem registrar o valor."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                for edit in auto.EditControl(searchDepth=40):
+                    name = (edit.Name or "").strip().lower()
+                    if any(h in name for h in hints):
+                        edit.SetFocus()
+                        try:
+                            edit.GetValuePattern().SetValue(value)
+                        except Exception:  # noqa: BLE001 - campos de senha nao aceitam SetValue
+                            edit.SendKeys("{Ctrl}a{Delete}", waitTime=0.05)
+                            edit.SendKeys(value, waitTime=0.02)
+                        logger.info("Campo %s preenchido.", "de senha" if is_secret else name or "(sem nome)")
+                        return True
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(1)
+        return False
+
+    def click_next():
+        return (click_by_text(auto.ButtonControl, ("avancar", "avançar", "next", "entrar", "sign in", "concluir", "done"), 8))
+
     try:
         auto.uiautomation.SetGlobalSearchTimeout(2)
         if not click_by_text(auto.ButtonControl, connect_texts, 25):
             logger.warning("Botao 'Conectar' nao encontrado.")
             return 0
-        # O "Ingressar no Entra ID" costuma ser um link (Hyperlink) na janela de conexao.
         if not (click_by_text(auto.HyperlinkControl, join_texts, 20)
                 or click_by_text(auto.TextControl, join_texts, 5)
                 or click_by_text(auto.ButtonControl, join_texts, 5)):
             logger.warning("Opcao 'Ingressar no Microsoft Entra ID' nao encontrada.")
             return 0
-        # Confirma que a tela de credencial apareceu (nao interage com ela).
-        deadline = time.time() + 40
-        while time.time() < deadline:
-            try:
-                for win in auto.WindowControl(searchDepth=3):
-                    if any(h in (win.Name or "").lower() for h in credential_hints):
-                        logger.info("Tela de login da Microsoft pronta.")
-                        return 0
-            except Exception:  # noqa: BLE001
-                pass
-            time.sleep(1.5)
-        logger.info("Fluxo do Entra acionado; aguardando o tecnico.")
+
+        if not tap or not upn:
+            logger.info("Sem TAP/conta: tela aberta para preenchimento manual.")
+            return 0
+
+        # Tela da Microsoft: conta -> Avancar -> TAP -> Avancar.
+        email_hints = ("email", "e-mail", "someone@example.com", "conta", "usuario", "usuário", "account")
+        if not type_into_edit(email_hints, upn, 40, is_secret=False):
+            logger.warning("Campo de e-mail nao encontrado; preenchimento manual.")
+            return 0
+        click_next()
+
+        tap_hints = ("senha", "password", "codigo", "código", "passcode", "acesso", "pass")
+        if not type_into_edit(tap_hints, tap, 40, is_secret=True):
+            logger.warning("Campo de senha/TAP nao encontrado; preenchimento manual.")
+            return 0
+        click_next()
+        logger.info("Conta e TAP enviados; aguardando o Windows concluir o ingresso.")
         return 0
     except Exception as exc:  # noqa: BLE001
         logger.warning("Falha na automacao da tela do Entra: %s", exc)
         return 0
+    finally:
+        tap = ""  # nao deixa o TAP na memoria alem do necessario
 
 
 # --------------------------------------------------------------------------- #

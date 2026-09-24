@@ -160,6 +160,13 @@ class WorkspaceApi:
         status, _ = self._request("POST", f"/steps/{step_id}/result", payload)
         return status in (200, 202)
 
+    def request_tap(self, step_id: int) -> dict | None:
+        """Pede ao servidor um TAP (senha temporaria) para a conta da etapa."""
+        status, body = self._request("POST", f"/steps/{step_id}/tap", {})
+        if status == 200 and isinstance(body, dict) and body.get("tap"):
+            return body
+        return None
+
 
 def describe_http_error(status: int, body: dict | None) -> str:
     """Motivo legivel para o log quando a API nao devolve uma etapa."""

@@ -168,6 +168,43 @@ final class ApiController extends AbstractController
     }
 
     /** Job atual dono da etapa (a etapa tem que ser a etapa corrente do job). */
+    /**
+     * Gera um TAP (senha temporaria) para a conta do provisionamento desta
+     * etapa. O executor usa para automatizar o login na tela do Entra. O codigo
+     * e de uso unico e nao e registrado.
+     */
+    #[Route('/api/v1/steps/{stepId}/tap', name: 'ativaworkspace_api_tap', requirements: ['stepId' => '\d+'], methods: ['POST'])]
+    public function tap(Request $request, int $stepId): Response
+    {
+        if ($error = $this->checkAuth($request)) {
+            return $error;
+        }
+        $jobId = $this->jobForStep($stepId);
+        if ($jobId === 0) {
+            return $this->error('STEP_NOT_FOUND', 'Etapa não encontrada.', 404);
+        }
+        if (!WorkspaceConfig::graphConfigured()) {
+            return $this->error('GRAPH_OFF', 'Microsoft Graph não configurado.', 503);
+        }
+
+        global $DB;
+        $job = $DB->request(['SELECT' => ['upn'], 'FROM' => \GlpiPlugin\Ativaworkspace\Job::getTable(), 'WHERE' => ['id' => $jobId], 'LIMIT' => 1])->current();
+        $upn = is_array($job) ? (string) ($job['upn'] ?? '') : '';
+        if ($upn === '') {
+            return $this->error('NO_UPN', 'Provisionamento sem conta Microsoft (UPN).', 422);
+        }
+
+        try {
+            $tap = \GlpiPlugin\Ativaworkspace\GraphClient::createTap($upn);
+        } catch (\RuntimeException $exception) {
+            Event::log(Event::LEVEL_WARNING, 'entra', 'Falha ao gerar TAP (executor): ' . $exception->getMessage(), [], $jobId, $stepId);
+            return $this->error('TAP_FAILED', $exception->getMessage(), 422);
+        }
+
+        Event::log(Event::LEVEL_SECURITY, 'entra', 'TAP gerado para o executor', ['validade_min' => $tap['lifetime_minutes']], $jobId, $stepId);
+        return new JsonResponse(['upn' => $upn, 'tap' => $tap['code'], 'lifetime_minutes' => $tap['lifetime_minutes']]);
+    }
+
     private function jobForStep(int $stepId): int
     {
         global $DB;
