@@ -36,7 +36,7 @@ import ativa_workspace_entra as lib
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.3.0"
+WORKSPACE_AGENT_VERSION = "1.3.1"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -438,41 +438,56 @@ def open_workplace_now() -> int:
     connect_texts = ("conectar", "connect")
     join_texts = ("microsoft entra id", "azure active directory")
 
+    # A busca da uiautomation varre a arvore internamente com o filtro Compare
+    # (control_type(searchDepth=..., Compare=fn) devolve UM controle). O jeito
+    # antigo (for ctrl in control_type(...)) nao funciona: retorna um controle so.
+    def find_control(control_type, texts, depth=50):
+        lowered = [t.lower() for t in texts]
+
+        def compare(ctrl, _depth):
+            try:
+                name = (ctrl.Name or "").strip().lower()
+            except Exception:  # noqa: BLE001
+                return False
+            return bool(name) and any(t in name for t in lowered)
+
+        ctrl = control_type(searchDepth=depth, Compare=compare)
+        return ctrl if ctrl.Exists(0, 0) else None
+
     def click_by_text(control_type, texts, timeout):
         deadline = time.time() + timeout
         while time.time() < deadline:
-            try:
-                for ctrl in control_type(searchDepth=40):
-                    name = (ctrl.Name or "").strip().lower()
-                    if name and any(t in name for t in texts):
-                        try:
-                            ctrl.GetInvokePattern().Invoke()
-                        except Exception:  # noqa: BLE001
-                            ctrl.Click(simulateMove=False)
-                        return True
-            except Exception:  # noqa: BLE001
-                pass
+            ctrl = find_control(control_type, texts)
+            if ctrl is not None:
+                try:
+                    ctrl.GetInvokePattern().Invoke()
+                except Exception:  # noqa: BLE001
+                    try:
+                        ctrl.Click(simulateMove=False)
+                    except Exception:  # noqa: BLE001
+                        pass
+                return True
             time.sleep(1)
         return False
 
     def type_into_edit(hints, value, timeout, is_secret):
-        """Acha um campo de texto (por nome/placeholder) e digita, sem registrar o valor."""
+        """Acha um campo de texto (por nome) e digita, sem registrar o valor."""
         deadline = time.time() + timeout
         while time.time() < deadline:
-            try:
-                for edit in auto.EditControl(searchDepth=40):
-                    name = (edit.Name or "").strip().lower()
-                    if any(h in name for h in hints):
-                        edit.SetFocus()
-                        try:
-                            edit.GetValuePattern().SetValue(value)
-                        except Exception:  # noqa: BLE001 - campos de senha nao aceitam SetValue
-                            edit.SendKeys("{Ctrl}a{Delete}", waitTime=0.05)
-                            edit.SendKeys(value, waitTime=0.02)
-                        logger.info("Campo %s preenchido.", "de senha" if is_secret else name or "(sem nome)")
-                        return True
-            except Exception:  # noqa: BLE001
-                pass
+            edit = find_control(auto.EditControl, hints)
+            if edit is not None:
+                try:
+                    edit.SetFocus()
+                    try:
+                        edit.GetValuePattern().SetValue(value)
+                    except Exception:  # noqa: BLE001 - campo de senha nao aceita SetValue
+                        edit.SendKeys("{Ctrl}a", waitTime=0.05)
+                        edit.SendKeys("{Delete}", waitTime=0.05)
+                        edit.SendKeys(value, waitTime=0.02)
+                    logger.info("Campo preenchido (%s).", "senha" if is_secret else "conta")
+                    return True
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Falha ao preencher campo: %s", exc)
             time.sleep(1)
         return False
 
