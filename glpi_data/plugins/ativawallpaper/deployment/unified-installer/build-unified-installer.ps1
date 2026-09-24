@@ -4,9 +4,8 @@ param(
     [string]$BootstrapConfig,
     [string]$UpdaterConfig = ".\ativaupdater-service-config.json",
     [string]$GuardianConfig = ".\ativaguardian-service-config.json",
-    # Opcional: config do Ativa Workspace (executor da etapa ENTRA_LOGIN).
-    # Baixe em Ativa Workspace > Configuracoes > Baixar configuracao. Sem ela,
-    # o instalador nao grava a config do Workspace (o Entra fica inativo).
+    # Obrigatoria: config do Ativa Workspace (executor da etapa ENTRA_LOGIN).
+    # Baixe em Ativa Workspace > Configuracoes > Baixar configuracao.
     [string]$WorkspaceConfig = ".\ativaworkspace-service-config.json",
     [string]$OutputDirectory = ".\dist",
     [string]$Python = "py",
@@ -230,23 +229,21 @@ if ([string]$GuardianBootstrap.updater_api_url -ne $ExpectedUpdaterApi) {
 if ([string]$GuardianBootstrap.updater_api_token -notmatch '^[a-fA-F0-9]{64}$') {
     throw "ativaguardian-service-config.json deve trazer updater_api_token valido. Baixe a configuracao novamente em Ativa Guardian > Configurar."
 }
-# Ativa Workspace (opcional): se a config existir, valida como o Guardian.
-# Sem ela, o pacote e gerado sem o Workspace e a etapa ENTRA_LOGIN fica inativa.
-$WorkspaceConfigPath = $null
-if (Test-Path -LiteralPath $WorkspaceConfig) {
-    $WorkspaceBootstrap = Get-Content -Raw -LiteralPath $WorkspaceConfig | ConvertFrom-Json
-    if ($WorkspaceBootstrap.verify_tls -ne $true) {
-        throw "ativaworkspace-service-config.json deve conter verify_tls=true."
-    }
-    if ([string]$WorkspaceBootstrap.api_url -ne $ExpectedWorkspaceApi) {
-        throw "A API do Ativa Workspace deve ser $ExpectedWorkspaceApi. Baixe a configuracao novamente em Ativa Workspace > Configuracoes."
-    }
-    if ([string]$WorkspaceBootstrap.api_token -notmatch '^[a-fA-F0-9]{64}$') {
-        throw "ativaworkspace-service-config.json nao contem um token valido."
-    }
-    $WorkspaceConfigPath = $WorkspaceConfig
-} else {
-    Write-Warning "Sem ativaworkspace-service-config.json: o pacote sai sem o executor do Entra (etapa ENTRA_LOGIN inativa)."
+# O pacote unificado nunca pode nascer sem o executor do Workspace: isso faria
+# os provisionamentos ficarem indefinidamente em "Aguardando o executor".
+if (-not (Test-Path -LiteralPath $WorkspaceConfig -PathType Leaf)) {
+    throw "Configuracao do Ativa Workspace nao encontrada: $WorkspaceConfig. Baixe-a em Ativa Workspace > Configuracoes."
+}
+$WorkspaceConfigPath = (Resolve-Path $WorkspaceConfig).Path
+$WorkspaceBootstrap = Get-Content -Raw -LiteralPath $WorkspaceConfigPath | ConvertFrom-Json
+if ($WorkspaceBootstrap.verify_tls -ne $true) {
+    throw "ativaworkspace-service-config.json deve conter verify_tls=true."
+}
+if ([string]$WorkspaceBootstrap.api_url -ne $ExpectedWorkspaceApi) {
+    throw "A API do Ativa Workspace deve ser $ExpectedWorkspaceApi. Baixe a configuracao novamente em Ativa Workspace > Configuracoes."
+}
+if ([string]$WorkspaceBootstrap.api_token -notmatch '^[a-fA-F0-9]{64}$') {
+    throw "ativaworkspace-service-config.json nao contem um token valido."
 }
 
 if (-not (Test-Path -LiteralPath $AgentMsi)) {
@@ -337,16 +334,16 @@ if ($GuardianVersion -notmatch '^\d+\.\d+\.\d+$') {
     throw "Nao foi possivel identificar a versao do servico Ativa Guardian compilado."
 }
 
-# Ativa Workspace: so entra no pacote quando ha config (senao o servico nao teria
-# com quem falar). Compila o exe proprio.
-if ($WorkspaceConfigPath) {
-    Write-Host "Compilando o servico AtivaWorkspace.exe..."
-    & $WorkspaceBuildScript -Python $PythonExecutable
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $WorkspaceExe)) {
-        throw "Falha ao compilar o servico Ativa Workspace."
-    }
-} else {
-    $WorkspaceExe = $null
+# Ativa Workspace e parte obrigatoria do instalador unificado.
+Write-Host "Compilando o servico AtivaWorkspace.exe..."
+& $WorkspaceBuildScript -Python $PythonExecutable
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $WorkspaceExe)) {
+    throw "Falha ao compilar o servico Ativa Workspace."
+}
+$WorkspaceVersion = ((& $WorkspaceExe --version) | Select-Object -First 1)
+$WorkspaceVersion = if ($WorkspaceVersion) { $WorkspaceVersion.ToString().Trim() } else { "" }
+if ($WorkspaceVersion -notmatch '^\d+\.\d+\.\d+$') {
+    throw "Nao foi possivel identificar a versao do servico Ativa Workspace compilado."
 }
 
 $Iscc = Find-InnoSetupCompiler
@@ -385,26 +382,19 @@ try {
         ($UpdaterBootstrap | ConvertTo-Json -Depth 8),
         $Utf8WithoutBom
     )
-    if ($WorkspaceConfigPath) {
-        [IO.File]::WriteAllText(
-            $PreparedWorkspaceConfig,
-            ($WorkspaceBootstrap | ConvertTo-Json -Depth 8),
-            $Utf8WithoutBom
-        )
-    }
+    [IO.File]::WriteAllText(
+        $PreparedWorkspaceConfig,
+        ($WorkspaceBootstrap | ConvertTo-Json -Depth 8),
+        $Utf8WithoutBom
+    )
     [IO.File]::WriteAllText(
         $PreparedGuardianConfig,
         ($GuardianBootstrap | ConvertTo-Json -Depth 8),
         $Utf8WithoutBom
     )
 
-    Write-Host "Gerando um unico instalador com GLPI Agent, Wallpaper Client, Ativa Updater e Ativa Guardian..."
-    # Defines do Workspace so quando ha config + exe (o .iss trata a ausencia).
-    $WorkspaceDefines = if ($WorkspaceConfigPath -and $WorkspaceExe) {
-        @("/DWorkspaceConfigPath=$PreparedWorkspaceConfig", "/DWorkspacePath=$WorkspaceExe")
-    } else {
-        @("/DSkipWorkspace=1")
-    }
+    Write-Host "Gerando um unico instalador com GLPI Agent, Wallpaper Client, Ativa Updater, Ativa Guardian e Ativa Workspace..."
+    $WorkspaceDefines = @("/DWorkspaceConfigPath=$PreparedWorkspaceConfig", "/DWorkspacePath=$WorkspaceExe")
     & $Iscc `
         @WorkspaceDefines `
         "/DWallpaperClientPath=$ClientExe" `
@@ -447,11 +437,15 @@ $Manifest = [ordered]@{
     bundle_version = $BundleVersion
     wallpaper_client_version = $ClientVersion
     unified_updater_version = $UnifiedUpdaterVersion
+    guardian_version = $GuardianVersion
+    workspace_version = $WorkspaceVersion
     glpi_agent_version = $AgentVersion
     glpi_agent_server = $AgentServerUrl
     glpi_agent_sha256 = (Get-FileHash -LiteralPath $AgentMsi -Algorithm SHA256).Hash
     wallpaper_client_sha256 = (Get-FileHash -LiteralPath $ClientExe -Algorithm SHA256).Hash
     unified_updater_sha256 = (Get-FileHash -LiteralPath $UnifiedUpdaterExe -Algorithm SHA256).Hash
+    guardian_sha256 = (Get-FileHash -LiteralPath $GuardianExe -Algorithm SHA256).Hash
+    workspace_sha256 = (Get-FileHash -LiteralPath $WorkspaceExe -Algorithm SHA256).Hash
     updater_api = $ExpectedUpdaterApi
     updater_interval_seconds = $UpdaterInterval
     unified_installer_filename = [IO.Path]::GetFileName($UnifiedInstaller)
@@ -463,6 +457,6 @@ $ManifestPath = Join-Path $OutputPath "Ativa-Unified-Agent-Setup-$BundleVersion.
 [IO.File]::WriteAllText($ManifestPath, ($Manifest | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
 
 Write-Host "Instalador unificado: $UnifiedInstaller"
-Write-Host "Conteudo do pacote $BundleVersion`: Wallpaper Client $ClientVersion | Ativa Unified Updater $UnifiedUpdaterVersion | GLPI Agent $AgentVersion"
+Write-Host "Conteudo do pacote $BundleVersion`: Wallpaper Client $ClientVersion | Ativa Unified Updater $UnifiedUpdaterVersion | Ativa Guardian $GuardianVersion | Ativa Workspace $WorkspaceVersion | GLPI Agent $AgentVersion"
 Write-Host "Manifesto e hashes: $ManifestPath"
 Write-Warning "O instalador contem o segredo de bootstrap. Distribua-o somente por canal protegido e rotacione o segredo apos o rollout."

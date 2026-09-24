@@ -77,7 +77,11 @@ final class ApiController extends AbstractController
         }
         $computersId = MachineIdentity::computerFromGuid($guid);
         if ($computersId <= 0) {
-            return $this->error('MACHINE_UNKNOWN', 'Máquina não vinculada a um computador do inventário.', 404);
+            return $this->error(
+                'MACHINE_UNKNOWN',
+                'Máquina não vinculada de forma única ao inventário. Aguarde o inventário do Wallpaper/Updater e confira o hostname no GLPI.',
+                404
+            );
         }
 
         $next = ProvisioningEngine::executorNextStep($computersId);

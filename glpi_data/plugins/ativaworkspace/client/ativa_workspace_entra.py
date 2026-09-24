@@ -170,7 +170,7 @@ def describe_http_error(status: int, body: dict | None) -> str:
         0: "sem conexao com o Workspace (rede, TLS ou URL)",
         401: "token ausente ou invalido",
         403: "token recusado (foi regenerado no GLPI? gere o pacote de novo)",
-        404: "maquina nao vinculada a um computador (Ativa Remote) ou rota inexistente",
+        404: "maquina nao vinculada de forma unica ao inventario (Wallpaper/Updater) ou rota inexistente",
         503: "API do Workspace desabilitada",
     }
     return f"HTTP {status} {code} - {reasons.get(status, 'resposta inesperada')}".strip()

@@ -24,6 +24,7 @@ import ctypes
 import json
 import logging
 import os
+import re
 import sys
 import time
 from ctypes import wintypes
@@ -35,7 +36,7 @@ import ativa_workspace_entra as lib
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.1.0"
+WORKSPACE_AGENT_VERSION = "1.1.1"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -445,6 +446,21 @@ def run_sc(*args: str) -> int:
     return completed.returncode
 
 
+def service_is_running() -> bool:
+    """Confirma o estado RUNNING; `sc start` pode retornar antes de o processo cair."""
+    import subprocess
+    try:
+        completed = subprocess.run(
+            ["sc.exe", "query", SERVICE_NAME], capture_output=True, text=True, timeout=15,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return completed.returncode == 0 and re.search(
+        r"(?:STATE|ESTADO)\s*:\s*4\b", completed.stdout or "", re.IGNORECASE
+    ) is not None
+
+
 def write_configuration(source: Path, logger: logging.Logger) -> None:
     """Grava config.json a partir do JSON baixado, com acesso restrito."""
     data = json.loads(source.read_text("utf-8"))
@@ -483,15 +499,26 @@ def install_service(logger: logging.Logger) -> int:
     exists = run_sc("query", SERVICE_NAME) == 0
     if exists:
         run_sc("stop", SERVICE_NAME)
-        run_sc("config", SERVICE_NAME, "binPath=", f'"{executable}" --service',
-               "start=", "auto", "DisplayName=", SERVICE_DISPLAY_NAME)
+        configured = run_sc("config", SERVICE_NAME, "binPath=", f'"{executable}" --service',
+                            "start=", "auto", "DisplayName=", SERVICE_DISPLAY_NAME)
+        if configured != 0:
+            raise RuntimeError(f"Nao foi possivel configurar o servico {SERVICE_NAME} (sc.exe={configured}).")
     else:
-        run_sc("create", SERVICE_NAME, "binPath=", f'"{executable}" --service',
-               "start=", "auto", "DisplayName=", SERVICE_DISPLAY_NAME)
+        created = run_sc("create", SERVICE_NAME, "binPath=", f'"{executable}" --service',
+                         "start=", "auto", "DisplayName=", SERVICE_DISPLAY_NAME)
+        if created != 0:
+            raise RuntimeError(f"Nao foi possivel criar o servico {SERVICE_NAME} (sc.exe={created}).")
     run_sc("description", SERVICE_NAME, SERVICE_DESCRIPTION)
     run_sc("failure", SERVICE_NAME, "reset=", "86400",
            "actions=", "restart/60000/restart/60000/restart/60000")
-    run_sc("start", SERVICE_NAME)
+    started = run_sc("start", SERVICE_NAME)
+    if started != 0:
+        raise RuntimeError(f"Nao foi possivel iniciar o servico {SERVICE_NAME} (sc.exe={started}).")
+    time.sleep(2)
+    if not service_is_running():
+        raise RuntimeError(
+            f"O servico {SERVICE_NAME} iniciou e encerrou. Consulte {LOG_DIR / 'service.log'}."
+        )
     logger.info("Servico %s registrado e iniciado.", SERVICE_NAME)
     return 0
 
