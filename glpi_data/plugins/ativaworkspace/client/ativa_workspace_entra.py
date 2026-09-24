@@ -160,12 +160,12 @@ class WorkspaceApi:
         status, _ = self._request("POST", f"/steps/{step_id}/result", payload)
         return status in (200, 202)
 
-    def request_tap(self, step_id: int) -> dict | None:
-        """Pede ao servidor um TAP (senha temporaria) para a conta da etapa."""
+    def request_tap(self, step_id: int) -> tuple[dict | None, str]:
+        """Pede um TAP ao servidor. Retorna (dados, motivo-do-erro-se-houver)."""
         status, body = self._request("POST", f"/steps/{step_id}/tap", {})
         if status == 200 and isinstance(body, dict) and body.get("tap"):
-            return body
-        return None
+            return body, ""
+        return None, describe_http_error(status, body)
 
 
 def describe_http_error(status: int, body: dict | None) -> str:

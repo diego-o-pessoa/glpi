@@ -36,7 +36,7 @@ import ativa_workspace_entra as lib
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.4.0"
+WORKSPACE_AGENT_VERSION = "1.4.1"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -358,15 +358,16 @@ class WorkspaceRuntime:
             return
 
         if time.time() - float(state.get("last_open", 0.0)) > OPEN_UI_MIN_INTERVAL:
-            # Gera o TAP (senha temporaria de uso unico) e entrega ao helper, que
-            # roda na sessao do usuario e digita conta + TAP na tela do Entra.
-            tap = api.request_tap(step_id)
-            if tap and tap.get("tap"):
-                write_helper_payload({"upn": tap.get("upn", ""), "tap": tap["tap"]}, logger)
+            # A conta (UPN) vem do proprio passo: o e-mail sempre preenche, mesmo
+            # se o TAP falhar. O TAP e gerado a parte (senha temporaria de uso unico).
+            upn = str(entra.get("upn", ""))
+            tap_data, tap_error = api.request_tap(step_id)
+            tap_code = str(tap_data.get("tap", "")) if tap_data else ""
+            if tap_code:
                 logger.info("Entra: TAP obtido; abrindo o fluxo automatico.")
             else:
-                clear_helper_payload()
-                logger.warning("Entra: sem TAP (Graph nao configurado?); abrindo so a tela.")
+                logger.warning("Entra: sem TAP (%s); digita o e-mail e aguarda o TAP manual.", tap_error or "motivo desconhecido")
+            write_helper_payload({"upn": upn, "tap": tap_code}, logger)
             opened = open_workplace_settings(logger)
             state["last_open"] = time.time()
             logger.info("Entra: abertura automatica %s.", "solicitada" if opened else "falhou")
@@ -533,8 +534,8 @@ def open_workplace_now() -> int:
             logger.warning("Opcao 'Ingressar no Microsoft Entra ID' nao encontrada.")
             return 0
 
-        if not tap or not upn:
-            logger.info("Sem TAP/conta: tela aberta para preenchimento manual.")
+        if not upn:
+            logger.info("Sem conta (UPN): tela aberta para preenchimento manual.")
             return 0
 
         time.sleep(4)  # a tela de login da organizacao (web) carrega
@@ -545,6 +546,11 @@ def open_workplace_now() -> int:
             logger.warning("Campo de e-mail nao encontrado; preenchimento manual.")
             return 0
         click_next()
+
+        if not tap:
+            logger.info("E-mail preenchido; sem TAP (digite a senha temporaria manualmente).")
+            return 0
+
         time.sleep(4)  # proxima tela (senha ou TAP)
 
         tap_hints = ("temporary", "temporária", "temporaria", "tap", "passcode",
