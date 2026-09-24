@@ -36,7 +36,7 @@ import ativa_workspace_entra as lib
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.3.2"
+WORKSPACE_AGENT_VERSION = "1.4.0"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -553,7 +553,16 @@ def open_workplace_now() -> int:
             logger.warning("Campo de senha/TAP nao encontrado; preenchimento manual.")
             return 0
         click_next()
-        logger.info("Conta e TAP enviados; aguardando o Windows concluir o ingresso.")
+
+        # Confirmacao "Verifique se esta e sua organizacao" -> Ingressar.
+        time.sleep(4)
+        if click_by_text(auto.ButtonControl, ("ingressar", "join", "participar"), 30):
+            logger.info("Confirmacao da organizacao: Ingressar clicado.")
+        # Tela final "Esta tudo pronto!" -> Concluido.
+        time.sleep(6)
+        if click_by_text(auto.ButtonControl, ("concluido", "concluído", "done", "finish", "ok"), 25):
+            logger.info("Ingresso concluido (Concluido clicado).")
+        logger.info("Fluxo do Entra finalizado; aguardando o dsregcmd confirmar.")
         return 0
     except Exception as exc:  # noqa: BLE001
         logger.warning("Falha na automacao da tela do Entra: %s", exc)
