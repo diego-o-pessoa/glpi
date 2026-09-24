@@ -36,7 +36,7 @@ import ativa_workspace_entra as lib
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.2.0"
+WORKSPACE_AGENT_VERSION = "1.3.0"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -476,14 +476,19 @@ def open_workplace_now() -> int:
             time.sleep(1)
         return False
 
+    # Inclui "Proximo" (o botao real da tela) e variantes.
+    next_texts = ("proximo", "próximo", "avancar", "avançar", "next", "entrar", "sign in", "concluir", "done")
+
     def click_next():
-        return (click_by_text(auto.ButtonControl, ("avancar", "avançar", "next", "entrar", "sign in", "concluir", "done"), 8))
+        return click_by_text(auto.ButtonControl, next_texts, 10)
 
     try:
         auto.uiautomation.SetGlobalSearchTimeout(2)
         if not click_by_text(auto.ButtonControl, connect_texts, 25):
             logger.warning("Botao 'Conectar' nao encontrado.")
             return 0
+        time.sleep(2)  # o dialogo "Configurar uma conta corporativa" abre
+        # "Ingressar este dispositivo no Microsoft Entra ID" (link em Acoes alternativas).
         if not (click_by_text(auto.HyperlinkControl, join_texts, 20)
                 or click_by_text(auto.TextControl, join_texts, 5)
                 or click_by_text(auto.ButtonControl, join_texts, 5)):
@@ -494,14 +499,18 @@ def open_workplace_now() -> int:
             logger.info("Sem TAP/conta: tela aberta para preenchimento manual.")
             return 0
 
-        # Tela da Microsoft: conta -> Avancar -> TAP -> Avancar.
-        email_hints = ("email", "e-mail", "someone@example.com", "conta", "usuario", "usuário", "account")
+        time.sleep(4)  # a tela de login da organizacao (web) carrega
+        # Conta -> Proximo -> TAP -> Proximo.
+        email_hints = ("email", "e-mail", "endereco de email", "endereço de email",
+                       "someone", "phone", "telefone", "skype", "conta", "account", "usuario", "usuário")
         if not type_into_edit(email_hints, upn, 40, is_secret=False):
             logger.warning("Campo de e-mail nao encontrado; preenchimento manual.")
             return 0
         click_next()
+        time.sleep(4)  # proxima tela (senha ou TAP)
 
-        tap_hints = ("senha", "password", "codigo", "código", "passcode", "acesso", "pass")
+        tap_hints = ("temporary", "temporária", "temporaria", "tap", "passcode",
+                     "codigo", "código", "acesso", "senha", "password", "pass", "pin")
         if not type_into_edit(tap_hints, tap, 40, is_secret=True):
             logger.warning("Campo de senha/TAP nao encontrado; preenchimento manual.")
             return 0
