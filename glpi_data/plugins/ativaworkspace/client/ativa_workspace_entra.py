@@ -150,13 +150,20 @@ class WorkspaceApi:
                 return status, body
         except Exception as exc:  # noqa: BLE001 - erro de rede vira (0, None)
             code = getattr(exc, "code", 0)
-            return int(code) if isinstance(code, int) else 0, None
+            status = int(code) if isinstance(code, int) else 0
+            body = None
+            # HTTPError traz o JSON de erro da API (ex.: MACHINE_UNKNOWN): le para o log.
+            if status and hasattr(exc, "read"):
+                try:
+                    body = json.loads(exc.read(8192).decode("utf-8"))
+                except Exception:  # noqa: BLE001
+                    body = None
+            return status, body
 
-    def next_step(self) -> dict | None:
+    def next_step(self) -> tuple[int, dict | None]:
+        """(status HTTP, corpo). 200 = etapa; 204 = nada a fazer; resto = erro."""
         status, body = self._request("GET", f"/machines/{self.machine_guid}/step")
-        if status == 200 and isinstance(body, dict):
-            return body
-        return None
+        return status, body if isinstance(body, dict) else None
 
     def progress(self, step_id: int, substate: str, log: str = "") -> bool:
         status, _ = self._request("POST", f"/steps/{step_id}/progress", {"substate": substate, "log": log})
@@ -279,11 +286,36 @@ class WorkspaceEntraExecutor:
         except OSError:
             self.logger.exception("Nao foi possivel gravar o estado do Entra.")
 
+    def _report_idle(self, reason: str) -> None:
+        """Loga o motivo de estar parado so quando ele muda (sem encher o log)."""
+        global _last_idle_reason
+        if reason != _last_idle_reason:
+            _last_idle_reason = reason
+            level = logging.INFO if reason.startswith("ok") else logging.WARNING
+            self.logger.log(level, "Executor Entra do Workspace: %s (machine_guid=%s)", reason, self.api.machine_guid)
+
     def tick(self) -> None:
         """Uma passada. Chamado periodicamente pelo servico."""
-        step = self.api.next_step()
-        if not step or step.get("type") != "ENTRA_LOGIN":
+        status, step = self.api.next_step()
+        if status == 204:
+            self._report_idle("ok, nenhuma etapa Entra para esta maquina")
             return
+        if status != 200 or step is None:
+            code = ""
+            if isinstance(step, dict) and isinstance(step.get("error"), dict):
+                code = str(step["error"].get("code", ""))
+            reasons = {
+                0: "sem conexao com o Workspace (rede/TLS/URL)",
+                401: "token ausente/invalido",
+                403: "token recusado (regenerado no GLPI? gere o pacote de novo)",
+                404: "maquina nao vinculada a um computador (Ativa Remote) ou rota inexistente",
+                503: "API do Workspace desabilitada",
+            }
+            self._report_idle(f"HTTP {status} {code} - {reasons.get(status, 'resposta inesperada')}")
+            return
+        if step.get("type") != "ENTRA_LOGIN":
+            return
+        self._report_idle(f"ok, etapa Entra #{step.get('step_id')} em andamento")
         step_id = int(step.get("step_id", 0))
         entra = step.get("entra", {}) if isinstance(step.get("entra"), dict) else {}
         expected_tenant = str(entra.get("expected_tenant", ""))
@@ -485,6 +517,10 @@ def helper_main(signal_path: Path) -> int:
 #  Config / entrypoint
 # --------------------------------------------------------------------------- #
 
+_last_idle_reason = ""
+_config_missing_logged = False
+
+
 def load_config() -> dict[str, Any] | None:
     """Config gravada pelo instalador: {api_url, api_token}. machine_guid vem do proprio host."""
     try:
@@ -501,7 +537,15 @@ def machine_guid() -> str:
     """MachineGuid do registro (o mesmo que os outros servicos Ativa usam)."""
     try:
         import winreg  # type: ignore
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography") as key:
+        # KEY_WOW64_64KEY: mesma leitura do Ativa Updater. Sem ela, um processo
+        # 32 bits le o ramo Wow6432Node (sem MachineGuid) e o GUID nao bate com
+        # o registrado no Ativa Remote -> o Workspace nao acha o computador.
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Cryptography",
+            0,
+            winreg.KEY_READ | winreg.KEY_WOW64_64KEY,
+        ) as key:
             value, _ = winreg.QueryValueEx(key, "MachineGuid")
             return str(value).strip().lower()
     except OSError:
@@ -512,8 +556,12 @@ def machine_guid() -> str:
 
 def run_executor_tick(logger: logging.Logger) -> None:
     """Ponto de entrada para o servico chamar a cada ciclo (curto e sem excecao)."""
+    global _config_missing_logged
     config = load_config()
     if config is None:
+        if not _config_missing_logged:
+            _config_missing_logged = True
+            logger.warning("Executor Entra do Workspace inativo: %s ausente ou sem api_url/api_token.", CONFIG_PATH)
         return
     try:
         WorkspaceEntraExecutor(config, logger).tick()

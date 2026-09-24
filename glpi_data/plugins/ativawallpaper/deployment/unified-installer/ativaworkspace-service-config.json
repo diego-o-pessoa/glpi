@@ -1,0 +1,5 @@
+{
+    "api_url": "https://chamados.ativalocacao.com.br:8443/plugins/ativaworkspace/api/v1",
+    "api_token": "71dc3cbdebc91c3ce9179ded515a8085157c0f0444ba852aa1fb59bf87fbc869",
+    "verify_tls": true
+}

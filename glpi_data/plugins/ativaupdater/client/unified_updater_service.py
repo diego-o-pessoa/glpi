@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.8"
+UPDATER_VERSION = "1.7.9"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 

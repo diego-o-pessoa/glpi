@@ -32,12 +32,25 @@ if not exist "%~dp0ativaguardian-service-config.json" (
     exit /b 1
 )
 
+rem O Ativa Workspace e opcional. Se a config existir, o Entra vai no pacote;
+rem se nao, o instalador e gerado sem o Entra (e avisa).
+if not exist "%~dp0ativaworkspace-service-config.json" (
+    echo.
+    echo AVISO: ativaworkspace-service-config.json nao encontrado.
+    echo O instalador sera gerado SEM a etapa Microsoft Entra ID.
+    echo Para incluir o Entra: baixe em Ativa Workspace ^> Configuracoes ^> Baixar
+    echo configuracao, salve nesta pasta com esse nome exato ^(sem "(1)"^) e rode de novo.
+    echo.
+    pause
+)
+
 echo Gerando o instalador unificado Ativa para todos os computadores...
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass ^
   -File "%~dp0build-unified-installer.ps1" ^
   -BootstrapConfig "%~dp0bootstrap-config.json" ^
   -UpdaterConfig "%~dp0ativaupdater-service-config.json" ^
   -GuardianConfig "%~dp0ativaguardian-service-config.json" ^
+  -WorkspaceConfig "%~dp0ativaworkspace-service-config.json" ^
   -OutputDirectory "%~dp0dist" ^
   -AllComputers ^
   -InstallBuildTools
