@@ -44,6 +44,10 @@ expect(
     $permissionMethod->invoke(null, ['UserAuthenticationMethod.ReadWrite.All']) === 'UserAuthenticationMethod.ReadWrite.All',
     'A permissao ampla compativel deveria ser aceita.'
 );
+expect(
+    $permissionMethod->invoke(null, ['userauthmethod-tap.readwrite.all']) === 'UserAuthMethod-TAP.ReadWrite.All',
+    'A comparacao da app role deveria tolerar diferenca de caixa.'
+);
 expect($permissionMethod->invoke(null, ['User.Read.All']) === '', 'Uma permissao sem acesso ao TAP foi aceita.');
 
 $invalidRejected = false;
@@ -57,4 +61,4 @@ expect($invalidRejected, 'Token malformado deveria ser recusado.');
 $expiresAt = $expirationMethod->invoke(null, '2026-09-24T12:00:00Z', 60);
 expect($expiresAt === '2026-09-24T13:00:00+00:00', 'Calculo de expiracao do TAP incorreto.');
 
-echo "GraphClient: 7 verificacoes concluidas.\n";
+echo "GraphClient: 8 verificacoes concluidas.\n";

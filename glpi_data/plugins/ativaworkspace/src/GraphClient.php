@@ -102,11 +102,23 @@ final class GraphClient
             throw new RuntimeException('A credencial não retornou um token destinado ao Microsoft Graph.');
         }
 
-        $roles = is_array($claims['roles'] ?? null) ? $claims['roles'] : [];
+        $roleClaim = $claims['roles'] ?? [];
+        // O formato documentado e uma lista, mas alguns emissores/proxies podem
+        // serializar uma unica app role como string. Aceita ambos sem aceitar
+        // o claim `scp`, que representaria permissao Delegada e nao serve para
+        // o fluxo client_credentials.
+        $roles = is_array($roleClaim)
+            ? array_values(array_filter(array_map('strval', $roleClaim)))
+            : (is_string($roleClaim) && $roleClaim !== '' ? [$roleClaim] : []);
         $permission = self::tapPermission($roles);
         if ($permission === '') {
+            $detected = $roles === []
+                ? 'nenhuma app role'
+                : implode(', ', array_slice($roles, 0, 8));
             throw new RuntimeException(
-                'A autenticação funcionou, mas falta a permissão de aplicativo UserAuthMethod-TAP.ReadWrite.All com consentimento administrativo.'
+                'A autenticação funcionou, mas o token não contém a app role UserAuthMethod-TAP.ReadWrite.All. '
+                . 'Confirme que a permissão foi adicionada em “Application permissions” e recebeu consentimento administrativo. '
+                . 'Roles recebidas: ' . mb_substr($detected, 0, 400) . '.'
             );
         }
 
@@ -235,8 +247,10 @@ final class GraphClient
     private static function tapPermission(array $roles): string
     {
         foreach (self::TAP_APPLICATION_ROLES as $allowed) {
-            if (in_array($allowed, $roles, true)) {
-                return $allowed;
+            foreach ($roles as $role) {
+                if (is_string($role) && strcasecmp($allowed, trim($role)) === 0) {
+                    return $allowed;
+                }
             }
         }
         return '';
