@@ -131,6 +131,24 @@
         });
     }
 
+    // Envia uma acao do job (ex.: cancel) como POST de formulario. O backend
+    // (job.action.php) revalida permissao e entidade, e redireciona para o job.
+    function submitAction(jobId, action) {
+        var form = document.createElement('form');
+        form.method = 'post';
+        form.action = urls.jobAction;
+        var fields = { _glpi_csrf_token: config.csrf || csrfToken(), job: jobId, action: action };
+        Object.keys(fields).forEach(function (name) {
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = fields[name];
+            form.appendChild(input);
+        });
+        document.body.appendChild(form);
+        form.submit();
+    }
+
     function csrfToken() {
         var meta = document.querySelector('meta[property="glpi:csrf_token"]');
         return meta ? meta.getAttribute('content') : '';
@@ -213,6 +231,22 @@
             computer.appendChild(icon('ti-device-desktop me-2'));
             computer.appendChild(document.createTextNode('Abrir computador'));
             menu.appendChild(computer);
+        }
+        // Cancelar direto da lista (inclui "Aguardando intervenção" travado).
+        var cancellable = job.is_active || job.status_state === 'failed';
+        if (config.canManage && cancellable && urls.jobAction) {
+            menu.appendChild(el('div', 'dropdown-divider'));
+            var cancel = el('a', 'dropdown-item text-danger');
+            cancel.href = '#';
+            cancel.appendChild(icon('ti-ban me-2'));
+            cancel.appendChild(document.createTextNode('Cancelar provisionamento'));
+            cancel.addEventListener('click', function (event) {
+                event.preventDefault();
+                if (window.confirm('Cancelar o provisionamento #' + job.id + '? As etapas não concluídas serão canceladas.')) {
+                    submitAction(job.id, 'cancel');
+                }
+            });
+            menu.appendChild(cancel);
         }
         dropdown.appendChild(menu);
         box.appendChild(dropdown);

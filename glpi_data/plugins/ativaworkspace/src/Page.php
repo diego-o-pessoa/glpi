@@ -149,13 +149,17 @@ final class Page
             'eventsLimit'=> $eventsLimit,
             // Filtros da listagem: o polling pede a mesma selecao.
             'filters'    => array_filter($filters, static fn ($v) => $v !== '' && $v !== 0),
+            // Pode cancelar/gerenciar direto da lista (o backend revalida).
+            'canManage'  => (bool) Session::haveRight(PluginAtivaworkspaceProfile::RIGHT_PROVISION, UPDATE),
+            'csrf'       => Session::getNewCSRFToken(),
             'urls'       => [
-                'data'     => self::href('overview_data'),
-                'job'      => self::href('job_data'),
-                'jobForm'  => self::href('job_form'),
-                'jobPage'  => self::href('job'),
-                'computer' => $CFG_GLPI['root_doc'] . '/front/computer.form.php',
-                'logs'     => self::href('logs'),
+                'data'      => self::href('overview_data'),
+                'job'       => self::href('job_data'),
+                'jobForm'   => self::href('job_form'),
+                'jobPage'   => self::href('job'),
+                'jobAction' => self::href('job_action'),
+                'computer'  => $CFG_GLPI['root_doc'] . '/front/computer.form.php',
+                'logs'      => self::href('logs'),
             ],
         ];
     }
