@@ -29,6 +29,7 @@ final class Page
         'job_data'         => 'job.data.php',
         'overview_data'    => 'overview.data.php',
         'config_download'  => 'download_config.php',
+        'remote'           => 'remote.php',
     ];
 
     /** Intervalo da atualizacao em tempo real das telas (ms). */

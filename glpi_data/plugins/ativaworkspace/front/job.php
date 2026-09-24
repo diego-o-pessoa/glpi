@@ -8,6 +8,7 @@ use GlpiPlugin\Ativaworkspace\JobStep;
 use GlpiPlugin\Ativaworkspace\MachineIdentity;
 use GlpiPlugin\Ativaworkspace\Page;
 use GlpiPlugin\Ativaworkspace\ProvisioningEngine;
+use GlpiPlugin\Ativaworkspace\RemoteBridge;
 use GlpiPlugin\Ativaworkspace\StepType;
 use GlpiPlugin\Ativaworkspace\WorkspaceConfig;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -62,6 +63,10 @@ if ($current !== null && $current['step_type'] === StepType::ENTRA_LOGIN) {
         'tenant_id'    => (string) ($runtime['tenant_id'] ?? ''),
         'remote_url'   => MachineIdentity::remoteDashboardUrl((int) $job['computers_id']),
         'waiting'      => $job['status'] === Job::WAITING_INTERVENTION,
+        'remote'       => RemoteBridge::status((int) $job['computers_id']),
+        'remote_api'   => Page::href('remote', ['job' => (int) $job['id']]),
+        'connect_api'  => $CFG_GLPI['root_doc'] . '/plugins/ativaremote/front/connect.php',
+        'csrf'         => Session::getNewCSRFToken(),
     ];
 }
 

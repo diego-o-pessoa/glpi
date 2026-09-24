@@ -89,17 +89,32 @@
                                 <div class="small">Acesse o computador pelo Ativa Remote e conclua a autenticação Microsoft. A senha é digitada direto na tela da Microsoft — o Workspace não a recebe.</div>
                             </div>
                         {% endif %}
-                        <div class="d-grid gap-2">
-                            {% if can_manage %}
-                                {% if entra.remote_url %}
-                                    <a href="{{ entra.remote_url }}" class="btn btn-success" target="_blank" rel="noopener">
-                                        <i class="ti ti-device-desktop-share"></i> Acessar computador (Ativa Remote)
+                        {% if can_manage and entra.remote.available and entra.remote.can_connect %}
+                            <div data-aw-remote
+                                 data-api="{{ entra.remote_api }}"
+                                 data-connect="{{ entra.connect_api }}"
+                                 data-client="{{ entra.remote.client_id }}"
+                                 data-protected="{{ entra.remote.protected ? '1' : '0' }}"
+                                 data-csrf="{{ entra.csrf }}">
+                                <div class="input-group input-group-sm mb-2 d-none" data-aw-remote-pass>
+                                    <input type="password" class="form-control" placeholder="Senha do T.I." autocomplete="off" />
+                                    <button type="button" class="btn btn-outline-primary" data-aw-remote-confirm>OK</button>
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button type="button" class="btn btn-success" data-aw-remote-start>
+                                        <i class="ti ti-device-desktop-share"></i> Acessar computador
+                                    </button>
+                                    <a class="btn btn-outline-success d-none" data-aw-remote-open href="#">
+                                        <i class="ti ti-external-link"></i> Abrir o RustDesk
                                     </a>
-                                {% else %}
-                                    <div class="text-muted small"><i class="ti ti-info-circle me-1"></i>Este computador ainda não está no Ativa Remote. Instale/registre o Ativa Remote nele para abrir a sessão.</div>
-                                {% endif %}
-                            {% endif %}
-                        </div>
+                                </div>
+                                <div class="small text-muted mt-2" data-aw-remote-msg role="status"></div>
+                            </div>
+                        {% elseif can_manage %}
+                            <div class="text-muted small">
+                                <i class="ti ti-info-circle me-1"></i>{{ entra.remote.reason ?? 'Sem acesso ao Ativa Remote para este computador.' }}
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -272,6 +287,102 @@
             });
     }
     setTimeout(tick, refresh);
+})();
+
+// Sessao remota: solicita ao Ativa Remote, aguarda liberar e abre o RustDesk.
+(function () {
+    var box = document.querySelector('[data-aw-remote]');
+    if (!box) { return; }
+    var api = box.getAttribute('data-api');
+    var connectUrl = box.getAttribute('data-connect');
+    var clientId = box.getAttribute('data-client');
+    var isProtected = box.getAttribute('data-protected') === '1';
+    var csrf = box.getAttribute('data-csrf');
+
+    var startBtn = box.querySelector('[data-aw-remote-start]');
+    var openBtn = box.querySelector('[data-aw-remote-open]');
+    var passWrap = box.querySelector('[data-aw-remote-pass]');
+    var passInput = passWrap.querySelector('input');
+    var confirmBtn = box.querySelector('[data-aw-remote-confirm]');
+    var msg = box.querySelector('[data-aw-remote-msg]');
+
+    function say(text) { msg.textContent = text || ''; }
+
+    function post(url, data) {
+        var body = new FormData();
+        Object.keys(data).forEach(function (k) { body.append(k, data[k]); });
+        return fetch(url, {
+            method: 'POST', credentials: 'same-origin', body: body,
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrf }
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (j) {
+                return { status: r.status, body: j };
+            });
+        });
+    }
+
+    // Passo 1: solicitar o acesso.
+    function requestAccess(tiPassword) {
+        startBtn.disabled = true;
+        say('Solicitando acesso...');
+        post(api, tiPassword ? { ti_password: tiPassword } : {})
+            .then(function (res) {
+                if (res.status === 401 || (res.body && res.body.password_required)) {
+                    passWrap.classList.remove('d-none');
+                    passInput.focus();
+                    say(res.body.message || 'Informe a senha do T.I.');
+                    startBtn.disabled = false;
+                    return;
+                }
+                if (!res.body || res.body.ok !== true) {
+                    say((res.body && res.body.message) || 'Não foi possível solicitar o acesso.');
+                    startBtn.disabled = false;
+                    return;
+                }
+                passWrap.classList.add('d-none');
+                waitAccepted(0);
+            });
+    }
+
+    // Passo 2: aguardar a maquina liberar (aceite automatico ou do usuario).
+    function waitAccepted(tries) {
+        if (tries > 40) { say('O computador não liberou o acesso a tempo.'); startBtn.disabled = false; return; }
+        say(isProtected ? 'Liberando o acesso...' : 'Aguardando o computador liberar...');
+        fetch(api + '&_=' + Date.now(), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (j && j.status === 'accepted') { connect(); return; }
+                if (j && (j.status === 'rejected' || j.status === 'failed')) {
+                    say(j.message || 'O acesso foi recusado.'); startBtn.disabled = false; return;
+                }
+                setTimeout(function () { waitAccepted(tries + 1); }, 3000);
+            })
+            .catch(function () { setTimeout(function () { waitAccepted(tries + 1); }, 3000); });
+    }
+
+    // Passo 3: pegar a URL do RustDesk e abrir.
+    function connect() {
+        say('Abrindo o RustDesk...');
+        post(connectUrl, { id: clientId }).then(function (res) {
+            var b = res.body || {};
+            if (b.ok && b.connect_url) {
+                openBtn.href = b.connect_url;
+                openBtn.classList.remove('d-none');
+                startBtn.classList.add('d-none');
+                say('Sessão pronta. Se o navegador não abrir o RustDesk, clique em "Abrir o RustDesk".');
+                window.location.href = b.connect_url; // dispara o RustDesk (o navegador pede 1 confirmacao)
+            } else if (b.password_required) {
+                passWrap.classList.remove('d-none'); passInput.focus();
+                say(b.message || 'Informe a senha do T.I.'); startBtn.disabled = false;
+            } else {
+                say(b.message || 'Não foi possível abrir a sessão.'); startBtn.disabled = false;
+            }
+        });
+    }
+
+    startBtn.addEventListener('click', function () { requestAccess(''); });
+    confirmBtn.addEventListener('click', function () { requestAccess(passInput.value); });
+    passInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { requestAccess(passInput.value); } });
 })();
 </script>
 {% endblock %}
