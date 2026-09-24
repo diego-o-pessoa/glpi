@@ -708,6 +708,15 @@
     max-height: 520px;
 }
 
+.ativaworkspace .aw-tap-code {
+    font-family: var(--tblr-font-monospace, monospace);
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #0067b8;
+    user-select: all;
+}
+
 .ativaworkspace .aw-entra {
     border-left: 4px solid #0067b8; /* azul Microsoft */
 }

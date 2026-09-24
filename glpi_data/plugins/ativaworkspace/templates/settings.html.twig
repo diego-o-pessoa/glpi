@@ -59,6 +59,68 @@
 
             <hr>
 
+            {# Microsoft Graph: gera o TAP (senha temporaria) automaticamente. #}
+            <form method="post" action="{{ action_url }}" class="row g-3 mb-2">
+                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
+                <div class="col-12">
+                    <div class="fw-semibold">
+                        <i class="ti ti-key text-primary me-1"></i>Senha temporária (TAP) via Microsoft Graph
+                        {% if graph_configured %}
+                            <span class="badge bg-success ms-1">Configurado</span>
+                        {% elseif graph_secret_stored and not encryption_ready %}
+                            <span class="badge bg-danger ms-1">Chave do GLPI indisponível</span>
+                        {% else %}
+                            <span class="badge bg-secondary ms-1">Não configurado</span>
+                        {% endif %}
+                    </div>
+                    <div class="form-hint">
+                        App registrado no Entra com a permissão de aplicativo
+                        <code>UserAuthMethod-TAP.ReadWrite.All</code> e consentimento administrativo.
+                        O segredo é protegido pela <code>glpicrypt.key</code> do próprio GLPI.
+                    </div>
+                    {% if not encryption_ready %}
+                        <div class="alert alert-danger mt-2 mb-0 py-2">
+                            O GLPI não consegue acessar sua chave criptográfica. Não substitua o Client Secret até corrigir a
+                            <code>glpicrypt.key</code> no servidor.
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="aw-graph-id">Client ID do app</label>
+                    <input type="text" class="form-control font-monospace" id="aw-graph-id" name="graph_client_id" value="{{ graph_client_id }}"
+                           placeholder="00000000-0000-0000-0000-000000000000" {{ can_configure ? '' : 'disabled' }} />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="aw-graph-secret">Client secret</label>
+                    <input type="password" class="form-control" id="aw-graph-secret" name="graph_client_secret" autocomplete="off"
+                           placeholder="{{ graph_secret_stored ? '•••••••• (deixe em branco para manter)' : 'cole o Value do secret' }}" {{ can_configure ? '' : 'disabled' }} />
+                    {% if graph_secret_stored and can_configure %}
+                        <label class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" name="clear_graph_secret" value="1"
+                                   onchange="if (this.checked && !confirm('Remover o Client Secret? A geração de TAP ficará indisponível.')) { this.checked = false; }" />
+                            <span class="form-check-label text-danger">Remover o segredo armazenado</span>
+                        </label>
+                    {% endif %}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="aw-tap-life">Validade do TAP (min)</label>
+                    <input type="number" class="form-control" id="aw-tap-life" name="tap_lifetime_minutes" min="10" max="480" value="{{ tap_lifetime }}" {{ can_configure ? '' : 'disabled' }} />
+                </div>
+                {% if can_configure %}
+                    <div class="col-12 d-flex flex-wrap align-items-center gap-2">
+                        <button type="submit" name="save_graph" value="1" class="btn btn-primary"><i class="ti ti-device-floppy"></i> Salvar Graph</button>
+                        <button type="button" class="btn btn-outline-primary" data-aw-graph-test
+                                data-url="{{ graph_test_url }}" data-csrf="{{ graph_test_csrf }}"
+                                {{ graph_configured ? '' : 'disabled' }}>
+                            <i class="ti ti-plug-connected"></i> Testar conexão
+                        </button>
+                        <span class="small" data-aw-graph-result aria-live="polite"></span>
+                    </div>
+                {% endif %}
+            </form>
+
+            <hr>
+
             <div class="row g-2 align-items-end">
                 <div class="col-md-8">
                     <label class="form-label" for="aw-api-token">Token da API do executor</label>
@@ -186,6 +248,35 @@
                 }
             });
         });
+
+        var testButton = document.querySelector('[data-aw-graph-test]');
+        var testResult = document.querySelector('[data-aw-graph-result]');
+        if (testButton && testResult) {
+            testButton.addEventListener('click', function () {
+                testButton.disabled = true;
+                testResult.className = 'small text-muted';
+                testResult.textContent = 'Validando credencial e permissão…';
+                fetch(testButton.dataset.url, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-Glpi-Csrf-Token': testButton.dataset.csrf
+                    }
+                }).then(function (response) {
+                    return response.json().catch(function () { return {}; });
+                }).then(function (data) {
+                    testResult.className = 'small ' + (data.ok ? 'text-success' : 'text-danger');
+                    testResult.textContent = data.message || 'O teste não retornou uma resposta válida.';
+                }).catch(function () {
+                    testResult.className = 'small text-danger';
+                    testResult.textContent = 'Falha de rede durante o teste.';
+                }).finally(function () {
+                    testButton.disabled = false;
+                });
+            });
+        }
     })();
     </script>
 {% endblock %}

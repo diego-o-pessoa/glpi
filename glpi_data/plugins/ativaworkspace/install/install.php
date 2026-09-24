@@ -286,6 +286,7 @@ function plugin_ativaworkspace_do_install(): bool
         require_once PLUGIN_ATIVAWORKSPACE_DIR . '/src/WorkspaceConfig.php';
         $existing = Config::getConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, [
             'simulation_enabled', 'entra_domain', 'entra_tenant_id', 'api_enabled', 'api_token',
+            'graph_client_id', 'graph_client_secret', 'tap_lifetime_minutes',
         ]);
         $defaults = [];
         if (!array_key_exists('simulation_enabled', $existing)) {
@@ -304,6 +305,15 @@ function plugin_ativaworkspace_do_install(): bool
         }
         if (empty($existing['api_token'])) {
             $defaults['api_token'] = bin2hex(random_bytes(32));
+        }
+        if (!array_key_exists('graph_client_id', $existing)) {
+            $defaults['graph_client_id'] = '';
+        }
+        if (!array_key_exists('graph_client_secret', $existing)) {
+            $defaults['graph_client_secret'] = '';
+        }
+        if (!array_key_exists('tap_lifetime_minutes', $existing)) {
+            $defaults['tap_lifetime_minutes'] = 60;
         }
         if ($defaults !== []) {
             Config::setConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, $defaults);
@@ -346,6 +356,7 @@ function plugin_ativaworkspace_do_uninstall(): bool
 
     Config::deleteConfigurationValues(PLUGIN_ATIVAWORKSPACE_CONFIG_CONTEXT, [
         'schema_version', 'simulation_enabled', 'entra_domain', 'entra_tenant_id', 'api_enabled', 'api_token',
+        'graph_client_id', 'graph_client_secret', 'tap_lifetime_minutes',
     ]);
     CronTask::unregister('ativaworkspace');
 

@@ -67,6 +67,9 @@ if ($current !== null && $current['step_type'] === StepType::ENTRA_LOGIN) {
         'remote_api'   => Page::href('remote', ['job' => (int) $job['id']]),
         'connect_api'  => $CFG_GLPI['root_doc'] . '/plugins/ativaremote/front/connect.php',
         'csrf'         => Session::getNewCSRFToken(),
+        // Geracao automatica do TAP (senha temporaria) via Microsoft Graph.
+        'tap_ready'    => WorkspaceConfig::graphConfigured() && $job['upn'] !== '',
+        'tap_api'      => Page::href('tap'),
     ];
 }
 

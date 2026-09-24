@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace GlpiPlugin\Ativaworkspace;
 
 use Config;
+use GLPIKey;
 use PluginAtivaworkspaceProfile;
+use RuntimeException;
 use Session;
+use Throwable;
 
 /**
  * Configuracoes do Workspace (glpi_configs, contexto plugin:ativaworkspace).
@@ -89,5 +92,89 @@ final class WorkspaceConfig
         $token = bin2hex(random_bytes(32));
         self::set(['api_token' => $token]);
         return $token;
+    }
+
+    // --------------------------------------------- Microsoft Graph (TAP)
+
+    /** App registrado no Entra que gera o TAP (client credentials). */
+    public static function graphClientId(): string
+    {
+        return mb_strtolower(trim((string) self::get('graph_client_id', '')));
+    }
+
+    /** Segredo do app: guardado criptografado (GLPIKey), como o GLPI faz com LDAP/API. */
+    public static function graphClientSecret(): string
+    {
+        $stored = (string) self::get('graph_client_secret', '');
+        if ($stored === '') {
+            return '';
+        }
+
+        $key = new GLPIKey();
+        if ($key->hasReadErrors()) {
+            return '';
+        }
+
+        try {
+            return (string) $key->decrypt($stored);
+        } catch (Throwable) {
+            // Configuracao corrompida ou criptografada com outra chave: nunca
+            // devolve o texto armazenado como se ele fosse o segredo real.
+            return '';
+        }
+    }
+
+    /**
+     * @throws RuntimeException se o GLPI nao puder proteger um segredo novo
+     */
+    public static function setGraph(string $clientId, string $secret, bool $clearSecret = false): void
+    {
+        $values = ['graph_client_id' => mb_strtolower(trim($clientId))];
+
+        if ($clearSecret) {
+            $values['graph_client_secret'] = '';
+        } elseif (trim($secret) !== '') {
+            $key = new GLPIKey();
+            if ($key->hasReadErrors() || !$key->isConfigSecured(self::CONTEXT, 'graph_client_secret')) {
+                throw new RuntimeException(
+                    'O GLPI não conseguiu acessar a chave criptográfica. Corrija a glpicrypt.key antes de salvar o Client Secret.'
+                );
+            }
+            // O valor segue em claro somente dentro deste processo. O proprio
+            // Config::setConfigurationValues() o criptografa porque o campo foi
+            // registrado em Hooks::SECURED_CONFIGS. Nao criptografar duas vezes.
+            $values['graph_client_secret'] = trim($secret);
+        }
+        self::set($values);
+    }
+
+    /** Situacao da chave, sem revelar caminho interno nem conteudo. */
+    public static function encryptionReady(): bool
+    {
+        return !(new GLPIKey())->hasReadErrors();
+    }
+
+    public static function graphSecretStored(): bool
+    {
+        return (string) self::get('graph_client_secret', '') !== '';
+    }
+
+    public static function graphConfigured(): bool
+    {
+        return self::isGuid(self::graphClientId())
+            && self::isGuid(self::entraTenantId())
+            && self::graphClientSecret() !== '';
+    }
+
+    /** Validade do TAP em minutos (10 a 480). */
+    public static function tapLifetimeMinutes(): int
+    {
+        $value = (int) self::get('tap_lifetime_minutes', 60);
+        return max(10, min(480, $value));
+    }
+
+    public static function setTapLifetime(int $minutes): void
+    {
+        self::set(['tap_lifetime_minutes' => max(10, min(480, $minutes))]);
     }
 }

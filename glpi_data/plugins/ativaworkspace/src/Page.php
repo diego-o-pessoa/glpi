@@ -30,6 +30,8 @@ final class Page
         'overview_data'    => 'overview.data.php',
         'config_download'  => 'download_config.php',
         'remote'           => 'remote.php',
+        'tap'              => 'tap.php',
+        'graph_test'       => 'graph.test.php',
     ];
 
     /** Intervalo da atualizacao em tempo real das telas (ms). */

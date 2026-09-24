@@ -89,6 +89,22 @@
                                 <div class="small">Acesse o computador pelo Ativa Remote e conclua a autenticação Microsoft. A senha é digitada direto na tela da Microsoft — o Workspace não a recebe.</div>
                             </div>
                         {% endif %}
+                        {% if can_manage and entra.tap_ready %}
+                            <div class="aw-tap mb-2" data-aw-tap data-api="{{ entra.tap_api }}" data-job="{{ job.id }}" data-csrf="{{ entra.csrf }}">
+                                <button type="button" class="btn btn-outline-primary btn-sm w-100" data-aw-tap-gen>
+                                    <i class="ti ti-key"></i> Gerar senha temporária (TAP)
+                                </button>
+                                <div class="d-none mt-2 text-center" data-aw-tap-result>
+                                    <div class="text-muted small">Cole este código no lugar da senha Microsoft. Ele funciona uma única vez.</div>
+                                    <div class="aw-tap-code" data-aw-tap-code></div>
+                                    <div class="small text-muted" data-aw-tap-exp></div>
+                                    <button type="button" class="btn btn-link btn-sm p-0" data-aw-tap-copy>Copiar</button>
+                                    <div class="small text-muted mt-1">Se o Windows solicitar a credencial novamente, gere um novo TAP.</div>
+                                </div>
+                                <div class="small text-danger mt-1 d-none" data-aw-tap-err></div>
+                            </div>
+                        {% endif %}
+
                         {% if can_manage and entra.remote.available and entra.remote.can_connect %}
                             <div data-aw-remote
                                  data-api="{{ entra.remote_api }}"
@@ -383,6 +399,101 @@
     startBtn.addEventListener('click', function () { requestAccess(''); });
     confirmBtn.addEventListener('click', function () { requestAccess(passInput.value); });
     passInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { requestAccess(passInput.value); } });
+})();
+
+// Gera o TAP (senha temporaria) via Microsoft Graph e mostra o codigo.
+(function () {
+    var box = document.querySelector('[data-aw-tap]');
+    if (!box) { return; }
+    var gen = box.querySelector('[data-aw-tap-gen]');
+    var result = box.querySelector('[data-aw-tap-result]');
+    var codeEl = box.querySelector('[data-aw-tap-code]');
+    var expEl = box.querySelector('[data-aw-tap-exp]');
+    var errEl = box.querySelector('[data-aw-tap-err]');
+    var copyBtn = box.querySelector('[data-aw-tap-copy]');
+    var timer = null;
+
+    function buttonLabel(hasCode) {
+        gen.innerHTML = hasCode
+            ? '<i class="ti ti-refresh"></i> Gerar novo TAP'
+            : '<i class="ti ti-key"></i> Gerar senha temporária (TAP)';
+    }
+
+    function clearCode(message) {
+        if (timer) { window.clearInterval(timer); timer = null; }
+        codeEl.textContent = '';
+        result.classList.add('d-none');
+        buttonLabel(false);
+        if (message) {
+            errEl.textContent = message;
+            errEl.classList.remove('d-none');
+        }
+    }
+
+    function startCountdown(expiresAt, fallbackMinutes) {
+        if (timer) { window.clearInterval(timer); }
+        var deadline = Date.parse(expiresAt || '');
+        if (!Number.isFinite(deadline)) {
+            deadline = Date.now() + Math.max(10, Number(fallbackMinutes) || 10) * 60000;
+        }
+        function render() {
+            var remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+            if (remaining <= 0) {
+                clearCode('Este TAP expirou. Gere um novo código se ainda for necessário.');
+                return;
+            }
+            var minutes = Math.floor(remaining / 60);
+            var seconds = String(remaining % 60).padStart(2, '0');
+            expEl.textContent = 'Uso único · expira em ' + minutes + ':' + seconds;
+        }
+        render();
+        timer = window.setInterval(render, 1000);
+    }
+
+    gen.addEventListener('click', function () {
+        if (codeEl.textContent && !window.confirm('Gerar outro TAP invalida o código atual. Continuar?')) {
+            return;
+        }
+        gen.disabled = true;
+        errEl.classList.add('d-none');
+        gen.innerHTML = 'Gerando…';
+        var body = new FormData();
+        body.append('job', box.dataset.job);
+        fetch(box.dataset.api, {
+            method: 'POST', credentials: 'same-origin', body: body,
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': box.dataset.csrf }
+        }).then(function (r) { return r.json().catch(function () { return {}; }); })
+          .then(function (j) {
+            gen.disabled = false;
+            if (j && j.ok && j.code) {
+                codeEl.textContent = j.code;
+                result.classList.remove('d-none');
+                buttonLabel(true);
+                startCountdown(j.expires_at, j.lifetime_minutes);
+            } else {
+                buttonLabel(Boolean(codeEl.textContent));
+                errEl.textContent = (j && j.message) || 'Não foi possível gerar o TAP.';
+                errEl.classList.remove('d-none');
+            }
+        }).catch(function () {
+            gen.disabled = false;
+            buttonLabel(Boolean(codeEl.textContent));
+            errEl.textContent = 'Falha de rede ao gerar o TAP.'; errEl.classList.remove('d-none');
+        });
+    });
+
+    copyBtn.addEventListener('click', function () {
+        if (navigator.clipboard && codeEl.textContent) {
+            navigator.clipboard.writeText(codeEl.textContent).then(function () {
+                copyBtn.textContent = 'Copiado';
+                window.setTimeout(function () { copyBtn.textContent = 'Copiar'; }, 1200);
+            });
+        }
+    });
+    window.addEventListener('pagehide', function () {
+        if (timer) { window.clearInterval(timer); }
+        codeEl.textContent = '';
+    });
 })();
 </script>
 {% endblock %}
