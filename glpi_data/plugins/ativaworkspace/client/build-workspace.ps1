@@ -15,38 +15,39 @@ New-Item -ItemType Directory -Force -Path $BuildDirectory, $DistDirectory | Out-
 
 & $VenvPython -c "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('PyInstaller') else 1)"
 if ($LASTEXITCODE -ne 0) {
-    & $VenvPython -m pip install -r (Join-Path $ClientDirectory "requirements-build.txt")
+    & $VenvPython -m pip install pyinstaller
     if ($LASTEXITCODE -ne 0) {
-        throw "Nao foi possivel instalar o PyInstaller para compilar o servico."
+        throw "Nao foi possivel instalar o PyInstaller para compilar o Ativa Workspace."
     }
 }
 
-# Console subsystem on purpose. In windowed (--noconsole) builds the PyInstaller
-# bootloader reports warnings such as "Failed to remove temporary directory"
-# with a blocking MessageBox. As SYSTEM in session 0 nobody can close it, so
-# "--configure" hung the unified installer forever. Services, scheduled tasks
-# and installer steps run without a visible console anyway.
+# Console subsystem de proposito, pelo mesmo motivo do Guardian/Updater: em build
+# --noconsole o bootloader do PyInstaller abre MessageBox de aviso e, como SYSTEM
+# na sessao 0, ninguem consegue fechar - o processo travaria.
+# ativa_workspace_entra.py entra como modulo importado (import normal).
 & $VenvPython -m PyInstaller `
     --noconfirm `
     --clean `
     --onefile `
     --console `
-    --name "AtivaUnifiedUpdater" `
+    --name "AtivaWorkspace" `
     --distpath $DistDirectory `
     --workpath $BuildDirectory `
     --specpath $BuildDirectory `
-    (Join-Path $ClientDirectory "unified_updater_service.py")
+    --paths $ClientDirectory `
+    --hidden-import ativa_workspace_entra `
+    (Join-Path $ClientDirectory "ativa_workspace_service.py")
 
-$Executable = Join-Path $DistDirectory "AtivaUnifiedUpdater.exe"
+$Executable = Join-Path $DistDirectory "AtivaWorkspace.exe"
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $Executable -PathType Leaf)) {
-    throw "PyInstaller nao gerou AtivaUnifiedUpdater.exe."
+    throw "PyInstaller nao gerou AtivaWorkspace.exe."
 }
 
-$Version = ((& $VenvPython (Join-Path $ClientDirectory "unified_updater_service.py") --version) | Select-Object -First 1).Trim()
+$Version = ((& $Executable --version) | Select-Object -First 1).Trim()
 if ($LASTEXITCODE -ne 0 -or $Version -notmatch '^\d+\.\d+\.\d+$') {
-    throw "Nao foi possivel identificar a versao do servico."
+    throw "Nao foi possivel identificar a versao do Ativa Workspace compilado."
 }
 
-Write-Host "Servico gerado: $Executable"
+Write-Host "Ativa Workspace gerado: $Executable"
 Write-Host "Versao: $Version"
 Write-Host "SHA-256: $((Get-FileHash -LiteralPath $Executable -Algorithm SHA256).Hash)"

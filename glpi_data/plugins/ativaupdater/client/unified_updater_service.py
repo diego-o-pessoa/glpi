@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.9"
+UPDATER_VERSION = "1.7.10"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -766,55 +766,6 @@ def reinstall_unified_package(logger: logging.Logger) -> None:
     cleanup_downloads(keep=destination)
     download_with_retries(api, release, destination, logger, lambda: False)
     launch_installer(destination, logger, release["version"], release["sha256"])
-
-
-# --- Executor da etapa ENTRA_LOGIN do Ativa Workspace ---------------------- #
-# O modulo e a config sao opcionais e deployados a parte. O servico so os
-# carrega se existirem; sem eles, e um no-op. Isso mantem o Updater independente
-# do Workspace (o Workspace usa o servico, nao o contrario).
-WORKSPACE_ENTRA_MODULE_PATHS = (
-    PRODUCT_DIR / "workspace" / "ativa_workspace_entra.py",
-    PROGRAM_DATA / "AtivaLocacao" / "Workspace" / "ativa_workspace_entra.py",
-)
-_workspace_entra_module: Any = None
-_workspace_entra_loaded = False
-
-
-def _load_workspace_entra() -> Any:
-    global _workspace_entra_module, _workspace_entra_loaded
-    if _workspace_entra_loaded:
-        return _workspace_entra_module
-    _workspace_entra_loaded = True
-
-    # Preferencia: modulo embutido no proprio exe (bundle do PyInstaller). Assim
-    # instalar o pacote unificado ja traz o executor, sem arquivo solto.
-    try:
-        import ativa_workspace_entra as bundled  # type: ignore
-        _workspace_entra_module = bundled
-        return _workspace_entra_module
-    except Exception:  # noqa: BLE001 - nao embutido: tenta o arquivo em disco
-        pass
-
-    import importlib.util
-
-    for path in WORKSPACE_ENTRA_MODULE_PATHS:
-        if not path.is_file():
-            continue
-        try:
-            spec = importlib.util.spec_from_file_location("ativa_workspace_entra", path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)  # type: ignore[union-attr]
-            _workspace_entra_module = module
-            break
-        except Exception:  # noqa: BLE001 - modulo ausente/invalido nao quebra o servico
-            _workspace_entra_module = None
-    return _workspace_entra_module
-
-
-def run_workspace_entra_tick(logger: logging.Logger) -> None:
-    module = _load_workspace_entra()
-    if module is not None and hasattr(module, "run_executor_tick"):
-        module.run_executor_tick(logger)
 
 
 def ensure_guardian_running(logger: logging.Logger) -> None:
@@ -2738,12 +2689,6 @@ class ServiceRuntime:
                 ensure_guardian_running(logger)
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Watchdog do Guardian falhou neste ciclo: %s", exc)
-            # Executor da etapa ENTRA_LOGIN do Ativa Workspace. Modulo/config
-            # opcionais: se nao houver, e um no-op. Nunca derruba o poll.
-            try:
-                run_workspace_entra_tick(logger)
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("Executor Entra do Workspace falhou neste ciclo: %s", exc)
             self.stop_event.wait(COMMAND_POLL_SECONDS)
 
     def run(self, logger: logging.Logger, start_poller: bool = True) -> None:
@@ -2919,18 +2864,10 @@ def main() -> int:
     parser.add_argument("--installed-version", default="")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--version", action="store_true")
-    # Helper interativo da etapa ENTRA_LOGIN, rodado na sessao do usuario. No exe
-    # congelado o proprio servico e o "python": este entrypoint executa o helper.
-    parser.add_argument("--workspace-entra-helper", type=Path, metavar="SIGNAL_JSON")
     args = parser.parse_args()
     if args.version:
         print(UPDATER_VERSION)
         return 0
-    if args.workspace_entra_helper is not None:
-        module = _load_workspace_entra()
-        if module is None or not hasattr(module, "helper_main"):
-            return 1
-        return int(module.helper_main(args.workspace_entra_helper))
     if args.install_package is not None:
         version_tuple(args.package_version)
         if not re.fullmatch(r"[a-fA-F0-9]{64}", args.package_sha256):

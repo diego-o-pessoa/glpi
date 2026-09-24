@@ -35,6 +35,7 @@ if (-not (Test-Path -LiteralPath $GuardianConfig -PathType Leaf)) {
 $GuardianConfigPath = (Resolve-Path $GuardianConfig).Path
 $UpdaterPluginRoot = (Resolve-Path (Join-Path $ScriptRoot "..\..\..\ativaupdater")).Path
 $GuardianPluginRoot = (Resolve-Path (Join-Path $ScriptRoot "..\..\..\ativaguardian")).Path
+$WorkspacePluginRoot = (Resolve-Path (Join-Path $ScriptRoot "..\..\..\ativaworkspace")).Path
 $OutputPath = if ([IO.Path]::IsPathRooted($OutputDirectory)) {
     [IO.Path]::GetFullPath($OutputDirectory)
 } else {
@@ -49,6 +50,8 @@ $UnifiedUpdaterBuildScript = Join-Path $UpdaterPluginRoot "client\build-service.
 $UnifiedUpdaterExe = Join-Path $UpdaterPluginRoot "client\dist\AtivaUnifiedUpdater.exe"
 $GuardianBuildScript = Join-Path $GuardianPluginRoot "client\build-guardian.ps1"
 $GuardianExe = Join-Path $GuardianPluginRoot "client\dist\AtivaGuardian.exe"
+$WorkspaceBuildScript = Join-Path $WorkspacePluginRoot "client\build-workspace.ps1"
+$WorkspaceExe = Join-Path $WorkspacePluginRoot "client\dist\AtivaWorkspace.exe"
 $ClientVersionFile = Join-Path $PluginRoot "client\dist\client-version.txt"
 $BundleVersionFile = Join-Path $ScriptRoot "unified-version.txt"
 $ClientIssFile = Join-Path $ScriptRoot "AtivaWallpaperClient.iss"
@@ -334,6 +337,18 @@ if ($GuardianVersion -notmatch '^\d+\.\d+\.\d+$') {
     throw "Nao foi possivel identificar a versao do servico Ativa Guardian compilado."
 }
 
+# Ativa Workspace: so entra no pacote quando ha config (senao o servico nao teria
+# com quem falar). Compila o exe proprio.
+if ($WorkspaceConfigPath) {
+    Write-Host "Compilando o servico AtivaWorkspace.exe..."
+    & $WorkspaceBuildScript -Python $PythonExecutable
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $WorkspaceExe)) {
+        throw "Falha ao compilar o servico Ativa Workspace."
+    }
+} else {
+    $WorkspaceExe = $null
+}
+
 $Iscc = Find-InnoSetupCompiler
 if (-not $Iscc -and ($InstallInnoSetup -or $InstallBuildTools)) {
     $Winget = Get-WingetExecutable
@@ -384,10 +399,14 @@ try {
     )
 
     Write-Host "Gerando um unico instalador com GLPI Agent, Wallpaper Client, Ativa Updater e Ativa Guardian..."
-    # Define do Workspace so quando ha config (o .iss trata a ausencia).
-    $WorkspaceDefine = if ($WorkspaceConfigPath) { "/DWorkspaceConfigPath=$PreparedWorkspaceConfig" } else { "/DSkipWorkspace=1" }
+    # Defines do Workspace so quando ha config + exe (o .iss trata a ausencia).
+    $WorkspaceDefines = if ($WorkspaceConfigPath -and $WorkspaceExe) {
+        @("/DWorkspaceConfigPath=$PreparedWorkspaceConfig", "/DWorkspacePath=$WorkspaceExe")
+    } else {
+        @("/DSkipWorkspace=1")
+    }
     & $Iscc `
-        $WorkspaceDefine `
+        @WorkspaceDefines `
         "/DWallpaperClientPath=$ClientExe" `
         "/DUnifiedUpdaterPath=$UnifiedUpdaterExe" `
         "/DGuardianPath=$GuardianExe" `
