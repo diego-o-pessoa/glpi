@@ -36,7 +36,7 @@ import ativa_workspace_entra as lib
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.3.1"
+WORKSPACE_AGENT_VERSION = "1.3.2"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -470,20 +470,43 @@ def open_workplace_now() -> int:
             time.sleep(1)
         return False
 
+    def first_edit():
+        """Primeiro campo de texto visivel (fallback p/ telas de um campo so)."""
+        def visible(ctrl, _d):
+            try:
+                return not ctrl.IsOffscreen
+            except Exception:  # noqa: BLE001
+                return True
+        edit = auto.EditControl(searchDepth=50, Compare=visible)
+        return edit if edit.Exists(0, 0) else None
+
     def type_into_edit(hints, value, timeout, is_secret):
-        """Acha um campo de texto (por nome) e digita, sem registrar o valor."""
+        """
+        Acha o campo (pelo nome; senao o unico campo da tela) e digita.
+        Campo de senha (TAP) rejeita SetValue: foca de verdade (Click) e envia
+        as teclas para a janela em foco. O valor nunca vai pro log.
+        """
         deadline = time.time() + timeout
         while time.time() < deadline:
-            edit = find_control(auto.EditControl, hints)
+            edit = find_control(auto.EditControl, hints) or (first_edit() if is_secret else None)
             if edit is not None:
                 try:
-                    edit.SetFocus()
+                    # Foco real: Click coloca o cursor no input web, onde SetFocus falha.
                     try:
-                        edit.GetValuePattern().SetValue(value)
-                    except Exception:  # noqa: BLE001 - campo de senha nao aceita SetValue
-                        edit.SendKeys("{Ctrl}a", waitTime=0.05)
-                        edit.SendKeys("{Delete}", waitTime=0.05)
-                        edit.SendKeys(value, waitTime=0.02)
+                        edit.Click(simulateMove=False, waitTime=0.2)
+                    except Exception:  # noqa: BLE001
+                        edit.SetFocus()
+                    if not is_secret:
+                        try:
+                            edit.GetValuePattern().SetValue(value)
+                            logger.info("Campo preenchido (conta).")
+                            return True
+                        except Exception:  # noqa: BLE001
+                            pass
+                    # Digita por teclas na janela em foco (funciona no campo de senha web).
+                    auto.SendKeys("{Ctrl}a", waitTime=0.05)
+                    auto.SendKeys("{Delete}", waitTime=0.05)
+                    auto.SendKeys(value, waitTime=0.02)
                     logger.info("Campo preenchido (%s).", "senha" if is_secret else "conta")
                     return True
                 except Exception as exc:  # noqa: BLE001
