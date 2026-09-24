@@ -35,7 +35,7 @@ import ativa_workspace_entra as lib
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.0.0"
+WORKSPACE_AGENT_VERSION = "1.1.0"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -365,12 +365,73 @@ class _StopEvent:
 # --------------------------------------------------------------------------- #
 
 def open_workplace_now() -> int:
-    """Roda NA SESSAO DO USUARIO: abre a pagina oficial e sai. Sem cliques."""
+    """Roda NA SESSAO DO USUARIO: abre a pagina, clica Conectar -> Ingressar no
+    Entra e para na tela de login da Microsoft. NUNCA le ou digita credenciais."""
+    logger = configure_logging(False)
     try:
         os.startfile("ms-settings:workplace")  # noqa: S606 - URI oficial do Windows
-        return 0
     except OSError:
+        logger.warning("Nao foi possivel abrir ms-settings:workplace.")
         return 1
+
+    try:
+        import uiautomation as auto  # type: ignore
+    except ImportError:
+        # Sem a lib: a tela abriu; os cliques ficam manuais (via Ativa Remote).
+        logger.warning("uiautomation ausente: cliques manuais.")
+        return 0
+
+    # Textos equivalentes por idioma. Busca por NOME do controle, sem coordenadas.
+    connect_texts = ("conectar", "connect")
+    join_texts = (
+        "microsoft entra id", "azure active directory",  # o link muda de nome por versao
+    )
+    credential_hints = ("sign in", "entrar", "trabalho ou escola", "work or school", "conta")
+
+    def click_by_text(control_type, texts, timeout):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                for ctrl in control_type(searchDepth=40):
+                    name = (ctrl.Name or "").strip().lower()
+                    if name and any(t in name for t in texts):
+                        try:
+                            ctrl.GetInvokePattern().Invoke()
+                        except Exception:  # noqa: BLE001 - alguns so aceitam Click
+                            ctrl.Click(simulateMove=False)
+                        return True
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(1)
+        return False
+
+    try:
+        auto.uiautomation.SetGlobalSearchTimeout(2)
+        if not click_by_text(auto.ButtonControl, connect_texts, 25):
+            logger.warning("Botao 'Conectar' nao encontrado.")
+            return 0
+        # O "Ingressar no Entra ID" costuma ser um link (Hyperlink) na janela de conexao.
+        if not (click_by_text(auto.HyperlinkControl, join_texts, 20)
+                or click_by_text(auto.TextControl, join_texts, 5)
+                or click_by_text(auto.ButtonControl, join_texts, 5)):
+            logger.warning("Opcao 'Ingressar no Microsoft Entra ID' nao encontrada.")
+            return 0
+        # Confirma que a tela de credencial apareceu (nao interage com ela).
+        deadline = time.time() + 40
+        while time.time() < deadline:
+            try:
+                for win in auto.WindowControl(searchDepth=3):
+                    if any(h in (win.Name or "").lower() for h in credential_hints):
+                        logger.info("Tela de login da Microsoft pronta.")
+                        return 0
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(1.5)
+        logger.info("Fluxo do Entra acionado; aguardando o tecnico.")
+        return 0
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Falha na automacao da tela do Entra: %s", exc)
+        return 0
 
 
 # --------------------------------------------------------------------------- #

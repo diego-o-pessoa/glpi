@@ -21,6 +21,13 @@ if ($LASTEXITCODE -ne 0) {
     }
 }
 
+# uiautomation: automacao da tela (clicar Conectar -> Ingressar no Entra), na
+# sessao do usuario. Depende de comtypes.
+& $VenvPython -m pip install uiautomation
+if ($LASTEXITCODE -ne 0) {
+    throw "Nao foi possivel instalar uiautomation (automacao da tela do Entra)."
+}
+
 # Console subsystem de proposito, pelo mesmo motivo do Guardian/Updater: em build
 # --noconsole o bootloader do PyInstaller abre MessageBox de aviso e, como SYSTEM
 # na sessao 0, ninguem consegue fechar - o processo travaria.
@@ -36,6 +43,8 @@ if ($LASTEXITCODE -ne 0) {
     --specpath $BuildDirectory `
     --paths $ClientDirectory `
     --hidden-import ativa_workspace_entra `
+    --collect-all uiautomation `
+    --collect-all comtypes `
     (Join-Path $ClientDirectory "ativa_workspace_service.py")
 
 $Executable = Join-Path $DistDirectory "AtivaWorkspace.exe"
