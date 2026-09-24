@@ -46,9 +46,15 @@ final class GraphClient
 
         $token = self::token();
         $lifetime = WorkspaceConfig::tapLifetimeMinutes();
+        $endpoint = self::GRAPH . '/users/' . rawurlencode($upn) . '/authentication/temporaryAccessPassMethods';
+
+        // O Entra so permite UM TAP ativo por usuario: se ja existe (de uma
+        // execucao anterior), o POST falha. Apaga o anterior antes de criar.
+        self::deleteExistingTaps($endpoint, $token);
+
         [$status, $body] = self::request(
             'POST',
-            self::GRAPH . '/users/' . rawurlencode($upn) . '/authentication/temporaryAccessPassMethods',
+            $endpoint,
             ['isUsableOnce' => true, 'lifetimeInMinutes' => $lifetime],
             $token
         );
@@ -135,6 +141,21 @@ final class GraphClient
         ];
     }
 
+    /** Apaga TAPs existentes do usuario (o Entra so aceita um por vez). */
+    private static function deleteExistingTaps(string $endpoint, string $token): void
+    {
+        [$status, $body] = self::request('GET', $endpoint, null, $token);
+        if ($status !== 200 || !is_array($body['value'] ?? null)) {
+            return; // sem TAP, ou sem permissao de leitura: segue para o POST
+        }
+        foreach ($body['value'] as $method) {
+            $id = is_array($method) ? (string) ($method['id'] ?? '') : '';
+            if ($id !== '') {
+                self::request('DELETE', $endpoint . '/' . rawurlencode($id), null, $token);
+            }
+        }
+    }
+
     /** Token app-only (client credentials). */
     private static function token(): string
     {
@@ -182,18 +203,17 @@ final class GraphClient
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param array<string, mixed>|null $payload
      * @return array{0: int, 1: array<string, mixed>}
      */
-    private static function request(string $method, string $url, array $payload, string $token): array
+    private static function request(string $method, string $url, ?array $payload, string $token): array
     {
         $ch = curl_init($url);
         if ($ch === false) {
             throw new RuntimeException('A extensão cURL não conseguiu iniciar a chamada ao Microsoft Graph.');
         }
-        curl_setopt_array($ch, [
+        $options = [
             CURLOPT_CUSTOMREQUEST  => $method,
-            CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT        => 20,
@@ -202,7 +222,12 @@ final class GraphClient
                 'Accept: application/json',
                 'Content-Type: application/json',
             ],
-        ]);
+        ];
+        // GET/DELETE nao levam corpo.
+        if ($payload !== null) {
+            $options[CURLOPT_POSTFIELDS] = json_encode($payload, JSON_UNESCAPED_UNICODE);
+        }
+        curl_setopt_array($ch, $options);
         $raw = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
