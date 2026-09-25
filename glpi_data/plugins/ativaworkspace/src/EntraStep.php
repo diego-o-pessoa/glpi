@@ -21,12 +21,16 @@ final class EntraStep
     public const WAITING_CREDENTIAL_UI = 'WAITING_CREDENTIAL_UI';
     public const WAITING_HUMAN         = 'WAITING_HUMAN';
     public const VERIFYING_JOIN        = 'VERIFYING_JOIN';
+    // Depois do ingresso: reinicia (ativa o Web sign-in) e entra com a conta.
+    public const REBOOTING             = 'REBOOTING';
+    public const USER_SIGNIN           = 'USER_SIGNIN';
     public const SUCCESS               = 'SUCCESS';
     public const FAILED                = 'FAILED';
 
     public const SUBSTATES = [
         self::PRECHECK, self::OPENING_SETTINGS, self::OPENING_CONNECT, self::OPENING_ENTRA_JOIN,
-        self::WAITING_CREDENTIAL_UI, self::WAITING_HUMAN, self::VERIFYING_JOIN, self::SUCCESS, self::FAILED,
+        self::WAITING_CREDENTIAL_UI, self::WAITING_HUMAN, self::VERIFYING_JOIN,
+        self::REBOOTING, self::USER_SIGNIN, self::SUCCESS, self::FAILED,
     ];
 
     /** Mensagem mostrada no Workspace para cada subestado. */
@@ -38,7 +42,9 @@ final class EntraStep
         self::WAITING_CREDENTIAL_UI => 'Aguardando a tela de login da Microsoft...',
         self::WAITING_HUMAN         => 'Aguardando a autenticação do técnico.',
         self::VERIFYING_JOIN        => 'Verificando o ingresso no Microsoft Entra ID...',
-        self::SUCCESS               => 'Microsoft Entra ID configurado com sucesso.',
+        self::REBOOTING             => 'Ingressado no Entra ID. Reiniciando o computador para o login do usuário...',
+        self::USER_SIGNIN           => 'Entrando com a conta do usuário (Web sign-in)...',
+        self::SUCCESS               => 'Microsoft Entra ID configurado e usuário conectado.',
         self::FAILED                => 'A autenticação Microsoft não foi concluída.',
     ];
 

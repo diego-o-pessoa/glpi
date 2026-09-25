@@ -33,11 +33,12 @@ from pathlib import Path
 from typing import Any
 
 import ativa_workspace_entra as lib
+import ativa_workspace_logon as logon
 
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.4.5"
+WORKSPACE_AGENT_VERSION = "1.4.6"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -51,11 +52,19 @@ WAIT_HUMAN_TIMEOUT = 30 * 60    # desiste de aguardar o tecnico depois disto
 OPEN_UI_MIN_INTERVAL = 120      # nao reabre a janela com mais frequencia que isto
 MUTEX_NAME = r"Global\AtivaWorkspaceService"
 
+# Fase de login do usuario Entra (depois do ingresso).
+LOGON_PAYLOAD = PRODUCT_DIR / "logon.json"   # conta + TAP; pasta so SYSTEM/Admins
+REBOOT_RETRY_SECONDS = 10 * 60   # reinicio agendado que nao aconteceu
+LOGON_RETRY_SECONDS = 3 * 60     # intervalo entre tentativas de login
+LOGON_MAX_ATTEMPTS = 3
+
 # Subestados (espelham EntraStep.php).
 PRECHECK = "PRECHECK"
 OPENING_SETTINGS = "OPENING_SETTINGS"
 WAITING_HUMAN = "WAITING_HUMAN"
 VERIFYING_JOIN = "VERIFYING_JOIN"
+REBOOTING = "REBOOTING"
+USER_SIGNIN = "USER_SIGNIN"
 SUCCESS = "SUCCESS"
 FAILED = "FAILED"
 
@@ -361,18 +370,22 @@ class WorkspaceRuntime:
         joined, reason = lib.evaluate_join(fields, expected_tenant, expected_domain)
         logger.info("Entra: AzureAdJoined=%s (%s)", fields.get("AzureAdJoined", "?"), reason)
 
-        if joined:
-            api.result(step_id, SUCCESS, "Dispositivo ingressado no Microsoft Entra ID.", {
-                "azure_ad_joined": True,
-                "device_id": fields.get("DeviceId", ""),
-                "tenant_id": fields.get("TenantId", ""),
-            })
-            STATE_PATH.unlink(missing_ok=True)
-            return
-
         state = load_json(STATE_PATH)
         if state.get("step_id") != step_id:
             state = {"step_id": step_id, "started_at": time.time(), "last_open": 0.0}
+
+        if joined:
+            proof = {
+                "azure_ad_joined": True,
+                "device_id": fields.get("DeviceId", ""),
+                "tenant_id": fields.get("TenantId", ""),
+            }
+            if logon.entra_user_logged_in():
+                api.result(step_id, SUCCESS, "Ingressado no Microsoft Entra ID e usuario conectado.", proof)
+                STATE_PATH.unlink(missing_ok=True)
+                return
+            self._handle_user_signin(logger, api, step_id, entra, state)
+            return
 
         # 2) Ja aguardando o tecnico: continua verificando ate o timeout.
         current = str(entra.get("substate", ""))
@@ -412,6 +425,64 @@ class WorkspaceRuntime:
         api.result(step_id, WAITING_HUMAN,
                    "Ingressando no Microsoft Entra ID automaticamente. Se pedir confirmacao, acompanhe pelo Ativa Remote.",
                    {"azure_ad_joined": False})
+
+    def _handle_user_signin(self, logger: logging.Logger, api: "lib.WorkspaceApi", step_id: int,
+                            entra: dict, state: dict) -> None:
+        """
+        Ingressado, mas a conta do Entra ainda nao entrou: liga o Web sign-in,
+        reinicia e, depois do boot, faz o login pela tela de login com um TAP novo.
+        """
+        now = time.time()
+        reboot_at = float(state.get("reboot_at", 0.0))
+
+        # a) Ainda nao reiniciou por nossa causa: liga o Web sign-in e reinicia.
+        if not reboot_at:
+            logon.enable_web_signin(logger)
+            api.progress(step_id, REBOOTING, "Reiniciando para ativar o Web sign-in")
+            if logon.request_reboot(logger):
+                state["reboot_at"] = now
+            save_json(STATE_PATH, state)
+            return
+
+        # b) Reinicio agendado mas ainda nao aconteceu (o boot e anterior a ele).
+        if logon.boot_time() < reboot_at:
+            if now - reboot_at > REBOOT_RETRY_SECONDS:
+                logger.warning("Reinicio nao aconteceu; agendando de novo.")
+                state["reboot_at"] = 0.0
+                save_json(STATE_PATH, state)
+            return
+
+        # c) Depois do boot: login automatico pela tela de login.
+        api.progress(step_id, USER_SIGNIN, "Entrando com a conta do Entra (Web sign-in)")
+        attempts = int(state.get("logon_attempts", 0))
+        if attempts >= LOGON_MAX_ATTEMPTS:
+            # Para de gerar TAPs: um TAP novo invalidaria o que o tecnico gerou a mao.
+            if not state.get("logon_gave_up"):
+                logger.warning("Login automatico esgotou %s tentativas; aguardando login manual.", attempts)
+                state["logon_gave_up"] = True
+                save_json(STATE_PATH, state)
+            return
+        if now - float(state.get("last_logon", 0.0)) < LOGON_RETRY_SECONDS:
+            return
+
+        upn = str(entra.get("upn", ""))
+        tap_data, tap_error = api.request_tap(step_id)
+        tap_code = str(tap_data.get("tap", "")) if tap_data else ""
+        state["last_logon"] = now
+        state["logon_attempts"] = attempts + 1
+        save_json(STATE_PATH, state)
+        if not upn or not tap_code:
+            logger.warning("Login: sem conta ou TAP (%s).", tap_error or "conta ausente")
+            return
+
+        logon.disconnect_local_sessions(logger)
+        logon.write_payload(LOGON_PAYLOAD, upn, tap_code)
+        tap_code = ""
+        exe = logon.current_exe(SERVICE_EXE)
+        if logon.launch_on_logon_screen(exe, "--logon-signin", logger):
+            logger.info("Login: helper aberto na tela de login (tentativa %s).", attempts + 1)
+        else:
+            LOGON_PAYLOAD.unlink(missing_ok=True)
 
 
 class _StopEvent:
@@ -839,6 +910,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--service", action="store_true", help="Executa pelo Service Control Manager")
     parser.add_argument("--once", action="store_true", help="Roda um ciclo e sai")
     parser.add_argument("--open-workplace", action="store_true", help="(sessao do usuario) abre Acessar trabalho ou escola")
+    parser.add_argument("--logon-signin", action="store_true", help="(tela de login, SYSTEM) entra com a conta do Entra")
     parser.add_argument("--configure", metavar="ARQUIVO", help="Grava config.json a partir de um JSON")
     parser.add_argument("--install-service", action="store_true")
     parser.add_argument("--uninstall-service", action="store_true")
@@ -851,6 +923,8 @@ def main(argv: list[str]) -> int:
         return 0
     if args.open_workplace:
         return open_workplace_now()
+    if args.logon_signin:
+        return logon.run_logon_signin(LOGON_PAYLOAD, configure_logging(False))
     if args.service:
         return run_service_dispatcher()
 

@@ -42,7 +42,7 @@ if ($LASTEXITCODE -ne 0) {
     --workpath $BuildDirectory `
     --specpath $BuildDirectory `
     --paths $ClientDirectory `
-    --hidden-import ativa_workspace_entra `
+    --hidden-import ativa_workspace_entra --hidden-import ativa_workspace_logon `
     --collect-all uiautomation `
     --collect-all comtypes `
     (Join-Path $ClientDirectory "ativa_workspace_service.py")
