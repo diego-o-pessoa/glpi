@@ -50,14 +50,23 @@ final class GraphClient
 
         // O Entra so permite UM TAP ativo por usuario: se ja existe (de uma
         // execucao anterior), o POST falha. Apaga o anterior antes de criar.
-        self::deleteExistingTaps($endpoint, $token);
+        $deleted = self::deleteExistingTaps($endpoint, $token);
 
-        [$status, $body] = self::request(
-            'POST',
-            $endpoint,
-            ['isUsableOnce' => true, 'lifetimeInMinutes' => $lifetime],
-            $token
-        );
+        // Logo apos o DELETE o Entra ainda pode ver o TAP antigo (replicacao):
+        // o POST volta 400/409. Tenta de novo algumas vezes antes de desistir.
+        $attempts = $deleted ? 5 : 2;
+        for ($i = 1; $i <= $attempts; $i++) {
+            [$status, $body] = self::request(
+                'POST',
+                $endpoint,
+                ['isUsableOnce' => true, 'lifetimeInMinutes' => $lifetime],
+                $token
+            );
+            if (!in_array($status, [400, 409], true) || $i === $attempts) {
+                break;
+            }
+            sleep(3);
+        }
 
         if ($status === 200 || $status === 201) {
             $code = (string) ($body['temporaryAccessPass'] ?? '');
@@ -142,18 +151,21 @@ final class GraphClient
     }
 
     /** Apaga TAPs existentes do usuario (o Entra so aceita um por vez). */
-    private static function deleteExistingTaps(string $endpoint, string $token): void
+    private static function deleteExistingTaps(string $endpoint, string $token): bool
     {
         [$status, $body] = self::request('GET', $endpoint, null, $token);
         if ($status !== 200 || !is_array($body['value'] ?? null)) {
-            return; // sem TAP, ou sem permissao de leitura: segue para o POST
+            return false; // sem TAP, ou sem permissao de leitura: segue para o POST
         }
+        $deleted = false;
         foreach ($body['value'] as $method) {
             $id = is_array($method) ? (string) ($method['id'] ?? '') : '';
             if ($id !== '') {
                 self::request('DELETE', $endpoint . '/' . rawurlencode($id), null, $token);
+                $deleted = true;
             }
         }
+        return $deleted;
     }
 
     /** Token app-only (client credentials). */

@@ -16,6 +16,12 @@
 /glpi_data/plugins/ativawallpaper/client/build/
 /glpi_data/plugins/ativawallpaper/client/.venv-build/
 
+# Ativa Updater / Workspace: saidas do PyInstaller (geradas no build).
+/glpi_data/plugins/ativaupdater/client/build/
+/glpi_data/plugins/ativaupdater/client/dist/
+/glpi_data/plugins/ativaworkspace/client/build/
+/glpi_data/plugins/ativaworkspace/client/dist/
+
 
 # graphify knowledge-graph outputs and extraction caches. Generated artifacts,
 # regenerable with /graphify. The pattern is unanchored so it matches the

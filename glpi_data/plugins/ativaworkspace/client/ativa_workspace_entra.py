@@ -162,7 +162,7 @@ class WorkspaceApi:
 
     def request_tap(self, step_id: int) -> tuple[dict | None, str]:
         """Pede um TAP ao servidor. Retorna (dados, motivo-do-erro-se-houver)."""
-        status, body = self._request("POST", f"/steps/{step_id}/tap", {})
+        status, body = self._request("POST", f"/steps/{step_id}/tap", {}, timeout=60)
         if status == 200 and isinstance(body, dict) and body.get("tap"):
             return body, ""
         return None, describe_http_error(status, body)
@@ -173,6 +173,10 @@ def describe_http_error(status: int, body: dict | None) -> str:
     code = ""
     if isinstance(body, dict) and isinstance(body.get("error"), dict):
         code = str(body["error"].get("code", ""))
+        # Mensagem do servidor (ex.: erro do Graph ao gerar o TAP). Nunca tem segredo.
+        message = str(body["error"].get("message", ""))[:200]
+        if message:
+            return f"HTTP {status} {code} - {message}"
     reasons = {
         0: "sem conexao com o Workspace (rede, TLS ou URL)",
         401: "token ausente ou invalido",
