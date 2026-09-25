@@ -65,6 +65,13 @@ final class GraphClient
             if (!in_array($status, [400, 409], true) || $i === $attempts) {
                 break;
             }
+            // A politica do tenant define a validade aceita ("valid range
+            // between 60 and 480"): ajusta e tenta de novo na hora.
+            $graphMsg = (string) ($body['error']['message'] ?? '');
+            if (preg_match('/LifetimeInMinutes.*?(\d+)\D+(\d+)/i', $graphMsg, $range)) {
+                $lifetime = max((int) $range[1], min((int) $range[2], $lifetime));
+                continue;
+            }
             sleep(3);
         }
 

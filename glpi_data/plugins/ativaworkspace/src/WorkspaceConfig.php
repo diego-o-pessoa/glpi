@@ -170,11 +170,11 @@ final class WorkspaceConfig
     public static function tapLifetimeMinutes(): int
     {
         $value = (int) self::get('tap_lifetime_minutes', 60);
-        return max(10, min(480, $value));
+        return max(60, min(480, $value));
     }
 
     public static function setTapLifetime(int $minutes): void
     {
-        self::set(['tap_lifetime_minutes' => max(10, min(480, $minutes))]);
+        self::set(['tap_lifetime_minutes' => max(60, min(480, $minutes))]);
     }
 }

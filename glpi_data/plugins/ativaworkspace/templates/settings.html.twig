@@ -104,7 +104,7 @@
                 </div>
                 <div class="col-md-4">
                     <label class="form-label" for="aw-tap-life">Validade do TAP (min)</label>
-                    <input type="number" class="form-control" id="aw-tap-life" name="tap_lifetime_minutes" min="10" max="480" value="{{ tap_lifetime }}" {{ can_configure ? '' : 'disabled' }} />
+                    <input type="number" class="form-control" id="aw-tap-life" name="tap_lifetime_minutes" min="60" max="480" value="{{ tap_lifetime }}" {{ can_configure ? '' : 'disabled' }} />
                 </div>
                 {% if can_configure %}
                     <div class="col-12 d-flex flex-wrap align-items-center gap-2">
