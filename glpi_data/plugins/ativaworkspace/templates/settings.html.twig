@@ -119,6 +119,25 @@
                 {% endif %}
             </form>
 
+            {% if can_configure and graph_configured %}
+                <div class="mt-3" data-aw-manual-tap data-api="{{ tap_api }}" data-csrf="{{ tap_csrf }}">
+                    <label class="form-label" for="aw-manual-tap-upn">Gerar senha temporária (TAP) manualmente</label>
+                    <div class="input-group" style="max-width: 520px;">
+                        <input type="email" class="form-control" id="aw-manual-tap-upn" placeholder="usuario@{{ entra_domain ?: 'empresa.com.br' }}" autocomplete="off" data-aw-manual-tap-upn />
+                        <button type="button" class="btn btn-outline-primary" data-aw-manual-tap-gen>
+                            <i class="ti ti-key"></i> Gerar TAP
+                        </button>
+                    </div>
+                    <div class="small text-muted mt-1">Uso único. Gerar outro TAP para a mesma conta invalida o anterior.</div>
+                    <div class="d-none mt-2" data-aw-manual-tap-result>
+                        <code class="fs-3" data-aw-manual-tap-code></code>
+                        <button type="button" class="btn btn-link btn-sm" data-aw-manual-tap-copy>Copiar</button>
+                        <div class="small text-muted" data-aw-manual-tap-exp></div>
+                    </div>
+                    <div class="small text-danger mt-1 d-none" data-aw-manual-tap-err></div>
+                </div>
+            {% endif %}
+
             <hr>
 
             <div class="row g-2 align-items-end">
@@ -236,6 +255,65 @@
     </div>
 
     <script>
+    // Geracao manual de TAP: o codigo so fica na tela (nunca em log/URL).
+    (function () {
+        var box = document.querySelector('[data-aw-manual-tap]');
+        if (!box) { return; }
+        var input = box.querySelector('[data-aw-manual-tap-upn]');
+        var gen = box.querySelector('[data-aw-manual-tap-gen]');
+        var result = box.querySelector('[data-aw-manual-tap-result]');
+        var codeEl = box.querySelector('[data-aw-manual-tap-code]');
+        var expEl = box.querySelector('[data-aw-manual-tap-exp]');
+        var errEl = box.querySelector('[data-aw-manual-tap-err]');
+        var copyBtn = box.querySelector('[data-aw-manual-tap-copy]');
+
+        function fail(message) {
+            errEl.textContent = message;
+            errEl.classList.remove('d-none');
+        }
+
+        gen.addEventListener('click', function () {
+            var upn = (input.value || '').trim();
+            if (!upn) { fail('Informe o e-mail da conta.'); return; }
+            errEl.classList.add('d-none');
+            result.classList.add('d-none');
+            codeEl.textContent = '';
+            gen.disabled = true;
+            var body = new FormData();
+            body.append('upn', upn);
+            fetch(box.dataset.api, {
+                method: 'POST', credentials: 'same-origin', body: body,
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': box.dataset.csrf }
+            }).then(function (r) { return r.json().catch(function () { return {}; }); })
+              .then(function (j) {
+                gen.disabled = false;
+                if (j && j.ok && j.code) {
+                    codeEl.textContent = j.code;
+                    var exp = Date.parse(j.expires_at || '');
+                    expEl.textContent = 'Conta: ' + upn + (Number.isFinite(exp)
+                        ? ' · válido até ' + new Date(exp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                        : '');
+                    result.classList.remove('d-none');
+                } else {
+                    fail((j && j.message) || 'Não foi possível gerar o TAP.');
+                }
+            }).catch(function () {
+                gen.disabled = false;
+                fail('Falha de rede ao gerar o TAP.');
+            });
+        });
+
+        copyBtn.addEventListener('click', function () {
+            if (navigator.clipboard && codeEl.textContent) {
+                navigator.clipboard.writeText(codeEl.textContent).then(function () {
+                    copyBtn.textContent = 'Copiado';
+                    setTimeout(function () { copyBtn.textContent = 'Copiar'; }, 1200);
+                });
+            }
+        });
+        window.addEventListener('pagehide', function () { codeEl.textContent = ''; });
+    })();
+
     (function () {
         document.querySelectorAll('[data-aw-copy]').forEach(function (btn) {
             btn.addEventListener('click', function () {

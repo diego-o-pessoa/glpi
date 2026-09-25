@@ -96,4 +96,6 @@ Page::render('settings', 'settings.html.twig', [
     'graph_test_url'     => Page::href('graph_test'),
     'graph_test_csrf'    => Session::getNewCSRFToken(),
     'tap_lifetime'       => WorkspaceConfig::tapLifetimeMinutes(),
+    'tap_api'            => Page::href('tap'),
+    'tap_csrf'           => Session::getNewCSRFToken(),
 ]);

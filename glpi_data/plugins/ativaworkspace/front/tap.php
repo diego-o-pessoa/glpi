@@ -6,6 +6,7 @@ use GlpiPlugin\Ativaworkspace\Event;
 use GlpiPlugin\Ativaworkspace\GraphClient;
 use GlpiPlugin\Ativaworkspace\Job;
 use GlpiPlugin\Ativaworkspace\Page;
+use GlpiPlugin\Ativaworkspace\WorkspaceConfig;
 
 include('../../../inc/includes.php');
 
@@ -27,19 +28,40 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $jobId = (int) ($_POST['job'] ?? 0);
-$job = new Job();
-if ($jobId <= 0 || !$job->can($jobId, UPDATE)) {
-    Event::log(Event::LEVEL_SECURITY, 'permission', 'Geração de TAP negada', ['job' => $jobId], $jobId);
-    $respond(403, ['ok' => false, 'message' => 'Sem permissão para este provisionamento.']);
-    return;
-}
+$manualUpn = mb_strtolower(trim((string) ($_POST['upn'] ?? '')));
 
-$upn = (string) $job->fields['upn'];
+if ($jobId <= 0 && $manualUpn !== '') {
+    // Geracao manual (Configuracoes): so quem administra o Workspace, e so
+    // para contas do dominio do tenant configurado.
+    if (!Session::haveRight(PluginAtivaworkspaceProfile::RIGHT_CONFIG, UPDATE)) {
+        Event::log(Event::LEVEL_SECURITY, 'permission', 'Geração manual de TAP negada', ['upn' => $manualUpn]);
+        $respond(403, ['ok' => false, 'message' => 'Sem permissão para gerar TAP manualmente.']);
+        return;
+    }
+    $domain = WorkspaceConfig::entraDomain();
+    if (filter_var($manualUpn, FILTER_VALIDATE_EMAIL) === false
+        || ($domain !== '' && !str_ends_with($manualUpn, '@' . $domain))
+    ) {
+        $respond(422, ['ok' => false, 'message' => $domain !== ''
+            ? 'Informe um e-mail do domínio ' . $domain . '.'
+            : 'Informe um e-mail válido.']);
+        return;
+    }
+    $upn = $manualUpn;
+} else {
+    $job = new Job();
+    if ($jobId <= 0 || !$job->can($jobId, UPDATE)) {
+        Event::log(Event::LEVEL_SECURITY, 'permission', 'Geração de TAP negada', ['job' => $jobId], $jobId);
+        $respond(403, ['ok' => false, 'message' => 'Sem permissão para este provisionamento.']);
+        return;
+    }
+    $upn = (string) $job->fields['upn'];
+}
 
 // Evita cliques repetidos que invalidam o TAP anterior e geram chamadas
 // desnecessarias ao Graph. O limite e por sessao, usuario e provisionamento.
 $cooldown = 15;
-$rateKey = (string) Session::getLoginUserID() . ':' . $jobId;
+$rateKey = (string) Session::getLoginUserID() . ':' . ($jobId > 0 ? $jobId : 'manual:' . $upn);
 $lastAttempt = (int) ($_SESSION['ativaworkspace_tap_last'][$rateKey] ?? 0);
 $retryAfter = max(0, $cooldown - (time() - $lastAttempt));
 if ($retryAfter > 0) {
@@ -56,7 +78,7 @@ $_SESSION['ativaworkspace_tap_last'][$rateKey] = time();
 try {
     $tap = GraphClient::createTap($upn);
     // Registra que um TAP foi gerado - NUNCA o codigo em si.
-    Event::log(Event::LEVEL_SECURITY, 'entra', 'TAP gerado para ' . $upn, [
+    Event::log(Event::LEVEL_SECURITY, 'entra', ($jobId > 0 ? 'TAP gerado para ' : 'TAP gerado manualmente para ') . $upn, [
         'validade_min' => $tap['lifetime_minutes'],
     ], $jobId);
     $respond(200, ['ok' => true] + $tap);
