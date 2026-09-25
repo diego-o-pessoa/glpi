@@ -37,7 +37,7 @@ import ativa_workspace_entra as lib
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.4.3"
+WORKSPACE_AGENT_VERSION = "1.4.4"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -154,7 +154,25 @@ def user_sessions() -> list[int]:
     return sessions
 
 
-def launch_in_session(session_id: int, arguments: str, logger: logging.Logger) -> bool:
+def elevated_linked_token(token: wintypes.HANDLE) -> wintypes.HANDLE | None:
+    """
+    Token elevado (vinculado) do mesmo usuario, se ele for administrador com
+    UAC. O dialogo de ingresso no Entra roda elevado e o Windows (UIPI) nao
+    deixa um processo comum ver/clicar nele. So o servico (SYSTEM) consegue
+    esse token; o exe fica em pasta protegida (SYSTEM/Administradores).
+    """
+    advapi32 = ctypes.windll.advapi32
+    TOKEN_LINKED_TOKEN_CLASS = 19
+    linked = wintypes.HANDLE()
+    size = wintypes.DWORD()
+    if advapi32.GetTokenInformation(
+        token, TOKEN_LINKED_TOKEN_CLASS, ctypes.byref(linked), ctypes.sizeof(linked), ctypes.byref(size)
+    ) and linked.value:
+        return linked
+    return None
+
+
+def launch_in_session(session_id: int, arguments: str, logger: logging.Logger, elevated: bool = False) -> bool:
     """
     Cria este mesmo exe na sessao do usuario, com os argumentos dados
     (ex.: --open-workplace). Mesmo mecanismo que o Ativa Updater usa para o
@@ -195,6 +213,15 @@ def launch_in_session(session_id: int, arguments: str, logger: logging.Logger) -
     if not wtsapi32.WTSQueryUserToken(session_id, ctypes.byref(token)):
         logger.warning("Sem token de usuario na sessao %s (erro %s).", session_id, kernel32.GetLastError())
         return False
+
+    if elevated:
+        linked = elevated_linked_token(token)
+        if linked is not None:
+            kernel32.CloseHandle(token)
+            token = linked
+            logger.info("Helper iniciado com o token elevado do usuario.")
+        else:
+            logger.info("Usuario sem token elevado: helper com token comum.")
 
     env = ctypes.c_void_p()
     try:
@@ -237,7 +264,7 @@ def open_workplace_settings(logger: logging.Logger) -> bool:
     """Abre a tela em pelo menos uma sessao de usuario. True se alguma abriu."""
     opened = False
     for session_id in user_sessions():
-        if launch_in_session(session_id, "--open-workplace", logger):
+        if launch_in_session(session_id, "--open-workplace", logger, elevated=True):
             opened = True
     return opened
 
@@ -599,6 +626,7 @@ def open_workplace_now() -> int:
 
         # Confirmacao "Verifique se esta e sua organizacao" -> Ingressar.
         # O login/validacao pode demorar: espera ate 2 min pelo dialogo.
+        logger.info("TAP enviado; aguardando a confirmacao da organizacao (Ingressar).")
         if click_exact_button(("ingressar", "join"), 120):
             logger.info("Confirmacao da organizacao: Ingressar clicado.")
         else:
