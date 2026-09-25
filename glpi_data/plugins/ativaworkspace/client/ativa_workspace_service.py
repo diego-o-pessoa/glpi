@@ -27,6 +27,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from ctypes import wintypes
 from pathlib import Path
 from typing import Any
@@ -36,7 +37,7 @@ import ativa_workspace_entra as lib
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.4.2"
+WORKSPACE_AGENT_VERSION = "1.4.3"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -471,6 +472,42 @@ def open_workplace_now() -> int:
             time.sleep(1)
         return False
 
+    def norm(text):
+        text = unicodedata.normalize("NFKD", (text or "").strip().lower())
+        return "".join(c for c in text if not unicodedata.combining(c))
+
+    def click_exact_button(texts, timeout):
+        """
+        Botao com nome EXATO (sem acento), visivel. Evita pegar o link
+        "Ingressar este dispositivo..." que fica atras do dialogo. Invoke e,
+        se o botao continuar na tela, clique real do mouse.
+        """
+        wanted = {norm(t) for t in texts}
+
+        def compare(ctrl, _depth):
+            try:
+                return norm(ctrl.Name) in wanted and not ctrl.IsOffscreen
+            except Exception:  # noqa: BLE001
+                return False
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            button = auto.ButtonControl(searchDepth=50, Compare=compare)
+            if button.Exists(0, 0):
+                try:
+                    button.GetInvokePattern().Invoke()
+                except Exception:  # noqa: BLE001
+                    pass
+                time.sleep(2)
+                if button.Exists(0, 0):
+                    try:
+                        button.Click(simulateMove=False)
+                    except Exception:  # noqa: BLE001
+                        pass
+                return True
+            time.sleep(1)
+        return False
+
     def first_edit():
         """Primeiro campo de texto visivel (fallback p/ telas de um campo so)."""
         def visible(ctrl, _d):
@@ -561,13 +598,16 @@ def open_workplace_now() -> int:
         click_next()
 
         # Confirmacao "Verifique se esta e sua organizacao" -> Ingressar.
-        time.sleep(4)
-        if click_by_text(auto.ButtonControl, ("ingressar", "join", "participar"), 30):
+        # O login/validacao pode demorar: espera ate 2 min pelo dialogo.
+        if click_exact_button(("ingressar", "join"), 120):
             logger.info("Confirmacao da organizacao: Ingressar clicado.")
-        # Tela final "Esta tudo pronto!" -> Concluido.
-        time.sleep(6)
-        if click_by_text(auto.ButtonControl, ("concluido", "concluído", "done", "finish", "ok"), 25):
+        else:
+            logger.warning("Botao 'Ingressar' nao encontrado.")
+        # Tela final "Esta tudo pronto!" -> Concluido (o ingresso leva um tempo).
+        if click_exact_button(("concluido", "done", "finish"), 180):
             logger.info("Ingresso concluido (Concluido clicado).")
+        else:
+            logger.warning("Botao 'Concluido' nao encontrado.")
         logger.info("Fluxo do Entra finalizado; aguardando o dsregcmd confirmar.")
         return 0
     except Exception as exc:  # noqa: BLE001
