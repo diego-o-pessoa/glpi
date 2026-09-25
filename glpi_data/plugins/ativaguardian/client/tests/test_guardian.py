@@ -172,7 +172,7 @@ class IsolationTests(unittest.TestCase):
             components = guardian.collect_components(quiet_logger())
 
         self.assertEqual(components["updater"]["status"], guardian.STATUS_UNKNOWN)
-        self.assertEqual(len(components), 4)
+        self.assertEqual(len(components), len(guardian.COMPONENT_CHECKS))
 
     def test_component_never_reports_offline(self) -> None:
         """A API rejeita 'offline' num componente: ele e derivado no servidor."""

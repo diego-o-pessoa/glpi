@@ -211,7 +211,7 @@ final class ApiController extends AbstractController
         }
 
         $versions = [];
-        foreach (['updater_version', 'installed_version', 'available_version', 'wallpaper_client_version'] as $field) {
+        foreach (['updater_version', 'installed_version', 'available_version', 'wallpaper_client_version', 'workspace_version'] as $field) {
             $value = trim((string) ($payload[$field] ?? ''));
             if ($value !== '' && !ReleasePolicy::isValidVersion($value)) {
                 return $this->error('INVALID_VERSION', 'Versao informada invalida.', 422);
@@ -238,6 +238,7 @@ final class ApiController extends AbstractController
             'installed_version' => $versions['installed_version'],
             'available_version' => $versions['available_version'],
             'wallpaper_client_version' => $versions['wallpaper_client_version'],
+            'workspace_version' => $versions['workspace_version'],
             'glpi_agent_version' => $agentVersion,
             'status'            => $status,
             'message'           => mb_substr(trim((string) ($payload['message'] ?? '')), 0, 1000),

@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.10"
+UPDATER_VERSION = "1.7.11"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -112,6 +112,7 @@ STATE_PATH = PRODUCT_DIR / "state.json"
 DOWNLOAD_DIR = PRODUCT_DIR / "downloads"
 LOG_DIR = PRODUCT_DIR / "logs"
 WALLPAPER_VERSION_PATH = PROGRAM_DATA / "AtivaLocacao" / "Wallpaper" / "version.json"
+WORKSPACE_VERSION_PATH = PROGRAM_DATA / "AtivaLocacao" / "Workspace" / "version.json"
 WALLPAPER_CLIENT_PATH = PROGRAM_DATA / "AtivaLocacao" / "Wallpaper" / "AtivaWallpaperClient.exe"
 WALLPAPER_LOG_DIR = PROGRAM_DATA / "AtivaLocacao" / "Wallpaper" / "logs"
 MSI_LOG_PATH = LOG_DIR / "glpi-agent-msi.log"
@@ -971,6 +972,15 @@ def wallpaper_client_version() -> str:
         return ""
 
 
+def workspace_version() -> str:
+    """Versao do servico Ativa Workspace (gravada por ele ao iniciar)."""
+    try:
+        version = str(load_json(WORKSPACE_VERSION_PATH).get("version", ""))
+        return version if VERSION_RE.fullmatch(version) else ""
+    except (OSError, UpdaterError):
+        return ""
+
+
 def glpi_agent_version() -> str:
     if os.name != "nt":
         return ""
@@ -1098,6 +1108,7 @@ class ApiClient:
             "installed_version": installed,
             "available_version": available,
             "wallpaper_client_version": wallpaper_client_version(),
+            "workspace_version": workspace_version(),
             "glpi_agent_version": glpi_agent_version(),
             "status": status,
             "message": message[:1000],

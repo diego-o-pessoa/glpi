@@ -26,7 +26,7 @@ final class ClientsView
     /** Columns needed to detect changes; the large log columns are only loaded to render. */
     private const SUMMARY_COLUMNS = [
         'id', 'hostname', 'machine_guid', 'updater_version', 'installed_version', 'available_version',
-        'wallpaper_client_version', 'glpi_agent_version', 'status', 'message', 'last_check',
+        'wallpaper_client_version', 'workspace_version', 'glpi_agent_version', 'status', 'message', 'last_check',
         'check_requested_at', 'check_request_seq', 'check_ack_seq', 'command',
         'install_started_at', 'diagnostics_at', 'recovery_note', 'recovery_at',
     ];
@@ -343,6 +343,7 @@ final class ClientsView
             . self::versionBlock('Pacote', (string) $client['installed_version'], $packageExtra)
             . self::versionBlock('Updater', $serviceVersion ?: '-', $serviceExtra)
             . self::versionBlock('Wallpaper', (string) ($client['wallpaper_client_version'] ?: '-'))
+            . self::versionBlock('Workspace', (string) ($client['workspace_version'] ?? '') ?: '-')
             . self::versionBlock('Agent', (string) ($client['glpi_agent_version'] ?: '-'))
             . '</div></td>';
         $html .= "<td><span class='badge {$statusClass}'>" . htmlescape($statusLabel) . '</span>'

@@ -51,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.5.0"
+GUARDIAN_VERSION = "1.5.1"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -116,6 +116,14 @@ UPDATER_HEARTBEAT_PATH = UPDATER_DIR / "heartbeat.json"
 WALLPAPER_DIR = PROGRAM_DATA / "AtivaLocacao" / "Wallpaper"
 WALLPAPER_EXE = WALLPAPER_DIR / "AtivaWallpaperClient.exe"
 WALLPAPER_VERSION_PATH = WALLPAPER_DIR / "version.json"
+
+# Ativa Workspace: servico SYSTEM proprio (provisionamento / Entra ID),
+# instalado pelo pacote unificado. Grava version.json ao iniciar.
+WORKSPACE_SERVICE_NAME = "AtivaWorkspace"
+WORKSPACE_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
+WORKSPACE_EXE = WORKSPACE_DIR / "AtivaWorkspace.exe"
+WORKSPACE_VERSION_PATH = WORKSPACE_DIR / "version.json"
+WORKSPACE_CONFIG_PATH = WORKSPACE_DIR / "config.json"
 
 # Ativa Remote = RustDesk gerenciado pelo Ativa Updater.
 RUSTDESK_SERVICE_NAME = "RustDesk"
@@ -727,6 +735,32 @@ def check_wallpaper() -> dict[str, str]:
     return _component(STATUS_PROCESS_STOPPED, version)
 
 
+def check_workspace() -> dict[str, str]:
+    """Ativa Workspace: executavel + servico SYSTEM (mesma regra do Updater)."""
+    version = ""
+    try:
+        candidate = str(load_json(WORKSPACE_VERSION_PATH).get("version", "")).strip()
+        if VERSION_RE.fullmatch(candidate):
+            version = candidate
+    except GuardianError:
+        version = ""
+
+    if not WORKSPACE_EXE.is_file():
+        # O Workspace e opcional no pacote. Sem a config (gravada pelo
+        # instalador; o antivirus nao a apaga) ele nunca foi instalado aqui:
+        # "unknown" evita reinstalar o pacote em loop numa maquina sem ele.
+        if not WORKSPACE_CONFIG_PATH.is_file():
+            return _component(STATUS_UNKNOWN, version)
+        return _component(STATUS_FILE_MISSING, version)
+
+    state = query_service(WORKSPACE_SERVICE_NAME)
+    if state is None:
+        return _component(STATUS_ERROR, version)
+    if state in (SERVICE_STATE_RUNNING, SERVICE_STATE_START_PENDING):
+        return _component(STATUS_HEALTHY, version)
+    return _component(STATUS_SERVICE_STOPPED, version)
+
+
 def check_remote() -> dict[str, str]:
     """Ativa Remote = RustDesk, instalado e mantido pelo Ativa Updater."""
     version = _cached_version("rustdesk", lambda: registry_uninstall_version(RUSTDESK_UNINSTALL_KEY))
@@ -762,6 +796,7 @@ COMPONENT_CHECKS = {
     "wallpaper": check_wallpaper,
     "updater": check_updater,
     "remote": check_remote,
+    "workspace": check_workspace,
 }
 
 
@@ -788,6 +823,7 @@ COMPONENT_SERVICES: dict[str, tuple[str, ...]] = {
     "updater": (UPDATER_SERVICE_NAME,),
     "remote": (RUSTDESK_SERVICE_NAME,),
     "glpi_agent": GLPI_AGENT_SERVICE_CANDIDATES,
+    "workspace": (WORKSPACE_SERVICE_NAME,),
 }
 
 SERVICE_WAIT_SECONDS = 45
@@ -812,7 +848,7 @@ SHA256_RE = re.compile(r"^[a-fA-F0-9]{64}$")
 # Quais componentes sabem se reparar. Wallpaper, Remote e GLPI Agent entram
 # depois que o Updater estiver validado em campo; ate la a acao e recusada com
 # mensagem clara em vez de fingir que funciona.
-REPAIRABLE_COMPONENTS = ("updater", "wallpaper", "remote", "glpi_agent")
+REPAIRABLE_COMPONENTS = ("updater", "wallpaper", "remote", "glpi_agent", "workspace")
 
 
 def resolve_component_service(component: str) -> str | None:

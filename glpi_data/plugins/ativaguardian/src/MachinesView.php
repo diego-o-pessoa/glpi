@@ -14,6 +14,7 @@ final class MachinesView
         'updater'    => 'Updater',
         'remote'     => 'Remote',
         'glpi_agent' => 'GLPI Agent',
+        'workspace'  => 'Workspace',
     ];
 
     /** @return array{machines: array<int, array>, actions: array<int, array>} */

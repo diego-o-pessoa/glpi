@@ -53,6 +53,7 @@ final class ActionQueue
         'remote'     => [self::CHECK, self::START, self::RESTART, self::REPAIR, self::FIX],
         'glpi_agent' => [self::CHECK, self::START, self::RESTART, self::REPAIR, self::FIX],
         'wallpaper'  => [self::CHECK, self::REPAIR, self::FIX],
+        'workspace'  => [self::CHECK, self::START, self::RESTART, self::REPAIR, self::FIX],
     ];
 
     /** Reparo baixa e instala pacote: leva bem mais que as demais ações. */

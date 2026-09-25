@@ -33,6 +33,9 @@ function plugin_ativaupdater_do_install(): bool
             if (!$DB->fieldExists($clientsTable, 'wallpaper_client_version')) {
                 $migration->addField($clientsTable, 'wallpaper_client_version', "varchar(32) NOT NULL DEFAULT ''");
             }
+            if (!$DB->fieldExists($clientsTable, 'workspace_version')) {
+                $migration->addField($clientsTable, 'workspace_version', "varchar(32) NOT NULL DEFAULT ''");
+            }
             if (!$DB->fieldExists($clientsTable, 'glpi_agent_version')) {
                 $migration->addField($clientsTable, 'glpi_agent_version', "varchar(32) NOT NULL DEFAULT ''");
             }

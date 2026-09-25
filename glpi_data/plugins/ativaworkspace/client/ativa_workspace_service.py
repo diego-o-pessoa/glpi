@@ -37,12 +37,13 @@ import ativa_workspace_entra as lib
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.4.4"
+WORKSPACE_AGENT_VERSION = "1.4.5"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
 LOG_DIR = PRODUCT_DIR / "logs"
 STATE_PATH = PRODUCT_DIR / "entra-state.json"
+VERSION_PATH = PRODUCT_DIR / "version.json"
 SERVICE_EXE = PRODUCT_DIR / "AtivaWorkspace.exe"
 
 POLL_SECONDS = 15               # ritmo normal do loop
@@ -306,6 +307,11 @@ class WorkspaceRuntime:
 
     def run(self, logger: logging.Logger) -> None:
         logger.info("Ativa Workspace %s iniciado.", WORKSPACE_AGENT_VERSION)
+        # Lido pelo Ativa Guardian e pelo Ativa Updater (painel de versoes).
+        try:
+            save_json(VERSION_PATH, {"version": WORKSPACE_AGENT_VERSION})
+        except Exception:  # noqa: BLE001
+            logger.warning("Nao foi possivel gravar %s.", VERSION_PATH)
         while not self.stop_event.is_set():
             try:
                 self.tick(logger)
