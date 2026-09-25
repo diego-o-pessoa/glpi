@@ -28,7 +28,7 @@ from pathlib import Path
 
 WEB_SIGNIN_KEY = r"SOFTWARE\Microsoft\PolicyManager\current\device\Authentication"
 WEB_SIGNIN_VALUE = "EnableWebSignIn"
-REBOOT_DELAY_SECONDS = 60
+REBOOT_DELAY_SECONDS = 20
 REBOOT_MESSAGE = "Ativa Workspace: reiniciando para concluir o ingresso no Microsoft Entra ID."
 ENTRA_DOMAIN = "AZUREAD"
 
@@ -348,15 +348,27 @@ def run_logon_signin(payload_path: Path, logger: logging.Logger) -> int:
         return ", ".join(names)
 
     try:
-        # Tira a "cortina" da tela de bloqueio (relogio), se estiver na frente.
-        width, height = auto.GetScreenSize()
-        auto.Click(width // 2, height // 2, waitTime=1)
+        logger.info("Login: helper iniciado na tela de login.")
+        other_user = exact("outro usuario", "other user")
+        options = contains("opcoes de entrada", "sign-in options", "opcoes de entrar")
 
-        if wait_click(exact("outro usuario", "other user"), 30):
+        # Tela de fundo (relogio) na frente: ENTER mostra a lista de usuarios.
+        # Repete ate a lista aparecer (logo apos o boot a tela ainda carrega).
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            if find(other_user) is not None or find(options) is not None:
+                break
+            auto.SendKeys("{Enter}", waitTime=0.1)
+            time.sleep(3)
+        else:
+            logger.warning("Login: lista de usuarios nao apareceu. Visiveis: %s", visible_names())
+            return 0
+
+        if wait_click(other_user, 15):
             logger.info("Login: 'Outro usuario' selecionado.")
-        time.sleep(1)
+        time.sleep(2)
 
-        if not wait_click(contains("opcoes de entrada", "sign-in options", "opcoes de entrar"), 20):
+        if not wait_click(options, 20):
             logger.warning("Login: 'Opcoes de entrada' nao encontrado. Visiveis: %s", visible_names())
             return 0
         time.sleep(1)

@@ -38,7 +38,7 @@ import ativa_workspace_logon as logon
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.4.6"
+WORKSPACE_AGENT_VERSION = "1.4.7"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -57,6 +57,7 @@ LOGON_PAYLOAD = PRODUCT_DIR / "logon.json"   # conta + TAP; pasta so SYSTEM/Admi
 REBOOT_RETRY_SECONDS = 10 * 60   # reinicio agendado que nao aconteceu
 LOGON_RETRY_SECONDS = 3 * 60     # intervalo entre tentativas de login
 LOGON_MAX_ATTEMPTS = 3
+LOGON_BOOT_GRACE_SECONDS = 30    # tela de login ainda carregando logo apos o boot
 
 # Subestados (espelham EntraStep.php).
 PRECHECK = "PRECHECK"
@@ -454,6 +455,9 @@ class WorkspaceRuntime:
 
         # c) Depois do boot: login automatico pela tela de login.
         api.progress(step_id, USER_SIGNIN, "Entrando com a conta do Entra (Web sign-in)")
+        if now - logon.boot_time() < LOGON_BOOT_GRACE_SECONDS:
+            logger.info("Login: reiniciado; aguardando a tela de login carregar.")
+            return
         attempts = int(state.get("logon_attempts", 0))
         if attempts >= LOGON_MAX_ATTEMPTS:
             # Para de gerar TAPs: um TAP novo invalidaria o que o tecnico gerou a mao.
