@@ -93,6 +93,7 @@ final class RemoteBridge
         }
 
         $protected = ProtectionPolicy::isProtected($client);
+        $repository = new ClientRepository();
         if ($protected && !TiPasswordGate::isVerified($client)) {
             if ($tiPassword === '') {
                 throw new RuntimeException('Computador protegido: informe a senha do T.I.', 401);
@@ -101,8 +102,21 @@ final class RemoteBridge
             TiPasswordGate::markVerified($client);
         }
 
+        // Durante o provisionamento a maquina fica na tela de login: nao ha
+        // usuario para aceitar o pedido ("Nenhum usuario conectado para
+        // autorizar"). Se o computador NAO e protegido, libera o acesso direto
+        // (sem consentimento) pela propria API do Ativa Remote. Protegido mantem
+        // a regra dele (senha do T.I. + autorizacao).
+        if (!$protected && ClientRepository::requiresConsent($client)) {
+            $repository->setRequireConsent((int) $client['id'], false);
+            $client = $repository->findById((int) $client['id']) ?? $client;
+            Event::log(Event::LEVEL_INFO, 'remote', 'Acesso direto liberado (computador não protegido)', [
+                'client_id' => (int) $client['id'],
+            ], $jobId);
+        }
+
         try {
-            $client = (new ClientRepository())->requestAccess((int) $client['id'], (int) Session::getLoginUserID());
+            $client = $repository->requestAccess((int) $client['id'], (int) Session::getLoginUserID());
         } catch (\Exception $exception) {
             throw new RuntimeException($exception->getMessage(), 409);
         }
