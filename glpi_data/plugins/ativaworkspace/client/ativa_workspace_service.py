@@ -38,7 +38,7 @@ import ativa_workspace_logon as logon
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.4.7"
+WORKSPACE_AGENT_VERSION = "1.4.10"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -54,6 +54,7 @@ MUTEX_NAME = r"Global\AtivaWorkspaceService"
 
 # Fase de login do usuario Entra (depois do ingresso).
 LOGON_PAYLOAD = PRODUCT_DIR / "logon.json"   # conta + TAP; pasta so SYSTEM/Admins
+WEB_SIGNIN_MARKER = PRODUCT_DIR / "websignin.json"  # quando o Web sign-in foi ligado
 REBOOT_RETRY_SECONDS = 10 * 60   # reinicio agendado que nao aconteceu
 LOGON_RETRY_SECONDS = 3 * 60     # intervalo entre tentativas de login
 LOGON_MAX_ATTEMPTS = 3
@@ -317,6 +318,9 @@ class WorkspaceRuntime:
 
     def run(self, logger: logging.Logger) -> None:
         logger.info("Ativa Workspace %s iniciado.", WORKSPACE_AGENT_VERSION)
+        # Web sign-in ligado ja na instalacao: quando o provisionamento chegar ao
+        # login, normalmente ja houve um boot e nao e preciso reiniciar.
+        logon.enable_web_signin(logger, WEB_SIGNIN_MARKER)
         # Lido pelo Ativa Guardian e pelo Ativa Updater (painel de versoes).
         try:
             save_json(VERSION_PATH, {"version": WORKSPACE_AGENT_VERSION})
@@ -335,6 +339,12 @@ class WorkspaceRuntime:
             logger.info("Workspace: %s", reason)
 
     def tick(self, logger: logging.Logger) -> None:
+        # Login pos-reinicio primeiro: nao depende do GLPI (VPN pode estar fora).
+        try:
+            self._pending_logon_tick(logger)
+        except Exception:  # noqa: BLE001
+            logger.exception("Falha no login pos-reinicio.")
+
         config = lib.load_config()
         if config is None:
             self._idle(logger, f"inativo: {lib.CONFIG_PATH} ausente ou sem api_url/api_token")
@@ -365,11 +375,13 @@ class WorkspaceRuntime:
         expected_tenant = str(entra.get("expected_tenant", ""))
         expected_domain = str(entra.get("expected_domain", ""))
 
-        # 1) Verificacao (nao abre UI).
-        api.progress(step_id, PRECHECK, "dsregcmd /status")
+        # 1) Verificacao (nao abre UI). O PRECHECK so vai ao servidor antes do
+        # ingresso: depois, ele esconderia o andamento (reinicio/login) no painel.
         fields = lib.parse_dsregcmd(lib.run_dsregcmd())
         joined, reason = lib.evaluate_join(fields, expected_tenant, expected_domain)
         logger.info("Entra: AzureAdJoined=%s (%s)", fields.get("AzureAdJoined", "?"), reason)
+        if not joined:
+            api.progress(step_id, PRECHECK, "dsregcmd /status")
 
         state = load_json(STATE_PATH)
         if state.get("step_id") != step_id:
@@ -427,19 +439,48 @@ class WorkspaceRuntime:
                    "Ingressando no Microsoft Entra ID automaticamente. Se pedir confirmacao, acompanhe pelo Ativa Remote.",
                    {"azure_ad_joined": False})
 
+    @staticmethod
+    def _report(logger: logging.Logger, api: "lib.WorkspaceApi", step_id: int, substate: str, log: str) -> None:
+        """Envia o subestado e avisa no log se o servidor recusar."""
+        if not api.progress(step_id, substate, log):
+            logger.warning("Servidor recusou o subestado %s: confira se o src/EntraStep.php "
+                           "atualizado foi enviado ao GLPI.", substate)
+
     def _handle_user_signin(self, logger: logging.Logger, api: "lib.WorkspaceApi", step_id: int,
                             entra: dict, state: dict) -> None:
         """
         Ingressado, mas a conta do Entra ainda nao entrou: liga o Web sign-in,
-        reinicia e, depois do boot, faz o login pela tela de login com um TAP novo.
+        gera o TAP JA (com a VPN ainda conectada), reinicia e, depois do boot,
+        faz o login pela tela de login. Depois do boot nao depende do GLPI.
         """
         now = time.time()
         reboot_at = float(state.get("reboot_at", 0.0))
 
-        # a) Ainda nao reiniciou por nossa causa: liga o Web sign-in e reinicia.
+        # a) Web sign-in + TAP guardado (DPAPI, so SYSTEM). Se o Web sign-in ja
+        # vale (houve boot depois de ligar), troca de usuario sem reiniciar.
         if not reboot_at:
-            logon.enable_web_signin(logger)
-            api.progress(step_id, REBOOTING, "Reiniciando para ativar o Web sign-in")
+            logon.enable_web_signin(logger, WEB_SIGNIN_MARKER)
+            upn = str(entra.get("upn", ""))
+            tap_data, tap_error = api.request_tap(step_id)
+            tap_code = str(tap_data.get("tap", "")) if tap_data else ""
+            if tap_code:
+                lifetime = int(tap_data.get("lifetime_minutes", 60) or 60)
+                state["upn"] = upn
+                state["tap_enc"] = logon.protect(tap_code)
+                state["tap_expires"] = now + lifetime * 60
+                logger.info("Login: TAP guardado para depois do reinicio (valido por %s min).", lifetime)
+            else:
+                logger.warning("Login: sem TAP antes do reinicio (%s).", tap_error or "motivo desconhecido")
+            tap_code = ""
+            if logon.web_signin_active(WEB_SIGNIN_MARKER):
+                # Marca como "ja reiniciado" (boot anterior a agora) e segue direto.
+                state["reboot_at"] = logon.boot_time() - 1
+                save_json(STATE_PATH, state)
+                logger.info("Login: Web sign-in ja ativo; trocando de usuario sem reiniciar.")
+                self._report(logger, api, step_id, USER_SIGNIN, "Entrando com a conta do Entra (Web sign-in)")
+                self._attempt_logon(logger, state, api, step_id, str(entra.get("upn", "")))
+                return
+            self._report(logger, api, step_id, REBOOTING, "Reiniciando para ativar o Web sign-in")
             if logon.request_reboot(logger):
                 state["reboot_at"] = now
             save_json(STATE_PATH, state)
@@ -447,16 +488,40 @@ class WorkspaceRuntime:
 
         # b) Reinicio agendado mas ainda nao aconteceu (o boot e anterior a ele).
         if logon.boot_time() < reboot_at:
+            logger.info("Login: aguardando o reinicio agendado.")
             if now - reboot_at > REBOOT_RETRY_SECONDS:
                 logger.warning("Reinicio nao aconteceu; agendando de novo.")
                 state["reboot_at"] = 0.0
                 save_json(STATE_PATH, state)
             return
 
-        # c) Depois do boot: login automatico pela tela de login.
-        api.progress(step_id, USER_SIGNIN, "Entrando com a conta do Entra (Web sign-in)")
+        # c) Depois do boot (com GLPI acessivel): informa e tenta o login.
+        self._report(logger, api, step_id, USER_SIGNIN, "Entrando com a conta do Entra (Web sign-in)")
+        self._attempt_logon(logger, state, api, step_id, str(entra.get("upn", "")))
+
+    def _pending_logon_tick(self, logger: logging.Logger) -> None:
+        """
+        Roda ANTES de falar com o GLPI: depois do reinicio a VPN costuma estar
+        desconectada, entao o login usa o TAP guardado antes de reiniciar.
+        """
+        state = load_json(STATE_PATH)
+        reboot_at = float(state.get("reboot_at", 0.0))
+        if not reboot_at or not state.get("tap_enc") or logon.boot_time() < reboot_at:
+            return
+        self._attempt_logon(logger, state, None, int(state.get("step_id", 0)), "")
+
+    def _attempt_logon(self, logger: logging.Logger, state: dict, api: "lib.WorkspaceApi | None",
+                       step_id: int, upn_fallback: str) -> None:
+        now = time.time()
         if now - logon.boot_time() < LOGON_BOOT_GRACE_SECONDS:
             logger.info("Login: reiniciado; aguardando a tela de login carregar.")
+            return
+        if logon.entra_user_logged_in():
+            # Ja entrou: o TAP guardado nao serve mais. O SUCCESS vai ao GLPI
+            # quando ele estiver acessivel (VPN conectada).
+            if state.pop("tap_enc", None) is not None:
+                logger.info("Login: conta do Entra conectada; TAP guardado descartado.")
+                save_json(STATE_PATH, state)
             return
         attempts = int(state.get("logon_attempts", 0))
         if attempts >= LOGON_MAX_ATTEMPTS:
@@ -469,14 +534,22 @@ class WorkspaceRuntime:
         if now - float(state.get("last_logon", 0.0)) < LOGON_RETRY_SECONDS:
             return
 
-        upn = str(entra.get("upn", ""))
-        tap_data, tap_error = api.request_tap(step_id)
-        tap_code = str(tap_data.get("tap", "")) if tap_data else ""
+        upn = str(state.get("upn", "")) or upn_fallback
+        tap_code = ""
+        if state.get("tap_enc") and float(state.get("tap_expires", 0.0)) > now + 60:
+            tap_code = logon.unprotect(str(state["tap_enc"]))
+        if not tap_code and api is not None:
+            # Sem TAP guardado (ou expirado) e com o GLPI acessivel: pede outro.
+            tap_data, tap_error = api.request_tap(step_id)
+            tap_code = str(tap_data.get("tap", "")) if tap_data else ""
+            if not tap_code:
+                logger.warning("Login: sem TAP (%s).", tap_error or "motivo desconhecido")
         state["last_logon"] = now
         state["logon_attempts"] = attempts + 1
         save_json(STATE_PATH, state)
         if not upn or not tap_code:
-            logger.warning("Login: sem conta ou TAP (%s).", tap_error or "conta ausente")
+            if api is None:
+                logger.warning("Login: sem conta ou TAP guardado; aguardando a VPN/GLPI.")
             return
 
         logon.disconnect_local_sessions(logger)

@@ -15,6 +15,7 @@ lido e apagado pelo helper. Nunca vai para log nem para linha de comando.
 
 from __future__ import annotations
 
+import base64
 import ctypes
 import json
 import logging
@@ -39,8 +40,12 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 #  Web sign-in e reinicio
 # --------------------------------------------------------------------------- #
 
-def enable_web_signin(logger: logging.Logger) -> bool:
-    """Liga o Web sign-in (vale depois do proximo boot). True se ficou ligado."""
+def enable_web_signin(logger: logging.Logger, marker: Path) -> bool:
+    """
+    Liga o Web sign-in (vale depois do proximo boot). True se ficou ligado.
+    Quando liga agora, grava em `marker` o horario, para saber se ja houve um
+    boot depois disso (ai nao precisa reiniciar no provisionamento).
+    """
     import winreg  # type: ignore
 
     try:
@@ -54,11 +59,30 @@ def enable_web_signin(logger: logging.Logger) -> bool:
                 current = None
             if current != 1:
                 winreg.SetValueEx(key, WEB_SIGNIN_VALUE, 0, winreg.REG_DWORD, 1)
-                logger.info("Web sign-in habilitado (vale apos reiniciar).")
+                marker.write_text(json.dumps({"enabled_at": time.time()}), "utf-8")
+                logger.info("Web sign-in habilitado (vale apos o proximo reinicio).")
         return True
     except OSError as exc:
         logger.warning("Nao foi possivel habilitar o Web sign-in: %s", exc)
         return False
+
+
+def web_signin_active(marker: Path) -> bool:
+    """Ligado E ja houve boot depois de ligar (sem registro = ligado antes, por fora)."""
+    import winreg  # type: ignore
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, WEB_SIGNIN_KEY, 0,
+                            winreg.KEY_QUERY_VALUE | winreg.KEY_WOW64_64KEY) as key:
+            if winreg.QueryValueEx(key, WEB_SIGNIN_VALUE)[0] != 1:
+                return False
+    except OSError:
+        return False
+    try:
+        enabled_at = float(json.loads(marker.read_text("utf-8")).get("enabled_at", 0.0))
+    except (OSError, ValueError, AttributeError):
+        return True
+    return enabled_at < boot_time()
 
 
 def boot_time() -> float:
@@ -233,19 +257,56 @@ def launch_on_logon_screen(exe: Path, arguments: str, logger: logging.Logger) ->
         kernel32.CloseHandle(own)
 
 
+class _DATA_BLOB(ctypes.Structure):
+    _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+
+def _dpapi(data: bytes, encrypt: bool) -> bytes:
+    """
+    DPAPI no escopo do usuario corrente. Como o servico e o helper rodam como
+    SYSTEM, so a conta SYSTEM desta maquina consegue abrir o dado.
+    """
+    crypt32 = ctypes.windll.crypt32
+    kernel32 = ctypes.windll.kernel32
+    buffer = ctypes.create_string_buffer(data, len(data))
+    blob_in = _DATA_BLOB(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_char)))
+    blob_out = _DATA_BLOB()
+    CRYPTPROTECT_UI_FORBIDDEN = 0x1
+    call = crypt32.CryptProtectData if encrypt else crypt32.CryptUnprotectData
+    if not call(ctypes.byref(blob_in), None, None, None, None, CRYPTPROTECT_UI_FORBIDDEN, ctypes.byref(blob_out)):
+        raise OSError(f"DPAPI falhou (erro {kernel32.GetLastError()})")
+    try:
+        return ctypes.string_at(blob_out.pbData, blob_out.cbData)
+    finally:
+        kernel32.LocalFree(blob_out.pbData)
+
+
+def protect(value: str) -> str:
+    return base64.b64encode(_dpapi(value.encode("utf-8"), True)).decode("ascii")
+
+
+def unprotect(value: str) -> str:
+    try:
+        return _dpapi(base64.b64decode(value), False).decode("utf-8")
+    except (OSError, ValueError):
+        return ""
+
+
 def write_payload(path: Path, upn: str, tap: str) -> None:
-    path.write_text(json.dumps({"upn": upn, "tap": tap}), "utf-8")
+    path.write_text(json.dumps({"upn": upn, "tap_enc": protect(tap)}), "utf-8")
 
 
 def read_payload(path: Path) -> dict[str, str]:
-    """Le e APAGA o arquivo (conta + TAP)."""
+    """Le e APAGA o arquivo (conta + TAP criptografado)."""
     try:
         data = json.loads(path.read_text("utf-8"))
     except (OSError, ValueError):
         return {}
     finally:
         path.unlink(missing_ok=True)
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        return {}
+    return {"upn": str(data.get("upn", "")), "tap": unprotect(str(data.get("tap_enc", "")))}
 
 
 # --------------------------------------------------------------------------- #
