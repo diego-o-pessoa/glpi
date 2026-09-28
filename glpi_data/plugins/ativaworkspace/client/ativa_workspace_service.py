@@ -38,7 +38,7 @@ import ativa_workspace_logon as logon
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.4.10"
+WORKSPACE_AGENT_VERSION = "1.4.11"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -53,11 +53,8 @@ OPEN_UI_MIN_INTERVAL = 120      # nao reabre a janela com mais frequencia que is
 MUTEX_NAME = r"Global\AtivaWorkspaceService"
 
 # Fase de login do usuario Entra (depois do ingresso).
-LOGON_PAYLOAD = PRODUCT_DIR / "logon.json"   # conta + TAP; pasta so SYSTEM/Admins
 WEB_SIGNIN_MARKER = PRODUCT_DIR / "websignin.json"  # quando o Web sign-in foi ligado
 REBOOT_RETRY_SECONDS = 10 * 60   # reinicio agendado que nao aconteceu
-LOGON_RETRY_SECONDS = 3 * 60     # intervalo entre tentativas de login
-LOGON_MAX_ATTEMPTS = 3
 LOGON_BOOT_GRACE_SECONDS = 30    # tela de login ainda carregando logo apos o boot
 
 # Subestados (espelham EntraStep.php).
@@ -66,7 +63,6 @@ OPENING_SETTINGS = "OPENING_SETTINGS"
 WAITING_HUMAN = "WAITING_HUMAN"
 VERIFYING_JOIN = "VERIFYING_JOIN"
 REBOOTING = "REBOOTING"
-USER_SIGNIN = "USER_SIGNIN"
 SUCCESS = "SUCCESS"
 FAILED = "FAILED"
 
@@ -339,12 +335,6 @@ class WorkspaceRuntime:
             logger.info("Workspace: %s", reason)
 
     def tick(self, logger: logging.Logger) -> None:
-        # Login pos-reinicio primeiro: nao depende do GLPI (VPN pode estar fora).
-        try:
-            self._pending_logon_tick(logger)
-        except Exception:  # noqa: BLE001
-            logger.exception("Falha no login pos-reinicio.")
-
         config = lib.load_config()
         if config is None:
             self._idle(logger, f"inativo: {lib.CONFIG_PATH} ausente ou sem api_url/api_token")
@@ -400,26 +390,22 @@ class WorkspaceRuntime:
             self._handle_user_signin(logger, api, step_id, entra, state)
             return
 
-        # 2) Ja aguardando o tecnico: continua verificando ate o timeout.
-        current = str(entra.get("substate", ""))
-        if current in (WAITING_HUMAN, VERIFYING_JOIN):
-            if time.time() - float(state.get("started_at", time.time())) > WAIT_HUMAN_TIMEOUT:
-                api.result(step_id, FAILED, "Tempo esgotado aguardando a autenticacao.", {"azure_ad_joined": False})
-                STATE_PATH.unlink(missing_ok=True)
-                return
-            api.progress(step_id, VERIFYING_JOIN, "Aguardando a autenticacao do tecnico")
-            save_json(STATE_PATH, state)
-            return
-
-        # 3) Nao ingressado e ainda nao aguardando: abre a tela na sessao do usuario.
+        # 2) Nao ingressado: conduz o ingresso AUTOMATICO. O job fica RUNNING (sem
+        # "aguardando intervencao"); so a etapa de login do usuario aguarda o TI.
         if not user_sessions():
             api.progress(step_id, OPENING_SETTINGS, "Sem usuario logado; aguardando login")
             save_json(STATE_PATH, state)
             return
 
+        # Timeout do ingresso automatico.
+        if time.time() - float(state.get("started_at", time.time())) > WAIT_HUMAN_TIMEOUT:
+            api.result(step_id, FAILED, "Tempo esgotado no ingresso automatico ao Microsoft Entra ID.",
+                       {"azure_ad_joined": False})
+            STATE_PATH.unlink(missing_ok=True)
+            return
+
+        # Abre/reabre a tela e dispara a automacao do ingresso no intervalo minimo.
         if time.time() - float(state.get("last_open", 0.0)) > OPEN_UI_MIN_INTERVAL:
-            # A conta (UPN) vem do proprio passo: o e-mail sempre preenche, mesmo
-            # se o TAP falhar. O TAP e gerado a parte (senha temporaria de uso unico).
             upn = str(entra.get("upn", ""))
             tap_data, tap_error = api.request_tap(step_id)
             tap_code = str(tap_data.get("tap", "")) if tap_data else ""
@@ -431,13 +417,10 @@ class WorkspaceRuntime:
             opened = open_workplace_settings(logger)
             state["last_open"] = time.time()
             logger.info("Entra: abertura automatica %s.", "solicitada" if opened else "falhou")
-        state["started_at"] = time.time()
         save_json(STATE_PATH, state)
 
-        api.progress(step_id, OPENING_SETTINGS, "Abrindo o ingresso no Microsoft Entra ID")
-        api.result(step_id, WAITING_HUMAN,
-                   "Ingressando no Microsoft Entra ID automaticamente. Se pedir confirmacao, acompanhe pelo Ativa Remote.",
-                   {"azure_ad_joined": False})
+        # Sem WAITING_HUMAN aqui: mantem RUNNING enquanto o ingresso ocorre.
+        api.progress(step_id, VERIFYING_JOIN, "Ingressando no Microsoft Entra ID automaticamente")
 
     @staticmethod
     def _report(logger: logging.Logger, api: "lib.WorkspaceApi", step_id: int, substate: str, log: str) -> None:
@@ -446,120 +429,57 @@ class WorkspaceRuntime:
             logger.warning("Servidor recusou o subestado %s: confira se o src/EntraStep.php "
                            "atualizado foi enviado ao GLPI.", substate)
 
+    WAIT_TI_MESSAGE = "Aguardando o T.I. entrar no usuário do Entra ID (tela de login pronta)."
+
     def _handle_user_signin(self, logger: logging.Logger, api: "lib.WorkspaceApi", step_id: int,
                             entra: dict, state: dict) -> None:
         """
-        Ingressado, mas a conta do Entra ainda nao entrou: liga o Web sign-in,
-        gera o TAP JA (com a VPN ainda conectada), reinicia e, depois do boot,
-        faz o login pela tela de login. Depois do boot nao depende do GLPI.
+        Ingressado, mas a conta do Entra ainda nao entrou. Prepara a tela de
+        login (Web sign-in + trocar de usuario) e passa a aguardar o T.I. entrar
+        na conta do Entra pela tela de login. O login em si e feito por uma
+        pessoa; o servico so confirma quando a sessao do Entra aparece.
         """
         now = time.time()
         reboot_at = float(state.get("reboot_at", 0.0))
 
-        # a) Web sign-in + TAP guardado (DPAPI, so SYSTEM). Se o Web sign-in ja
-        # vale (houve boot depois de ligar), troca de usuario sem reiniciar.
+        # a) Web sign-in (globo na tela de login). So reinicia se ainda nao vale
+        # - normalmente ja vale, porque foi ligado na instalacao do servico.
         if not reboot_at:
             logon.enable_web_signin(logger, WEB_SIGNIN_MARKER)
-            upn = str(entra.get("upn", ""))
-            tap_data, tap_error = api.request_tap(step_id)
-            tap_code = str(tap_data.get("tap", "")) if tap_data else ""
-            if tap_code:
-                lifetime = int(tap_data.get("lifetime_minutes", 60) or 60)
-                state["upn"] = upn
-                state["tap_enc"] = logon.protect(tap_code)
-                state["tap_expires"] = now + lifetime * 60
-                logger.info("Login: TAP guardado para depois do reinicio (valido por %s min).", lifetime)
-            else:
-                logger.warning("Login: sem TAP antes do reinicio (%s).", tap_error or "motivo desconhecido")
-            tap_code = ""
             if logon.web_signin_active(WEB_SIGNIN_MARKER):
-                # Marca como "ja reiniciado" (boot anterior a agora) e segue direto.
-                state["reboot_at"] = logon.boot_time() - 1
+                state["reboot_at"] = logon.boot_time() - 1  # ja vale; nao reinicia
                 save_json(STATE_PATH, state)
-                logger.info("Login: Web sign-in ja ativo; trocando de usuario sem reiniciar.")
-                self._report(logger, api, step_id, USER_SIGNIN, "Entrando com a conta do Entra (Web sign-in)")
-                self._attempt_logon(logger, state, api, step_id, str(entra.get("upn", "")))
+            else:
+                self._report(logger, api, step_id, REBOOTING, "Reiniciando para ativar o Web sign-in")
+                if logon.request_reboot(logger):
+                    state["reboot_at"] = now
+                save_json(STATE_PATH, state)
                 return
-            self._report(logger, api, step_id, REBOOTING, "Reiniciando para ativar o Web sign-in")
-            if logon.request_reboot(logger):
-                state["reboot_at"] = now
-            save_json(STATE_PATH, state)
-            return
 
         # b) Reinicio agendado mas ainda nao aconteceu (o boot e anterior a ele).
-        if logon.boot_time() < reboot_at:
+        if logon.boot_time() < float(state.get("reboot_at", 0.0)):
             logger.info("Login: aguardando o reinicio agendado.")
-            if now - reboot_at > REBOOT_RETRY_SECONDS:
+            if now - float(state.get("reboot_at", 0.0)) > REBOOT_RETRY_SECONDS:
                 logger.warning("Reinicio nao aconteceu; agendando de novo.")
                 state["reboot_at"] = 0.0
                 save_json(STATE_PATH, state)
             return
 
-        # c) Depois do boot (com GLPI acessivel): informa e tenta o login.
-        self._report(logger, api, step_id, USER_SIGNIN, "Entrando com a conta do Entra (Web sign-in)")
-        self._attempt_logon(logger, state, api, step_id, str(entra.get("upn", "")))
-
-    def _pending_logon_tick(self, logger: logging.Logger) -> None:
-        """
-        Roda ANTES de falar com o GLPI: depois do reinicio a VPN costuma estar
-        desconectada, entao o login usa o TAP guardado antes de reiniciar.
-        """
-        state = load_json(STATE_PATH)
-        reboot_at = float(state.get("reboot_at", 0.0))
-        if not reboot_at or not state.get("tap_enc") or logon.boot_time() < reboot_at:
-            return
-        self._attempt_logon(logger, state, None, int(state.get("step_id", 0)), "")
-
-    def _attempt_logon(self, logger: logging.Logger, state: dict, api: "lib.WorkspaceApi | None",
-                       step_id: int, upn_fallback: str) -> None:
-        now = time.time()
+        # c) Espera a tela de login carregar apos o boot.
         if now - logon.boot_time() < LOGON_BOOT_GRACE_SECONDS:
             logger.info("Login: reiniciado; aguardando a tela de login carregar.")
             return
-        if logon.entra_user_logged_in():
-            # Ja entrou: o TAP guardado nao serve mais. O SUCCESS vai ao GLPI
-            # quando ele estiver acessivel (VPN conectada).
-            if state.pop("tap_enc", None) is not None:
-                logger.info("Login: conta do Entra conectada; TAP guardado descartado.")
-                save_json(STATE_PATH, state)
-            return
-        attempts = int(state.get("logon_attempts", 0))
-        if attempts >= LOGON_MAX_ATTEMPTS:
-            # Para de gerar TAPs: um TAP novo invalidaria o que o tecnico gerou a mao.
-            if not state.get("logon_gave_up"):
-                logger.warning("Login automatico esgotou %s tentativas; aguardando login manual.", attempts)
-                state["logon_gave_up"] = True
-                save_json(STATE_PATH, state)
-            return
-        if now - float(state.get("last_logon", 0.0)) < LOGON_RETRY_SECONDS:
-            return
 
-        upn = str(state.get("upn", "")) or upn_fallback
-        tap_code = ""
-        if state.get("tap_enc") and float(state.get("tap_expires", 0.0)) > now + 60:
-            tap_code = logon.unprotect(str(state["tap_enc"]))
-        if not tap_code and api is not None:
-            # Sem TAP guardado (ou expirado) e com o GLPI acessivel: pede outro.
-            tap_data, tap_error = api.request_tap(step_id)
-            tap_code = str(tap_data.get("tap", "")) if tap_data else ""
-            if not tap_code:
-                logger.warning("Login: sem TAP (%s).", tap_error or "motivo desconhecido")
-        state["last_logon"] = now
-        state["logon_attempts"] = attempts + 1
-        save_json(STATE_PATH, state)
-        if not upn or not tap_code:
-            if api is None:
-                logger.warning("Login: sem conta ou TAP guardado; aguardando a VPN/GLPI.")
-            return
+        # d) Status amigavel ANTES de trocar de usuario: bloquear a tela pode
+        # derrubar a VPN, entao o painel ja tem que refletir o "aguardando o TI".
+        api.result(step_id, WAITING_HUMAN, self.WAIT_TI_MESSAGE, {"azure_ad_joined": True})
 
-        logon.disconnect_local_sessions(logger)
-        logon.write_payload(LOGON_PAYLOAD, upn, tap_code)
-        tap_code = ""
-        exe = logon.current_exe(SERVICE_EXE)
-        if logon.launch_on_logon_screen(exe, "--logon-signin", logger):
-            logger.info("Login: helper aberto na tela de login (tentativa %s).", attempts + 1)
-        else:
-            LOGON_PAYLOAD.unlink(missing_ok=True)
+        # e) Troca para a tela de login uma unica vez (equivale a "Trocar usuario").
+        if not state.get("switched_user"):
+            logon.disconnect_local_sessions(logger)
+            state["switched_user"] = True
+            save_json(STATE_PATH, state)
+            logger.info("Login: tela de login pronta; aguardando o T.I. entrar no usuario do Entra.")
 
 
 class _StopEvent:
@@ -987,7 +907,6 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--service", action="store_true", help="Executa pelo Service Control Manager")
     parser.add_argument("--once", action="store_true", help="Roda um ciclo e sai")
     parser.add_argument("--open-workplace", action="store_true", help="(sessao do usuario) abre Acessar trabalho ou escola")
-    parser.add_argument("--logon-signin", action="store_true", help="(tela de login, SYSTEM) entra com a conta do Entra")
     parser.add_argument("--configure", metavar="ARQUIVO", help="Grava config.json a partir de um JSON")
     parser.add_argument("--install-service", action="store_true")
     parser.add_argument("--uninstall-service", action="store_true")
@@ -1000,8 +919,6 @@ def main(argv: list[str]) -> int:
         return 0
     if args.open_workplace:
         return open_workplace_now()
-    if args.logon_signin:
-        return logon.run_logon_signin(LOGON_PAYLOAD, configure_logging(False))
     if args.service:
         return run_service_dispatcher()
 

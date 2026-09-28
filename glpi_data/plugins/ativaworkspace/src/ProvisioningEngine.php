@@ -597,10 +597,16 @@ final class ProvisioningEngine
                 return;
 
             case JobStep::WAITING_HUMAN:
+                // A propria etapa pode ditar a mensagem (ex.: ENTRA_LOGIN pede
+                // "Aguardando o T.I. entrar no usuário do Entra ID"). Sem isso,
+                // usa o texto padrao de intervencao.
+                $waitMessage = (string) $current['message'] !== ''
+                    ? (string) $current['message']
+                    : 'Aguardando intervenção do TI: ' . $name;
                 self::updateJob($jobId, [
                     'status'   => Job::WAITING_INTERVENTION,
                     'progress' => $progress,
-                    'message'  => 'Aguardando intervenção do TI: ' . $name,
+                    'message'  => $waitMessage,
                     'plugin_ativaworkspace_jobsteps_id' => $currentId,
                 ]);
                 return;
