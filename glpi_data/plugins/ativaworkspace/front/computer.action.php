@@ -25,23 +25,54 @@ if ($computerId <= 0) {
     Html::redirect(Page::href('computers'));
 }
 
+$isAjax = strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
+
 if ($action === 'uninstall') {
-    $id = MachineAction::queueUninstall(
-        $computerId,
-        (string) ($_POST['target'] ?? ''),
-        (string) ($_POST['scope'] ?? ''),
-        (string) ($_POST['key'] ?? ''),
-        (int) Session::getLoginUserID()
-    );
-    if ($id > 0) {
-        Event::log(Event::LEVEL_INFO, 'computer', 'Desinstalação solicitada: ' . (string) ($_POST['target'] ?? ''), [
-            'computador' => $computerId,
-            'por'        => (int) Session::getLoginUserID(),
-        ]);
-        Session::addMessageAfterRedirect('Desinstalação agendada. O computador executará em silêncio no próximo ciclo.', false, INFO);
+    // Um alvo (formulario simples) ou varios (lote): arrays paralelos.
+    if (isset($_POST['keys']) && is_array($_POST['keys'])) {
+        $targets = (array) ($_POST['targets'] ?? []);
+        $scopes  = (array) ($_POST['scopes'] ?? []);
+        $keys    = (array) $_POST['keys'];
     } else {
-        Session::addMessageAfterRedirect('Não foi possível agendar a desinstalação (dados inválidos).', false, ERROR);
+        $targets = [(string) ($_POST['target'] ?? '')];
+        $scopes  = [(string) ($_POST['scope'] ?? '')];
+        $keys    = [(string) ($_POST['key'] ?? '')];
     }
+
+    $queued = 0;
+    $userId = (int) Session::getLoginUserID();
+    foreach ($keys as $i => $key) {
+        $id = MachineAction::queueUninstall(
+            $computerId,
+            (string) ($targets[$i] ?? ''),
+            (string) ($scopes[$i] ?? ''),
+            (string) $key,
+            $userId
+        );
+        if ($id > 0) {
+            $queued++;
+        }
+    }
+    if ($queued > 0) {
+        Event::log(Event::LEVEL_INFO, 'computer', 'Desinstalação solicitada (' . $queued . ' app)', [
+            'computador' => $computerId,
+            'por'        => $userId,
+        ]);
+    }
+    if ($isAjax) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => $queued > 0, 'queued' => $queued]);
+        return;
+    }
+    Session::addMessageAfterRedirect(
+        $queued > 0 ? $queued . ' desinstalação(ões) agendada(s).' : 'Nada agendado (dados inválidos).',
+        false,
+        $queued > 0 ? INFO : ERROR
+    );
+} elseif ($isAjax) {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => false, 'message' => 'Ação desconhecida.']);
+    return;
 } else {
     Session::addMessageAfterRedirect('Ação desconhecida.', false, ERROR);
 }

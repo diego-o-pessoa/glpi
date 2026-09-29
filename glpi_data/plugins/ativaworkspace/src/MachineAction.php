@@ -137,4 +137,43 @@ final class MachineAction
         }
         return $rows;
     }
+
+    /**
+     * Lista das acoes (mais recentes) + contagem, para a barra de progresso.
+     *
+     * @return array{items: array<int, array<string, mixed>>, counts: array<string, int>, active: bool}
+     */
+    public static function progressForComputer(int $computersId, int $limit = 50): array
+    {
+        global $DB;
+
+        $items = [];
+        $counts = ['total' => 0, 'queued' => 0, 'running' => 0, 'done' => 0, 'failed' => 0];
+        foreach ($DB->request([
+            'FROM'  => self::TABLE,
+            'WHERE' => ['computers_id' => $computersId],
+            'ORDER' => ['id DESC'],
+            'LIMIT' => $limit,
+        ]) as $row) {
+            $status = (string) $row['status'];
+            $items[] = [
+                'id'      => (int) $row['id'],
+                'target'  => (string) $row['target'],
+                'key'     => (string) $row['reg_key'],
+                'status'  => $status,
+                'message' => (string) $row['message'],
+            ];
+            $counts['total']++;
+            if (isset($counts[$status])) {
+                $counts[$status]++;
+            }
+        }
+        // Ordem cronologica para a lista (mais antigo primeiro).
+        $items = array_reverse($items);
+        return [
+            'items'  => $items,
+            'counts' => $counts,
+            'active' => ($counts['queued'] + $counts['running']) > 0,
+        ];
+    }
 }

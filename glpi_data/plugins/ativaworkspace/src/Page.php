@@ -28,6 +28,7 @@ final class Page
         'job_action'       => 'job.action.php',
         'job_data'         => 'job.data.php',
         'computer_action'  => 'computer.action.php',
+        'computer_data'    => 'computer.data.php',
         'overview_data'    => 'overview.data.php',
         'config_download'  => 'download_config.php',
         'remote'           => 'remote.php',

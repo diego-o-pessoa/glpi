@@ -75,37 +75,71 @@
         </div>
 
         <div class="col-12">
+            {% if can_manage %}
+                <div class="card mb-3 d-none" data-aw-uninstall-panel>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <strong><i class="ti ti-trash me-1"></i>Desinstalando programas</strong>
+                            <span class="text-muted small" data-aw-prog-text>0 de 0</span>
+                        </div>
+                        <div class="progress mb-2" style="height: 10px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" data-aw-prog-bar style="width:0%"></div>
+                        </div>
+                        <div class="list-group list-group-flush small" data-aw-prog-list></div>
+                    </div>
+                </div>
+            {% endif %}
+
             <div class="card">
-                <div class="card-header"><h3 class="card-title"><i class="ti ti-apps me-2"></i>Programas instalados ({{ inv.programs|length }})</h3></div>
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h3 class="card-title mb-0"><i class="ti ti-apps me-2"></i>Programas instalados ({{ inv.programs|length }})</h3>
+                    {% if can_manage %}
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-aw-uninstall-selected disabled>
+                                <i class="ti ti-trash"></i> Desinstalar selecionados (<span data-aw-sel-count>0</span>)
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" data-aw-uninstall-all>
+                                <i class="ti ti-trash-x"></i> Desinstalar todos
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
                 <div class="table-responsive" style="max-height: 460px; overflow-y:auto;">
-                    <table class="table table-sm table-hover card-table">
-                        <thead><tr><th>Nome</th><th>Versão</th><th>Fabricante</th>{% if can_manage %}<th class="text-end">Ação</th>{% endif %}</tr></thead>
+                    <table class="table table-sm table-hover card-table"
+                           data-aw-uninstall data-url="{{ data_url }}" data-action="{{ action_url }}"
+                           data-computer="{{ computers_id }}" data-csrf="{{ csrf }}">
+                        <thead><tr>
+                            {% if can_manage %}<th style="width:1%"><input type="checkbox" class="form-check-input m-0" data-aw-prog-all aria-label="Selecionar todos" /></th>{% endif %}
+                            <th>Nome</th><th>Versão</th><th>Fabricante</th>{% if can_manage %}<th class="text-end">Ação</th>{% endif %}
+                        </tr></thead>
                         <tbody>
                             {% for prog in inv.programs %}
                                 {% set pending = actions[prog.key] ?? null %}
-                                <tr>
+                                <tr data-aw-row-key="{{ prog.key }}">
+                                    {% if can_manage %}
+                                        <td>
+                                            {% if prog.can_uninstall %}
+                                                <input type="checkbox" class="form-check-input m-0" data-aw-prog-check
+                                                       data-target="{{ prog.name }}" data-scope="{{ prog.scope }}" data-key="{{ prog.key }}" />
+                                            {% endif %}
+                                        </td>
+                                    {% endif %}
                                     <td>{{ prog.name }}</td>
                                     <td>{{ prog.version ?: '—' }}</td>
                                     <td>{{ prog.publisher ?: '—' }}</td>
                                     {% if can_manage %}
-                                        <td class="text-end">
+                                        <td class="text-end" data-aw-row-status>
                                             {% if pending and pending.status in ['queued', 'running'] %}
-                                                <span class="badge bg-blue-lt"><i class="ti ti-loader me-1"></i>{{ pending.status == 'running' ? 'Desinstalando…' : 'Na fila' }}</span>
+                                                <span class="badge bg-blue-lt">{{ pending.status == 'running' ? 'Desinstalando…' : 'Na fila' }}</span>
                                             {% elseif pending and pending.status == 'failed' %}
                                                 <span class="badge bg-danger-lt" title="{{ pending.message }}">Falhou</span>
                                             {% elseif pending and pending.status == 'done' %}
                                                 <span class="badge bg-green-lt">Desinstalado</span>
                                             {% elseif prog.can_uninstall %}
-                                                <form method="post" action="{{ action_url }}" class="d-inline"
-                                                      onsubmit="return confirm('Desinstalar {{ prog.name|e('js') }} deste computador?');">
-                                                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}" />
-                                                    <input type="hidden" name="computer" value="{{ computers_id }}" />
-                                                    <input type="hidden" name="action" value="uninstall" />
-                                                    <input type="hidden" name="target" value="{{ prog.name }}" />
-                                                    <input type="hidden" name="scope" value="{{ prog.scope }}" />
-                                                    <input type="hidden" name="key" value="{{ prog.key }}" />
-                                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ti ti-trash"></i> Desinstalar</button>
-                                                </form>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" data-aw-uninstall-one
+                                                        data-target="{{ prog.name }}" data-scope="{{ prog.scope }}" data-key="{{ prog.key }}">
+                                                    <i class="ti ti-trash"></i> Desinstalar
+                                                </button>
                                             {% else %}
                                                 <span class="text-muted small">—</span>
                                             {% endif %}
@@ -113,7 +147,7 @@
                                     {% endif %}
                                 </tr>
                             {% else %}
-                                <tr><td colspan="{{ can_manage ? 4 : 3 }}" class="text-muted">Sem dados de programas.</td></tr>
+                                <tr><td colspan="{{ can_manage ? 5 : 3 }}" class="text-muted">Sem dados de programas.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -121,5 +155,142 @@
             </div>
         </div>
     </div>
+
+    {% if can_manage %}
+    <script>
+    (function () {
+        var root = document.querySelector('[data-aw-uninstall]');
+        if (!root) { return; }
+        var dataUrl = root.dataset.url, actionUrl = root.dataset.action;
+        var computer = root.dataset.computer, csrf = root.dataset.csrf;
+        var panel = document.querySelector('[data-aw-uninstall-panel]');
+        var bar = document.querySelector('[data-aw-prog-bar]');
+        var progText = document.querySelector('[data-aw-prog-text]');
+        var list = document.querySelector('[data-aw-prog-list]');
+        var selCount = document.querySelector('[data-aw-sel-count]');
+        var btnSelected = document.querySelector('[data-aw-uninstall-selected]');
+        var pollTimer = null, wasActive = false;
+
+        var STATUS = {
+            queued:  ['bg-blue-lt', 'Na fila'],
+            running: ['bg-blue-lt', 'Desinstalando…'],
+            done:    ['bg-green-lt', 'Desinstalado'],
+            failed:  ['bg-danger-lt', 'Falhou']
+        };
+
+        function checks() { return Array.prototype.slice.call(root.querySelectorAll('[data-aw-prog-check]')); }
+        function selected() { return checks().filter(function (c) { return c.checked; }); }
+
+        function updateSelCount() {
+            var n = selected().length;
+            if (selCount) { selCount.textContent = n; }
+            if (btnSelected) { btnSelected.disabled = n === 0; }
+        }
+
+        function post(items) {
+            if (!items.length) { return; }
+            var body = new FormData();
+            body.append('_glpi_csrf_token', csrf);
+            body.append('computer', computer);
+            body.append('action', 'uninstall');
+            items.forEach(function (it) {
+                body.append('targets[]', it.target);
+                body.append('scopes[]', it.scope);
+                body.append('keys[]', it.key);
+            });
+            fetch(actionUrl, { method: 'POST', credentials: 'same-origin', body: body,
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrf } })
+                .then(function (r) { return r.json().catch(function () { return {}; }); })
+                .then(function () { checks().forEach(function (c) { c.checked = false; }); updateSelCount(); startPolling(); });
+        }
+
+        function itemsFrom(nodes) {
+            return nodes.map(function (n) { return { target: n.dataset.target, scope: n.dataset.scope, key: n.dataset.key }; });
+        }
+
+        root.addEventListener('click', function (event) {
+            var one = event.target.closest('[data-aw-uninstall-one]');
+            if (one) {
+                if (window.confirm('Desinstalar ' + one.dataset.target + ' deste computador?')) {
+                    post(itemsFrom([one]));
+                }
+            }
+        });
+        root.addEventListener('change', function (event) {
+            if (event.target.matches('[data-aw-prog-check]')) { updateSelCount(); }
+        });
+
+        var all = document.querySelector('[data-aw-prog-all]');
+        if (all) {
+            all.addEventListener('change', function () {
+                checks().forEach(function (c) { c.checked = all.checked; });
+                updateSelCount();
+            });
+        }
+        if (btnSelected) {
+            btnSelected.addEventListener('click', function () {
+                var items = itemsFrom(selected());
+                if (items.length && window.confirm('Desinstalar ' + items.length + ' programa(s)?')) { post(items); }
+            });
+        }
+        var btnAll = document.querySelector('[data-aw-uninstall-all]');
+        if (btnAll) {
+            btnAll.addEventListener('click', function () {
+                var items = itemsFrom(checks());
+                if (items.length && window.confirm('Desinstalar TODOS os ' + items.length + ' programas removíveis?')) { post(items); }
+            });
+        }
+
+        function renderProgress(data) {
+            var counts = data.counts || {};
+            var total = counts.total || 0;
+            var finished = (counts.done || 0) + (counts.failed || 0);
+            if (total === 0) { panel.classList.add('d-none'); return; }
+            panel.classList.remove('d-none');
+            var pct = total ? Math.round(finished / total * 100) : 0;
+            bar.style.width = pct + '%';
+            bar.classList.toggle('progress-bar-animated', data.active);
+            progText.textContent = finished + ' de ' + total;
+            list.innerHTML = '';
+            (data.items || []).forEach(function (it) {
+                var meta = STATUS[it.status] || ['bg-secondary-lt', it.status];
+                var row = document.createElement('div');
+                row.className = 'list-group-item d-flex justify-content-between align-items-center px-0 py-1 border-0';
+                var name = document.createElement('span'); name.textContent = it.target;
+                var badge = document.createElement('span'); badge.className = 'badge ' + meta[0]; badge.textContent = meta[1];
+                if (it.status === 'failed' && it.message) { badge.title = it.message; }
+                row.appendChild(name); row.appendChild(badge);
+                list.appendChild(row);
+                var cell = root.querySelector('tr[data-aw-row-key="' + (window.CSS && CSS.escape ? CSS.escape(it.key) : it.key) + '"] [data-aw-row-status]');
+                if (cell) { cell.innerHTML = '<span class="badge ' + meta[0] + '">' + meta[1] + '</span>'; }
+            });
+        }
+
+        function poll() {
+            fetch(dataUrl + '?computer=' + encodeURIComponent(computer), { credentials: 'same-origin' })
+                .then(function (r) { return r.json().catch(function () { return {}; }); })
+                .then(function (data) {
+                    if (!data.ok) { return; }
+                    renderProgress(data);
+                    if (data.active) {
+                        wasActive = true;
+                        pollTimer = window.setTimeout(poll, 3000);
+                    } else if (wasActive) {
+                        // Terminou: recarrega para atualizar a lista de programas.
+                        window.setTimeout(function () { window.location.reload(); }, 1500);
+                    }
+                });
+        }
+        function startPolling() {
+            if (pollTimer) { window.clearTimeout(pollTimer); }
+            poll();
+        }
+
+        updateSelCount();
+        startPolling();
+    })();
+    </script>
+    {% else %}
     <script>window.setTimeout(function () { window.location.reload(); }, 60000);</script>
+    {% endif %}
 {% endblock %}

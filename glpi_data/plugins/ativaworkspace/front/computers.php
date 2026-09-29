@@ -28,6 +28,7 @@ if ($computerId > 0) {
         'can_manage' => (bool) Session::haveRight(PluginAtivaworkspaceProfile::RIGHT_PROVISION, UPDATE),
         'actions'    => MachineAction::forComputer($computerId),
         'action_url' => Page::href('computer_action'),
+        'data_url'   => Page::href('computer_data'),
         'csrf'       => Session::getNewCSRFToken(),
         'computers_id' => $computerId,
     ]);
