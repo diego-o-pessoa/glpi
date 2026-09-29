@@ -214,6 +214,24 @@ final class Application extends CommonDBTM
         if (array_key_exists('expected_signer', $input)) {
             $input['expected_signer'] = mb_substr(trim((string) $input['expected_signer']), 0, 255);
         }
+        // winget: identificador do pacote (ex.: Google.Chrome). Sem espacos nem
+        // caracteres que permitam injetar outra opcao na linha de comando.
+        if (array_key_exists('winget_id', $input)) {
+            $wingetId = trim((string) $input['winget_id']);
+            if ($wingetId !== '' && !preg_match('/^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/D', $wingetId)) {
+                return $fail('ID do winget inválido (use letras, números, ".", "-", "+" ou "_").');
+            }
+            $input['winget_id'] = $wingetId;
+        }
+        // Argumentos silenciosos do instalador EXE (ex.: /S ou /qn). Nunca aceita
+        // caracteres de encadeamento de comando.
+        if (array_key_exists('install_args', $input)) {
+            $args = trim((string) $input['install_args']);
+            if ($args !== '' && preg_match('/[&|;`\r\n><%$]/', $args)) {
+                return $fail('Argumentos de instalação contêm caracteres não permitidos.');
+            }
+            $input['install_args'] = mb_substr($args, 0, 512);
+        }
         foreach (['is_active', 'requires_reboot'] as $flag) {
             if (array_key_exists($flag, $input)) {
                 $input[$flag] = (int) (bool) $input[$flag];

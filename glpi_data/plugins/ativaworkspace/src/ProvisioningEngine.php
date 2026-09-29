@@ -28,7 +28,10 @@ final class ProvisioningEngine
     private const HUMAN_TYPES = [StepType::MANUAL_INTERVENTION];
 
     /** Tipos conduzidos pelo executor (servico na maquina). */
-    public const EXECUTOR_TYPES = [StepType::ENTRA_LOGIN];
+    public const EXECUTOR_TYPES = [StepType::ENTRA_LOGIN, StepType::SOFTWARE];
+
+    /** Subestados aceitos para etapas SOFTWARE (sem segredo; so andamento). */
+    public const SOFTWARE_SUBSTATES = ['PRECHECK', 'DOWNLOADING', 'INSTALLING', 'VERIFYING'];
 
     /** Resultados aceitos para a etapa atual. */
     public const RESULTS = [JobStep::SUCCESS, JobStep::FAILED, JobStep::WAITING_HUMAN, JobStep::SKIPPED];
@@ -370,7 +373,40 @@ final class ProvisioningEngine
         return [
             'job'     => $job,
             'step'    => $step,
-            'payload' => self::entraPayload($job, $step),
+            'payload' => (string) $step['step_type'] === StepType::SOFTWARE
+                ? self::softwarePayload($step)
+                : self::entraPayload($job, $step),
+        ];
+    }
+
+    /**
+     * Dados nao sensiveis para instalar um app. Escolhe winget (quando ha ID) ou
+     * o instalador enviado (baixado pela rota /installer, conferido por SHA-256).
+     *
+     * @return array<string, mixed>
+     */
+    private static function softwarePayload(array $step): array
+    {
+        $appId = (int) ($step['plugin_ativaworkspace_applications_id'] ?? 0);
+        $app = new Application();
+        $fields = ($appId > 0 && $app->getFromDB($appId)) ? $app->fields : [];
+
+        $wingetId = trim((string) ($fields['winget_id'] ?? ''));
+        $hasFile  = trim((string) ($fields['file_stored_name'] ?? '')) !== '';
+        $method   = $wingetId !== '' ? 'winget' : ($hasFile ? 'file' : 'none');
+
+        return [
+            'step_type'       => StepType::SOFTWARE,
+            'method'          => $method,
+            'name'            => (string) ($fields['name'] ?? ''),
+            'winget_id'       => $wingetId,
+            'installer_type'  => (string) ($fields['installer_type'] ?? 'OTHER'),
+            'install_args'    => (string) ($fields['install_args'] ?? ''),
+            'file_sha256'     => (string) ($fields['file_sha256'] ?? ''),
+            'file_size'       => (int) ($fields['file_size'] ?? 0),
+            'requires_reboot' => (int) ($fields['requires_reboot'] ?? 0) === 1,
+            'timeout_minutes' => (int) ($fields['timeout_minutes'] ?? self::DEFAULT_TIMEOUT_MINUTES),
+            'status'          => (string) $step['status'],
         ];
     }
 
@@ -400,7 +436,7 @@ final class ProvisioningEngine
      */
     public static function executorProgress(int $jobId, int $stepId, string $substate, string $log = ''): void
     {
-        if (!EntraStep::isValidSubstate($substate)) {
+        if (!EntraStep::isValidSubstate($substate) && !in_array($substate, self::SOFTWARE_SUBSTATES, true)) {
             throw new RuntimeException('Subestado inválido.');
         }
 
@@ -430,14 +466,20 @@ final class ProvisioningEngine
                 $stepStatus = JobStep::RUNNING;
             }
 
+            // ENTRA_LOGIN tem mensagens amigaveis; SOFTWARE usa o log/subestado.
+            $substateMessage = EntraStep::message($substate);
+            if ($substateMessage === '') {
+                $substateMessage = $log !== '' ? $log : $substate;
+            }
+
             self::updateStep($stepId, ['status' => $stepStatus, 'runtime' => json_encode($runtime, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
             self::updateJob($jobId, [
                 'status'   => $job['status'] === Job::WAITING_INTERVENTION ? Job::WAITING_INTERVENTION : Job::RUNNING,
-                'message'  => EntraStep::message($substate),
+                'message'  => $substateMessage,
             ]);
 
             if ($changed) {
-                Event::log(Event::LEVEL_INFO, 'entra', EntraStep::message($substate), array_filter([
+                Event::log(Event::LEVEL_INFO, 'provisioning', $substateMessage, array_filter([
                     'subestado' => $substate,
                     'detalhe'   => $log,
                 ]), $jobId, $stepId);
@@ -455,7 +497,21 @@ final class ProvisioningEngine
     public static function executorResult(int $jobId, int $stepId, string $result, string $message, array $meta = []): void
     {
         if (!in_array($result, [JobStep::SUCCESS, JobStep::FAILED, JobStep::WAITING_HUMAN], true)) {
-            throw new RuntimeException('Resultado inválido para a etapa Entra.');
+            throw new RuntimeException('Resultado inválido para a etapa do executor.');
+        }
+
+        // SOFTWARE: sem prova de ingresso; SUCCESS/FAILED vao direto ao resultado.
+        global $DB;
+        $typeRow = $DB->request(['SELECT' => ['step_type'], 'FROM' => JobStep::getTable(), 'WHERE' => ['id' => $stepId], 'LIMIT' => 1])->current();
+        if (is_array($typeRow) && (string) $typeRow['step_type'] === StepType::SOFTWARE) {
+            if ($result === JobStep::WAITING_HUMAN) {
+                throw new RuntimeException('A etapa de software não aguarda intervenção.');
+            }
+            self::mergeRuntime($jobId, $stepId, ['substate' => $result === JobStep::SUCCESS ? 'DONE' : 'FAILED']);
+            self::recordResult($jobId, $stepId, $result, $message !== ''
+                ? $message
+                : ($result === JobStep::SUCCESS ? 'Aplicativo instalado.' : 'Falha na instalação do aplicativo.'));
+            return;
         }
 
         // SUCCESS so com a prova de ingresso no tenant esperado.

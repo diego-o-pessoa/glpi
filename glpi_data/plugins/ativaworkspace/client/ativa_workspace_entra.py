@@ -167,6 +167,27 @@ class WorkspaceApi:
             return body, ""
         return None, describe_http_error(status, body)
 
+    def download_installer(self, step_id: int, dest: Path, timeout: int = 600) -> tuple[bool, str, str]:
+        """
+        Baixa o instalador da etapa para `dest`. Retorna (ok, sha256_do_servidor,
+        erro). O SHA-256 vem no cabecalho X-Installer-Sha256 (o chamador confere).
+        """
+        request = Request(self.base_url + f"/steps/{step_id}/installer", method="GET")
+        request.add_header("Authorization", f"Bearer {self.token}")
+        try:
+            with self.opener.open(request, timeout=timeout) as response:
+                sha256 = str(response.headers.get("X-Installer-Sha256", "")).strip().lower()
+                with open(dest, "wb") as handle:
+                    while True:
+                        chunk = response.read(1024 * 256)
+                        if not chunk:
+                            break
+                        handle.write(chunk)
+            return True, sha256, ""
+        except Exception as exc:  # noqa: BLE001
+            status = getattr(exc, "code", 0)
+            return False, "", describe_http_error(int(status) if isinstance(status, int) else 0, None)
+
 
 def describe_http_error(status: int, body: dict | None) -> str:
     """Motivo legivel para o log quando a API nao devolve uma etapa."""

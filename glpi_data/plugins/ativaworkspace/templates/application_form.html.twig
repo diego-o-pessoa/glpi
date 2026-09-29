@@ -57,6 +57,19 @@
                             {{ fields.dropdownArrayField('architecture', item.architecture, architectures, 'Arquitetura', {'disabled': not can_edit}) }}
                         </div>
 
+                        <div class="row">
+                            {{ fields.textField('winget_id', item.winget_id, 'ID do winget', {
+                                'full_width': true,
+                                'disabled': not can_edit,
+                                'helper': 'Opcional. Ex.: Google.Chrome. Se preenchido, instala pelo winget (sem precisar enviar arquivo).'
+                            }) }}
+                            {{ fields.textField('install_args', item.install_args, 'Argumentos silenciosos (EXE)', {
+                                'full_width': true,
+                                'disabled': not can_edit,
+                                'helper': 'Opcional. Ex.: /S ou /qn. MSI já instala em silêncio automaticamente.'
+                            }) }}
+                        </div>
+
                         {% if can_edit %}
                             <div class="mb-2">
                                 <label class="form-label" for="aw-installer">{{ file ? 'Substituir arquivo' : 'Arquivo do instalador' }}</label>

@@ -36,6 +36,8 @@ function plugin_ativaworkspace_tables(): array
             `name` varchar(255) NOT NULL DEFAULT '',
             `comment` text,
             `provider` varchar(32) NOT NULL DEFAULT 'manual',
+            `winget_id` varchar(128) NOT NULL DEFAULT '',
+            `install_args` varchar(512) NOT NULL DEFAULT '',
             `desired_version` varchar(64) NOT NULL DEFAULT '',
             `is_active` tinyint NOT NULL DEFAULT '1',
             `date_creation` timestamp NULL DEFAULT NULL,
@@ -238,6 +240,19 @@ function plugin_ativaworkspace_do_install(): bool
                         $migration->addKey($table, $field);
                     }
                 }
+            }
+        }
+
+        // 0.7.0 (Etapa 5): execucao de software. winget_id para instalar pelo
+        // gerenciador do Windows; install_args para os argumentos silenciosos do
+        // instalador enviado (EXE). Nenhum comando/script livre.
+        $installFields = [
+            'winget_id'    => "varchar(128) NOT NULL DEFAULT ''",
+            'install_args' => "varchar(512) NOT NULL DEFAULT ''",
+        ];
+        foreach ($installFields as $field => $definition) {
+            if (!$DB->fieldExists('glpi_plugin_ativaworkspace_applications', $field)) {
+                $migration->addField('glpi_plugin_ativaworkspace_applications', $field, $definition);
             }
         }
 

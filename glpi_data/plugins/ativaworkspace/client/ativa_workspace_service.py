@@ -33,12 +33,13 @@ from pathlib import Path
 from typing import Any
 
 import ativa_workspace_entra as lib
+import ativa_workspace_install as installer
 import ativa_workspace_logon as logon
 
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.4.11"
+WORKSPACE_AGENT_VERSION = "1.5.0"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -54,6 +55,8 @@ MUTEX_NAME = r"Global\AtivaWorkspaceService"
 
 # Fase de login do usuario Entra (depois do ingresso).
 WEB_SIGNIN_MARKER = PRODUCT_DIR / "websignin.json"  # quando o Web sign-in foi ligado
+SOFTWARE_STATE_PATH = PRODUCT_DIR / "software-install.lock"  # instalacao em andamento
+SOFTWARE_LOCK_SECONDS = 4 * 60 * 60  # nao reentra na instalacao dentro disto
 REBOOT_RETRY_SECONDS = 10 * 60   # reinicio agendado que nao aconteceu
 LOGON_BOOT_GRACE_SECONDS = 30    # tela de login ainda carregando logo apos o boot
 
@@ -354,12 +357,33 @@ class WorkspaceRuntime:
         if status != 200 or step is None:
             self._idle(logger, lib.describe_http_error(status, step))
             return
-        if step.get("type") != "ENTRA_LOGIN":
-            return
-
         step_id = int(step.get("step_id", 0))
-        entra = step.get("entra", {}) if isinstance(step.get("entra"), dict) else {}
-        self._handle_entra(logger, api, step_id, entra)
+        step_type = step.get("type")
+        if step_type == "ENTRA_LOGIN":
+            entra = step.get("entra", {}) if isinstance(step.get("entra"), dict) else {}
+            self._handle_entra(logger, api, step_id, entra)
+        elif step_type == "SOFTWARE":
+            software = step.get("software", {}) if isinstance(step.get("software"), dict) else {}
+            self._handle_software(logger, api, step_id, software)
+
+    def _handle_software(self, logger: logging.Logger, api: "lib.WorkspaceApi", step_id: int, payload: dict) -> None:
+        """Instala o app da etapa (winget ou instalador enviado) e reporta o resultado."""
+        # Marca uma execucao em andamento; evita reinstalar em paralelo se o
+        # ciclo se sobrepuser (a instalacao pode demorar).
+        marker = SOFTWARE_STATE_PATH
+        if marker.exists() and time.time() - marker.stat().st_mtime < SOFTWARE_LOCK_SECONDS:
+            return
+        marker.write_text(str(step_id), "utf-8")
+        try:
+            api.progress(step_id, "PRECHECK", f"Preparando: {payload.get('name', 'aplicativo')}")
+            ok, message = installer.install(payload, api, step_id, logger)
+            logger.info("Software: %s -> %s (%s)", payload.get("name", "app"), "ok" if ok else "falhou", message)
+            api.result(step_id, SUCCESS if ok else FAILED, message)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Software: erro inesperado.")
+            api.result(step_id, FAILED, f"Erro inesperado na instalacao: {exc}")
+        finally:
+            marker.unlink(missing_ok=True)
 
     def _handle_entra(self, logger: logging.Logger, api: "lib.WorkspaceApi", step_id: int, entra: dict) -> None:
         expected_tenant = str(entra.get("expected_tenant", ""))

@@ -5,12 +5,17 @@ declare(strict_types=1);
 namespace GlpiPlugin\Ativaworkspace\Controller;
 
 use Glpi\Controller\AbstractController;
+use GlpiPlugin\Ativaworkspace\Application;
 use GlpiPlugin\Ativaworkspace\EntraStep;
 use GlpiPlugin\Ativaworkspace\Event;
+use GlpiPlugin\Ativaworkspace\InstallerStorage;
+use GlpiPlugin\Ativaworkspace\Job;
 use GlpiPlugin\Ativaworkspace\JobStep;
 use GlpiPlugin\Ativaworkspace\MachineIdentity;
 use GlpiPlugin\Ativaworkspace\ProvisioningEngine;
+use GlpiPlugin\Ativaworkspace\StepType;
 use GlpiPlugin\Ativaworkspace\WorkspaceConfig;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -89,12 +94,15 @@ final class ApiController extends AbstractController
             return new JsonResponse(null, 204);
         }
 
-        return new JsonResponse([
+        $type = (string) $next['step']['step_type'];
+        $response = [
             'job_id'  => (int) $next['job']['id'],
             'step_id' => (int) $next['step']['id'],
-            'type'    => (string) $next['step']['step_type'],
-            'entra'   => $next['payload'],
-        ]);
+            'type'    => $type,
+        ];
+        // Payload sob a chave do tipo (o executor le a que corresponde).
+        $response[$type === \GlpiPlugin\Ativaworkspace\StepType::SOFTWARE ? 'software' : 'entra'] = $next['payload'];
+        return new JsonResponse($response);
     }
 
     /**
@@ -203,6 +211,46 @@ final class ApiController extends AbstractController
 
         Event::log(Event::LEVEL_SECURITY, 'entra', 'TAP gerado para o executor', ['validade_min' => $tap['lifetime_minutes']], $jobId, $stepId);
         return new JsonResponse(['upn' => $upn, 'tap' => $tap['code'], 'lifetime_minutes' => $tap['lifetime_minutes']]);
+    }
+
+    /**
+     * Baixa o instalador enviado do app da etapa SOFTWARE corrente. Token Bearer;
+     * o executor confere o SHA-256 (cabecalho) contra o arquivo baixado.
+     */
+    #[Route('/api/v1/steps/{stepId}/installer', name: 'ativaworkspace_api_installer', requirements: ['stepId' => '\d+'], methods: ['GET'])]
+    public function installer(Request $request, int $stepId): Response
+    {
+        if ($error = $this->checkAuth($request)) {
+            return $error;
+        }
+
+        global $DB;
+        $step = $DB->request(['FROM' => JobStep::getTable(), 'WHERE' => ['id' => $stepId], 'LIMIT' => 1])->current();
+        if (!is_array($step) || (string) $step['step_type'] !== StepType::SOFTWARE) {
+            return $this->error('NOT_SOFTWARE', 'Etapa não encontrada ou não é de software.', 404);
+        }
+        // So a etapa corrente do job pode servir o arquivo.
+        $jobId = (int) $step[JobStep::JOB_FK];
+        $job = $DB->request(['SELECT' => ['plugin_ativaworkspace_jobsteps_id'], 'FROM' => Job::getTable(), 'WHERE' => ['id' => $jobId], 'LIMIT' => 1])->current();
+        if (!is_array($job) || (int) $job['plugin_ativaworkspace_jobsteps_id'] !== $stepId) {
+            return $this->error('STEP_NOT_CURRENT', 'Esta etapa não está em execução.', 409);
+        }
+
+        $app = new Application();
+        if (!$app->getFromDB((int) $step['plugin_ativaworkspace_applications_id'])) {
+            return $this->error('APP_NOT_FOUND', 'Aplicativo da etapa não encontrado.', 404);
+        }
+        $stored = (string) ($app->fields['file_stored_name'] ?? '');
+        $path = $stored !== '' ? InstallerStorage::path($stored) : null;
+        if ($path === null || !is_file($path)) {
+            return $this->error('FILE_MISSING', 'Instalador não disponível para esta etapa.', 404);
+        }
+
+        $response = new BinaryFileResponse($path);
+        $response->headers->set('Content-Type', 'application/octet-stream');
+        $response->headers->set('X-Installer-Sha256', (string) ($app->fields['file_sha256'] ?? ''));
+        $response->headers->set('Cache-Control', 'no-store');
+        return $response;
     }
 
     private function jobForStep(int $stepId): int
