@@ -75,21 +75,6 @@
         </div>
 
         <div class="col-12">
-            {% if can_manage %}
-                <div class="card mb-3 d-none" data-aw-uninstall-panel>
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <strong><i class="ti ti-trash me-1"></i>Desinstalando programas</strong>
-                            <span class="text-muted small" data-aw-prog-text>0 de 0</span>
-                        </div>
-                        <div class="progress mb-2" style="height: 10px;">
-                            <div class="progress-bar progress-bar-striped progress-bar-animated" data-aw-prog-bar style="width:0%"></div>
-                        </div>
-                        <div class="list-group list-group-flush small" data-aw-prog-list></div>
-                    </div>
-                </div>
-            {% endif %}
-
             <div class="card">
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <h3 class="card-title mb-0"><i class="ti ti-apps me-2"></i>Programas instalados ({{ inv.programs|length }})</h3>
@@ -157,13 +142,36 @@
     </div>
 
     {% if can_manage %}
+    <div class="modal fade" id="aw-uninstall-modal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title mb-0"><i class="ti ti-trash me-2"></i>Desinstalando programas</h5>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small">Aguarde, não feche esta janela.</span>
+                        <span class="text-muted small" data-aw-prog-text>0 de 0</span>
+                    </div>
+                    <div class="progress mb-3" style="height: 12px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" data-aw-prog-bar style="width:0%"></div>
+                    </div>
+                    <div class="list-group list-group-flush small" data-aw-prog-list style="max-height: 280px; overflow-y: auto;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
     <script>
     (function () {
         var root = document.querySelector('[data-aw-uninstall]');
         if (!root) { return; }
         var dataUrl = root.dataset.url, actionUrl = root.dataset.action;
         var computer = root.dataset.computer, csrf = root.dataset.csrf;
-        var panel = document.querySelector('[data-aw-uninstall-panel]');
+        var modalEl = document.getElementById('aw-uninstall-modal');
+        var modal = (window.bootstrap && modalEl)
+            ? window.bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false })
+            : null;
+        var modalShown = false;
         var bar = document.querySelector('[data-aw-prog-bar]');
         var progText = document.querySelector('[data-aw-prog-text]');
         var list = document.querySelector('[data-aw-prog-list]');
@@ -241,12 +249,17 @@
             });
         }
 
+        function showModal(show) {
+            if (!modal || show === modalShown) { return; }
+            modalShown = show;
+            if (show) { modal.show(); } else { modal.hide(); }
+        }
+
         function renderProgress(data) {
             var counts = data.counts || {};
             var total = counts.total || 0;
             var finished = (counts.done || 0) + (counts.failed || 0);
-            if (total === 0) { panel.classList.add('d-none'); return; }
-            panel.classList.remove('d-none');
+            if (total === 0) { return; }
             var pct = total ? Math.round(finished / total * 100) : 0;
             bar.style.width = pct + '%';
             bar.classList.toggle('progress-bar-animated', data.active);
@@ -274,10 +287,14 @@
                     renderProgress(data);
                     if (data.active) {
                         wasActive = true;
+                        showModal(true);
                         pollTimer = window.setTimeout(poll, 3000);
                     } else if (wasActive) {
-                        // Terminou: recarrega para atualizar a lista de programas.
-                        window.setTimeout(function () { window.location.reload(); }, 1500);
+                        // Terminou: mostra o 100% um instante, fecha e recarrega.
+                        window.setTimeout(function () {
+                            showModal(false);
+                            window.location.reload();
+                        }, 1500);
                     }
                 });
         }
