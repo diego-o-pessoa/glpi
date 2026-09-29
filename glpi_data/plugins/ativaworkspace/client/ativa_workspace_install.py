@@ -83,10 +83,11 @@ def _install_file(path: Path, installer_type: str, install_args: str,
     if installer_type == "MSI":
         args = ["msiexec", "/i", str(path), "/qn", "/norestart"]
     elif installer_type == "EXE":
-        extra = shlex.split(install_args) if install_args else []
-        if not extra:
-            logger.warning("Software: EXE sem argumentos silenciosos; pode abrir a UI.")
-        args = [str(path), *extra]
+        if not install_args:
+            return False, ("Instalador EXE precisa dos argumentos silenciosos (campo "
+                           "'Argumentos silenciosos'). Ex.: Chrome: /silent /install; "
+                           "NSIS: /S; Inno: /VERYSILENT /NORESTART.")
+        args = [str(path), *shlex.split(install_args)]
     elif installer_type == "OTHER" and path.suffix.lower() in (".msix", ".msixbundle", ".appx", ".appxbundle"):
         args = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
                 "Add-AppxProvisionedPackage", "-Online", "-PackagePath", str(path), "-SkipLicense"]
@@ -122,6 +123,8 @@ def install(payload: dict, api, step_id: int, logger: logging.Logger) -> tuple[b
         ok, server_sha, error = api.download_installer(step_id, dest, timeout=timeout)
         if not ok:
             return False, f"Falha ao baixar o instalador: {error}"
+        size = dest.stat().st_size if dest.exists() else 0
+        logger.info("Software: instalador baixado (%s bytes).", size)
         expected = str(payload.get("file_sha256", "")).strip().lower() or server_sha
         actual = _sha256(dest)
         if expected and actual != expected:

@@ -34,12 +34,13 @@ from typing import Any
 
 import ativa_workspace_entra as lib
 import ativa_workspace_install as installer
+import ativa_workspace_inventory as inventory
 import ativa_workspace_logon as logon
 
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.5.0"
+WORKSPACE_AGENT_VERSION = "1.6.0"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -57,6 +58,8 @@ MUTEX_NAME = r"Global\AtivaWorkspaceService"
 WEB_SIGNIN_MARKER = PRODUCT_DIR / "websignin.json"  # quando o Web sign-in foi ligado
 SOFTWARE_STATE_PATH = PRODUCT_DIR / "software-install.lock"  # instalacao em andamento
 SOFTWARE_LOCK_SECONDS = 4 * 60 * 60  # nao reentra na instalacao dentro disto
+INVENTORY_MARKER = PRODUCT_DIR / "inventory.stamp"  # ultimo envio de inventario
+INVENTORY_INTERVAL = 30 * 60  # coleta e envia o inventario a cada 30 min
 REBOOT_RETRY_SECONDS = 10 * 60   # reinicio agendado que nao aconteceu
 LOGON_BOOT_GRACE_SECONDS = 30    # tela de login ainda carregando logo apos o boot
 
@@ -350,6 +353,13 @@ class WorkspaceRuntime:
             return
 
         api = lib.WorkspaceApi(config["api_url"], config["api_token"], guid)
+
+        # Inventario (programas, discos, memoria, processos) no seu intervalo.
+        try:
+            self._maybe_report_inventory(logger, api)
+        except Exception:  # noqa: BLE001
+            logger.exception("Falha ao reportar o inventario.")
+
         status, step = api.next_step()
         if status == 204:
             self._idle(logger, "ok, nenhuma etapa Entra pendente")
@@ -365,6 +375,22 @@ class WorkspaceRuntime:
         elif step_type == "SOFTWARE":
             software = step.get("software", {}) if isinstance(step.get("software"), dict) else {}
             self._handle_software(logger, api, step_id, software)
+
+    def _maybe_report_inventory(self, logger: logging.Logger, api: "lib.WorkspaceApi") -> None:
+        """Coleta e envia o inventario a cada INVENTORY_INTERVAL."""
+        now = time.time()
+        try:
+            last = INVENTORY_MARKER.stat().st_mtime
+        except OSError:
+            last = 0.0
+        if now - last < INVENTORY_INTERVAL:
+            return
+        data = inventory.collect(WORKSPACE_AGENT_VERSION)
+        if api.report_inventory(data):
+            INVENTORY_MARKER.write_text(str(int(now)), "utf-8")
+            logger.info("Inventario enviado (%s programas).", len(data.get("programs", [])))
+        else:
+            logger.warning("Inventario nao aceito pelo servidor (maquina vinculada?).")
 
     def _handle_software(self, logger: logging.Logger, api: "lib.WorkspaceApi", step_id: int, payload: dict) -> None:
         """Instala o app da etapa (winget ou instalador enviado) e reporta o resultado."""

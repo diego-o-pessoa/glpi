@@ -120,6 +120,20 @@ function plugin_ativaworkspace_tables(): array
             KEY `entities_id` (`entities_id`),
             KEY `users_id` (`users_id`),
             KEY `plugin_ativaworkspace_jobs_id` (`plugin_ativaworkspace_jobs_id`)",
+
+        // 0.8.0 (Etapa 5): inventario da maquina reportado pelo servico. Uma
+        // linha por maquina; `data` guarda o ultimo snapshot (JSON). Sem segredos.
+        'glpi_plugin_ativaworkspace_inventory' => "
+            `computers_id` int {$sign} NOT NULL DEFAULT '0',
+            `machine_guid` varchar(64) NOT NULL DEFAULT '',
+            `hostname` varchar(255) NOT NULL DEFAULT '',
+            `agent_version` varchar(32) NOT NULL DEFAULT '',
+            `data` longtext,
+            `reported_at` timestamp NULL DEFAULT NULL,
+            `date_mod` timestamp NULL DEFAULT NULL,
+            UNIQUE KEY `machine_guid` (`machine_guid`),
+            KEY `computers_id` (`computers_id`),
+            KEY `reported_at` (`reported_at`)",
     ];
 }
 

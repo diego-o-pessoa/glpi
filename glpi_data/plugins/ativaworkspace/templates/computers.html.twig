@@ -1,0 +1,48 @@
+{% extends '@ativaworkspace/_layout.html.twig' %}
+
+{% block content %}
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="ti ti-device-desktop me-2"></i>Computadores com o Ativa Workspace</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover card-table">
+                <thead>
+                    <tr>
+                        <th>Computador</th>
+                        <th class="text-center">RAM</th>
+                        <th class="text-center">CPU</th>
+                        <th class="text-center">Programas</th>
+                        <th>Agente</th>
+                        <th>Último relato</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in machines %}
+                        <tr>
+                            <td>
+                                <i class="ti ti-device-desktop me-1 text-muted"></i>{{ m.name }}
+                                {% if m.hostname and m.hostname != m.name %}<small class="text-muted d-block">{{ m.hostname }}</small>{% endif %}
+                            </td>
+                            <td class="text-center">
+                                <span class="badge {{ m.ram_percent >= 90 ? 'bg-danger-lt' : (m.ram_percent >= 75 ? 'bg-warning-lt' : 'bg-green-lt') }}">{{ m.ram_percent }}%</span>
+                            </td>
+                            <td class="text-center">{{ m.cpu_percent }}%</td>
+                            <td class="text-center">{{ m.programs }}</td>
+                            <td><small>{{ m.agent_version ?: '—' }}</small></td>
+                            <td><small>{{ m.reported_at ? m.reported_at|date('d/m/Y H:i') : '—' }}</small></td>
+                            <td class="text-end">
+                                <a href="{{ base_url }}?computer={{ m.computers_id }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="ti ti-eye"></i> Ver
+                                </a>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="7" class="text-center text-muted py-4">Nenhum computador reportou inventário ainda.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

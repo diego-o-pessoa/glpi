@@ -167,6 +167,11 @@ class WorkspaceApi:
             return body, ""
         return None, describe_http_error(status, body)
 
+    def report_inventory(self, data: dict) -> bool:
+        """Envia o inventario da maquina (programas, discos, memoria, processos)."""
+        status, _ = self._request("POST", f"/machines/{self.machine_guid}/inventory", data, timeout=30)
+        return status in (200, 202)
+
     def download_installer(self, step_id: int, dest: Path, timeout: int = 600) -> tuple[bool, str, str]:
         """
         Baixa o instalador da etapa para `dest`. Retorna (ok, sha256_do_servidor,

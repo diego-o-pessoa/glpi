@@ -1,0 +1,95 @@
+{% extends '@ativaworkspace/_layout.html.twig' %}
+
+{% block content %}
+    {% set sys = inv.system %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="mb-0"><i class="ti ti-device-desktop me-2"></i>{{ name }}</h3>
+        <a href="{{ back_url }}" class="btn btn-outline-secondary btn-sm"><i class="ti ti-arrow-left"></i> Voltar</a>
+    </div>
+
+    <div class="row row-cards mb-3">
+        <div class="col-sm-6 col-lg-3">
+            <div class="card"><div class="card-body">
+                <div class="text-muted">Memória RAM</div>
+                <div class="h2 mb-1">{{ sys.ram_percent|default(0) }}%</div>
+                <div class="small text-muted">{{ sys.ram_used_mb|default(0) }} / {{ sys.ram_total_mb|default(0) }} MB</div>
+            </div></div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card"><div class="card-body">
+                <div class="text-muted">CPU</div>
+                <div class="h2 mb-1">{{ sys.cpu_percent|default(0) }}%</div>
+                <div class="small text-muted">{{ sys.os|default('—') }}</div>
+            </div></div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card"><div class="card-body">
+                <div class="text-muted">Tempo ligado</div>
+                <div class="h2 mb-1">{{ sys.uptime_hours|default(0) }} h</div>
+            </div></div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card"><div class="card-body">
+                <div class="text-muted">Último relato</div>
+                <div class="h4 mb-1">{{ inv.reported_at ? inv.reported_at|date('d/m/Y H:i') : '—' }}</div>
+                <div class="small text-muted">Agente {{ inv.agent_version ?: '—' }}</div>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="row row-cards">
+        <div class="col-lg-4">
+            <div class="card mb-3">
+                <div class="card-header"><h3 class="card-title"><i class="ti ti-server me-2"></i>Discos</h3></div>
+                <div class="list-group list-group-flush">
+                    {% for d in inv.disks %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between"><strong>{{ d.drive }}</strong><span>{{ d.free_gb }} GB livres de {{ d.total_gb }} GB</span></div>
+                            <div class="progress mt-1" style="height:6px;">
+                                <div class="progress-bar {{ d.percent >= 90 ? 'bg-danger' : 'bg-primary' }}" style="width: {{ d.percent }}%"></div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="list-group-item text-muted">Sem dados de disco.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card mb-3">
+                <div class="card-header"><h3 class="card-title"><i class="ti ti-cpu me-2"></i>Processos (maior uso de memória)</h3></div>
+                <div class="table-responsive" style="max-height: 320px; overflow-y:auto;">
+                    <table class="table table-sm card-table">
+                        <thead><tr><th>Processo</th><th class="text-end">RAM (MB)</th></tr></thead>
+                        <tbody>
+                            {% for p in inv.processes %}
+                                <tr><td>{{ p.name }}</td><td class="text-end">{{ p.ram_mb }}</td></tr>
+                            {% else %}
+                                <tr><td colspan="2" class="text-muted">Sem dados de processos.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header"><h3 class="card-title"><i class="ti ti-apps me-2"></i>Programas instalados ({{ inv.programs|length }})</h3></div>
+                <div class="table-responsive" style="max-height: 460px; overflow-y:auto;">
+                    <table class="table table-sm table-hover card-table">
+                        <thead><tr><th>Nome</th><th>Versão</th><th>Fabricante</th></tr></thead>
+                        <tbody>
+                            {% for prog in inv.programs %}
+                                <tr><td>{{ prog.name }}</td><td>{{ prog.version ?: '—' }}</td><td>{{ prog.publisher ?: '—' }}</td></tr>
+                            {% else %}
+                                <tr><td colspan="3" class="text-muted">Sem dados de programas.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

@@ -69,6 +69,12 @@ final class Page
                 'right' => PluginAtivaworkspaceProfile::RIGHT_APPLICATIONS,
                 'form'  => 'application_form',
             ],
+            'computers' => [
+                'title' => 'Computadores',
+                'icon'  => 'ti ti-device-desktop',
+                'file'  => 'computers.php',
+                'right' => PluginAtivaworkspaceProfile::RIGHT_VIEW,
+            ],
             'logs' => [
                 'title' => 'Logs',
                 'icon'  => 'ti ti-file-text',

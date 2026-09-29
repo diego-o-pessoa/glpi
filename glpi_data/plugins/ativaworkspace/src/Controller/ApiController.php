@@ -9,6 +9,7 @@ use GlpiPlugin\Ativaworkspace\Application;
 use GlpiPlugin\Ativaworkspace\EntraStep;
 use GlpiPlugin\Ativaworkspace\Event;
 use GlpiPlugin\Ativaworkspace\InstallerStorage;
+use GlpiPlugin\Ativaworkspace\Inventory;
 use GlpiPlugin\Ativaworkspace\Job;
 use GlpiPlugin\Ativaworkspace\JobStep;
 use GlpiPlugin\Ativaworkspace\MachineIdentity;
@@ -251,6 +252,31 @@ final class ApiController extends AbstractController
         $response->headers->set('X-Installer-Sha256', (string) ($app->fields['file_sha256'] ?? ''));
         $response->headers->set('Cache-Control', 'no-store');
         return $response;
+    }
+
+    /**
+     * Inventario da maquina (programas, discos, memoria, CPU, processos).
+     * Token Bearer; nenhum segredo trafega. Corpo maior que os demais.
+     */
+    #[Route('/api/v1/machines/{guid}/inventory', name: 'ativaworkspace_api_inventory', requirements: ['guid' => '[a-fA-F0-9-]{16,64}'], methods: ['POST'])]
+    public function inventory(Request $request, string $guid): Response
+    {
+        if ($error = $this->checkAuth($request)) {
+            return $error;
+        }
+        // Inventario pode passar de 16 KB; aceita ate 512 KB.
+        if (strlen($request->getContent()) > 512 * 1024) {
+            return $this->error('TOO_LARGE', 'Inventário grande demais.', 413);
+        }
+        try {
+            $data = json_decode($request->getContent(), true, 64, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return $this->error('INVALID_JSON', 'Corpo inválido.', 400);
+        }
+        if (!is_array($data) || !Inventory::store($guid, $data)) {
+            return $this->error('MACHINE_UNKNOWN', 'Máquina não vinculada de forma única ao inventário.', 404);
+        }
+        return new JsonResponse(['ok' => true], 202);
     }
 
     private function jobForStep(int $stepId): int
