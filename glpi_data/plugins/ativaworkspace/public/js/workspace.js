@@ -133,20 +133,65 @@
 
     // Envia uma acao do job (ex.: cancel) como POST de formulario. O backend
     // (job.action.php) revalida permissao e entidade, e redireciona para o job.
-    function submitAction(jobId, action) {
+    function submitForm(fields) {
         var form = document.createElement('form');
         form.method = 'post';
         form.action = urls.jobAction;
-        var fields = { _glpi_csrf_token: config.csrf || csrfToken(), job: jobId, action: action };
+        fields._glpi_csrf_token = config.csrf || csrfToken();
         Object.keys(fields).forEach(function (name) {
-            var input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = name;
-            input.value = fields[name];
-            form.appendChild(input);
+            var value = fields[name];
+            var values = Array.isArray(value) ? value : [value];
+            values.forEach(function (item) {
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = Array.isArray(value) ? name + '[]' : name;
+                input.value = item;
+                form.appendChild(input);
+            });
         });
         document.body.appendChild(form);
         form.submit();
+    }
+
+    function submitAction(jobId, action) {
+        submitForm({ job: jobId, action: action });
+    }
+
+    function checkedJobIds() {
+        if (!jobsBody) { return []; }
+        return Array.prototype.slice.call(jobsBody.querySelectorAll('[data-aw-job-check]:checked'))
+            .map(function (cb) { return cb.getAttribute('data-aw-job-check'); });
+    }
+
+    function updateBulkBar() {
+        var bar = root.querySelector('[data-aw-bulk-bar]');
+        if (!bar) { return; }
+        var ids = checkedJobIds();
+        var count = root.querySelector('[data-aw-bulk-count]');
+        if (count) { count.textContent = ids.length; }
+        bar.classList.toggle('d-none', ids.length === 0);
+    }
+
+    function setupBulk() {
+        var all = root.querySelector('[data-aw-check-all]');
+        if (all && jobsBody) {
+            all.addEventListener('change', function () {
+                Array.prototype.slice.call(jobsBody.querySelectorAll('[data-aw-job-check]')).forEach(function (cb) {
+                    cb.checked = all.checked;
+                });
+                updateBulkBar();
+            });
+        }
+        var del = root.querySelector('[data-aw-bulk-delete]');
+        if (del) {
+            del.addEventListener('click', function () {
+                var ids = checkedJobIds();
+                if (!ids.length) { return; }
+                if (window.confirm('Excluir ' + ids.length + ' provisionamento(s)? Esta ação não pode ser desfeita.')) {
+                    submitForm({ action: 'delete_bulk', jobs: ids });
+                }
+            });
+        }
     }
 
     function csrfToken() {
@@ -232,6 +277,23 @@
             computer.appendChild(document.createTextNode('Abrir computador'));
             menu.appendChild(computer);
         }
+        var terminal = job.status_state === 'completed' || job.status_state === 'failed' || job.status_state === 'canceled';
+        // Recomeçar um provisionamento encerrado (sem precisar criar outro).
+        if (config.canManage && terminal && urls.jobAction) {
+            menu.appendChild(el('div', 'dropdown-divider'));
+            var restart = el('a', 'dropdown-item');
+            restart.href = '#';
+            restart.appendChild(icon('ti-refresh me-2'));
+            restart.appendChild(document.createTextNode('Recomeçar'));
+            restart.addEventListener('click', function (event) {
+                event.preventDefault();
+                if (window.confirm('Recomeçar o provisionamento #' + job.id + ' do início?')) {
+                    submitAction(job.id, 'restart');
+                }
+            });
+            menu.appendChild(restart);
+        }
+
         // Cancelar direto da lista (inclui "Aguardando intervenção" travado).
         var cancellable = job.is_active || job.status_state === 'failed';
         if (config.canManage && cancellable && urls.jobAction) {
@@ -247,6 +309,22 @@
                 }
             });
             menu.appendChild(cancel);
+        }
+
+        // Excluir o provisionamento (um por um).
+        if (config.canManage && urls.jobAction) {
+            menu.appendChild(el('div', 'dropdown-divider'));
+            var del = el('a', 'dropdown-item text-danger');
+            del.href = '#';
+            del.appendChild(icon('ti-trash me-2'));
+            del.appendChild(document.createTextNode('Excluir provisionamento'));
+            del.addEventListener('click', function (event) {
+                event.preventDefault();
+                if (window.confirm('Excluir o provisionamento #' + job.id + '? Esta ação não pode ser desfeita.')) {
+                    submitAction(job.id, 'delete');
+                }
+            });
+            menu.appendChild(del);
         }
         dropdown.appendChild(menu);
         box.appendChild(dropdown);
@@ -279,6 +357,17 @@
         jobs.forEach(function (job) {
             var tr = el('tr', job.status_state === 'failed' ? 'aw-row-failed' : '');
 
+            var checkTd = el('td');
+            if (config.canManage) {
+                var cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.className = 'form-check-input m-0';
+                cb.setAttribute('data-aw-job-check', job.id);
+                cb.addEventListener('change', updateBulkBar);
+                checkTd.appendChild(cb);
+            }
+            tr.appendChild(checkTd);
+
             var computerTd = el('td');
             if (job.computers_id > 0) {
                 var link = el('a', 'aw-computer', job.computer_name);
@@ -310,6 +399,9 @@
 
             jobsBody.appendChild(tr);
         });
+        var all = root.querySelector('[data-aw-check-all]');
+        if (all) { all.checked = false; }
+        updateBulkBar();
     }
 
     var EVENT_TONES = {
@@ -659,6 +751,7 @@
     // ------------------------------------------------------------------ start
 
     render(config.initial || {});
+    setupBulk();
     setLive(true);
     schedule(refreshMs);
 })();

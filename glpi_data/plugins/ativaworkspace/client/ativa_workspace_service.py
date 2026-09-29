@@ -40,7 +40,7 @@ import ativa_workspace_logon as logon
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.6.1"
+WORKSPACE_AGENT_VERSION = "1.6.2"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -362,6 +362,9 @@ class WorkspaceRuntime:
 
         status, step = api.next_step()
         if status == 204:
+            # Sem etapa ativa (cancelado/excluido/concluido): nao deixa estado
+            # local que faca o processo continuar/retomar na maquina.
+            self._clear_local_state()
             self._idle(logger, "ok, nenhuma etapa Entra pendente")
             return
         if status != 200 or step is None:
@@ -375,6 +378,15 @@ class WorkspaceRuntime:
         elif step_type == "SOFTWARE":
             software = step.get("software", {}) if isinstance(step.get("software"), dict) else {}
             self._handle_software(logger, api, step_id, software)
+
+    @staticmethod
+    def _clear_local_state() -> None:
+        """Remove marcadores locais para nada resumir apos cancelar/excluir."""
+        for path in (STATE_PATH, SOFTWARE_STATE_PATH):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def _maybe_report_inventory(self, logger: logging.Logger, api: "lib.WorkspaceApi") -> None:
         """Coleta e envia o inventario a cada INVENTORY_INTERVAL."""
@@ -433,6 +445,13 @@ class WorkspaceRuntime:
                 "device_id": fields.get("DeviceId", ""),
                 "tenant_id": fields.get("TenantId", ""),
             }
+            # Ja possuia conta do Entra ID antes desta etapa (nunca abrimos o
+            # fluxo): pula a etapa em vez de trocar de usuario/reiniciar.
+            if not state.get("acted"):
+                logger.info("Entra: computador ja ingressado; pulando a etapa.")
+                api.result(step_id, SUCCESS, "Computador já ingressado no Microsoft Entra ID; etapa concluída.", proof)
+                STATE_PATH.unlink(missing_ok=True)
+                return
             if logon.entra_user_logged_in():
                 api.result(step_id, SUCCESS, "Ingressado no Microsoft Entra ID e usuario conectado.", proof)
                 STATE_PATH.unlink(missing_ok=True)
@@ -465,6 +484,7 @@ class WorkspaceRuntime:
                 logger.warning("Entra: sem TAP (%s); digita o e-mail e aguarda o TAP manual.", tap_error or "motivo desconhecido")
             write_helper_payload({"upn": upn, "tap": tap_code}, logger)
             opened = open_workplace_settings(logger)
+            state["acted"] = True  # a partir daqui, um join detectado foi nosso
             state["last_open"] = time.time()
             logger.info("Entra: abertura automatica %s.", "solicitada" if opened else "falhou")
         save_json(STATE_PATH, state)

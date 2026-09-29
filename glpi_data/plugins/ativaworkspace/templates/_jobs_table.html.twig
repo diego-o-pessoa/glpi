@@ -1,9 +1,16 @@
 {# Tabela de provisionamentos. As linhas sao montadas e atualizadas pelo
    workspace.js a partir do JSON (mesmo formato de Job::present()). #}
+<div class="d-flex align-items-center mb-2 aw-bulk-bar d-none" data-aw-bulk-bar>
+    <span class="me-2 small text-muted"><span data-aw-bulk-count>0</span> selecionado(s)</span>
+    <button type="button" class="btn btn-sm btn-outline-danger" data-aw-bulk-delete>
+        <i class="ti ti-trash me-1"></i>Excluir selecionados
+    </button>
+</div>
 <div class="table-responsive">
     <table class="table table-vcenter card-table aw-jobs-table mb-0">
         <thead>
             <tr>
+                <th style="width:1%"><input type="checkbox" class="form-check-input m-0" data-aw-check-all aria-label="Selecionar todos" /></th>
                 <th>Computador</th>
                 <th>Funcionário</th>
                 <th>Perfil</th>
@@ -17,7 +24,7 @@
         </thead>
         <tbody data-aw-jobs>
             <tr class="aw-empty-row">
-                <td colspan="9">
+                <td colspan="10">
                     <div class="empty py-4">
                         <div class="empty-icon"><i class="ti ti-device-desktop-off"></i></div>
                         <p class="empty-title">Nenhum provisionamento ainda</p>

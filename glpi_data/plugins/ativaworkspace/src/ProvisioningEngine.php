@@ -334,6 +334,52 @@ final class ProvisioningEngine
         });
     }
 
+    /**
+     * Recomeça um provisionamento encerrado: zera todas as etapas e roda de novo
+     * do inicio, no mesmo computador/perfil. Evita ter que criar outro.
+     */
+    public static function restart(int $jobId): void
+    {
+        self::locked($jobId, static function (array $job) use ($jobId): void {
+            if (!in_array($job['status'], [Job::COMPLETED, Job::FAILED, Job::CANCELED], true)) {
+                throw new RuntimeException('Só é possível recomeçar um provisionamento já encerrado.');
+            }
+            foreach (JobStep::forJob($jobId) as $step) {
+                self::updateStep((int) $step['id'], [
+                    'status'   => JobStep::PENDING,
+                    'message'  => '',
+                    'runtime'  => null,
+                    'attempts' => 0,
+                    'date_end' => null,
+                ]);
+            }
+            self::updateJob($jobId, [
+                'status'   => Job::RUNNING,
+                'progress' => 0,
+                'message'  => 'Provisionamento recomeçado.',
+                'date_end' => null,
+                'plugin_ativaworkspace_jobsteps_id' => 0,
+            ]);
+            Event::log(Event::LEVEL_INFO, 'provisioning', 'Provisionamento recomeçado', [
+                'por' => (int) Session::getLoginUserID(),
+            ], $jobId);
+            self::advance($jobId);
+        });
+    }
+
+    /**
+     * Exclui um provisionamento: etapas, eventos e o proprio job. A validacao de
+     * permissao/entidade e feita antes, no controller (Job::can).
+     */
+    public static function deleteJob(int $jobId): void
+    {
+        global $DB;
+
+        $DB->delete(JobStep::getTable(), [JobStep::JOB_FK => $jobId]);
+        $DB->delete('glpi_plugin_ativaworkspace_events', ['plugin_ativaworkspace_jobs_id' => $jobId]);
+        $DB->delete(Job::getTable(), ['id' => $jobId]);
+    }
+
     // ---------------------------------------------------- executor (servico)
 
     /**
