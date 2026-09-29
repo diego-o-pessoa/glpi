@@ -134,6 +134,24 @@ function plugin_ativaworkspace_tables(): array
             UNIQUE KEY `machine_guid` (`machine_guid`),
             KEY `computers_id` (`computers_id`),
             KEY `reported_at` (`reported_at`)",
+
+        // 0.10.0 (Fase 2): acoes na maquina (por enquanto: desinstalar programa).
+        // O servidor so guarda o alvo (nome + chave do registro); o comando de
+        // desinstalacao e o que o proprio Windows registrou, resolvido no cliente.
+        'glpi_plugin_ativaworkspace_machineactions' => "
+            `computers_id` int {$sign} NOT NULL DEFAULT '0',
+            `action` varchar(32) NOT NULL DEFAULT 'uninstall',
+            `target` varchar(255) NOT NULL DEFAULT '',
+            `scope` varchar(16) NOT NULL DEFAULT '',
+            `reg_key` varchar(255) NOT NULL DEFAULT '',
+            `status` varchar(16) NOT NULL DEFAULT 'queued',
+            `message` varchar(255) NOT NULL DEFAULT '',
+            `users_id` int {$sign} NOT NULL DEFAULT '0',
+            `requested_at` timestamp NULL DEFAULT NULL,
+            `date_mod` timestamp NULL DEFAULT NULL,
+            KEY `computers_id` (`computers_id`),
+            KEY `status` (`status`),
+            KEY `requested_at` (`requested_at`)",
     ];
 }
 

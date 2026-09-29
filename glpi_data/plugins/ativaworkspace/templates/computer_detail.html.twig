@@ -79,12 +79,41 @@
                 <div class="card-header"><h3 class="card-title"><i class="ti ti-apps me-2"></i>Programas instalados ({{ inv.programs|length }})</h3></div>
                 <div class="table-responsive" style="max-height: 460px; overflow-y:auto;">
                     <table class="table table-sm table-hover card-table">
-                        <thead><tr><th>Nome</th><th>Versão</th><th>Fabricante</th></tr></thead>
+                        <thead><tr><th>Nome</th><th>Versão</th><th>Fabricante</th>{% if can_manage %}<th class="text-end">Ação</th>{% endif %}</tr></thead>
                         <tbody>
                             {% for prog in inv.programs %}
-                                <tr><td>{{ prog.name }}</td><td>{{ prog.version ?: '—' }}</td><td>{{ prog.publisher ?: '—' }}</td></tr>
+                                {% set pending = actions[prog.key] ?? null %}
+                                <tr>
+                                    <td>{{ prog.name }}</td>
+                                    <td>{{ prog.version ?: '—' }}</td>
+                                    <td>{{ prog.publisher ?: '—' }}</td>
+                                    {% if can_manage %}
+                                        <td class="text-end">
+                                            {% if pending and pending.status in ['queued', 'running'] %}
+                                                <span class="badge bg-blue-lt"><i class="ti ti-loader me-1"></i>{{ pending.status == 'running' ? 'Desinstalando…' : 'Na fila' }}</span>
+                                            {% elseif pending and pending.status == 'failed' %}
+                                                <span class="badge bg-danger-lt" title="{{ pending.message }}">Falhou</span>
+                                            {% elseif pending and pending.status == 'done' %}
+                                                <span class="badge bg-green-lt">Desinstalado</span>
+                                            {% elseif prog.can_uninstall %}
+                                                <form method="post" action="{{ action_url }}" class="d-inline"
+                                                      onsubmit="return confirm('Desinstalar {{ prog.name|e('js') }} deste computador?');">
+                                                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}" />
+                                                    <input type="hidden" name="computer" value="{{ computers_id }}" />
+                                                    <input type="hidden" name="action" value="uninstall" />
+                                                    <input type="hidden" name="target" value="{{ prog.name }}" />
+                                                    <input type="hidden" name="scope" value="{{ prog.scope }}" />
+                                                    <input type="hidden" name="key" value="{{ prog.key }}" />
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ti ti-trash"></i> Desinstalar</button>
+                                                </form>
+                                            {% else %}
+                                                <span class="text-muted small">—</span>
+                                            {% endif %}
+                                        </td>
+                                    {% endif %}
+                                </tr>
                             {% else %}
-                                <tr><td colspan="3" class="text-muted">Sem dados de programas.</td></tr>
+                                <tr><td colspan="{{ can_manage ? 4 : 3 }}" class="text-muted">Sem dados de programas.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>

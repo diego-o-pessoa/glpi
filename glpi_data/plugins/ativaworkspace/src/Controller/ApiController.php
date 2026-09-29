@@ -12,6 +12,7 @@ use GlpiPlugin\Ativaworkspace\InstallerStorage;
 use GlpiPlugin\Ativaworkspace\Inventory;
 use GlpiPlugin\Ativaworkspace\Job;
 use GlpiPlugin\Ativaworkspace\JobStep;
+use GlpiPlugin\Ativaworkspace\MachineAction;
 use GlpiPlugin\Ativaworkspace\MachineIdentity;
 use GlpiPlugin\Ativaworkspace\ProvisioningEngine;
 use GlpiPlugin\Ativaworkspace\StepType;
@@ -275,6 +276,45 @@ final class ApiController extends AbstractController
         }
         if (!is_array($data) || !Inventory::store($guid, $data)) {
             return $this->error('MACHINE_UNKNOWN', 'Máquina não vinculada de forma única ao inventário.', 404);
+        }
+        return new JsonResponse(['ok' => true], 202);
+    }
+
+    /** Proxima acao pendente da maquina (ex.: desinstalar programa). 204 se nao ha. */
+    #[Route('/api/v1/machines/{guid}/action', name: 'ativaworkspace_api_action', requirements: ['guid' => '[a-fA-F0-9-]{16,64}'], methods: ['GET'])]
+    public function action(Request $request, string $guid): Response
+    {
+        if ($error = $this->checkAuth($request)) {
+            return $error;
+        }
+        $computersId = MachineIdentity::computerFromGuid($guid);
+        if ($computersId <= 0) {
+            return $this->error('MACHINE_UNKNOWN', 'Máquina não vinculada ao inventário.', 404);
+        }
+        $next = MachineAction::nextForComputer($computersId);
+        if ($next === null) {
+            return new JsonResponse(null, 204);
+        }
+        return new JsonResponse($next);
+    }
+
+    /** Resultado de uma acao da maquina. */
+    #[Route('/api/v1/machines/{guid}/actions/{id}/result', name: 'ativaworkspace_api_action_result', requirements: ['guid' => '[a-fA-F0-9-]{16,64}', 'id' => '\d+'], methods: ['POST'])]
+    public function actionResult(Request $request, string $guid, int $id): Response
+    {
+        if ($error = $this->checkAuth($request)) {
+            return $error;
+        }
+        $computersId = MachineIdentity::computerFromGuid($guid);
+        if ($computersId <= 0) {
+            return $this->error('MACHINE_UNKNOWN', 'Máquina não vinculada ao inventário.', 404);
+        }
+        $body = $this->json($request);
+        if ($body === null) {
+            return $this->error('INVALID_JSON', 'Corpo inválido.', 400);
+        }
+        if (!MachineAction::report($id, $computersId, ($body['ok'] ?? null) === true, (string) ($body['message'] ?? ''))) {
+            return $this->error('ACTION_NOT_FOUND', 'Ação não encontrada para esta máquina.', 404);
         }
         return new JsonResponse(['ok' => true], 202);
     }

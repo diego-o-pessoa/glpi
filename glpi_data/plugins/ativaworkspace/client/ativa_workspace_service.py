@@ -36,11 +36,12 @@ import ativa_workspace_entra as lib
 import ativa_workspace_install as installer
 import ativa_workspace_inventory as inventory
 import ativa_workspace_logon as logon
+import ativa_workspace_uninstall as uninstall
 
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.6.2"
+WORKSPACE_AGENT_VERSION = "1.7.0"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -360,6 +361,12 @@ class WorkspaceRuntime:
         except Exception:  # noqa: BLE001
             logger.exception("Falha ao reportar o inventario.")
 
+        # Acoes pendentes na maquina (ex.: desinstalar programa).
+        try:
+            self._handle_actions(logger, api)
+        except Exception:  # noqa: BLE001
+            logger.exception("Falha ao processar acoes da maquina.")
+
         status, step = api.next_step()
         if status == 204:
             # Sem etapa ativa (cancelado/excluido/concluido): nao deixa estado
@@ -387,6 +394,26 @@ class WorkspaceRuntime:
                 path.unlink(missing_ok=True)
             except OSError:
                 pass
+
+    def _handle_actions(self, logger: logging.Logger, api: "lib.WorkspaceApi") -> None:
+        """Executa a proxima acao pendente (por enquanto: desinstalar programa)."""
+        action = api.next_action()
+        if not action:
+            return
+        action_id = int(action.get("id", 0))
+        kind = str(action.get("action", ""))
+        if kind != "uninstall" or action_id <= 0:
+            api.report_action(action_id, False, f"Acao nao suportada: {kind}")
+            return
+        target = str(action.get("target", ""))
+        logger.info("Acao: desinstalar '%s'.", target)
+        ok, message = uninstall.run_uninstall(
+            str(action.get("scope", "")), str(action.get("reg_key", "")), 20 * 60, logger,
+        )
+        logger.info("Acao: desinstalar '%s' -> %s (%s)", target, "ok" if ok else "falhou", message)
+        api.report_action(action_id, ok, message)
+        # Inventario ficou desatualizado: forca reenvio no proximo ciclo.
+        INVENTORY_MARKER.unlink(missing_ok=True)
 
     def _maybe_report_inventory(self, logger: logging.Logger, api: "lib.WorkspaceApi") -> None:
         """Coleta e envia o inventario a cada INVENTORY_INTERVAL."""

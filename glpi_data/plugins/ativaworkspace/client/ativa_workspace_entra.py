@@ -172,6 +172,16 @@ class WorkspaceApi:
         status, _ = self._request("POST", f"/machines/{self.machine_guid}/inventory", data, timeout=30)
         return status in (200, 202)
 
+    def next_action(self) -> dict | None:
+        """Proxima acao pendente da maquina (ex.: desinstalar), ou None."""
+        status, body = self._request("GET", f"/machines/{self.machine_guid}/action")
+        return body if status == 200 and isinstance(body, dict) else None
+
+    def report_action(self, action_id: int, ok: bool, message: str = "") -> bool:
+        status, _ = self._request("POST", f"/machines/{self.machine_guid}/actions/{action_id}/result",
+                                  {"ok": ok, "message": message[:200]})
+        return status in (200, 202)
+
     def download_installer(self, step_id: int, dest: Path, timeout: int = 600) -> tuple[bool, str, str]:
         """
         Baixa o instalador da etapa para `dest`. Retorna (ok, sha256_do_servidor,

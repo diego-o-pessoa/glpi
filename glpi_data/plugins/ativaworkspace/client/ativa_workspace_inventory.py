@@ -101,13 +101,13 @@ def _programs() -> list[dict]:
     import winreg
 
     roots = [
-        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", winreg.KEY_WOW64_64KEY),
-        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", winreg.KEY_WOW64_32KEY),
-        (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", 0),
+        ("hklm64", winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", winreg.KEY_WOW64_64KEY),
+        ("hklm32", winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", winreg.KEY_WOW64_32KEY),
+        ("hkcu", winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", 0),
     ]
     seen: set[str] = set()
     programs: list[dict] = []
-    for hive, path, view in roots:
+    for scope, hive, path, view in roots:
         try:
             key = winreg.OpenKey(hive, path, 0, winreg.KEY_READ | view)
         except OSError:
@@ -125,10 +125,17 @@ def _programs() -> list[dict]:
                         if marker in seen:
                             continue
                         seen.add(marker)
+                        has_uninstall = bool(
+                            _reg_str(item, "QuietUninstallString") or _reg_str(item, "UninstallString")
+                        )
                         programs.append({
                             "name": name[:160],
                             "version": _reg_str(item, "DisplayVersion")[:64],
                             "publisher": _reg_str(item, "Publisher")[:120],
+                            # Para a Fase 2 (desinstalar): onde a entrada mora no registro.
+                            "scope": scope,
+                            "key": sub[:255],
+                            "can_uninstall": has_uninstall,
                         })
                 except OSError:
                     continue
