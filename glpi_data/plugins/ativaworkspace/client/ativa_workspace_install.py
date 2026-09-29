@@ -83,11 +83,19 @@ def _install_file(path: Path, installer_type: str, install_args: str,
     if installer_type == "MSI":
         args = ["msiexec", "/i", str(path), "/qn", "/norestart"]
     elif installer_type == "EXE":
-        if not install_args:
-            return False, ("Instalador EXE precisa dos argumentos silenciosos (campo "
-                           "'Argumentos silenciosos'). Ex.: Chrome: /silent /install; "
-                           "NSIS: /S; Inno: /VERYSILENT /NORESTART.")
-        args = [str(path), *shlex.split(install_args)]
+        # Silencioso automatico: usa os argumentos do admin, ou detecta o tipo do
+        # instalador e tenta as flags silenciosas certas (roda como SYSTEM, sem UI).
+        attempts = [shlex.split(install_args)] if install_args else _silent_attempts(path, logger)
+        last = "sem tentativas"
+        for extra in attempts:
+            logger.info("Software: instalando %s (EXE, args=%s)", path.name, " ".join(extra) or "(nenhum)")
+            code, tail = _run([str(path), *extra], timeout)
+            if code in (0, 1641, 3010):
+                return True, "Instalado a partir do pacote enviado."
+            last = f"codigo {code}. {tail}"
+            logger.warning("Software: tentativa falhou (%s).", last)
+        return False, f"Instalador terminou com {last}"
+
     elif installer_type == "OTHER" and path.suffix.lower() in (".msix", ".msixbundle", ".appx", ".appxbundle"):
         args = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
                 "Add-AppxProvisionedPackage", "-Online", "-PackagePath", str(path), "-SkipLicense"]
@@ -100,6 +108,41 @@ def _install_file(path: Path, installer_type: str, install_args: str,
     if code in (0, 1641, 3010):
         return True, "Instalado a partir do pacote enviado."
     return False, f"Instalador terminou com codigo {code}. {tail}"
+
+
+def _silent_attempts(path: Path, logger: logging.Logger) -> list[list[str]]:
+    """
+    Descobre as flags silenciosas pelo tipo do instalador (assinaturas no EXE) e
+    devolve as tentativas em ordem, mais provavel primeiro. Sem UI (SYSTEM), so
+    flags silenciosas funcionam.
+    """
+    head = b""
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(4 * 1024 * 1024)
+    except OSError:
+        pass
+
+    attempts: list[list[str]] = []
+
+    def add(args: list[str]) -> None:
+        if args not in attempts:
+            attempts.append(args)
+
+    if b"Nullsoft" in head:                          # NSIS
+        add(["/S"])
+    if b"Inno Setup" in head or b"JR.Inno" in head:  # Inno Setup
+        add(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
+    if b"InstallShield" in head:                     # InstallShield
+        add(["/s", "/v/qn"])
+    if b"Chrome" in head:                            # instalador do Google Chrome
+        add(["/silent", "/install"])
+
+    # Fallbacks genericos: cobrem a maioria dos instaladores.
+    for generic in (["/S"], ["/silent", "/install"], ["/silent"], ["/quiet"], ["/verysilent"]):
+        add(generic)
+    logger.info("Software: %s tentativa(s) de instalacao silenciosa.", len(attempts))
+    return attempts
 
 
 def install(payload: dict, api, step_id: int, logger: logging.Logger) -> tuple[bool, str]:
