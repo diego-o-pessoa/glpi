@@ -214,6 +214,44 @@ def _desktop_folder() -> Path:
     return Path(os.environ.get("USERPROFILE", "")) / "Desktop"
 
 
+def _appdata_rel(path: Path) -> str:
+    """Caminho relativo ao %APPDATA% (sem resolver links), ou "" se estiver fora."""
+    appdata = os.path.normcase(os.path.normpath(os.environ.get("APPDATA", "")))
+    full = os.path.normpath(str(path))
+    if not appdata or not os.path.normcase(full).startswith(appdata + os.sep):
+        return ""
+    return full[len(appdata) + 1:]
+
+
+def _start_menu_shortcut_rel(shortcut: Path, started_at: float, logger: logging.Logger) -> str:
+    """
+    A politica da barra referencia o atalho do Menu Iniciar. O Chrome costuma
+    criar o da area de trabalho antes: espera o do Menu Iniciar e, se nao vier,
+    copia o atalho para "Chrome Apps" (onde o proprio Chrome o colocaria).
+    """
+    rel = _appdata_rel(shortcut)
+    if rel and SHORTCUT_REL_RE.fullmatch(rel):
+        return rel
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        for candidate in _shortcut_candidates(started_at):
+            rel = _appdata_rel(candidate)
+            if rel and SHORTCUT_REL_RE.fullmatch(rel):
+                return rel
+        time.sleep(3)
+    target = (Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu"
+              / "Programs" / "Chrome Apps" / shortcut.name)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(shortcut, target)
+        logger.info("Atalho do Outlook copiado para o Menu Iniciar.")
+    except OSError as exc:
+        logger.warning("Nao foi possivel copiar o atalho para o Menu Iniciar: %s", exc)
+        return ""
+    rel = _appdata_rel(target)
+    return rel if SHORTCUT_REL_RE.fullmatch(rel) else ""
+
+
 def _ensure_desktop_shortcut(shortcut: Path, logger: logging.Logger) -> None:
     """Garante o atalho da PWA na area de trabalho (o Chrome as vezes so cria no Menu Iniciar)."""
     desktop = _desktop_folder()
@@ -372,12 +410,11 @@ def configure_for_current_user(step_id: int, logger: logging.Logger) -> int:
             _write_result(step_id, PHASE_VERIFYING, "Outlook PWA instalado e ja fixado na barra de tarefas.", True)
             return 0
 
-        # Pede ao servico (SYSTEM) a politica de layout com este atalho e
-        # espera o XML refleti-lo. O caminho vai relativo ao %APPDATA%.
-        try:
-            shortcut_rel = str(shortcut.resolve().relative_to(Path(os.environ.get("APPDATA", "")).resolve()))
-        except ValueError:
-            _write_result(step_id, PHASE_VERIFYING, "O atalho do Outlook nao esta no Menu Iniciar do usuario.", False)
+        # Pede ao servico (SYSTEM) a politica de layout com o atalho do Menu
+        # Iniciar e espera o XML refleti-lo. O caminho vai relativo ao %APPDATA%.
+        shortcut_rel = _start_menu_shortcut_rel(shortcut, started_at, logger)
+        if not shortcut_rel:
+            _write_result(step_id, PHASE_VERIFYING, "Nao foi possivel colocar o atalho do Outlook no Menu Iniciar.", False)
             return 1
         _write_result(step_id, PHASE_PINNING, "Aplicando a fixacao do Outlook na barra de tarefas.",
                       shortcut=shortcut_rel)
