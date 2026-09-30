@@ -104,6 +104,62 @@ def entra_user_logged_in() -> bool:
     return any(domain.upper() == ENTRA_DOMAIN for _sid, domain, _user, _state in logged_sessions())
 
 
+class _WTS_PROCESS_INFOW(ctypes.Structure):
+    _fields_ = [
+        ("SessionId", wintypes.DWORD),
+        ("ProcessId", wintypes.DWORD),
+        ("pProcessName", wintypes.LPWSTR),
+        ("pUserSid", ctypes.c_void_p),
+    ]
+
+
+def session_process_names(session_id: int) -> set[str] | None:
+    """Nomes (minusculos) dos processos da sessao; None se nao deu para listar."""
+    wtsapi32 = ctypes.windll.wtsapi32
+    info = ctypes.c_void_p()
+    count = wintypes.DWORD()
+    if not wtsapi32.WTSEnumerateProcessesW(None, 0, 1, ctypes.byref(info), ctypes.byref(count)):
+        return None
+    try:
+        array = ctypes.cast(info, ctypes.POINTER(_WTS_PROCESS_INFOW))
+        return {
+            (array[i].pProcessName or "").lower()
+            for i in range(count.value)
+            if int(array[i].SessionId) == session_id
+        }
+    finally:
+        wtsapi32.WTSFreeMemory(info)
+
+
+# Telas do primeiro login (Windows Hello / criar PIN, "Ola", privacidade) rodam
+# no CloudExperienceHost. Enquanto ele esta aberto, o usuario nao chegou a area
+# de trabalho.
+FIRST_LOGON_PROCESSES = {"cloudexperiencehostbroker.exe"}
+
+
+def entra_desktop_state() -> tuple[str, str]:
+    """
+    Estado da sessao do Entra: ("none", ...) sem sessao; ("setup", ...) logado
+    mas ainda no primeiro login (PIN etc.); ("desktop", ...) na area de trabalho.
+    """
+    sessions = [(sid, state) for sid, domain, _user, state in logged_sessions()
+                if domain.upper() == ENTRA_DOMAIN]
+    if not sessions:
+        return "none", "nenhuma sessao do Entra"
+    for session_id, state in sessions:
+        if state != WTS_ACTIVE:
+            continue
+        names = session_process_names(session_id)
+        if names is None:
+            return "setup", "nao foi possivel listar os processos da sessao"
+        if "explorer.exe" not in names:
+            return "setup", "area de trabalho ainda nao carregou"
+        if names & FIRST_LOGON_PROCESSES:
+            return "setup", "configuracao do primeiro login (PIN) em andamento"
+        return "desktop", "area de trabalho aberta"
+    return "setup", "sessao do Entra nao esta ativa na tela"
+
+
 def disconnect_local_sessions(logger: logging.Logger) -> None:
     """Igual a "Trocar usuario": desconecta (nao encerra) as sessoes locais ativas."""
     wtsapi32 = ctypes.windll.wtsapi32

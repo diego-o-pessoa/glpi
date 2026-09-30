@@ -43,7 +43,7 @@ import ativa_workspace_uninstall as uninstall
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.8.5"
+WORKSPACE_AGENT_VERSION = "1.8.6"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -55,6 +55,7 @@ SERVICE_EXE = PRODUCT_DIR / "AtivaWorkspace.exe"
 POLL_SECONDS = 15               # ritmo normal do loop
 WAIT_HUMAN_TIMEOUT = 30 * 60    # desiste de aguardar o tecnico depois disto
 OPEN_UI_MIN_INTERVAL = 120      # nao reabre a janela com mais frequencia que isto
+DESKTOP_STABLE_SECONDS = 45     # area de trabalho estavel (sem tela de PIN) antes de concluir
 MUTEX_NAME = r"Global\AtivaWorkspaceService"
 
 # Fase de login do usuario Entra (depois do ingresso).
@@ -666,9 +667,29 @@ class WorkspaceRuntime:
                 api.result(step_id, SUCCESS, "Computador já ingressado no Microsoft Entra ID; etapa concluída.", proof)
                 STATE_PATH.unlink(missing_ok=True)
                 return
-            if logon.entra_user_logged_in():
-                api.result(step_id, SUCCESS, "Ingressado no Microsoft Entra ID e usuario conectado.", proof)
-                STATE_PATH.unlink(missing_ok=True)
+            # So conclui quando a conta do Entra CHEGA a area de trabalho: logo
+            # apos o login o Windows pede para criar o PIN (Windows Hello) e as
+            # proximas etapas nao podem comecar antes disso.
+            desktop, reason = logon.entra_desktop_state()
+            if desktop == "desktop":
+                since = float(state.get("desktop_since", 0.0)) or time.time()
+                if time.time() - since >= DESKTOP_STABLE_SECONDS:
+                    logger.info("Entra: usuario na area de trabalho; etapa concluida.")
+                    api.result(step_id, SUCCESS, "Ingressado no Microsoft Entra ID e usuario na area de trabalho.", proof)
+                    STATE_PATH.unlink(missing_ok=True)
+                    return
+                state["desktop_since"] = since
+                save_json(STATE_PATH, state)
+                api.result(step_id, WAITING_HUMAN, "Usuário do Entra na área de trabalho; confirmando...",
+                           {"azure_ad_joined": True})
+                return
+            if desktop == "setup":
+                logger.info("Entra: usuario conectado, mas ainda nao na area de trabalho (%s).", reason)
+                state["desktop_since"] = 0.0
+                save_json(STATE_PATH, state)
+                api.result(step_id, WAITING_HUMAN,
+                           "Usuário do Entra conectado. Conclua a criação do PIN (Windows Hello) "
+                           "até abrir a área de trabalho.", {"azure_ad_joined": True})
                 return
             self._handle_user_signin(logger, api, step_id, entra, state)
             return
