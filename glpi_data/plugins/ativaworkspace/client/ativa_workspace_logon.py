@@ -132,12 +132,6 @@ def session_process_names(session_id: int) -> set[str] | None:
         wtsapi32.WTSFreeMemory(info)
 
 
-# Telas do primeiro login (Windows Hello / criar PIN, "Ola", privacidade) rodam
-# no CloudExperienceHost. Enquanto ele esta aberto, o usuario nao chegou a area
-# de trabalho.
-FIRST_LOGON_PROCESSES = {"cloudexperiencehostbroker.exe"}
-
-
 # Provisionamento do PIN (Windows Hello for Business) no log oficial do Windows
 # "Microsoft-Windows-User Device Registration/Admin":
 #   358 = o provisionamento VAI ser aberto (tela "Configurar um PIN");
@@ -150,12 +144,14 @@ HELLO_WILL_LAUNCH = 358
 HELLO_NOT_LAUNCHED = 360
 HELLO_KEY_REGISTERED = 300
 
+# Provedor de credencial do PIN: subchave com o SID de quem tem PIN. So vale
+# como prova se foi GRAVADA depois do inicio da etapa (pode sobrar de teste).
+PIN_PROVIDER_KEY = (r"SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication"
+                    r"\Credential Providers\{D6886603-9D2F-4EB2-B667-1971041FA96B}")
 
-def hello_status(since_epoch: float, upn: str = "") -> str:
-    """
-    "done" (PIN criado), "not_needed" (Windows Hello nao sera pedido),
-    "pending" (tela do PIN aberta/esperando) ou "unknown" (nenhum evento ainda).
-    """
+
+def hello_event_ids(since_epoch: float) -> list[int]:
+    """IDs dos eventos do Windows Hello (300/358/360) desde `since_epoch`."""
     import re
 
     window_ms = max(1000, int((time.time() - since_epoch) * 1000))
@@ -167,49 +163,93 @@ def hello_status(since_epoch: float, upn: str = "") -> str:
             capture_output=True, text=True, timeout=30, creationflags=NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError):
-        return "unknown"
-    ids: list[int] = []
-    upn = (upn or "").strip().lower()
-    for event in completed.stdout.split("<Event ")[1:]:
-        match = re.search(r"<EventID[^>]*>(\d+)</EventID>", event)
-        if not match:
-            continue
-        event_id = int(match.group(1))
-        # A chave registrada tem que ser da conta desta etapa (quando o log traz a UPN).
-        if event_id == HELLO_KEY_REGISTERED and upn and "@" in event and upn not in event.lower():
-            continue
-        ids.append(event_id)
-    if HELLO_KEY_REGISTERED in ids:
-        return "done"
-    if HELLO_WILL_LAUNCH in ids:
-        return "pending"
-    if HELLO_NOT_LAUNCHED in ids:
-        return "not_needed"
-    return "unknown"
+        return []
+    return [int(m) for m in re.findall(r"<EventID[^>]*>(\d+)</EventID>", completed.stdout or "")]
 
 
-def entra_desktop_state() -> tuple[str, str]:
+def session_user_sid(session_id: int) -> str:
+    """SID (texto) do usuario da sessao, ou "" se nao der para ler (requer SYSTEM)."""
+    wtsapi32 = ctypes.windll.wtsapi32
+    advapi32 = ctypes.windll.advapi32
+    kernel32 = ctypes.windll.kernel32
+    token = wintypes.HANDLE()
+    if not wtsapi32.WTSQueryUserToken(wintypes.ULONG(session_id), ctypes.byref(token)):
+        return ""
+    try:
+        size = wintypes.DWORD()
+        advapi32.GetTokenInformation(token, 1, None, 0, ctypes.byref(size))  # 1 = TokenUser
+        if not size.value:
+            return ""
+        buffer = ctypes.create_string_buffer(size.value)
+        if not advapi32.GetTokenInformation(token, 1, buffer, size, ctypes.byref(size)):
+            return ""
+        # TOKEN_USER comeca com SID_AND_ATTRIBUTES, cujo primeiro campo e o PSID.
+        psid = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_void_p))[0]
+        text = wintypes.LPWSTR()
+        if not advapi32.ConvertSidToStringSidW(ctypes.c_void_p(psid), ctypes.byref(text)):
+            return ""
+        try:
+            return text.value or ""
+        finally:
+            kernel32.LocalFree(text)
+    finally:
+        kernel32.CloseHandle(token)
+
+
+def pin_written_after(sid: str, since_epoch: float) -> bool:
+    """True se o PIN do usuario foi gravado no registro depois de `since_epoch`."""
+    if not sid:
+        return False
+    import winreg  # type: ignore
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, PIN_PROVIDER_KEY + "\\" + sid, 0,
+                            winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as key:
+            # Ultima gravacao: intervalos de 100 ns desde 1601.
+            written = winreg.QueryInfoKey(key)[2] / 10_000_000 - 11_644_473_600
+    except OSError:
+        return False
+    return written >= since_epoch
+
+
+def hello_status(since_epoch: float, session_id: int | None = None) -> tuple[str, str]:
     """
-    ("none", ...) sem sessao do Entra; ("setup", ...) logado mas o Explorer
-    ainda nao carregou; ("desktop", ...) Explorer carregado. A tela do PIN fica
-    POR CIMA do Explorer: quem decide se acabou e o hello_status().
+    ("done" | "not_needed" | "pending" | "unknown", detalhe para o log).
+    done: PIN criado (evento 300 ou PIN gravado apos o inicio da etapa).
+    """
+    ids = hello_event_ids(since_epoch)
+    pin_new = session_id is not None and pin_written_after(session_user_sid(session_id), since_epoch)
+    detail = f"eventos={sorted(set(ids)) or '-'} pin_novo={pin_new}"
+    if HELLO_KEY_REGISTERED in ids or pin_new:
+        return "done", detail
+    if HELLO_WILL_LAUNCH in ids:
+        return "pending", detail
+    if HELLO_NOT_LAUNCHED in ids:
+        return "not_needed", detail
+    return "unknown", detail
+
+
+def entra_desktop_state() -> tuple[str, str, int | None]:
+    """
+    ("none", motivo, None) sem sessao do Entra; ("setup", motivo, sessao) logado
+    mas o Explorer ainda nao carregou; ("desktop", motivo, sessao) com o
+    Explorer. A tela do PIN fica POR CIMA do Explorer: quem decide se acabou e
+    o hello_status().
     """
     sessions = [(sid, state) for sid, domain, _user, state in logged_sessions()
                 if domain.upper() == ENTRA_DOMAIN]
     if not sessions:
-        return "none", "nenhuma sessao do Entra"
+        return "none", "nenhuma sessao do Entra", None
     for session_id, state in sessions:
         if state != WTS_ACTIVE:
             continue
         names = session_process_names(session_id)
         if names is None:
-            return "setup", "nao foi possivel listar os processos da sessao"
+            return "setup", "nao foi possivel listar os processos da sessao", session_id
         if "explorer.exe" not in names:
-            return "setup", "area de trabalho ainda nao carregou"
-        if names & FIRST_LOGON_PROCESSES:
-            return "setup", "configuracao do primeiro login em andamento"
-        return "desktop", "Explorer carregado"
-    return "setup", "sessao do Entra nao esta ativa na tela"
+            return "setup", "area de trabalho ainda nao carregou", session_id
+        return "desktop", "Explorer carregado", session_id
+    return "setup", "sessao do Entra nao esta ativa na tela", None
 
 
 def disconnect_local_sessions(logger: logging.Logger) -> None:
