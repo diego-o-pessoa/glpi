@@ -43,7 +43,7 @@ import ativa_workspace_uninstall as uninstall
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.8.8"
+WORKSPACE_AGENT_VERSION = "1.8.9"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -671,15 +671,25 @@ class WorkspaceRuntime:
             # So conclui quando a conta do Entra CHEGA a area de trabalho: logo
             # apos o login o Windows pede para criar o PIN (Windows Hello) e as
             # proximas etapas nao podem comecar antes disso.
-            desktop, has_pin, reason = logon.entra_desktop_state()
+            desktop, reason = logon.entra_desktop_state()
             if desktop == "desktop":
+                # A tela "Configurar um PIN" fica por cima do Explorer: quem diz
+                # se o primeiro login acabou sao os eventos do Windows Hello.
+                hello = logon.hello_status(float(state.get("started_at", time.time())), str(entra.get("upn", "")))
+                has_pin = hello in ("done", "not_needed")
+                if hello == "pending":
+                    # PIN pedido e ainda nao criado: nunca segue sem ele.
+                    logger.info("Entra: tela do PIN (Windows Hello) aberta; aguardando.")
+                    state["desktop_since"] = 0.0
+                    save_json(STATE_PATH, state)
+                    api.result(step_id, WAITING_HUMAN,
+                               "Usuário do Entra conectado. Conclua a criação do PIN (Windows Hello) "
+                               "até abrir a área de trabalho.", {"azure_ad_joined": True})
+                    return
                 since = float(state.get("desktop_since", 0.0)) or time.time()
-                # Com PIN criado: basta a area de trabalho estavel. Sem PIN, a
-                # tela "Configurar um PIN" pode estar por cima: so segue depois
-                # de um tempo longo (tenant sem Windows Hello nunca cria PIN).
+                # Sem nenhum evento do Windows Hello: espera longa antes de seguir.
                 needed = DESKTOP_STABLE_SECONDS if has_pin else NO_PIN_FALLBACK_SECONDS
-                if not has_pin:
-                    logger.info("Entra: area de trabalho carregada, mas o PIN ainda nao foi criado.")
+                logger.info("Entra: area de trabalho carregada (Windows Hello: %s).", hello)
                 if time.time() - since >= needed:
                     logger.info("Entra: usuario na area de trabalho; etapa concluida.")
                     api.result(step_id, SUCCESS, "Ingressado no Microsoft Entra ID e usuario na area de trabalho.", proof)

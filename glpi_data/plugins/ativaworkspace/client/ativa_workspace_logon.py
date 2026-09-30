@@ -14,6 +14,7 @@ from __future__ import annotations
 import ctypes
 import logging
 import subprocess
+import time
 from ctypes import wintypes
 from pathlib import Path
 
@@ -137,79 +138,78 @@ def session_process_names(session_id: int) -> set[str] | None:
 FIRST_LOGON_PROCESSES = {"cloudexperiencehostbroker.exe"}
 
 
-# Provedor de credencial do PIN (Windows Hello): existe uma subchave com o SID
-# de cada usuario que ja tem PIN configurado.
-PIN_PROVIDER_KEY = (r"SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication"
-                    r"\Credential Providers\{D6886603-9D2F-4EB2-B667-1971041FA96B}")
+# Provisionamento do PIN (Windows Hello for Business) no log oficial do Windows
+# "Microsoft-Windows-User Device Registration/Admin":
+#   358 = o provisionamento VAI ser aberto (tela "Configurar um PIN");
+#   360 = o provisionamento NAO sera aberto (tenant/maquina sem Windows Hello);
+#   300 = chave NGC registrada, ou seja, o PIN foi criado.
+# So contam eventos posteriores ao inicio da etapa: um PIN de teste anterior
+# (o SID da conta do Entra nao muda ao reingressar) nao vale.
+HELLO_LOG = "Microsoft-Windows-User Device Registration/Admin"
+HELLO_WILL_LAUNCH = 358
+HELLO_NOT_LAUNCHED = 360
+HELLO_KEY_REGISTERED = 300
 
 
-def session_user_sid(session_id: int) -> str:
-    """SID (texto) do usuario da sessao, ou "" se nao der para ler (requer SYSTEM)."""
-    wtsapi32 = ctypes.windll.wtsapi32
-    advapi32 = ctypes.windll.advapi32
-    kernel32 = ctypes.windll.kernel32
-    token = wintypes.HANDLE()
-    if not wtsapi32.WTSQueryUserToken(wintypes.ULONG(session_id), ctypes.byref(token)):
-        return ""
-    try:
-        size = wintypes.DWORD()
-        advapi32.GetTokenInformation(token, 1, None, 0, ctypes.byref(size))  # 1 = TokenUser
-        if not size.value:
-            return ""
-        buffer = ctypes.create_string_buffer(size.value)
-        if not advapi32.GetTokenInformation(token, 1, buffer, size, ctypes.byref(size)):
-            return ""
-        # TOKEN_USER comeca com SID_AND_ATTRIBUTES, cujo primeiro campo e o PSID.
-        psid = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_void_p))[0]
-        text = wintypes.LPWSTR()
-        if not advapi32.ConvertSidToStringSidW(ctypes.c_void_p(psid), ctypes.byref(text)):
-            return ""
-        try:
-            return text.value or ""
-        finally:
-            kernel32.LocalFree(text)
-    finally:
-        kernel32.CloseHandle(token)
-
-
-def user_has_pin(sid: str) -> bool:
-    """True se o usuario ja concluiu a criacao do PIN do Windows Hello."""
-    if not sid:
-        return False
-    import winreg  # type: ignore
-
-    try:
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, PIN_PROVIDER_KEY + "\\" + sid, 0,
-                            winreg.KEY_READ | winreg.KEY_WOW64_64KEY):
-            return True
-    except OSError:
-        return False
-
-
-def entra_desktop_state() -> tuple[str, bool, str]:
+def hello_status(since_epoch: float, upn: str = "") -> str:
     """
-    (estado, tem_pin, motivo). estado: "none" sem sessao do Entra; "setup"
-    logado mas ainda no primeiro login; "desktop" com o Explorer carregado.
-    tem_pin diz se o PIN do Windows Hello ja foi criado (a tela do PIN fica por
-    cima da area de trabalho, entao o Explorer sozinho nao prova nada).
+    "done" (PIN criado), "not_needed" (Windows Hello nao sera pedido),
+    "pending" (tela do PIN aberta/esperando) ou "unknown" (nenhum evento ainda).
+    """
+    import re
+
+    window_ms = max(1000, int((time.time() - since_epoch) * 1000))
+    query = (f"*[System[(EventID={HELLO_KEY_REGISTERED} or EventID={HELLO_WILL_LAUNCH} "
+             f"or EventID={HELLO_NOT_LAUNCHED}) and TimeCreated[timediff(@SystemTime) <= {window_ms}]]]")
+    try:
+        completed = subprocess.run(
+            ["wevtutil", "qe", HELLO_LOG, f"/q:{query}", "/f:xml", "/c:50", "/rd:true"],
+            capture_output=True, text=True, timeout=30, creationflags=NO_WINDOW,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    ids: list[int] = []
+    upn = (upn or "").strip().lower()
+    for event in completed.stdout.split("<Event ")[1:]:
+        match = re.search(r"<EventID[^>]*>(\d+)</EventID>", event)
+        if not match:
+            continue
+        event_id = int(match.group(1))
+        # A chave registrada tem que ser da conta desta etapa (quando o log traz a UPN).
+        if event_id == HELLO_KEY_REGISTERED and upn and "@" in event and upn not in event.lower():
+            continue
+        ids.append(event_id)
+    if HELLO_KEY_REGISTERED in ids:
+        return "done"
+    if HELLO_WILL_LAUNCH in ids:
+        return "pending"
+    if HELLO_NOT_LAUNCHED in ids:
+        return "not_needed"
+    return "unknown"
+
+
+def entra_desktop_state() -> tuple[str, str]:
+    """
+    ("none", ...) sem sessao do Entra; ("setup", ...) logado mas o Explorer
+    ainda nao carregou; ("desktop", ...) Explorer carregado. A tela do PIN fica
+    POR CIMA do Explorer: quem decide se acabou e o hello_status().
     """
     sessions = [(sid, state) for sid, domain, _user, state in logged_sessions()
                 if domain.upper() == ENTRA_DOMAIN]
     if not sessions:
-        return "none", False, "nenhuma sessao do Entra"
+        return "none", "nenhuma sessao do Entra"
     for session_id, state in sessions:
         if state != WTS_ACTIVE:
             continue
         names = session_process_names(session_id)
         if names is None:
-            return "setup", False, "nao foi possivel listar os processos da sessao"
+            return "setup", "nao foi possivel listar os processos da sessao"
         if "explorer.exe" not in names:
-            return "setup", False, "area de trabalho ainda nao carregou"
-        has_pin = user_has_pin(session_user_sid(session_id))
+            return "setup", "area de trabalho ainda nao carregou"
         if names & FIRST_LOGON_PROCESSES:
-            return "setup", has_pin, "configuracao do primeiro login em andamento"
-        return "desktop", has_pin, "area de trabalho aberta" if has_pin else "PIN ainda nao criado"
-    return "setup", False, "sessao do Entra nao esta ativa na tela"
+            return "setup", "configuracao do primeiro login em andamento"
+        return "desktop", "Explorer carregado"
+    return "setup", "sessao do Entra nao esta ativa na tela"
 
 
 def disconnect_local_sessions(logger: logging.Logger) -> None:
