@@ -421,7 +421,28 @@ try {
     if (-not (Test-Path -LiteralPath $CompiledUnifiedInstaller)) {
         throw "O Inno Setup nao gerou o instalador esperado: $CompiledUnifiedInstaller"
     }
-    Copy-Item -LiteralPath $CompiledUnifiedInstaller -Destination $UnifiedInstaller -Force
+    # Alguns antivirus abrem o novo .exe exatamente durante a copia e o
+    # Copy-Item termina com AccessDenied mesmo quando a pasta esta gravavel.
+    # Primeiro copia com extensao neutra e depois faz uma renomeacao atomica,
+    # repetindo por poucos segundos caso o scanner ainda esteja com o handle.
+    $StagedUnifiedInstaller = "$UnifiedInstaller.partial"
+    Copy-Item -LiteralPath $CompiledUnifiedInstaller -Destination $StagedUnifiedInstaller -Force
+    $Moved = $false
+    for ($Attempt = 1; $Attempt -le 10; $Attempt++) {
+        try {
+            Move-Item -LiteralPath $StagedUnifiedInstaller -Destination $UnifiedInstaller -Force -ErrorAction Stop
+            $Moved = $true
+            break
+        } catch {
+            if ($Attempt -eq 10) {
+                throw
+            }
+            Start-Sleep -Seconds 2
+        }
+    }
+    if (-not $Moved) {
+        throw "Nao foi possivel mover o instalador compilado para $UnifiedInstaller."
+    }
 
 } finally {
     $ResolvedWorkingDirectory = [IO.Path]::GetFullPath($WorkingDirectory)

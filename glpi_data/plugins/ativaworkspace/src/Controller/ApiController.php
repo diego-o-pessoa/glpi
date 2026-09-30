@@ -26,9 +26,10 @@ use Symfony\Component\Routing\Attribute\Route;
 /**
  * API do executor do Workspace (servico Windows nas maquinas).
  *
- * Autenticacao por token Bearer proprio do Workspace (nao usa sessao). Nenhuma
- * credencial Microsoft trafega por aqui: o executor so reporta subestado, o
- * resultado e a PROVA de ingresso (AzureAdJoined + TenantId), nunca senha.
+ * Autenticacao por token Bearer proprio do Workspace (nao usa sessao). O unico
+ * segredo Microsoft que pode trafegar e um TAP curto, gerado sob demanda para
+ * a etapa ENTRA_LOGIN; ele nunca e persistido ou devolvido em logs. Resultados
+ * contem apenas subestado e prova de ingresso (AzureAdJoined + TenantId).
  */
 final class ApiController extends AbstractController
 {
@@ -102,8 +103,13 @@ final class ApiController extends AbstractController
             'step_id' => (int) $next['step']['id'],
             'type'    => $type,
         ];
-        // Payload sob a chave do tipo (o executor le a que corresponde).
-        $response[$type === \GlpiPlugin\Ativaworkspace\StepType::SOFTWARE ? 'software' : 'entra'] = $next['payload'];
+        // Payload sob a chave do tipo (o executor le somente a correspondente).
+        $payloadKey = match ($type) {
+            StepType::SOFTWARE       => 'software',
+            StepType::CONFIGURATION  => 'configuration',
+            default                  => 'entra',
+        };
+        $response[$payloadKey] = $next['payload'];
         return new JsonResponse($response);
     }
 

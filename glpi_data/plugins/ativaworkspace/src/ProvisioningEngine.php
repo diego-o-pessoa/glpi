@@ -28,7 +28,7 @@ final class ProvisioningEngine
     private const HUMAN_TYPES = [StepType::MANUAL_INTERVENTION];
 
     /** Tipos conduzidos pelo executor (servico na maquina). */
-    public const EXECUTOR_TYPES = [StepType::ENTRA_LOGIN, StepType::SOFTWARE];
+    public const EXECUTOR_TYPES = [StepType::ENTRA_LOGIN, StepType::SOFTWARE, StepType::CONFIGURATION];
 
     /** Subestados aceitos para etapas SOFTWARE (sem segredo; so andamento). */
     public const SOFTWARE_SUBSTATES = ['PRECHECK', 'DOWNLOADING', 'INSTALLING', 'VERIFYING'];
@@ -416,12 +416,41 @@ final class ProvisioningEngine
             return null;
         }
 
+        $payload = match ((string) $step['step_type']) {
+            StepType::SOFTWARE       => self::softwarePayload($step),
+            StepType::CONFIGURATION  => self::configurationPayload($job, $step),
+            default                  => self::entraPayload($job, $step),
+        };
+
         return [
             'job'     => $job,
             'step'    => $step,
-            'payload' => (string) $step['step_type'] === StepType::SOFTWARE
-                ? self::softwarePayload($step)
-                : self::entraPayload($job, $step),
+            'payload' => $payload,
+        ];
+    }
+
+    /**
+     * Configuracao predefinida. Nenhum comando arbitrario e enviado para a
+     * maquina: somente uma chave conhecida e parametros controlados.
+     *
+     * @return array<string, mixed>
+     */
+    private static function configurationPayload(array $job, array $step): array
+    {
+        $config = json_decode((string) ($step['config'] ?? ''), true);
+        $config = is_array($config) ? $config : [];
+
+        return [
+            'step_type'         => StepType::CONFIGURATION,
+            'configuration_key' => (string) ($config['configuration_key'] ?? ''),
+            'upn'               => (string) ($job['upn'] ?? ''),
+            'expected_domain'   => WorkspaceConfig::entraDomain(),
+            'expected_tenant'   => WorkspaceConfig::entraTenantId(),
+            'outlook_url'       => 'https://outlook.office.com/mail/',
+            'install_chrome'    => true,
+            'pin_taskbar'       => true,
+            'timeout_minutes'   => max(5, (int) ($step['timeout_minutes'] ?? self::DEFAULT_TIMEOUT_MINUTES)),
+            'status'            => (string) $step['status'],
         ];
     }
 
@@ -482,7 +511,11 @@ final class ProvisioningEngine
      */
     public static function executorProgress(int $jobId, int $stepId, string $substate, string $log = ''): void
     {
-        if (!EntraStep::isValidSubstate($substate) && !in_array($substate, self::SOFTWARE_SUBSTATES, true)) {
+        if (
+            !EntraStep::isValidSubstate($substate)
+            && !ConfigurationStep::isValidSubstate($substate)
+            && !in_array($substate, self::SOFTWARE_SUBSTATES, true)
+        ) {
             throw new RuntimeException('Subestado inválido.');
         }
 
@@ -515,6 +548,9 @@ final class ProvisioningEngine
             // ENTRA_LOGIN tem mensagens amigaveis; SOFTWARE usa o log/subestado.
             $substateMessage = EntraStep::message($substate);
             if ($substateMessage === '') {
+                $substateMessage = ConfigurationStep::message($substate);
+            }
+            if ($substateMessage === '') {
                 $substateMessage = $log !== '' ? $log : $substate;
             }
 
@@ -546,17 +582,19 @@ final class ProvisioningEngine
             throw new RuntimeException('Resultado inválido para a etapa do executor.');
         }
 
-        // SOFTWARE: sem prova de ingresso; SUCCESS/FAILED vao direto ao resultado.
+        // SOFTWARE/CONFIGURATION: sem prova de ingresso; SUCCESS/FAILED vao
+        // direto ao resultado. A prova do tenant pertence somente a ENTRA_LOGIN.
         global $DB;
         $typeRow = $DB->request(['SELECT' => ['step_type'], 'FROM' => JobStep::getTable(), 'WHERE' => ['id' => $stepId], 'LIMIT' => 1])->current();
-        if (is_array($typeRow) && (string) $typeRow['step_type'] === StepType::SOFTWARE) {
+        $stepType = is_array($typeRow) ? (string) $typeRow['step_type'] : '';
+        if (in_array($stepType, [StepType::SOFTWARE, StepType::CONFIGURATION], true)) {
             if ($result === JobStep::WAITING_HUMAN) {
-                throw new RuntimeException('A etapa de software não aguarda intervenção.');
+                throw new RuntimeException('Esta etapa automática não aguarda intervenção.');
             }
             self::mergeRuntime($jobId, $stepId, ['substate' => $result === JobStep::SUCCESS ? 'DONE' : 'FAILED']);
             self::recordResult($jobId, $stepId, $result, $message !== ''
                 ? $message
-                : ($result === JobStep::SUCCESS ? 'Aplicativo instalado.' : 'Falha na instalação do aplicativo.'));
+                : ($result === JobStep::SUCCESS ? 'Etapa automática concluída.' : 'Falha na etapa automática.'));
             return;
         }
 

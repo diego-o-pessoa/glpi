@@ -23,12 +23,12 @@ final class StepType
 
     /** Configuracoes predefinidas para CONFIGURATION (o executor sabera aplicar). */
     public const CONFIGURATION_KEYS = [
-        'vpn_ativa'   => 'VPN Ativa',
-        'openvpn'     => 'Perfil do OpenVPN',
+        'vpn_ativa'   => 'VPN Ativa (em desenvolvimento)',
+        'openvpn'     => 'Perfil do OpenVPN (em desenvolvimento)',
         'outlook_pwa' => 'Outlook PWA',
-        'onedrive'    => 'OneDrive',
-        'teams'       => 'Microsoft Teams',
-        'company'     => 'Configuração específica da empresa',
+        'onedrive'    => 'OneDrive (em desenvolvimento)',
+        'teams'       => 'Microsoft Teams (em desenvolvimento)',
+        'company'     => 'Configuração específica da empresa (em desenvolvimento)',
     ];
 
     /**
@@ -47,7 +47,7 @@ final class StepType
             self::CONFIGURATION => [
                 'label'       => 'Configuração',
                 'icon'        => 'ti ti-adjustments',
-                'description' => 'Aplica uma configuração predefinida (VPN, Outlook PWA...).',
+                'description' => 'Aplica uma configuração predefinida. Outlook PWA é automático; as demais opções estão sinalizadas como em desenvolvimento.',
                 'application' => false,
                 'config'      => [
                     'configuration_key' => [

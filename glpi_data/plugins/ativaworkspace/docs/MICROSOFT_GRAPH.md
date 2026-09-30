@@ -1,9 +1,10 @@
 # Microsoft Graph e Temporary Access Pass
 
 O Ativa Workspace usa uma credencial de aplicativo (client credentials) para
-criar um Temporary Access Pass (TAP) no momento em que o técnico solicita. A
-credencial fica somente no servidor GLPI. Ela não entra no instalador e não é
-enviada ao serviço Windows.
+criar um Temporary Access Pass (TAP) quando a etapa Microsoft Entra precisa
+ingressar o dispositivo. Client ID/Secret ficam somente no servidor GLPI e
+nunca entram no instalador. Apenas o TAP temporário é enviado ao executor da
+máquina, que o entrega ao helper efêmero, apaga o arquivo e não o registra.
 
 ## Configuração no Microsoft Entra
 
@@ -38,3 +39,19 @@ vez durante o ingresso ou a configuração do Windows Hello, gere um novo TAP.
 
 Antes de liberar para todos, valide com um usuário piloto que esteja incluído
 na política do TAP e acompanhe o evento de geração nos Logs do Workspace.
+
+## Outlook PWA
+
+A configuração `Outlook PWA` deve ficar depois de `Autenticação Microsoft` no
+perfil. O executor:
+
+1. confirma que o computador está no tenant esperado e que existe uma sessão
+   do usuário Entra;
+2. instala o Google Chrome pelo winget, se necessário;
+3. ativa `CloudAPAuthEnabled` e mescla o Outlook em
+   `WebAppInstallForceList`, preservando outras PWAs corporativas;
+4. reinicia o Chrome na sessão do usuário, abre o Outlook e aguarda a PWA;
+5. confirma a janela autenticada pelo SSO e fixa o atalho na barra de tarefas.
+
+O TAP não é reutilizado no navegador. A conta do Windows fornece o SSO ao
+Chrome; por isso nenhuma senha permanente é armazenada, digitada ou exibida.

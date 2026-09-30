@@ -6,8 +6,10 @@ Funcoes puras usadas pelo servico Ativa Workspace:
   - cliente da API do Workspace (token Bearer, so HTTPS);
   - leitura e avaliacao do `dsregcmd /status`.
 
-Nenhuma credencial Microsoft passa por aqui. A prova de ingresso e so o que o
-proprio Windows informa (AzureAdJoined, DeviceId, TenantId).
+O cliente pode receber um TAP de curta duracao e uso controlado para o ingresso
+automatico. Ele existe apenas na resposta em memoria/arquivo efemero do helper;
+nao e registrado. A prova final usa somente o que o Windows informa
+(AzureAdJoined, DeviceId, TenantId).
 """
 
 from __future__ import annotations

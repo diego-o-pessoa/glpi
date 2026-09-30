@@ -2,8 +2,8 @@
 Ativa Workspace - servico Windows.
 
 Independente do Ativa Updater: uma falha aqui nunca afeta a atualizacao do
-pacote unificado. Roda como SYSTEM e conduz a etapa ENTRA_LOGIN de um
-provisionamento:
+pacote unificado. Roda como SYSTEM e executa as etapas automaticas do
+provisionamento (ENTRA_LOGIN, SOFTWARE e CONFIGURATION).
 
   1. pergunta ao Workspace se ha uma etapa Entra para esta maquina;
   2. `dsregcmd /status`: se ja ingressado no tenant esperado -> SUCCESS, sem UI;
@@ -14,7 +14,8 @@ provisionamento:
   5. o servico verifica o `dsregcmd` periodicamente e conclui SUCCESS quando o
      ingresso no tenant certo e confirmado.
 
-Nenhuma credencial Microsoft e lida, digitada, guardada ou registrada.
+O TAP e temporario, apagado assim que o helper o le e nunca registrado. Para
+Outlook PWA, a autenticacao usa o SSO CloudAP do Windows/Entra, sem senha.
 """
 
 from __future__ import annotations
@@ -36,12 +37,13 @@ import ativa_workspace_entra as lib
 import ativa_workspace_install as installer
 import ativa_workspace_inventory as inventory
 import ativa_workspace_logon as logon
+import ativa_workspace_outlook as outlook
 import ativa_workspace_uninstall as uninstall
 
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.7.1"
+WORKSPACE_AGENT_VERSION = "1.8.1"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -58,6 +60,7 @@ MUTEX_NAME = r"Global\AtivaWorkspaceService"
 # Fase de login do usuario Entra (depois do ingresso).
 WEB_SIGNIN_MARKER = PRODUCT_DIR / "websignin.json"  # quando o Web sign-in foi ligado
 SOFTWARE_STATE_PATH = PRODUCT_DIR / "software-install.lock"  # instalacao em andamento
+CONFIGURATION_STATE_PATH = PRODUCT_DIR / "configuration-state.json"
 SOFTWARE_LOCK_SECONDS = 4 * 60 * 60  # nao reentra na instalacao dentro disto
 INVENTORY_MARKER = PRODUCT_DIR / "inventory.stamp"  # ultimo envio de inventario
 INVENTORY_INTERVAL = 60  # coleta e envia o inventario a cada 1 min
@@ -187,7 +190,13 @@ def elevated_linked_token(token: wintypes.HANDLE) -> wintypes.HANDLE | None:
     return None
 
 
-def launch_in_session(session_id: int, arguments: str, logger: logging.Logger, elevated: bool = False) -> bool:
+def launch_in_session(
+    session_id: int,
+    arguments: str,
+    logger: logging.Logger,
+    elevated: bool = False,
+    executable: Path | None = None,
+) -> bool:
     """
     Cria este mesmo exe na sessao do usuario, com os argumentos dados
     (ex.: --open-workplace). Mesmo mecanismo que o Ativa Updater usa para o
@@ -243,7 +252,7 @@ def launch_in_session(session_id: int, arguments: str, logger: logging.Logger, e
         if not userenv.CreateEnvironmentBlock(ctypes.byref(env), token, False):
             env = ctypes.c_void_p()
 
-        exe = Path(sys.executable) if getattr(sys, "frozen", False) else SERVICE_EXE
+        exe = executable or (Path(sys.executable) if getattr(sys, "frozen", False) else SERVICE_EXE)
         command = ctypes.create_unicode_buffer(f'"{exe}" {arguments}')
 
         si = STARTUPINFOW()
@@ -289,25 +298,70 @@ def open_workplace_settings(logger: logging.Logger) -> bool:
 # ler e apagar. O helper roda como o usuario, por isso precisa de acesso.
 HELPER_DIR = PROGRAM_DATA / "AtivaLocacao" / "WorkspaceHelper"
 HELPER_PAYLOAD = HELPER_DIR / "entra.json"
+OUTLOOK_HELPER_EXE = HELPER_DIR / "AtivaWorkspaceUser.exe"
 
 
-def write_helper_payload(data: dict[str, Any], logger: logging.Logger) -> None:
+def ensure_helper_dir(logger: logging.Logger) -> bool:
+    """Area de troca do helper: SYSTEM/Admins e usuarios com modificacao."""
     import subprocess
     try:
         HELPER_DIR.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
+        completed = subprocess.run(
             ["icacls", str(HELPER_DIR), "/inheritance:r",
              "/grant:r", "*S-1-5-18:(OI)(CI)F", "/grant:r", "*S-1-5-32-544:(OI)(CI)F",
              "/grant:r", "*S-1-5-32-545:(OI)(CI)M"],
             capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
-        HELPER_PAYLOAD.write_text(json.dumps(data), encoding="utf-8")
+        return completed.returncode == 0
     except (OSError, subprocess.SubprocessError):
+        logger.exception("Nao foi possivel preparar a pasta do helper.")
+        return False
+
+
+def write_helper_payload(data: dict[str, Any], logger: logging.Logger) -> None:
+    try:
+        if not ensure_helper_dir(logger):
+            return
+        HELPER_PAYLOAD.write_text(json.dumps(data), encoding="utf-8")
+    except OSError:
         logger.exception("Nao foi possivel preparar os dados do helper.")
 
 
 def clear_helper_payload() -> None:
     HELPER_PAYLOAD.unlink(missing_ok=True)
+
+
+def prepare_outlook_helper(logger: logging.Logger) -> Path | None:
+    """
+    O executavel do servico fica numa pasta que usuarios comuns nao podem ler
+    (ela contem o token da API). Copia somente o binario para a area do helper,
+    que roda sem elevacao e nunca recebe o token nem um TAP.
+    """
+    import shutil
+    if not ensure_helper_dir(logger):
+        return None
+    source = Path(sys.executable) if getattr(sys, "frozen", False) else SERVICE_EXE
+    if not source.is_file():
+        logger.warning("Executavel do Workspace nao encontrado para o helper: %s", source)
+        return None
+    try:
+        shutil.copy2(source, OUTLOOK_HELPER_EXE)
+        return OUTLOOK_HELPER_EXE
+    except OSError:
+        logger.exception("Nao foi possivel preparar o helper do Outlook PWA.")
+        return None
+
+
+def configure_user_helper_logging() -> logging.Logger:
+    """Log sem dados sensiveis, gravavel pelo usuario que executa a PWA."""
+    HELPER_DIR.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger("ativa-workspace-user-helper")
+    if not logger.handlers:
+        logger.setLevel(logging.INFO)
+        handler = logging.FileHandler(HELPER_DIR / "outlook-helper.log", encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        logger.addHandler(handler)
+    return logger
 
 
 # --------------------------------------------------------------------------- #
@@ -385,11 +439,17 @@ class WorkspaceRuntime:
         elif step_type == "SOFTWARE":
             software = step.get("software", {}) if isinstance(step.get("software"), dict) else {}
             self._handle_software(logger, api, step_id, software)
+        elif step_type == "CONFIGURATION":
+            configuration = step.get("configuration", {}) if isinstance(step.get("configuration"), dict) else {}
+            self._handle_configuration(logger, api, step_id, configuration)
 
     @staticmethod
     def _clear_local_state() -> None:
         """Remove marcadores locais para nada resumir apos cancelar/excluir."""
-        for path in (STATE_PATH, SOFTWARE_STATE_PATH):
+        config_state = load_json(CONFIGURATION_STATE_PATH)
+        if int(config_state.get("step_id", 0) or 0) > 0:
+            outlook.clear_result(int(config_state["step_id"]))
+        for path in (STATE_PATH, SOFTWARE_STATE_PATH, CONFIGURATION_STATE_PATH):
             try:
                 path.unlink(missing_ok=True)
             except OSError:
@@ -449,6 +509,139 @@ class WorkspaceRuntime:
             api.result(step_id, FAILED, f"Erro inesperado na instalacao: {exc}")
         finally:
             marker.unlink(missing_ok=True)
+
+    def _handle_configuration(
+        self,
+        logger: logging.Logger,
+        api: "lib.WorkspaceApi",
+        step_id: int,
+        payload: dict,
+    ) -> None:
+        """Executa configuracoes predefinidas; hoje, Outlook PWA."""
+        key = str(payload.get("configuration_key", ""))
+        if key != "outlook_pwa":
+            api.result(
+                step_id,
+                FAILED,
+                f"A configuracao '{key or 'sem chave'}' ainda nao possui executor no Ativa Workspace.",
+            )
+            return
+
+        state = load_json(CONFIGURATION_STATE_PATH)
+        if int(state.get("step_id", 0) or 0) != step_id:
+            state = {
+                "step_id": step_id,
+                "started_at": time.time(),
+                "helper_started_at": 0.0,
+                "last_phase": "",
+            }
+            outlook.clear_result(step_id)
+            save_json(CONFIGURATION_STATE_PATH, state)
+            api.progress(step_id, "CONFIG_PRECHECK", "Validando Entra, Chrome e sessao do usuario")
+
+        timeout = max(5, int(payload.get("timeout_minutes", 30) or 30)) * 60
+        if time.time() - float(state.get("started_at", time.time())) > timeout:
+            api.result(step_id, FAILED, "Tempo esgotado ao configurar o Outlook PWA.")
+            self._finish_configuration(step_id)
+            return
+
+        # O SSO do Chrome depende do computador no tenant correto e do primeiro
+        # login do usuario Entra. Nao ha senha permanente como fallback.
+        fields = lib.parse_dsregcmd(lib.run_dsregcmd())
+        joined, reason = lib.evaluate_join(
+            fields,
+            str(payload.get("expected_tenant", "")),
+            str(payload.get("expected_domain", "")),
+        )
+        if not joined:
+            api.result(
+                step_id,
+                FAILED,
+                "Outlook PWA exige a etapa Microsoft Entra concluida antes dela: " + reason + ".",
+            )
+            self._finish_configuration(step_id)
+            return
+        if not logon.entra_user_logged_in():
+            api.progress(step_id, "WAITING_USER_SESSION", "Aguardando o primeiro login do usuario Entra")
+            return
+
+        sessions = user_sessions()
+        if not sessions:
+            api.progress(step_id, "WAITING_USER_SESSION", "Nenhuma sessao interativa esta ativa")
+            return
+
+        # Primeira passagem: garante o navegador, aplica politicas e dispara o
+        # helper no desktop do usuario. Nas passagens seguintes, le o progresso.
+        if float(state.get("helper_started_at", 0.0)) <= 0:
+            if not outlook.chrome_installed():
+                api.progress(step_id, "INSTALLING_CHROME", "Instalando Google Chrome pelo winget")
+                ok, message = installer.install_winget("Google.Chrome", 15 * 60, logger)
+                if not ok or not outlook.chrome_installed():
+                    api.result(step_id, FAILED, "Nao foi possivel instalar o Google Chrome: " + message)
+                    self._finish_configuration(step_id)
+                    return
+
+            api.progress(step_id, "APPLYING_POLICY", "CloudAP SSO e instalacao forcada do Outlook PWA")
+            ok, message = outlook.apply_chrome_policies(str(payload.get("outlook_url", outlook.OUTLOOK_URL)))
+            if not ok:
+                api.result(step_id, FAILED, message)
+                self._finish_configuration(step_id)
+                return
+
+            helper = prepare_outlook_helper(logger)
+            if helper is None:
+                api.result(step_id, FAILED, "Nao foi possivel preparar o helper do Outlook PWA.")
+                self._finish_configuration(step_id)
+                return
+            if not launch_in_session(
+                sessions[0],
+                f"--configure-outlook-pwa {step_id}",
+                logger,
+                elevated=False,
+                executable=helper,
+            ):
+                api.result(step_id, FAILED, "Nao foi possivel iniciar a configuracao na sessao do usuario.")
+                self._finish_configuration(step_id)
+                return
+
+            state["helper_started_at"] = time.time()
+            state["last_phase"] = "OPENING_OUTLOOK"
+            save_json(CONFIGURATION_STATE_PATH, state)
+            api.progress(step_id, "OPENING_OUTLOOK", "Helper iniciado na sessao do usuario")
+            return
+
+        result = outlook.read_result(step_id)
+        # O arquivo pode ser criado pelo usuario: aceite somente o step atual,
+        # fases conhecidas e textos curtos. Ele nunca pode alterar outro job.
+        if int(result.get("step_id", 0) or 0) != step_id:
+            return
+        allowed_phases = {
+            "OPENING_OUTLOOK", "INSTALLING_PWA", "SIGNING_IN",
+            "PINNING_TASKBAR", "VERIFYING_CONFIGURATION",
+        }
+        phase = str(result.get("phase", ""))
+        message = str(result.get("message", ""))[:200]
+        if phase in allowed_phases and phase != str(state.get("last_phase", "")):
+            api.progress(step_id, phase, message)
+            state["last_phase"] = phase
+            save_json(CONFIGURATION_STATE_PATH, state)
+
+        if result.get("done") is True:
+            ok = result.get("ok") is True
+            api.result(
+                step_id,
+                SUCCESS if ok else FAILED,
+                message or ("Outlook PWA configurado." if ok else "Falha ao configurar o Outlook PWA."),
+            )
+            self._finish_configuration(step_id)
+
+    @staticmethod
+    def _finish_configuration(step_id: int) -> None:
+        outlook.clear_result(step_id)
+        try:
+            CONFIGURATION_STATE_PATH.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     def _handle_entra(self, logger: logging.Logger, api: "lib.WorkspaceApi", step_id: int, entra: dict) -> None:
         expected_tenant = str(entra.get("expected_tenant", ""))
@@ -1004,6 +1197,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--service", action="store_true", help="Executa pelo Service Control Manager")
     parser.add_argument("--once", action="store_true", help="Roda um ciclo e sai")
     parser.add_argument("--open-workplace", action="store_true", help="(sessao do usuario) abre Acessar trabalho ou escola")
+    parser.add_argument("--configure-outlook-pwa", type=int, metavar="STEP_ID",
+                        help="(sessao do usuario) instala e fixa o Outlook PWA")
     parser.add_argument("--configure", metavar="ARQUIVO", help="Grava config.json a partir de um JSON")
     parser.add_argument("--install-service", action="store_true")
     parser.add_argument("--uninstall-service", action="store_true")
@@ -1016,6 +1211,8 @@ def main(argv: list[str]) -> int:
         return 0
     if args.open_workplace:
         return open_workplace_now()
+    if args.configure_outlook_pwa is not None:
+        return outlook.configure_for_current_user(args.configure_outlook_pwa, configure_user_helper_logging())
     if args.service:
         return run_service_dispatcher()
 
@@ -1036,7 +1233,7 @@ def main(argv: list[str]) -> int:
         print(f"Erro: {exc}", file=sys.stderr)
         return 1
 
-    parser.error("selecione --service, --once, --configure, --install-service, --uninstall-service ou --version")
+    parser.error("selecione --service, --once, --configure, --configure-outlook-pwa, --install-service, --uninstall-service ou --version")
     return 2
 
 
