@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import time
 import unicodedata
@@ -26,9 +27,11 @@ HELPER_DIR = PROGRAM_DATA / "AtivaLocacao" / "WorkspaceHelper"
 
 PHASE_OPENING = "OPENING_OUTLOOK"
 PHASE_INSTALLING = "INSTALLING_PWA"
-PHASE_SIGNING_IN = "SIGNING_IN"
 PHASE_PINNING = "PINNING_TASKBAR"
 PHASE_VERIFYING = "VERIFYING_CONFIGURATION"
+
+# Tempo para o Chrome instalar a PWA forcada pela politica (com SSO do Entra).
+PWA_WAIT_SECONDS = 5 * 60
 
 # Fixacao na barra: o Windows bloqueia a fixacao programatica (verbo oculto
 # desde o 1809). O caminho suportado e a politica "Start Layout" com um XML
@@ -185,7 +188,13 @@ def _shortcut_candidates(started_at: float) -> list[Path]:
                     recent.append(path)
             except OSError:
                 pass
-    return sorted(named, key=lambda item: item.stat().st_mtime, reverse=True) + recent
+    # Prefere o atalho do Menu Iniciar (%APPDATA%): e ele que a politica da
+    # barra referencia; o da area de trabalho fica por ultimo.
+    start_menu = str(appdata).lower()
+    return sorted(
+        named,
+        key=lambda item: (not str(item).lower().startswith(start_menu), -item.stat().st_mtime),
+    ) + recent
 
 
 def _wait_for_outlook_shortcut(started_at: float, timeout: int) -> Path | None:
@@ -196,6 +205,26 @@ def _wait_for_outlook_shortcut(started_at: float, timeout: int) -> Path | None:
             return candidates[0]
         time.sleep(2)
     return None
+
+
+def _desktop_folder() -> Path:
+    onedrive = Path(os.environ.get("OneDrive", "")) / "Desktop"
+    if os.environ.get("OneDrive") and onedrive.is_dir():
+        return onedrive
+    return Path(os.environ.get("USERPROFILE", "")) / "Desktop"
+
+
+def _ensure_desktop_shortcut(shortcut: Path, logger: logging.Logger) -> None:
+    """Garante o atalho da PWA na area de trabalho (o Chrome as vezes so cria no Menu Iniciar)."""
+    desktop = _desktop_folder()
+    try:
+        if any("outlook" in item.stem.lower() for item in desktop.glob("*.lnk")):
+            return
+        desktop.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(shortcut, desktop / shortcut.name)
+        logger.info("Atalho do Outlook copiado para a area de trabalho.")
+    except OSError as exc:
+        logger.warning("Nao foi possivel criar o atalho na area de trabalho: %s", exc)
 
 
 def _norm(text: str) -> str:
@@ -290,28 +319,6 @@ def _restart_explorer() -> None:
     subprocess.Popen(["explorer.exe"], close_fds=True)
 
 
-def _outlook_window_visible(timeout: int) -> bool:
-    try:
-        import uiautomation as auto  # type: ignore
-    except ImportError:
-        return False
-
-    def compare(control, _depth):
-        try:
-            name = _norm(str(control.Name or ""))
-            return "outlook" in name and not control.IsOffscreen
-        except Exception:  # noqa: BLE001
-            return False
-
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        window = auto.WindowControl(searchDepth=2, Compare=compare)
-        if window.Exists(0, 0):
-            return True
-        time.sleep(2)
-    return False
-
-
 def configure_for_current_user(step_id: int, logger: logging.Logger) -> int:
     """Entry point do helper que roda sem elevacao na sessao interativa."""
     if step_id <= 0:
@@ -341,26 +348,25 @@ def configure_for_current_user(step_id: int, logger: logging.Logger) -> int:
             close_fds=True,
             creationflags=NO_WINDOW,
         )
-        shortcut = _wait_for_outlook_shortcut(started_at, 240)
+        # A etapa nao faz login: na conta do Entra o SSO do Windows (CloudAP)
+        # abre o Outlook ja autenticado e o Chrome conclui a PWA sozinho.
+        shortcut = _wait_for_outlook_shortcut(started_at, PWA_WAIT_SECONDS)
         if shortcut is None:
             _write_result(
                 step_id,
                 PHASE_VERIFYING,
-                "O Chrome nao criou o atalho do Outlook PWA em 4 minutos. Confira chrome://policy e o acesso ao Outlook.",
+                "O Chrome nao criou o Outlook PWA a tempo. Confira se o usuario e do Entra (SSO) e o chrome://policy.",
                 False,
             )
             return 1
+        logger.info("Atalho da PWA encontrado: %s", shortcut.name)
+        _ensure_desktop_shortcut(shortcut, logger)
 
-        _write_result(step_id, PHASE_SIGNING_IN, "Abrindo o Outlook. Com Entra, o SSO entra sozinho; senao, faca o login (ex.: com um TAP).")
         try:
             os.startfile(str(shortcut))  # noqa: S606 - atalho criado pelo Chrome
         except OSError as exc:
             _write_result(step_id, PHASE_VERIFYING, f"O atalho da PWA nao abriu: {exc}", False)
             return 1
-        # Best-effort: espera a janela aparecer, mas NAO falha se o login ainda
-        # for manual (sem Entra o usuario entra depois, ex.: com um TAP). A etapa
-        # cuida de instalar e fixar a PWA; o login em si e do usuario.
-        _outlook_window_visible(60)
 
         if _already_pinned(shortcut):
             _write_result(step_id, PHASE_VERIFYING, "Outlook PWA instalado e ja fixado na barra de tarefas.", True)

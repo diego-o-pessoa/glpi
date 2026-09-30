@@ -43,7 +43,7 @@ import ativa_workspace_uninstall as uninstall
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.8.3"
+WORKSPACE_AGENT_VERSION = "1.8.5"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -58,21 +58,18 @@ OPEN_UI_MIN_INTERVAL = 120      # nao reabre a janela com mais frequencia que is
 MUTEX_NAME = r"Global\AtivaWorkspaceService"
 
 # Fase de login do usuario Entra (depois do ingresso).
-WEB_SIGNIN_MARKER = PRODUCT_DIR / "websignin.json"  # quando o Web sign-in foi ligado
+WEB_SIGNIN_MARKER = PRODUCT_DIR / "websignin.json"  # legado: Web sign-in ligado por versao antiga
 SOFTWARE_STATE_PATH = PRODUCT_DIR / "software-install.lock"  # instalacao em andamento
 CONFIGURATION_STATE_PATH = PRODUCT_DIR / "configuration-state.json"
 SOFTWARE_LOCK_SECONDS = 4 * 60 * 60  # nao reentra na instalacao dentro disto
 INVENTORY_MARKER = PRODUCT_DIR / "inventory.stamp"  # ultimo envio de inventario
 INVENTORY_INTERVAL = 60  # coleta e envia o inventario a cada 1 min
-REBOOT_RETRY_SECONDS = 10 * 60   # reinicio agendado que nao aconteceu
-LOGON_BOOT_GRACE_SECONDS = 30    # tela de login ainda carregando logo apos o boot
 
 # Subestados (espelham EntraStep.php).
 PRECHECK = "PRECHECK"
 OPENING_SETTINGS = "OPENING_SETTINGS"
 WAITING_HUMAN = "WAITING_HUMAN"
 VERIFYING_JOIN = "VERIFYING_JOIN"
-REBOOTING = "REBOOTING"
 SUCCESS = "SUCCESS"
 FAILED = "FAILED"
 
@@ -375,9 +372,9 @@ class WorkspaceRuntime:
 
     def run(self, logger: logging.Logger) -> None:
         logger.info("Ativa Workspace %s iniciado.", WORKSPACE_AGENT_VERSION)
-        # Web sign-in ligado ja na instalacao: quando o provisionamento chegar ao
-        # login, normalmente ja houve um boot e nao e preciso reiniciar.
-        logon.enable_web_signin(logger, WEB_SIGNIN_MARKER)
+        # O login do Entra agora e manual (usuario normal na tela de bloqueio):
+        # desfaz o Web sign-in que versoes anteriores ligaram.
+        logon.remove_web_signin(logger, WEB_SIGNIN_MARKER)
         # Lido pelo Ativa Guardian e pelo Ativa Updater (painel de versoes).
         try:
             save_json(VERSION_PATH, {"version": WORKSPACE_AGENT_VERSION})
@@ -716,52 +713,22 @@ class WorkspaceRuntime:
             logger.warning("Servidor recusou o subestado %s: confira se o src/EntraStep.php "
                            "atualizado foi enviado ao GLPI.", substate)
 
-    WAIT_TI_MESSAGE = "Aguardando o T.I. entrar no usuário do Entra ID (tela de login pronta)."
+    WAIT_TI_MESSAGE = ("Ingressado no Entra ID. Na tela de bloqueio, entre manualmente em "
+                       "\"Outro usuário\" com o e-mail e a senha da conta do Entra.")
 
     def _handle_user_signin(self, logger: logging.Logger, api: "lib.WorkspaceApi", step_id: int,
                             entra: dict, state: dict) -> None:
         """
-        Ingressado, mas a conta do Entra ainda nao entrou. Prepara a tela de
-        login (Web sign-in + trocar de usuario) e passa a aguardar o T.I. entrar
-        na conta do Entra pela tela de login. O login em si e feito por uma
-        pessoa; o servico so confirma quando a sessao do Entra aparece.
+        Ingressado, mas a conta do Entra ainda nao entrou. Sem Web sign-in e sem
+        reinicio: vai para a tela de login e aguarda o login MANUAL (e-mail e
+        senha), que deixa a conta salva como usuario da maquina. O servico so
+        confirma quando a sessao do Entra aparece.
         """
-        now = time.time()
-        reboot_at = float(state.get("reboot_at", 0.0))
-
-        # a) Web sign-in (globo na tela de login). So reinicia se ainda nao vale
-        # - normalmente ja vale, porque foi ligado na instalacao do servico.
-        if not reboot_at:
-            logon.enable_web_signin(logger, WEB_SIGNIN_MARKER)
-            if logon.web_signin_active(WEB_SIGNIN_MARKER):
-                state["reboot_at"] = logon.boot_time() - 1  # ja vale; nao reinicia
-                save_json(STATE_PATH, state)
-            else:
-                self._report(logger, api, step_id, REBOOTING, "Reiniciando para ativar o Web sign-in")
-                if logon.request_reboot(logger):
-                    state["reboot_at"] = now
-                save_json(STATE_PATH, state)
-                return
-
-        # b) Reinicio agendado mas ainda nao aconteceu (o boot e anterior a ele).
-        if logon.boot_time() < float(state.get("reboot_at", 0.0)):
-            logger.info("Login: aguardando o reinicio agendado.")
-            if now - float(state.get("reboot_at", 0.0)) > REBOOT_RETRY_SECONDS:
-                logger.warning("Reinicio nao aconteceu; agendando de novo.")
-                state["reboot_at"] = 0.0
-                save_json(STATE_PATH, state)
-            return
-
-        # c) Espera a tela de login carregar apos o boot.
-        if now - logon.boot_time() < LOGON_BOOT_GRACE_SECONDS:
-            logger.info("Login: reiniciado; aguardando a tela de login carregar.")
-            return
-
-        # d) Status amigavel ANTES de trocar de usuario: bloquear a tela pode
+        # a) Status amigavel ANTES de trocar de usuario: bloquear a tela pode
         # derrubar a VPN, entao o painel ja tem que refletir o "aguardando o TI".
         api.result(step_id, WAITING_HUMAN, self.WAIT_TI_MESSAGE, {"azure_ad_joined": True})
 
-        # e) Troca para a tela de login uma unica vez (equivale a "Trocar usuario").
+        # b) Troca para a tela de login uma unica vez (equivale a "Trocar usuario").
         if not state.get("switched_user"):
             logon.disconnect_local_sessions(logger)
             state["switched_user"] = True
