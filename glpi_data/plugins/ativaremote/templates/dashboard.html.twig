@@ -1,220 +1,173 @@
-<div class="row">
-    <div class="col-12">
-        {% if not updater_active %}
-            <div class="alert alert-warning">
-                <i class="ti ti-alert-triangle"></i>
-                O plugin <strong>Ativa Updater</strong> precisa estar ativo: é o serviço dele que instala o RustDesk e registra os computadores.
-            </div>
-        {% endif %}
-        {% if default_password and can_configure %}
-            <div class="alert alert-warning">
-                <i class="ti ti-key"></i>
-                A senha do T.I. para computadores protegidos ainda é a padrão.
-                <a href="{{ urls.config }}">Altere em Configurações</a>.
-            </div>
-        {% endif %}
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h3 class="card-title"><i class="ti ti-device-desktop-share me-2"></i>Computadores com Ativa Remote</h3>
-                {% if can_configure %}
-                    <a href="{{ urls.config }}" class="btn btn-sm btn-outline-secondary"><i class="ti ti-settings"></i> Configurações</a>
-                {% endif %}
-            </div>
-            <div class="card-body">
-                <p class="text-muted mb-3">
-                    Os computadores aparecem aqui depois de instalar o pacote unificado 1.6.8 ou superior (que traz o serviço Ativa Updater 1.7.1 e o RustDesk).
-                    "Solicitar acesso" gera uma senha nova no RustDesk, válida até a sessão ser encerrada (no máximo 4 horas).
-                </p>
-                <div class="table-responsive">
-                    <table class="table table-hover table-striped align-middle">
-                        <thead>
-                            <tr>
-                                <th>Computador</th>
-                                <th>Situação</th>
-                                <th>RustDesk</th>
-                                <th>Último contato</th>
-                                <th>Acesso</th>
-                                <th class="text-end">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        {% for client in clients.rows %}
-                            {% set status = client.remote_access_status %}
-                            <tr>
-                                <td>
-                                    {% if client.computers_id %}
-                                        <a href="{{ urls.computer }}?id={{ client.computers_id }}"><strong>{{ client.hostname }}</strong></a>
-                                    {% else %}
-                                        <strong>{{ client.hostname }}</strong>
-                                    {% endif %}
-                                    {% if client.protected %}
-                                        <span class="badge bg-purple-lt ms-1" title="{{ client.protection_reason }}: sempre pede autorização e exige a senha do T.I.">
-                                            <i class="ti ti-shield-lock"></i> Protegido
-                                        </span>
-                                    {% endif %}
-                                    <div class="small text-muted">Serviço {{ client.client_version ?: '—' }}</div>
-                                    {% if not client.computers_id %}
-                                        <div class="small text-warning" title="O nome do computador não corresponde a um único computador do inventário; a proteção por grupo não se aplica.">
-                                            Sem vínculo com o inventário
-                                        </div>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if client.online %}
-                                        <span class="badge bg-success">Online</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary">Offline</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if client.rustdesk_id %}
-                                        <code>{{ client.rustdesk_id }}</code>
-                                        <div class="small text-muted">{{ client.rustdesk_version ? 'v' ~ client.rustdesk_version : '' }}</div>
-                                    {% else %}
-                                        <span class="text-warning">Não pronto</span>
-                                    {% endif %}
-                                    {% if client.rustdesk_message %}
-                                        <div class="small text-muted">{{ client.rustdesk_message }}</div>
-                                    {% endif %}
-                                </td>
-                                <td>{{ client.last_check ? client.last_check|formatted_datetime : '—' }}</td>
-                                <td>
-                                    {% if status == 'pending' %}
-                                        <span class="badge bg-warning"><i class="ti ti-loader-2"></i> Aguardando</span>
-                                    {% elseif status == 'accepted' %}
-                                        <span class="badge bg-success">Liberado</span>
-                                    {% elseif status == 'closing' %}
-                                        <span class="badge bg-secondary">Encerrando</span>
-                                    {% elseif status == 'rejected' %}
-                                        <span class="badge bg-danger">Recusado</span>
-                                    {% elseif status == 'failed' %}
-                                        <span class="badge bg-danger">Falhou</span>
-                                    {% else %}
-                                        <span class="badge {{ client.require_consent ? 'bg-primary' : 'bg-secondary' }}">
-                                            {{ client.protected ? 'Sempre pede autorização' : (client.require_consent ? 'Pede autorização' : 'Acesso sem autorização') }}
-                                        </span>
-                                    {% endif %}
-                                    {% if client.status_message %}
-                                        <div class="small text-muted">{{ client.status_message }}</div>
-                                    {% endif %}
-                                    {% if status == 'accepted' and client.password %}
-                                        <div class="mt-1 small">
-                                            ID <code>{{ client.rustdesk_id }}</code> · Senha <code>{{ client.password }}</code>
-                                        </div>
-                                    {% endif %}
-                                </td>
-                                <td class="text-end text-nowrap">
-                                    {% if can_manage %}
-                                        {% if client.can_connect and client.protected %}
-                                            <button type="button" class="btn btn-sm btn-success" data-ativa-protected-connect
-                                                    data-id="{{ client.id }}" data-hostname="{{ client.hostname }}" data-verified="{{ client.ti_verified ? '1' : '0' }}"
-                                                    title="{{ client.ti_verified ? 'Senha do T.I. já conferida para esta sessão' : 'Exige a senha do T.I.' }}">
-                                                <i class="ti ti-lock"></i> Conectar
-                                            </button>
-                                        {% elseif client.can_connect and client.connect_url %}
-                                            <a href="{{ client.connect_url }}" class="btn btn-sm btn-success" data-ativa-connect
-                                               data-rustdesk-id="{{ client.rustdesk_id }}" data-password="{{ client.password }}">
-                                                <i class="ti ti-device-desktop"></i> Conectar
-                                            </a>
-                                        {% endif %}
-                                        {% if status in ['pending', 'accepted'] %}
-                                            <form method="post" action="{{ urls.action }}" class="d-inline-block">
-                                                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
-                                                <input type="hidden" name="action" value="close_remote_access">
-                                                <input type="hidden" name="id" value="{{ client.id }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Encerrar e trocar a senha">
-                                                    <i class="ti ti-x"></i> {{ status == 'pending' ? 'Cancelar' : 'Encerrar' }}
-                                                </button>
-                                            </form>
-                                        {% elseif status != 'closing' and client.protected %}
-                                            <button type="button" class="btn btn-sm btn-primary" data-ativa-protected-request
-                                                    data-id="{{ client.id }}" data-hostname="{{ client.hostname }}"
-                                                    {{ client.online and client.rustdesk_id ? '' : 'disabled' }}
-                                                    title="{{ client.online ? (client.rustdesk_id ? 'Exige a senha do T.I.' : 'RustDesk ainda não está pronto') : 'Computador offline' }}">
-                                                <i class="ti ti-lock"></i> Solicitar acesso
-                                            </button>
-                                        {% elseif status != 'closing' %}
-                                            <form method="post" action="{{ urls.action }}" class="d-inline-block">
-                                                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
-                                                <input type="hidden" name="action" value="request_remote_access">
-                                                <input type="hidden" name="id" value="{{ client.id }}">
-                                                <button type="submit" class="btn btn-sm btn-primary"
-                                                        {{ client.online and client.rustdesk_id ? '' : 'disabled' }}
-                                                        title="{{ client.online ? (client.rustdesk_id ? 'Solicitar acesso remoto' : 'RustDesk ainda não está pronto') : 'Computador offline' }}">
-                                                    <i class="ti ti-hand-click"></i> Solicitar acesso
-                                                </button>
-                                            </form>
-                                        {% endif %}
-                                        {% if status is null and client.protected %}
-                                            <span class="btn btn-sm btn-outline-secondary disabled" title="Grupo protegido: a autorização não pode ser desligada">
-                                                <i class="ti ti-lock"></i> Autorização: obrigatória
-                                            </span>
-                                        {% elseif status is null %}
-                                            <form method="post" action="{{ urls.action }}" class="d-inline-block"
-                                                  data-ativa-confirm="{{ client.require_consent ? 'Permitir acesso a este computador sem a autorização do usuário?' : 'Voltar a pedir a autorização do usuário?' }}">
-                                                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
-                                                <input type="hidden" name="action" value="toggle_rustdesk_consent">
-                                                <input type="hidden" name="id" value="{{ client.id }}">
-                                                <input type="hidden" name="require" value="{{ client.require_consent ? '0' : '1' }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Alterar a exigência de autorização">
-                                                    <i class="ti ti-key"></i> Autorização: {{ client.require_consent ? 'ON' : 'OFF' }}
-                                                </button>
-                                            </form>
-                                        {% elseif status in ['rejected', 'failed'] %}
-                                            <form method="post" action="{{ urls.action }}" class="d-inline-block">
-                                                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
-                                                <input type="hidden" name="action" value="close_remote_access">
-                                                <input type="hidden" name="id" value="{{ client.id }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Limpar o resultado">
-                                                    <i class="ti ti-eraser"></i>
-                                                </button>
-                                            </form>
-                                        {% endif %}
-                                    {% else %}
-                                        <small class="text-muted">Somente leitura</small>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% else %}
-                            <tr><td colspan="6" class="text-center text-muted">Nenhum computador registrado ainda.</td></tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="card-footer d-flex justify-content-between align-items-center">
-                <span class="text-muted">{{ clients.total }} computador(es)</span>
-                {% if clients.pages > 1 %}
-                    <div class="btn-group">
-                        {% if clients.page > 1 %}
-                            <a class="btn btn-sm btn-outline-secondary" href="{{ urls.dashboard }}?page={{ clients.page - 1 }}&limit={{ clients.limit }}">Anterior</a>
-                        {% endif %}
-                        <span class="btn btn-sm disabled">{{ clients.page }} / {{ clients.pages }}</span>
-                        {% if clients.page < clients.pages %}
-                            <a class="btn btn-sm btn-outline-secondary" href="{{ urls.dashboard }}?page={{ clients.page + 1 }}&limit={{ clients.limit }}">Próxima</a>
-                        {% endif %}
-                    </div>
-                {% endif %}
-            </div>
+<style>
+.ar-shell{--ar-ink:#142a5b;--ar-muted:#6d7da7;--ar-border:#dfe5f1;--ar-soft:#f5f8fd;--ar-blue:#356fd1;--ar-green:#2fb35a;--ar-red:#dd3f4a;--ar-amber:#f2a516;--ar-purple:#7a4fd6;color:var(--ar-ink);padding:6px 4px 28px}
+.ar-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.ar-brand{display:flex;align-items:center;gap:14px}
+.ar-brand-icon{width:52px;height:52px;border-radius:13px;background:#e1ecff;color:var(--ar-blue);display:grid;place-items:center;font-size:27px}
+.ar-brand h1{font-size:24px;line-height:1.1;margin:0;font-weight:750;letter-spacing:-.3px}
+.ar-brand p{margin:3px 0 0;color:var(--ar-muted);font-size:13px}
+.ar-hero-actions{display:flex;align-items:center;gap:10px}
+.ar-live{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;background:#e8f7ee;color:#1f7a43;font-size:12px;font-weight:650}
+.ar-live i{width:8px;height:8px;border-radius:50%;background:var(--ar-green);box-shadow:0 0 0 0 #2fb35a80;animation:ar-pulse 1.8s infinite}
+.ar-live.is-off{background:#fdecee;color:#a8232d}.ar-live.is-off i{background:var(--ar-red);animation:none}
+@keyframes ar-pulse{0%{box-shadow:0 0 0 0 #2fb35a80}70%{box-shadow:0 0 0 7px #2fb35a00}100%{box-shadow:0 0 0 0 #2fb35a00}}
+.ar-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.ar-kpi{display:flex;align-items:center;gap:13px;padding:13px 14px;background:#fff;border:1px solid var(--ar-border);border-radius:10px;box-shadow:0 2px 7px #20335c0a;cursor:pointer;text-align:left;transition:border-color .15s,box-shadow .15s}
+.ar-kpi:hover{border-color:#b9c7e6}.ar-kpi.is-active{border-color:var(--ar-blue);box-shadow:0 0 0 3px #356fd126}
+.ar-kpi-icon{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;font-size:22px;flex:none}
+.ar-kpi strong{display:block;font-size:22px;line-height:1;font-weight:750}.ar-kpi span{color:var(--ar-muted);font-size:12.5px}
+.ar-kpi-total .ar-kpi-icon{background:#e1ecff;color:var(--ar-blue)}.ar-kpi-online .ar-kpi-icon{background:#e3f6ea;color:var(--ar-green)}
+.ar-kpi-offline .ar-kpi-icon{background:#eef1f6;color:#7b879f}.ar-kpi-session .ar-kpi-icon{background:#fff3dc;color:#c98200}
+.ar-kpi-protected .ar-kpi-icon{background:#efe8fd;color:var(--ar-purple)}
+.ar-card{background:#fff;border:1px solid var(--ar-border);border-radius:10px;box-shadow:0 2px 7px #20335c0a;overflow:hidden}
+.ar-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--ar-border);flex-wrap:wrap}
+.ar-toolbar h2{font-size:17px;font-weight:700;margin:0;display:flex;align-items:center;gap:9px}
+.ar-toolbar h2 small{font-size:12.5px;font-weight:500;color:var(--ar-muted)}
+.ar-search{position:relative;min-width:280px}
+.ar-search i{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--ar-muted);font-size:17px;pointer-events:none}
+.ar-search input{padding-left:36px;border-radius:8px}
+.ar-search button{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:none;color:var(--ar-muted);padding:2px 6px}
+.ar-table{margin:0}.ar-table thead th{background:var(--ar-soft);color:var(--ar-muted);font-size:11px;letter-spacing:.4px;text-transform:uppercase;font-weight:650;border-bottom:1px solid var(--ar-border);padding:10px 14px;white-space:nowrap}
+.ar-table td{padding:12px 14px;vertical-align:middle;border-color:#eef1f7}
+.ar-table tbody tr:hover{background:#fafcff}
+.ar-computer{display:flex;align-items:center;gap:12px;min-width:240px}
+.ar-pc{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;font-size:19px;flex:none;background:#eef1f6;color:#8290aa}
+.ar-pc.is-online{background:#e3f6ea;color:var(--ar-green)}
+.ar-host{font-weight:700;color:var(--ar-ink);text-decoration:none}.ar-host:hover{text-decoration:underline}
+.ar-user{display:flex;align-items:center;gap:5px;font-size:12.5px;color:#3d5078;margin-top:1px}
+.ar-user.is-empty{color:#9aa6bf;font-style:italic}
+.ar-meta{font-size:11.5px;color:var(--ar-muted)}.ar-meta .ar-warn{color:#b86e00}
+.ar-badge-protected{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px;border-radius:999px;background:#efe8fd;color:var(--ar-purple);font-size:11px;font-weight:650;vertical-align:1px}
+.ar-status{display:inline-flex;align-items:center;gap:7px;font-weight:650;font-size:13px}
+.ar-status i{width:9px;height:9px;border-radius:50%;background:#aab4c8}
+.ar-status.is-online{color:#1f7a43}.ar-status.is-online i{background:var(--ar-green);box-shadow:0 0 0 3px #2fb35a26}
+.ar-status.is-offline{color:#7b879f}
+.ar-ago{display:block;font-size:11.5px;color:var(--ar-muted);margin-top:2px}
+.ar-rd{display:inline-flex;align-items:center;gap:4px;font-family:var(--tblr-font-monospace,monospace);font-size:12.5px;background:var(--ar-soft);border:1px solid var(--ar-border);border-radius:6px;padding:2px 4px 2px 8px}
+.ar-copy{border:0;background:none;color:var(--ar-muted);padding:0 4px;line-height:1}.ar-copy:hover{color:var(--ar-blue)}
+.ar-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:650;white-space:nowrap}
+.ar-pill-consent{background:#fff3dc;color:#9a6200}.ar-pill-free{background:#eef1f6;color:#56627c}.ar-pill-protected{background:#efe8fd;color:var(--ar-purple)}
+.ar-pill-pending{background:#e1ecff;color:var(--ar-blue)}.ar-pill-accepted{background:#e3f6ea;color:#1f7a43}
+.ar-pill-closing{background:#eef1f6;color:#56627c}.ar-pill-rejected,.ar-pill-failed{background:#fdecee;color:#a8232d}
+.ar-msg{display:block;font-size:11.5px;color:var(--ar-muted);margin-top:3px;max-width:320px}
+.ar-session{display:flex;align-items:center;gap:6px;margin-top:5px;font-size:12px}
+.ar-actions{display:flex;justify-content:flex-end;align-items:center;gap:6px;flex-wrap:nowrap}
+.ar-actions .btn{white-space:nowrap}
+.ar-icon-btn{width:31px;height:31px;padding:0;display:inline-grid;place-items:center}
+.ar-empty{padding:42px 16px;text-align:center;color:var(--ar-muted)}.ar-empty i{font-size:34px;display:block;margin-bottom:8px;color:#b9c3d8}
+.ar-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px;border-top:1px solid var(--ar-border);color:var(--ar-muted);font-size:12.5px;flex-wrap:wrap}
+.ar-toasts{position:fixed;right:18px;bottom:18px;z-index:12000;display:flex;flex-direction:column;gap:8px}
+.ar-toast{min-width:260px;max-width:420px;padding:11px 14px;border-radius:9px;background:#142a5b;color:#fff;box-shadow:0 10px 30px #07132c40;font-size:13px;display:flex;gap:9px;align-items:flex-start}
+.ar-toast.is-error{background:#a8232d}
+.ar-spin{animation:ar-spin 1s linear infinite;display:inline-block}@keyframes ar-spin{to{transform:rotate(360deg)}}
+@media(max-width:1200px){.ar-kpis{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:700px){.ar-kpis{grid-template-columns:repeat(2,1fr)}.ar-search{min-width:0;width:100%}}
+</style>
+
+<div class="ar-shell" data-ar-root
+     data-clients-url="{{ urls.clients }}" data-action-url="{{ urls.action }}" data-connect-url="{{ urls.connect }}"
+     data-can-manage="{{ can_manage ? '1' : '0' }}">
+    {% if not updater_active %}
+        <div class="alert alert-warning">
+            <i class="ti ti-alert-triangle me-1"></i>
+            O plugin <strong>Ativa Updater</strong> precisa estar ativo: é o serviço dele que instala o RustDesk e registra os computadores.
+        </div>
+    {% endif %}
+    {% if default_password and can_configure %}
+        <div class="alert alert-warning">
+            <i class="ti ti-key me-1"></i>
+            A senha do T.I. para computadores protegidos ainda é a padrão. <a href="{{ urls.config }}">Altere em Configurações</a>.
+        </div>
+    {% endif %}
+
+    <header class="ar-hero">
+        <div class="ar-brand">
+            <span class="ar-brand-icon"><i class="ti ti-device-desktop-share"></i></span>
+            <span>
+                <h1>Ativa Remote</h1>
+                <p>Acesso remoto aos computadores pelo RustDesk</p>
+            </span>
+        </div>
+        <div class="ar-hero-actions">
+            <span class="ar-live" data-ar-live title="A lista é atualizada automaticamente"><i></i><span>Ao vivo</span></span>
+            {% if can_configure %}
+                <a href="{{ urls.config }}" class="btn btn-outline-secondary"><i class="ti ti-settings me-1"></i>Configurações</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <div class="ar-kpis">
+        <button type="button" class="ar-kpi ar-kpi-total is-active" data-ar-filter="all">
+            <span class="ar-kpi-icon"><i class="ti ti-devices"></i></span>
+            <span><strong data-ar-count="total">0</strong><span>Computadores</span></span>
+        </button>
+        <button type="button" class="ar-kpi ar-kpi-online" data-ar-filter="online">
+            <span class="ar-kpi-icon"><i class="ti ti-wifi"></i></span>
+            <span><strong data-ar-count="online">0</strong><span>Online</span></span>
+        </button>
+        <button type="button" class="ar-kpi ar-kpi-offline" data-ar-filter="offline">
+            <span class="ar-kpi-icon"><i class="ti ti-wifi-off"></i></span>
+            <span><strong data-ar-count="offline">0</strong><span>Offline</span></span>
+        </button>
+        <button type="button" class="ar-kpi ar-kpi-session" data-ar-filter="session">
+            <span class="ar-kpi-icon"><i class="ti ti-plug-connected"></i></span>
+            <span><strong data-ar-count="session">0</strong><span>Em sessão</span></span>
+        </button>
+        <button type="button" class="ar-kpi ar-kpi-protected" data-ar-filter="protected">
+            <span class="ar-kpi-icon"><i class="ti ti-shield-lock"></i></span>
+            <span><strong data-ar-count="protected">0</strong><span>Protegidos</span></span>
+        </button>
+    </div>
+
+    <div class="ar-card">
+        <div class="ar-toolbar">
+            <h2><i class="ti ti-device-desktop text-primary"></i>Computadores <small data-ar-showing></small></h2>
+            <label class="ar-search mb-0">
+                <i class="ti ti-search"></i>
+                <input type="search" class="form-control" placeholder="Pesquisar computador, usuário ou ID do RustDesk"
+                       autocomplete="off" data-ar-search aria-label="Pesquisar computadores" />
+                <button type="button" class="d-none" data-ar-search-clear title="Limpar a pesquisa"><i class="ti ti-x" style="position:static;transform:none"></i></button>
+            </label>
+        </div>
+        <div class="table-responsive">
+            <table class="table ar-table">
+                <thead>
+                    <tr>
+                        <th>Computador</th>
+                        <th>Situação</th>
+                        <th>RustDesk</th>
+                        <th>Acesso</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody data-ar-rows></tbody>
+            </table>
+        </div>
+        <div class="ar-empty d-none" data-ar-empty></div>
+        <div class="ar-footer">
+            <span>
+                <i class="ti ti-info-circle me-1"></i>"Solicitar acesso" gera uma senha nova no RustDesk, válida até a sessão ser encerrada (no máximo 4 horas).
+                {% if not wallpaper_active %}O usuário logado aparece quando o Ativa Wallpaper está ativo.{% endif %}
+            </span>
+            <span class="d-flex align-items-center gap-2" data-ar-pager>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ar-page="-1"><i class="ti ti-chevron-left"></i></button>
+                <span data-ar-page-label></span>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-ar-page="1"><i class="ti ti-chevron-right"></i></button>
+            </span>
         </div>
     </div>
 </div>
-<form method="post" action="{{ urls.action }}" class="d-none" data-ti-request-form>
-    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="action" value="request_remote_access">
-    <input type="hidden" name="id" value="">
-    <input type="hidden" name="ti_password" value="">
-</form>
+
+<div class="ar-toasts" data-ar-toasts></div>
+
 <div class="modal fade" id="ativa-remote-ti-password" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-sm">
-        <form class="modal-content" data-ti-password-form data-endpoint="{{ urls.connect }}" autocomplete="off">
+        <form class="modal-content" data-ti-password-form autocomplete="off">
             <div class="modal-header">
                 <h5 class="modal-title"><i class="ti ti-shield-lock me-2"></i>Computador protegido</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
             </div>
             <div class="modal-body">
                 <p class="mb-2">Informe a senha do T.I. para <span data-ti-purpose>conectar em</span> <strong data-ti-hostname></strong>.</p>
-                <input type="hidden" name="id" data-ti-id>
                 <input class="form-control" type="password" name="ti_password" required autocomplete="off"
                        placeholder="Senha do T.I." data-ti-password>
                 <div class="text-danger small mt-2 d-none" data-ti-error></div>
@@ -226,6 +179,7 @@
         </form>
     </div>
 </div>
+
 <div class="modal fade" id="ativa-remote-connect" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -256,160 +210,470 @@
         </div>
     </div>
 </div>
+
+<script type="application/json" data-ar-initial>{{ initial|json_encode|raw }}</script>
 <script>
-    (() => {
-        // Faster while waiting for a computer; otherwise refresh the online status every 30 s.
-        // A reload closes the browser's "Open RustDesk?" prompt, so it waits while a connection is being opened.
-        let pausedUntil = 0;
-        const reload = () => {
-            if (Date.now() < pausedUntil || document.querySelector('#ativa-remote-connect.show, #ativa-remote-ti-password.show')) {
-                setTimeout(reload, 5000);
-            } else if (document.visibilityState === 'visible') {
-                window.location.reload();
+(() => {
+    const root = document.querySelector('[data-ar-root]');
+    if (!root) {
+        return;
+    }
+    const canManage = root.dataset.canManage === '1';
+    const PER_PAGE = 50;
+    const FAST_MS = 2000;   // aba visivel: consulta a cada 2 s
+    const SLOW_MS = 15000;  // aba em segundo plano
+    const state = { data: null, filter: 'all', search: '', page: 1, offset: 0, busy: new Set() };
+
+    const rowsEl = root.querySelector('[data-ar-rows]');
+    const emptyEl = root.querySelector('[data-ar-empty]');
+    const liveEl = root.querySelector('[data-ar-live]');
+    const searchEl = root.querySelector('[data-ar-search]');
+    const clearEl = root.querySelector('[data-ar-search-clear]');
+    const csrf = () => document.querySelector('meta[property="glpi:csrf_token"]')?.getAttribute('content') || '';
+
+    // ---------------------------------------------------------------- utilitarios
+    const el = (tag, className, text) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+    };
+    const icon = (name) => el('i', 'ti ' + name);
+    const normalize = (text) => String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const nowSec = () => Date.now() / 1000 + state.offset;
+    const ago = (ts) => {
+        if (!ts) return 'Nunca';
+        const diff = Math.max(0, Math.round(nowSec() - ts));
+        if (diff < 45) return 'agora';
+        if (diff < 3600) return 'há ' + Math.round(diff / 60) + ' min';
+        if (diff < 86400) return 'há ' + Math.round(diff / 3600) + ' h';
+        return 'há ' + Math.round(diff / 86400) + ' d';
+    };
+    const toast = (message, isError = false) => {
+        const box = el('div', 'ar-toast' + (isError ? ' is-error' : ''));
+        box.append(icon(isError ? 'ti-alert-circle' : 'ti-circle-check'), el('span', '', message));
+        root.ownerDocument.querySelector('[data-ar-toasts]').append(box);
+        setTimeout(() => box.remove(), 4500);
+    };
+    const copyButton = (value, title) => {
+        const button = el('button', 'ar-copy');
+        button.type = 'button';
+        button.title = title;
+        button.append(icon('ti-copy'));
+        button.addEventListener('click', () => {
+            const done = () => { button.replaceChildren(icon('ti-check')); setTimeout(() => button.replaceChildren(icon('ti-copy')), 1500); };
+            (navigator.clipboard ? navigator.clipboard.writeText(value) : Promise.reject()).then(done, done);
+        });
+        return button;
+    };
+
+    // ---------------------------------------------------------------- filtros
+    const matches = (client) => {
+        if (state.filter === 'online' && !client.online) return false;
+        if (state.filter === 'offline' && client.online) return false;
+        if (state.filter === 'session' && !['pending', 'accepted'].includes(client.status)) return false;
+        if (state.filter === 'protected' && !client.protected) return false;
+        if (!state.search) return true;
+        return normalize([client.hostname, client.username, client.rustdesk_id].join(' ')).includes(state.search);
+    };
+
+    // ---------------------------------------------------------------- linhas
+    const accessPill = (client) => {
+        const map = {
+            pending: ['ar-pill-pending', 'ti-loader-2 ar-spin', 'Aguardando'],
+            accepted: ['ar-pill-accepted', 'ti-lock-open', 'Liberado'],
+            closing: ['ar-pill-closing', 'ti-loader-2 ar-spin', 'Encerrando'],
+            rejected: ['ar-pill-rejected', 'ti-hand-stop', 'Recusado'],
+            failed: ['ar-pill-failed', 'ti-alert-triangle', 'Falhou'],
+        };
+        let spec = map[client.status];
+        if (!spec) {
+            spec = client.protected
+                ? ['ar-pill-protected', 'ti-shield-lock', 'Sempre pede autorização']
+                : client.require_consent
+                    ? ['ar-pill-consent', 'ti-user-check', 'Pede autorização']
+                    : ['ar-pill-free', 'ti-bolt', 'Sem autorização'];
+        }
+        const pill = el('span', 'ar-pill ' + spec[0]);
+        pill.append(icon(spec[1]), document.createTextNode(spec[2]));
+        return pill;
+    };
+
+    const actionButton = (className, iconName, label, handler, options = {}) => {
+        const button = el('button', 'btn btn-sm ' + className);
+        button.type = 'button';
+        button.append(icon(iconName + (label ? ' me-1' : '')));
+        if (label) button.append(document.createTextNode(label));
+        if (options.title) button.title = options.title;
+        if (options.disabled) button.disabled = true;
+        if (handler) button.addEventListener('click', () => handler(button));
+        return button;
+    };
+
+    const buildActions = (client) => {
+        const box = el('div', 'ar-actions');
+        if (!canManage) {
+            box.append(el('small', 'text-muted', 'Somente leitura'));
+            return box;
+        }
+        const busy = state.busy.has(client.id);
+        const status = client.status;
+        if (client.can_connect) {
+            box.append(actionButton('btn-success', client.protected ? 'ti-lock' : 'ti-device-desktop', 'Conectar',
+                () => connect(client), { disabled: busy }));
+        }
+        if (status === 'pending' || status === 'accepted') {
+            box.append(actionButton('btn-outline-danger', 'ti-x', status === 'pending' ? 'Cancelar' : 'Encerrar',
+                () => runAction('close_remote_access', client), { disabled: busy, title: 'Encerrar e trocar a senha' }));
+        } else if (status !== 'closing') {
+            const ready = client.online && client.rustdesk_id;
+            const reason = !client.online ? 'Computador offline' : (!client.rustdesk_id ? 'RustDesk ainda não está pronto' : 'Solicitar acesso remoto');
+            box.append(actionButton('btn-primary', client.protected ? 'ti-lock' : 'ti-hand-click', 'Solicitar acesso',
+                () => client.protected ? askPassword(client, 'request') : runAction('request_remote_access', client),
+                { disabled: busy || !ready, title: client.protected && ready ? 'Exige a senha do T.I.' : reason }));
+        }
+        if (status === 'rejected' || status === 'failed') {
+            box.append(actionButton('btn-outline-secondary ar-icon-btn', 'ti-eraser', '',
+                () => runAction('close_remote_access', client), { title: 'Limpar o resultado', disabled: busy }));
+        } else if (!status) {
+            if (client.protected) {
+                box.append(actionButton('btn-outline-secondary ar-icon-btn', 'ti-lock', '', null,
+                    { disabled: true, title: 'Grupo protegido: a autorização do usuário é obrigatória' }));
             } else {
-                document.addEventListener('visibilitychange', reload, { once: true });
-            }
-        };
-        setTimeout(reload, {{ waiting ? 5000 : 30000 }});
-
-        const dialog = document.getElementById('ativa-remote-connect');
-        const openRustdesk = (url) => {
-            pausedUntil = Date.now() + 60000;
-            window.location.href = url;
-        };
-        const showConnection = (rustdeskId, password, url) => {
-            dialog.querySelector('[data-connect-field="id"]').value = rustdeskId;
-            dialog.querySelector('[data-connect-field="password"]').value = password;
-            dialog.querySelector('[data-connect-retry]').setAttribute('href', url);
-            bootstrap.Modal.getOrCreateInstance(dialog).show();
-            openRustdesk(url);
-        };
-        // The session password of a protected computer must not stay in the page.
-        dialog.addEventListener('hidden.bs.modal', () => {
-            dialog.querySelectorAll('[data-connect-field]').forEach((input) => { input.value = ''; });
-            dialog.querySelector('[data-connect-retry]').setAttribute('href', '#');
-        });
-        document.querySelectorAll('[data-ativa-connect]').forEach((link) => {
-            link.addEventListener('click', (event) => {
-                event.preventDefault();
-                showConnection(link.dataset.rustdeskId, link.dataset.password, link.getAttribute('href'));
-            });
-        });
-
-        const tiDialog = document.getElementById('ativa-remote-ti-password');
-        const tiForm = tiDialog.querySelector('[data-ti-password-form]');
-        const tiError = tiDialog.querySelector('[data-ti-error]');
-        const tiSubmit = tiDialog.querySelector('[data-ti-submit]');
-        const tiPassword = tiDialog.querySelector('[data-ti-password]');
-        const requestForm = document.querySelector('[data-ti-request-form]');
-        const askPassword = (button, mode, message = '') => {
-            tiForm.dataset.mode = mode;
-            tiDialog.querySelector('[data-ti-id]').value = button.dataset.id;
-            tiDialog.querySelector('[data-ti-hostname]').textContent = button.dataset.hostname;
-            tiDialog.querySelector('[data-ti-purpose]').textContent = mode === 'request' ? 'solicitar acesso a' : 'conectar em';
-            tiPassword.value = '';
-            tiError.textContent = message;
-            tiError.classList.toggle('d-none', message === '');
-            bootstrap.Modal.getOrCreateInstance(tiDialog).show();
-        };
-        document.querySelectorAll('[data-ativa-protected-request]').forEach((button) => {
-            button.addEventListener('click', () => askPassword(button, 'request'));
-        });
-        const connectProtected = async (id, password) => {
-            const body = new FormData();
-            body.append('id', id);
-            body.append('ti_password', password);
-            const response = await fetch(tiForm.dataset.endpoint, {
-                method: 'POST',
-                body,
-                credentials: 'same-origin',
-                headers: {
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-Glpi-Csrf-Token': document.querySelector('meta[property="glpi:csrf_token"]')?.getAttribute('content') || '',
-                },
-            });
-            return response.json().catch(() => ({ ok: false, message: `Erro ${response.status} ao liberar a conexão.` }));
-        };
-        document.querySelectorAll('[data-ativa-protected-connect]').forEach((button) => {
-            button.addEventListener('click', async () => {
-                if (button.dataset.verified !== '1') {
-                    askPassword(button, 'connect');
-                    return;
-                }
-                button.disabled = true;
-                try {
-                    const result = await connectProtected(button.dataset.id, '');
-                    if (result.ok) {
-                        showConnection(result.rustdesk_id, result.password, result.connect_url);
-                    } else {
-                        askPassword(button, 'connect', result.password_required ? '' : (result.message || ''));
+                const on = client.require_consent;
+                box.append(actionButton('btn-outline-secondary ar-icon-btn', on ? 'ti-user-check' : 'ti-bolt', '', () => {
+                    const question = on ? 'Permitir acesso a este computador sem a autorização do usuário?' : 'Voltar a pedir a autorização do usuário?';
+                    if (window.confirm(question)) {
+                        runAction('toggle_rustdesk_consent', client, { require: on ? '0' : '1' });
                     }
-                } catch (error) {
-                    askPassword(button, 'connect', 'Falha de comunicação com o GLPI. Tente novamente.');
-                } finally {
-                    button.disabled = false;
-                }
+                }, { disabled: busy, title: 'Autorização do usuário: ' + (on ? 'ligada (clique para desligar)' : 'desligada (clique para ligar)') }));
+            }
+        }
+        return box;
+    };
+
+    const buildRow = (client) => {
+        const tr = el('tr');
+
+        // Computador + usuario logado + versao do servico
+        const tdPc = el('td');
+        const pc = el('div', 'ar-computer');
+        const pcIcon = el('span', 'ar-pc' + (client.online ? ' is-online' : ''));
+        pcIcon.append(icon('ti-device-desktop'));
+        const info = el('div');
+        const nameLine = el('div');
+        const host = client.computer_url ? el('a', 'ar-host', client.hostname) : el('span', 'ar-host', client.hostname);
+        if (client.computer_url) host.href = client.computer_url;
+        nameLine.append(host);
+        if (client.protected) {
+            const badge = el('span', 'ar-badge-protected');
+            badge.title = (client.protection_reason || 'Protegido') + ': sempre pede autorização e exige a senha do T.I.';
+            badge.append(icon('ti-shield-lock'), document.createTextNode('Protegido'));
+            nameLine.append(badge);
+        }
+        const user = el('div', 'ar-user' + (client.username ? '' : ' is-empty'));
+        user.title = 'Usuário logado (informado pelo Ativa Wallpaper)';
+        user.append(icon('ti-user'), document.createTextNode(client.username || 'Usuário não informado'));
+        const meta = el('div', 'ar-meta', 'Serviço ' + (client.client_version || '—'));
+        if (!client.linked) {
+            const warn = el('span', 'ar-warn', ' · Sem vínculo com o inventário');
+            warn.title = 'O nome não corresponde a um único computador do inventário; a proteção por grupo não se aplica.';
+            meta.append(warn);
+        }
+        info.append(nameLine, user, meta);
+        pc.append(pcIcon, info);
+        tdPc.append(pc);
+
+        // Situacao
+        const tdStatus = el('td');
+        const status = el('span', 'ar-status ' + (client.online ? 'is-online' : 'is-offline'));
+        status.append(el('i'), document.createTextNode(client.online ? 'Online' : 'Offline'));
+        const seen = el('span', 'ar-ago', ago(client.last_check_ts));
+        seen.dataset.arAgo = client.last_check_ts || 0;
+        seen.title = client.last_check_label ? 'Último contato: ' + client.last_check_label : 'Sem contato';
+        tdStatus.append(status, seen);
+
+        // RustDesk
+        const tdRd = el('td');
+        if (client.rustdesk_id) {
+            const rd = el('span', 'ar-rd', client.rustdesk_id);
+            rd.append(copyButton(client.rustdesk_id, 'Copiar o ID'));
+            tdRd.append(rd, el('span', 'ar-ago', client.rustdesk_version ? 'v' + client.rustdesk_version : ''));
+        } else {
+            tdRd.append(el('span', 'text-warning small fw-semibold', 'Não pronto'));
+        }
+        if (client.rustdesk_message) tdRd.append(el('span', 'ar-msg', client.rustdesk_message));
+
+        // Acesso
+        const tdAccess = el('td');
+        tdAccess.append(accessPill(client));
+        if (client.status_message) tdAccess.append(el('span', 'ar-msg', client.status_message));
+        if (client.status === 'accepted' && client.password) {
+            const session = el('div', 'ar-session');
+            const code = el('span', 'ar-rd', client.password);
+            code.append(copyButton(client.password, 'Copiar a senha'));
+            session.append(el('span', 'text-muted', 'Senha'), code);
+            tdAccess.append(session);
+        }
+
+        const tdActions = el('td', 'text-end');
+        tdActions.append(buildActions(client));
+
+        tr.append(tdPc, tdStatus, tdRd, tdAccess, tdActions);
+        return tr;
+    };
+
+    // ---------------------------------------------------------------- render
+    const render = () => {
+        const data = state.data;
+        if (!data) return;
+        Object.entries(data.counts).forEach(([key, value]) => {
+            const node = root.querySelector(`[data-ar-count="${key}"]`);
+            if (node) node.textContent = value;
+        });
+        root.querySelectorAll('[data-ar-filter]').forEach((button) => {
+            button.classList.toggle('is-active', button.dataset.arFilter === state.filter);
+        });
+
+        const list = data.clients.filter(matches);
+        const pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
+        state.page = Math.min(state.page, pages);
+        const start = (state.page - 1) * PER_PAGE;
+        rowsEl.replaceChildren(...list.slice(start, start + PER_PAGE).map(buildRow));
+
+        root.querySelector('[data-ar-showing]').textContent = list.length === data.clients.length
+            ? `(${data.clients.length})` : `(${list.length} de ${data.clients.length})`;
+        root.querySelector('[data-ar-pager]').classList.toggle('d-none', pages <= 1);
+        root.querySelector('[data-ar-page-label]').textContent = `${state.page} / ${pages}`;
+        root.querySelector('[data-ar-page="-1"]').disabled = state.page <= 1;
+        root.querySelector('[data-ar-page="1"]').disabled = state.page >= pages;
+
+        emptyEl.classList.toggle('d-none', list.length > 0);
+        if (list.length === 0) {
+            emptyEl.replaceChildren(icon(data.clients.length ? 'ti-search-off' : 'ti-device-desktop-off'),
+                document.createTextNode(data.clients.length
+                    ? 'Nenhum computador encontrado para esta pesquisa ou filtro.'
+                    : 'Nenhum computador registrado ainda. Eles aparecem depois de instalar o pacote unificado com o Ativa Updater.'));
+        }
+    };
+
+    const refreshAgo = () => {
+        rowsEl.querySelectorAll('[data-ar-ago]').forEach((node) => { node.textContent = ago(Number(node.dataset.arAgo)); });
+    };
+
+    const apply = (payload) => {
+        state.offset = payload.now - Date.now() / 1000;
+        if (payload.unchanged) {
+            refreshAgo();
+            return;
+        }
+        state.data = payload;
+        render();
+    };
+
+    // ---------------------------------------------------------------- ao vivo
+    let timer = 0;
+    let inFlight = false;
+    const setLive = (ok) => {
+        liveEl.classList.toggle('is-off', !ok);
+        liveEl.querySelector('span').textContent = ok ? 'Ao vivo' : 'Reconectando…';
+    };
+    const refresh = async () => {
+        clearTimeout(timer);
+        if (!inFlight) {
+            inFlight = true;
+            try {
+                const url = root.dataset.clientsUrl + '?signature=' + encodeURIComponent(state.data?.signature || '');
+                const response = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' }, cache: 'no-store' });
+                if (!response.ok) throw new Error(String(response.status));
+                apply(await response.json());
+                setLive(true);
+            } catch (error) {
+                setLive(false);
+            } finally {
+                inFlight = false;
+            }
+        }
+        timer = setTimeout(refresh, document.visibilityState === 'visible' ? FAST_MS : SLOW_MS);
+    };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
+
+    // ---------------------------------------------------------------- acoes
+    const post = async (url, fields) => {
+        const body = new FormData();
+        Object.entries(fields).forEach(([key, value]) => body.append(key, value));
+        const response = await fetch(url, {
+            method: 'POST', body, credentials: 'same-origin',
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrf() },
+        });
+        return response.json().catch(() => ({ ok: false, message: `Erro ${response.status} na comunicação com o GLPI.` }));
+    };
+
+    const runAction = async (action, client, extra = {}) => {
+        state.busy.add(client.id);
+        render();
+        try {
+            const result = await post(root.dataset.actionUrl, { action, id: client.id, ...extra });
+            toast(result.message || (result.ok ? 'Feito.' : 'Não foi possível concluir a ação.'), !result.ok);
+            return result;
+        } catch (error) {
+            toast('Falha de comunicação com o GLPI. Tente novamente.', true);
+            return { ok: false };
+        } finally {
+            state.busy.delete(client.id);
+            if (state.data) state.data.signature = '';  // forca redesenho com o estado novo
+            refresh();
+        }
+    };
+
+    // Conexao (RustDesk) -------------------------------------------------------
+    const dialog = document.getElementById('ativa-remote-connect');
+    const showConnection = (rustdeskId, password, url) => {
+        dialog.querySelector('[data-connect-field="id"]').value = rustdeskId;
+        dialog.querySelector('[data-connect-field="password"]').value = password;
+        dialog.querySelector('[data-connect-retry]').setAttribute('href', url);
+        bootstrap.Modal.getOrCreateInstance(dialog).show();
+        window.location.href = url;
+    };
+    // A senha da sessao nao fica na pagina depois de fechar.
+    dialog.addEventListener('hidden.bs.modal', () => {
+        dialog.querySelectorAll('[data-connect-field]').forEach((input) => { input.value = ''; });
+        dialog.querySelector('[data-connect-retry]').setAttribute('href', '#');
+    });
+    dialog.querySelector('[data-connect-retry]').addEventListener('click', (event) => {
+        event.preventDefault();
+        window.location.href = event.currentTarget.getAttribute('href');
+    });
+    dialog.querySelectorAll('[data-copy-field]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const input = dialog.querySelector(`[data-connect-field="${button.dataset.copyField}"]`);
+            const done = () => {
+                button.innerHTML = '<i class="ti ti-check"></i> Copiado';
+                setTimeout(() => { button.innerHTML = '<i class="ti ti-copy"></i> Copiar'; }, 2000);
+            };
+            (navigator.clipboard ? navigator.clipboard.writeText(input.value) : Promise.reject()).then(done, () => {
+                input.select();
+                document.execCommand('copy');
+                done();
             });
         });
-        tiDialog.addEventListener('shown.bs.modal', () => tiPassword.focus());
-        tiDialog.addEventListener('hidden.bs.modal', () => { tiPassword.value = ''; });
-        tiForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
+    });
+
+    const connectProtected = (id, password) => post(root.dataset.connectUrl, { id, ti_password: password });
+
+    const connect = async (client) => {
+        if (!client.protected) {
+            showConnection(client.rustdesk_id, client.password, client.connect_url);
+            return;
+        }
+        if (!client.ti_verified) {
+            askPassword(client, 'connect');
+            return;
+        }
+        const result = await connectProtected(client.id, '').catch(() => ({ ok: false, message: 'Falha de comunicação com o GLPI.' }));
+        if (result.ok) {
+            showConnection(result.rustdesk_id, result.password, result.connect_url);
+        } else {
+            askPassword(client, 'connect', result.password_required ? '' : (result.message || ''));
+        }
+    };
+
+    // Senha do T.I. (computadores protegidos) ------------------------------
+    const tiDialog = document.getElementById('ativa-remote-ti-password');
+    const tiForm = tiDialog.querySelector('[data-ti-password-form]');
+    const tiError = tiDialog.querySelector('[data-ti-error]');
+    const tiSubmit = tiDialog.querySelector('[data-ti-submit]');
+    const tiPassword = tiDialog.querySelector('[data-ti-password]');
+    let tiClient = null;
+    const showTiError = (message) => {
+        tiError.textContent = message;
+        tiError.classList.toggle('d-none', message === '');
+    };
+    const askPassword = (client, mode, message = '') => {
+        tiClient = client;
+        tiForm.dataset.mode = mode;
+        tiDialog.querySelector('[data-ti-hostname]').textContent = client.hostname;
+        tiDialog.querySelector('[data-ti-purpose]').textContent = mode === 'request' ? 'solicitar acesso a' : 'conectar em';
+        tiPassword.value = '';
+        showTiError(message);
+        bootstrap.Modal.getOrCreateInstance(tiDialog).show();
+    };
+    tiDialog.addEventListener('shown.bs.modal', () => tiPassword.focus());
+    tiDialog.addEventListener('hidden.bs.modal', () => { tiPassword.value = ''; tiClient = null; });
+    tiForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!tiClient) return;
+        tiSubmit.disabled = true;
+        showTiError('');
+        try {
             if (tiForm.dataset.mode === 'request') {
-                // Regular POST: the page reloads with the result of the request.
-                requestForm.querySelector('[name="id"]').value = tiDialog.querySelector('[data-ti-id]').value;
-                requestForm.querySelector('[name="ti_password"]').value = tiPassword.value;
-                tiSubmit.disabled = true;
-                requestForm.submit();
-                return;
-            }
-            tiSubmit.disabled = true;
-            tiError.classList.add('d-none');
-            try {
-                const result = await connectProtected(tiDialog.querySelector('[data-ti-id]').value, tiPassword.value);
+                const result = await post(root.dataset.actionUrl, { action: 'request_remote_access', id: tiClient.id, ti_password: tiPassword.value });
                 if (!result.ok) {
-                    tiError.textContent = result.message || 'Não foi possível liberar a conexão.';
-                    tiError.classList.remove('d-none');
+                    showTiError(result.message || 'Não foi possível solicitar o acesso.');
                     tiPassword.focus();
                     return;
                 }
                 bootstrap.Modal.getOrCreateInstance(tiDialog).hide();
-                showConnection(result.rustdesk_id, result.password, result.connect_url);
-            } catch (error) {
-                tiError.textContent = 'Falha de comunicação com o GLPI. Tente novamente.';
-                tiError.classList.remove('d-none');
-            } finally {
-                tiSubmit.disabled = false;
-                tiPassword.value = '';
+                toast(result.message || 'Acesso solicitado.');
+                if (state.data) state.data.signature = '';
+                refresh();
+                return;
             }
+            const result = await connectProtected(tiClient.id, tiPassword.value);
+            if (!result.ok) {
+                showTiError(result.message || 'Não foi possível liberar a conexão.');
+                tiPassword.focus();
+                return;
+            }
+            bootstrap.Modal.getOrCreateInstance(tiDialog).hide();
+            showConnection(result.rustdesk_id, result.password, result.connect_url);
+        } catch (error) {
+            showTiError('Falha de comunicação com o GLPI. Tente novamente.');
+        } finally {
+            tiSubmit.disabled = false;
+            tiPassword.value = '';
+        }
+    });
+
+    // ---------------------------------------------------------------- busca/filtros
+    let searchTimer = 0;
+    searchEl.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        clearEl.classList.toggle('d-none', searchEl.value === '');
+        searchTimer = setTimeout(() => {
+            state.search = normalize(searchEl.value.trim());
+            state.page = 1;
+            render();
+        }, 120);
+    });
+    clearEl.addEventListener('click', () => {
+        searchEl.value = '';
+        clearEl.classList.add('d-none');
+        state.search = '';
+        state.page = 1;
+        render();
+        searchEl.focus();
+    });
+    root.querySelectorAll('[data-ar-filter]').forEach((button) => {
+        button.addEventListener('click', () => {
+            state.filter = state.filter === button.dataset.arFilter ? 'all' : button.dataset.arFilter;
+            state.page = 1;
+            render();
         });
-        dialog.querySelector('[data-connect-retry]').addEventListener('click', (event) => {
-            event.preventDefault();
-            openRustdesk(event.currentTarget.getAttribute('href'));
+    });
+    root.querySelectorAll('[data-ar-page]').forEach((button) => {
+        button.addEventListener('click', () => {
+            state.page += Number(button.dataset.arPage);
+            render();
         });
-        dialog.querySelectorAll('[data-copy-field]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const input = dialog.querySelector(`[data-connect-field="${button.dataset.copyField}"]`);
-                input.select();
-                const done = () => {
-                    button.innerHTML = '<i class="ti ti-check"></i> Copiado';
-                    setTimeout(() => { button.innerHTML = '<i class="ti ti-copy"></i> Copiar'; }, 2000);
-                };
-                if (navigator.clipboard) {
-                    navigator.clipboard.writeText(input.value).then(done, () => { document.execCommand('copy'); done(); });
-                } else {
-                    document.execCommand('copy');
-                    done();
-                }
-            });
-        });
-        document.querySelectorAll('form[data-ativa-confirm]').forEach((form) => {
-            form.addEventListener('submit', (event) => {
-                if (!window.confirm(form.dataset.ativaConfirm)) {
-                    event.preventDefault();
-                }
-            });
-        });
-    })();
+    });
+
+    // ---------------------------------------------------------------- inicio
+    try {
+        apply(JSON.parse(document.querySelector('[data-ar-initial]').textContent));
+    } catch (error) {
+        state.data = null;
+    }
+    timer = setTimeout(refresh, FAST_MS);
+})();
 </script>

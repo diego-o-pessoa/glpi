@@ -45,7 +45,7 @@ import ativa_workspace_uninstall as uninstall
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.8.11"
+WORKSPACE_AGENT_VERSION = "1.8.12"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -66,6 +66,7 @@ WEB_SIGNIN_MARKER = PRODUCT_DIR / "websignin.json"  # legado: Web sign-in ligado
 SOFTWARE_STATE_PATH = PRODUCT_DIR / "software-install.lock"  # instalacao em andamento
 CONFIGURATION_STATE_PATH = PRODUCT_DIR / "configuration-state.json"
 OPENVPN_STATE_PATH = PRODUCT_DIR / "openvpn-state.json"
+PENDING_RESULT_PATH = PRODUCT_DIR / "pending-result.json"  # resultado que nao chegou ao servidor (troca de VPN)
 OPENVPN_CONNECT_TIMEOUT = 3 * 60  # tempo para a VPN conectar depois de mandar o GUI
 SOFTWARE_LOCK_SECONDS = 4 * 60 * 60  # nao reentra na instalacao dentro disto
 INVENTORY_MARKER = PRODUCT_DIR / "inventory.stamp"  # ultimo envio de inventario
@@ -412,6 +413,15 @@ class WorkspaceRuntime:
 
         api = lib.WorkspaceApi(config["api_url"], config["api_token"], guid)
 
+        # Troca de VPN em andamento: confere a conexao pelo log local, sem
+        # depender do servidor (que so e alcancado pela VPN). Depois tenta
+        # entregar um resultado que ficou guardado sem conexao.
+        try:
+            self._watch_openvpn(logger, api)
+            self._flush_pending_result(logger, api)
+        except Exception:  # noqa: BLE001
+            logger.exception("Falha ao acompanhar a VPN.")
+
         # Inventario (programas, discos, memoria, processos) no seu intervalo.
         try:
             self._maybe_report_inventory(logger, api)
@@ -661,20 +671,8 @@ class WorkspaceRuntime:
         session_id = sessions[0]
         user_sid = logon.session_user_sid(session_id)
 
-        # Ja mandou conectar: acompanha pelo log do OpenVPN.
+        # Ja mandou conectar: quem acompanha e o _watch_openvpn (no inicio do tick).
         if state.get("connect_at"):
-            name = str(state.get("profile_name", ""))
-            status, detail = openvpn.connection_status(user_sid, name, float(state["connect_at"]))
-            logger.info("OpenVPN: %s (%s).", status, detail)
-            if status == "connected":
-                api.result(step_id, SUCCESS, f"VPN conectada ({name}).")
-                OPENVPN_STATE_PATH.unlink(missing_ok=True)
-            elif status == "auth_failed":
-                fail("O servidor da VPN recusou o usuario ou a senha informados no provisionamento.")
-            elif status == "error":
-                fail(f"O OpenVPN nao conectou: {detail}")
-            elif time.time() - float(state["connect_at"]) > OPENVPN_CONNECT_TIMEOUT:
-                fail("A VPN nao conectou em 3 minutos. Confira o perfil e o acesso ao servidor da VPN.")
             return
 
         # 1) OpenVPN instalado?
@@ -720,18 +718,87 @@ class WorkspaceRuntime:
             fail(message)
             return
 
-        # 4) Conecta pelo OpenVPN GUI na sessao do usuario (icone da bandeja).
-        api.progress(step_id, "CONNECTING_VPN", "Conectando a VPN pelo OpenVPN GUI")
+        # 4) So uma VPN por vez: anota a atual (ex.: a do T.I., por onde o
+        # servico fala com o servidor), desconecta e conecta a do funcionario.
+        # Se a nova falhar, _watch_openvpn reconecta a anterior.
         name = ovpn.stem
+        previous = [p for p in openvpn.connected_profiles(user_sid) if p.lower() != name.lower()]
+        api.progress(step_id, "CONNECTING_VPN",
+                     "Trocando a VPN: " + (", ".join(previous) or "nenhuma") + " -> " + name)
+        state.update({"profile_name": name, "previous": previous,
+                      "session_id": session_id, "user_sid": user_sid})
         names = logon.session_process_names(session_id) or set()
-        for arguments in openvpn.connect_arguments(name, "openvpn-gui.exe" in names):
+        gui_running = "openvpn-gui.exe" in names
+        if gui_running:
+            launch_in_session(session_id, openvpn.DISCONNECT_ALL, logger, elevated=False, executable=openvpn.GUI_EXE)
+            time.sleep(5)
+        for arguments in openvpn.connect_arguments(name, gui_running):
             if not launch_in_session(session_id, arguments, logger, elevated=False, executable=openvpn.GUI_EXE):
                 fail("Nao foi possivel abrir o OpenVPN GUI na sessao do usuario.")
                 return
             time.sleep(3)
-        state.update({"connect_at": time.time(), "profile_name": name})
+        state["connect_at"] = time.time()
         save_json(OPENVPN_STATE_PATH, state)
-        logger.info("OpenVPN: conexao solicitada para o perfil %s.", name)
+        logger.info("OpenVPN: conexao solicitada para o perfil %s (anterior: %s).", name, previous or "-")
+
+    def _watch_openvpn(self, logger: logging.Logger, api: "lib.WorkspaceApi") -> None:
+        """Acompanha a VPN do funcionario pelo log local; em falha, volta a anterior."""
+        state = load_json(OPENVPN_STATE_PATH)
+        if not state.get("connect_at"):
+            return
+        step_id = int(state.get("step_id", 0) or 0)
+        name = str(state.get("profile_name", ""))
+        user_sid = str(state.get("user_sid", ""))
+        status, detail = openvpn.connection_status(user_sid, name, float(state["connect_at"]))
+        logger.info("OpenVPN: %s (%s).", status, detail)
+        if status == "connected":
+            OPENVPN_STATE_PATH.unlink(missing_ok=True)
+            self._deliver_result(logger, api, step_id, SUCCESS, f"VPN conectada ({name}).")
+            return
+        if status == "auth_failed":
+            reason = "O servidor da VPN recusou o usuario ou a senha informados no provisionamento."
+        elif status == "error":
+            reason = f"O OpenVPN nao conectou: {detail}"
+        elif time.time() - float(state["connect_at"]) > OPENVPN_CONNECT_TIMEOUT:
+            reason = "A VPN nao conectou em 3 minutos. Confira o perfil e o acesso ao servidor da VPN."
+        else:
+            return
+
+        # Falhou: derruba a tentativa e reconecta a VPN anterior, para o servico
+        # voltar a falar com o servidor e reportar o erro.
+        OPENVPN_STATE_PATH.unlink(missing_ok=True)
+        sessions = user_sessions()
+        previous = [str(p) for p in state.get("previous", []) if str(p)]
+        if sessions:
+            session_id = sessions[0]
+            launch_in_session(session_id, openvpn.DISCONNECT_ALL, logger, elevated=False, executable=openvpn.GUI_EXE)
+            if previous:
+                time.sleep(5)
+                for arguments in openvpn.connect_arguments(previous[0], True):
+                    launch_in_session(session_id, arguments, logger, elevated=False, executable=openvpn.GUI_EXE)
+                    time.sleep(3)
+                reason += f" A VPN anterior ({previous[0]}) foi reconectada."
+                logger.info("OpenVPN: falhou; reconectando a VPN anterior %s.", previous[0])
+        self._deliver_result(logger, api, step_id, FAILED, reason)
+
+    @staticmethod
+    def _deliver_result(logger: logging.Logger, api: "lib.WorkspaceApi", step_id: int, result: str, message: str) -> None:
+        """Envia o resultado; sem conexao (troca de VPN), guarda para reenviar."""
+        if api.send_result(step_id, result, message) == 0:
+            save_json(PENDING_RESULT_PATH, {"step_id": step_id, "result": result, "message": message})
+            logger.info("Sem conexao com o servidor; resultado da etapa %s guardado para reenvio.", step_id)
+
+    @staticmethod
+    def _flush_pending_result(logger: logging.Logger, api: "lib.WorkspaceApi") -> None:
+        pending = load_json(PENDING_RESULT_PATH)
+        if not pending.get("step_id"):
+            return
+        status = api.send_result(int(pending["step_id"]), str(pending.get("result", "")), str(pending.get("message", "")))
+        if status == 0:
+            return  # ainda sem conexao
+        # Entregue ou recusado de vez (ex.: etapa cancelada): nao insiste.
+        PENDING_RESULT_PATH.unlink(missing_ok=True)
+        logger.info("Resultado guardado da etapa %s entregue (HTTP %s).", pending["step_id"], status)
 
     @staticmethod
     def _finish_configuration(step_id: int) -> None:

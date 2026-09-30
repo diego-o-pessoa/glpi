@@ -125,6 +125,38 @@ def apply_credentials(ovpn: Path, username: str, password: str, user_sid: str) -
     return True, "Perfil e credenciais da VPN aplicados."
 
 
+DISCONNECT_ALL = "--command disconnect_all"
+# Linhas do log que mostram que a conexao terminou depois de ter subido.
+_ENDED_MARKERS = ("process exiting", "SIGTERM", "Closing TUN/TAP", "SIGHUP", "SIGUSR1")
+
+
+def connected_profiles(user_sid: str) -> list[str]:
+    """
+    Perfis do OpenVPN GUI conectados agora (ex.: a VPN do T.I.), pelos logs do
+    usuario: subiu ("Initialization Sequence Completed") e nao terminou depois.
+    """
+    profile = _profile_dir(user_sid)
+    if profile is None:
+        return []
+    connected: list[str] = []
+    try:
+        logs = list((profile / "OpenVPN" / "log").glob("*.log"))
+    except OSError:
+        return []
+    for log in logs:
+        try:
+            with open(log, "rb") as handle:
+                handle.seek(0, os.SEEK_END)
+                handle.seek(max(0, handle.tell() - 65536))
+                text = handle.read().decode("utf-8", errors="replace")
+        except OSError:
+            continue
+        up = text.rfind("Initialization Sequence Completed")
+        if up >= 0 and not any(marker in text[up:] for marker in _ENDED_MARKERS):
+            connected.append(log.stem)
+    return connected
+
+
 def connect_arguments(profile_name: str, gui_running: bool) -> list[str]:
     """Argumentos do openvpn-gui.exe para conectar o perfil (na ordem)."""
     if gui_running:

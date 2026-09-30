@@ -19,6 +19,20 @@ Session::checkRight('plugin_ativaremote', UPDATE);
 $action = (string) ($_POST['action'] ?? '');
 $id = (int) ($_POST['id'] ?? 0);
 
+// O painel ao vivo chama por fetch e quer JSON (sem recarregar a pagina).
+$ajax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
+$messages = [
+    'toggle_rustdesk_consent' => static fn (): string => ($_POST['require'] ?? '1') === '1'
+        ? 'O usuário precisará autorizar cada acesso.'
+        : 'Acesso sem autorização do usuário ativado.',
+    'request_remote_access'   => static fn (): string => 'Acesso solicitado. Aguardando o computador responder.',
+    'close_remote_access'     => static fn (): string => 'Sessão encerrada. O computador troca a senha do RustDesk em seguida.',
+];
+if ($ajax) {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+}
+
 try {
     $repo = new ClientRepository();
 
@@ -60,7 +74,24 @@ try {
             throw new Exception('Ação inválida.');
     }
 } catch (Exception $e) {
+    if ($ajax) {
+        http_response_code(422);
+        echo json_encode([
+            'ok'                => false,
+            'message'           => $e->getMessage(),
+            // Senha do T.I. errada/bloqueada: o modal continua aberto.
+            'password_required' => $e instanceof RuntimeException && in_array((int) $e->getCode(), [403, 429], true),
+        ]);
+        exit;
+    }
     Session::addMessageAfterRedirect($e->getMessage(), false, ERROR);
+}
+
+if ($ajax) {
+    // A mensagem vai na resposta; nao sobra para a proxima pagina.
+    $_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
+    echo json_encode(['ok' => true, 'message' => ($messages[$action] ?? static fn (): string => 'Feito.')()]);
+    exit;
 }
 
 Html::back();

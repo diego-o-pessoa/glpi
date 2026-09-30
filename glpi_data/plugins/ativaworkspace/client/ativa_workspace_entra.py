@@ -162,6 +162,11 @@ class WorkspaceApi:
         status, _ = self._request("POST", f"/steps/{step_id}/result", payload)
         return status in (200, 202)
 
+    def send_result(self, step_id: int, result: str, message: str = "") -> int:
+        """Como result(), mas devolve o HTTP status (0 = sem conexao com o servidor)."""
+        status, _ = self._request("POST", f"/steps/{step_id}/result", {"result": result, "message": message[:200]})
+        return status
+
     def request_tap(self, step_id: int) -> tuple[dict | None, str]:
         """Pede um TAP ao servidor. Retorna (dados, motivo-do-erro-se-houver)."""
         status, body = self._request("POST", f"/steps/{step_id}/tap", {}, timeout=60)
