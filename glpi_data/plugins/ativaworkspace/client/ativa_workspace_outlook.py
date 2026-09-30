@@ -377,20 +377,16 @@ def configure_for_current_user(step_id: int, logger: logging.Logger) -> int:
             )
             return 1
 
-        _write_result(step_id, PHASE_SIGNING_IN, "Confirmando o Outlook aberto com o SSO do Microsoft Entra.")
+        _write_result(step_id, PHASE_SIGNING_IN, "Abrindo o Outlook. Com Entra, o SSO entra sozinho; senao, faca o login (ex.: com um TAP).")
         try:
             os.startfile(str(shortcut))  # noqa: S606 - atalho criado pelo Chrome
         except OSError as exc:
             _write_result(step_id, PHASE_VERIFYING, f"O atalho da PWA nao abriu: {exc}", False)
             return 1
-        if not _outlook_window_visible(120):
-            _write_result(
-                step_id,
-                PHASE_VERIFYING,
-                "A PWA foi instalada, mas a janela autenticada do Outlook nao foi confirmada. Verifique o SSO/CloudAP.",
-                False,
-            )
-            return 1
+        # Best-effort: espera a janela aparecer, mas NAO falha se o login ainda
+        # for manual (sem Entra o usuario entra depois, ex.: com um TAP). A etapa
+        # cuida de instalar e fixar a PWA; o login em si e do usuario.
+        _outlook_window_visible(60)
 
         _write_result(step_id, PHASE_PINNING, "Fixando o atalho do Outlook na barra de tarefas.")
         pinned, pin_message = _pin_shortcut(shortcut)
@@ -398,11 +394,11 @@ def configure_for_current_user(step_id: int, logger: logging.Logger) -> int:
             _write_result(step_id, PHASE_VERIFYING, pin_message, False)
             return 1
 
-        _write_result(step_id, PHASE_VERIFYING, "Outlook PWA instalado, autenticado e fixado; validacao concluida.")
+        _write_result(step_id, PHASE_VERIFYING, "Outlook PWA instalado e fixado; validacao concluida.")
         _write_result(
             step_id,
             PHASE_VERIFYING,
-            "Outlook PWA instalado com SSO do Entra e fixado na barra de tarefas.",
+            "Outlook PWA instalado e fixado na barra de tarefas. O login e via SSO do Entra ou manual (TAP).",
             True,
         )
         logger.info("Outlook PWA concluido para o usuario da sessao.")

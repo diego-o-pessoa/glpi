@@ -43,7 +43,7 @@ import ativa_workspace_uninstall as uninstall
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.8.1"
+WORKSPACE_AGENT_VERSION = "1.8.2"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -545,26 +545,10 @@ class WorkspaceRuntime:
             self._finish_configuration(step_id)
             return
 
-        # O SSO do Chrome depende do computador no tenant correto e do primeiro
-        # login do usuario Entra. Nao ha senha permanente como fallback.
-        fields = lib.parse_dsregcmd(lib.run_dsregcmd())
-        joined, reason = lib.evaluate_join(
-            fields,
-            str(payload.get("expected_tenant", "")),
-            str(payload.get("expected_domain", "")),
-        )
-        if not joined:
-            api.result(
-                step_id,
-                FAILED,
-                "Outlook PWA exige a etapa Microsoft Entra concluida antes dela: " + reason + ".",
-            )
-            self._finish_configuration(step_id)
-            return
-        if not logon.entra_user_logged_in():
-            api.progress(step_id, "WAITING_USER_SESSION", "Aguardando o primeiro login do usuario Entra")
-            return
-
+        # O Outlook PWA NAO exige o ingresso no Entra: instala e fixa de qualquer
+        # forma. Se a maquina estiver no Entra, o SSO (CloudAP) autentica sozinho;
+        # senao, o usuario faz o primeiro login (ex.: com um TAP) na tela aberta.
+        # So e preciso uma sessao interativa para abrir o navegador.
         sessions = user_sessions()
         if not sessions:
             api.progress(step_id, "WAITING_USER_SESSION", "Nenhuma sessao interativa esta ativa")
