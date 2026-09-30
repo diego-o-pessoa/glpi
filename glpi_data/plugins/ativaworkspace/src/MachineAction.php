@@ -99,9 +99,13 @@ final class MachineAction
     {
         global $DB;
 
-        $row = $DB->request(['SELECT' => ['id'], 'FROM' => self::TABLE, 'WHERE' => ['id' => $id, 'computers_id' => $computersId], 'LIMIT' => 1])->current();
+        $row = $DB->request(['SELECT' => ['id', 'action', 'scope', 'reg_key'], 'FROM' => self::TABLE, 'WHERE' => ['id' => $id, 'computers_id' => $computersId], 'LIMIT' => 1])->current();
         if (!is_array($row)) {
             return false;
+        }
+        // Desinstalou: some da lista de programas na hora (nao espera o proximo inventario).
+        if ($ok && $row['action'] === 'uninstall') {
+            Inventory::removeProgram($computersId, (string) $row['scope'], (string) $row['reg_key']);
         }
         $now = $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s');
         $DB->update(self::TABLE, [

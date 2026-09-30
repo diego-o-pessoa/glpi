@@ -100,6 +100,36 @@ final class Inventory
     }
 
     /**
+     * Tira um programa do ultimo inventario salvo (apos desinstalar com sucesso),
+     * sem esperar o proximo envio do servico.
+     */
+    public static function removeProgram(int $computersId, string $scope, string $regKey): void
+    {
+        global $DB;
+
+        $row = $DB->request(['SELECT' => ['id', 'data'], 'FROM' => self::TABLE, 'WHERE' => ['computers_id' => $computersId], 'LIMIT' => 1])->current();
+        if (!is_array($row)) {
+            return;
+        }
+        $data = json_decode((string) ($row['data'] ?? ''), true);
+        if (!is_array($data) || !is_array($data['programs'] ?? null)) {
+            return;
+        }
+        $before = count($data['programs']);
+        $data['programs'] = array_values(array_filter(
+            $data['programs'],
+            static fn ($p): bool => !(is_array($p) && ($p['scope'] ?? '') === $scope && ($p['key'] ?? '') === $regKey)
+        ));
+        if (count($data['programs']) === $before) {
+            return;
+        }
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json !== false) {
+            $DB->update(self::TABLE, ['data' => $json], ['id' => (int) $row['id']]);
+        }
+    }
+
+    /**
      * Inventario completo de uma maquina (JSON decodificado), ou null.
      *
      * @return array<string, mixed>|null
