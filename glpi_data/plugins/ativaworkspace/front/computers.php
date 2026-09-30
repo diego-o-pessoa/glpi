@@ -21,12 +21,30 @@ if ($computerId > 0) {
     $computer = new Computer();
     $name = $computer->getFromDB($computerId) ? (string) $computer->fields['name'] : (string) $inventory['hostname'];
 
+    // Desinstalacao concluida x inventario: se o snapshot e anterior a ela, o
+    // programa ja saiu (esconde). Se um inventario mais novo ainda o lista, ele
+    // esta mesmo instalado (reinstalado ou outra entrada): mostra o botao de novo.
+    $actions = MachineAction::forComputer($computerId);
+    $programs = [];
+    foreach ($inventory['programs'] as $prog) {
+        $key = (string) ($prog['key'] ?? '');
+        $action = $actions[$key] ?? null;
+        if ($action !== null && $action['status'] === MachineAction::STATUS_DONE) {
+            if ($action['scope'] === (string) ($prog['scope'] ?? '') && $inventory['reported_at'] <= $action['date_mod']) {
+                continue;
+            }
+            unset($actions[$key]);
+        }
+        $programs[] = $prog;
+    }
+    $inventory['programs'] = $programs;
+
     Page::render('computers', 'computer_detail.html.twig', [
         'inv'        => $inventory,
         'name'       => $name,
         'back_url'   => Page::href('computers'),
         'can_manage' => (bool) Session::haveRight(PluginAtivaworkspaceProfile::RIGHT_PROVISION, UPDATE),
-        'actions'    => MachineAction::forComputer($computerId),
+        'actions'    => $actions,
         'action_url' => Page::href('computer_action'),
         'data_url'   => Page::href('computer_data'),
         'csrf'       => Session::getNewCSRFToken(),

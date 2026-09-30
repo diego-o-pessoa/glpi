@@ -40,6 +40,63 @@ def _run(args: list[str], timeout: int) -> tuple[int, str]:
     return completed.returncode, tail
 
 
+UNINSTALL_PATH = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+
+
+def _norm(text: str) -> str:
+    return " ".join((text or "").lower().split())
+
+
+def find_installed(name: str) -> str | None:
+    """
+    Procura o programa nas entradas de desinstalacao do registro: maquina (64 e
+    32 bits) e perfis carregados dos usuarios (instalacoes por usuario, como o
+    Chrome sem admin). Devolve "Nome versao" se achar, senao None.
+    """
+    import re
+    import winreg
+
+    wanted = _norm(name)
+    if len(wanted) < 3:
+        return None
+    # "GLPI Agent" casa com "GLPI Agent 1.19"; nao casa com "GLPI Agentes".
+    pattern = re.compile(r"^" + re.escape(wanted) + r"(?:$|[\s(\-–,.]|\d)")
+
+    roots = [
+        (winreg.HKEY_LOCAL_MACHINE, UNINSTALL_PATH, winreg.KEY_WOW64_64KEY),
+        (winreg.HKEY_LOCAL_MACHINE, UNINSTALL_PATH, winreg.KEY_WOW64_32KEY),
+    ]
+    try:
+        with winreg.OpenKey(winreg.HKEY_USERS, "") as users:
+            for index in range(winreg.QueryInfoKey(users)[0]):
+                sid = winreg.EnumKey(users, index)
+                if sid.startswith("S-1-5-21-") and not sid.endswith("_Classes"):
+                    roots.append((winreg.HKEY_USERS, sid + "\\" + UNINSTALL_PATH, 0))
+    except OSError:
+        pass
+
+    for hive, path, view in roots:
+        try:
+            key = winreg.OpenKey(hive, path, 0, winreg.KEY_READ | view)
+        except OSError:
+            continue
+        with key:
+            for index in range(winreg.QueryInfoKey(key)[0]):
+                try:
+                    with winreg.OpenKey(key, winreg.EnumKey(key, index)) as item:
+                        display = str(winreg.QueryValueEx(item, "DisplayName")[0])
+                        if not pattern.match(_norm(display)):
+                            continue
+                        try:
+                            version = str(winreg.QueryValueEx(item, "DisplayVersion")[0])
+                        except OSError:
+                            version = ""
+                        return f"{display} {version}".strip()
+                except OSError:
+                    continue
+    return None
+
+
 def _winget_path() -> str | None:
     """
     winget nao fica no PATH do SYSTEM: resolve o winget.exe real dentro de
@@ -160,6 +217,12 @@ def install(payload: dict, api, step_id: int, logger: logging.Logger) -> tuple[b
     method = str(payload.get("method", "none"))
     timeout = max(60, int(payload.get("timeout_minutes", 30) or 30) * 60)
     name = str(payload.get("name", "aplicativo"))
+
+    # Ja esta na maquina (por maquina ou por usuario)? Nao reinstala.
+    found = find_installed(name)
+    if found:
+        logger.info("Software: '%s' ja instalado (%s); pulando.", name, found)
+        return True, f"Ja instalado na maquina ({found}); instalacao pulada."
 
     if method == "winget":
         api.progress(step_id, "INSTALLING", f"Instalando {name} pelo winget")

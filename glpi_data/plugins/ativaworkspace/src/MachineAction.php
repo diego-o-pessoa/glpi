@@ -132,11 +132,18 @@ final class MachineAction
             'ORDER' => ['id DESC'],
             'LIMIT' => $limit,
         ]) as $row) {
-            $rows[(string) $row['reg_key']] = [
-                'id'      => (int) $row['id'],
-                'target'  => (string) $row['target'],
-                'status'  => (string) $row['status'],
-                'message' => (string) $row['message'],
+            $key = (string) $row['reg_key'];
+            // Ordem DESC: a primeira vista de cada chave e a acao mais recente.
+            if (isset($rows[$key])) {
+                continue;
+            }
+            $rows[$key] = [
+                'id'       => (int) $row['id'],
+                'target'   => (string) $row['target'],
+                'scope'    => (string) $row['scope'],
+                'status'   => (string) $row['status'],
+                'message'  => (string) $row['message'],
+                'date_mod' => (string) $row['date_mod'],
             ];
         }
         return $rows;

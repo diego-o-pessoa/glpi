@@ -43,7 +43,7 @@ import ativa_workspace_uninstall as uninstall
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.8.2"
+WORKSPACE_AGENT_VERSION = "1.8.3"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -537,7 +537,7 @@ class WorkspaceRuntime:
             }
             outlook.clear_result(step_id)
             save_json(CONFIGURATION_STATE_PATH, state)
-            api.progress(step_id, "CONFIG_PRECHECK", "Validando Entra, Chrome e sessao do usuario")
+            api.progress(step_id, "CONFIG_PRECHECK", "Validando Chrome e sessao do usuario")
 
         timeout = max(5, int(payload.get("timeout_minutes", 30) or 30)) * 60
         if time.time() - float(state.get("started_at", time.time())) > timeout:
@@ -557,7 +557,7 @@ class WorkspaceRuntime:
         # Primeira passagem: garante o navegador, aplica politicas e dispara o
         # helper no desktop do usuario. Nas passagens seguintes, le o progresso.
         if float(state.get("helper_started_at", 0.0)) <= 0:
-            if not outlook.chrome_installed():
+            if not outlook.chrome_installed() and not installer.find_installed("Google Chrome"):
                 api.progress(step_id, "INSTALLING_CHROME", "Instalando Google Chrome pelo winget")
                 ok, message = installer.install_winget("Google.Chrome", 15 * 60, logger)
                 if not ok or not outlook.chrome_installed():
@@ -608,6 +608,19 @@ class WorkspaceRuntime:
         if phase in allowed_phases and phase != str(state.get("last_phase", "")):
             api.progress(step_id, phase, message)
             state["last_phase"] = phase
+            save_json(CONFIGURATION_STATE_PATH, state)
+
+        # O helper pede a fixacao: so o SYSTEM grava a politica de layout. O
+        # caminho vem de arquivo nao confiavel e e validado em apply_taskbar_layout.
+        shortcut = str(result.get("shortcut", ""))
+        if phase == "PINNING_TASKBAR" and shortcut and not state.get("layout_applied"):
+            ok, layout_message = outlook.apply_taskbar_layout(shortcut)
+            logger.info("Outlook PWA: layout da barra -> %s (%s)", "ok" if ok else "falhou", layout_message)
+            if not ok:
+                api.result(step_id, FAILED, layout_message)
+                self._finish_configuration(step_id)
+                return
+            state["layout_applied"] = True
             save_json(CONFIGURATION_STATE_PATH, state)
 
         if result.get("done") is True:

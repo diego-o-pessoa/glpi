@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 import unicodedata
@@ -28,6 +29,18 @@ PHASE_INSTALLING = "INSTALLING_PWA"
 PHASE_SIGNING_IN = "SIGNING_IN"
 PHASE_PINNING = "PINNING_TASKBAR"
 PHASE_VERIFYING = "VERIFYING_CONFIGURATION"
+
+# Fixacao na barra: o Windows bloqueia a fixacao programatica (verbo oculto
+# desde o 1809). O caminho suportado e a politica "Start Layout" com um XML
+# de barra de tarefas. O XML fica legivel para o usuario (o Explorer o le).
+LAYOUT_DIR = PROGRAM_DATA / "AtivaLocacao" / "WorkspaceLayout"
+LAYOUT_PATH = LAYOUT_DIR / "TaskbarLayout.xml"
+EXPLORER_POLICY = r"SOFTWARE\Policies\Microsoft\Windows\Explorer"
+# Atalho relativo ao %APPDATA% do usuario; sem "..", so dentro do Menu Iniciar.
+SHORTCUT_REL_RE = re.compile(
+    r"^Microsoft\\Windows\\Start Menu\\Programs\\(?:Chrome Apps\\)?[^\\/:*?\"<>|%]{1,120}\.lnk$",
+    re.IGNORECASE,
+)
 
 
 def result_path(step_id: int) -> Path:
@@ -49,7 +62,7 @@ def clear_result(step_id: int) -> None:
         pass
 
 
-def _write_result(step_id: int, phase: str, message: str, ok: bool | None = None) -> None:
+def _write_result(step_id: int, phase: str, message: str, ok: bool | None = None, shortcut: str = "") -> None:
     """Arquivo pequeno de progresso; o servico o trata como entrada nao confiavel."""
     HELPER_DIR.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {
@@ -58,6 +71,8 @@ def _write_result(step_id: int, phase: str, message: str, ok: bool | None = None
         "message": str(message)[:200],
         "updated_at": int(time.time()),
     }
+    if shortcut:
+        payload["shortcut"] = shortcut
     if ok is not None:
         payload["done"] = True
         payload["ok"] = bool(ok)
@@ -203,117 +218,76 @@ def _already_pinned(shortcut: Path) -> bool:
         return False
 
 
-def _pin_shortcut_with_ui(shortcut: Path) -> tuple[bool, str]:
-    """Fallback para Windows 11, que frequentemente oculta o verbo do COM."""
+def _xml_attr(text: str) -> str:
+    return (text.replace("&", "&amp;").replace('"', "&quot;")
+            .replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def apply_taskbar_layout(shortcut_rel: str) -> tuple[bool, str]:
+    """
+    (SYSTEM) Fixa o atalho pela politica oficial "Start Layout": XML so com a
+    barra de tarefas (PinListPlacement=Append, nao mexe no Menu Iniciar nem
+    remove os pins do usuario). O Explorer aplica ao iniciar/no logon.
+    """
+    if not SHORTCUT_REL_RE.fullmatch(shortcut_rel or "") or ".." in shortcut_rel:
+        return False, "Caminho do atalho do Outlook recusado."
+    link = "%APPDATA%\\" + shortcut_rel
+    xml = (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        '<LayoutModificationTemplate'
+        ' xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification"'
+        ' xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout"'
+        ' xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout"'
+        ' xmlns:taskbar="http://schemas.microsoft.com/Start/2014/TaskbarLayout"'
+        ' Version="1">\n'
+        '  <CustomTaskbarLayoutCollection PinListPlacement="Append">\n'
+        '    <defaultlayout:TaskbarLayout>\n'
+        '      <taskbar:TaskbarPinList>\n'
+        f'        <taskbar:DesktopApp DesktopApplicationLinkPath="{_xml_attr(link)}" />\n'
+        '      </taskbar:TaskbarPinList>\n'
+        '    </defaultlayout:TaskbarLayout>\n'
+        '  </CustomTaskbarLayoutCollection>\n'
+        '</LayoutModificationTemplate>\n'
+    )
     try:
-        import uiautomation as auto  # type: ignore
+        import winreg  # type: ignore
 
-        subprocess.Popen(
-            ["explorer.exe", "/select," + str(shortcut)],
-            close_fds=True,
-            creationflags=NO_WINDOW,
-        )
-        time.sleep(3)
-        wanted_name = _norm(shortcut.stem)
-
-        def same_shortcut(control, _depth):
+        with winreg.CreateKeyEx(
+            winreg.HKEY_LOCAL_MACHINE, EXPLORER_POLICY, 0,
+            winreg.KEY_READ | winreg.KEY_WRITE | winreg.KEY_WOW64_64KEY,
+        ) as key:
+            # Nao sobrescreve um layout corporativo de outra origem.
             try:
-                name = _norm(str(control.Name or ""))
-                return name in {wanted_name, _norm(shortcut.name)} and not control.IsOffscreen
-            except Exception:  # noqa: BLE001
-                return False
+                current = str(winreg.QueryValueEx(key, "StartLayoutFile")[0])
+            except FileNotFoundError:
+                current = ""
+            if current and os.path.normcase(current) != os.path.normcase(str(LAYOUT_PATH)):
+                return False, f"Ja existe outra politica de layout da barra ({current}); nada foi alterado."
 
-        item = auto.ListItemControl(searchDepth=50, Compare=same_shortcut)
-        if not item.Exists(0, 0):
-            item = auto.TreeItemControl(searchDepth=50, Compare=same_shortcut)
-        if not item.Exists(0, 0):
-            return False, "O atalho do Outlook foi criado, mas nao apareceu no Explorador para ser fixado."
-        item.RightClick(simulateMove=False)
-        time.sleep(1)
-
-        pin_names = {"fixar na barra de tarefas", "pin to taskbar"}
-        more_names = {"mostrar mais opcoes", "show more options"}
-
-        def find_menu(names: set[str], timeout: int):
-            deadline = time.time() + timeout
-            while time.time() < deadline:
-                def match(control, _depth):
-                    try:
-                        return _norm(str(control.Name or "")) in names and not control.IsOffscreen
-                    except Exception:  # noqa: BLE001
-                        return False
-                menu = auto.MenuItemControl(searchDepth=20, Compare=match)
-                if menu.Exists(0, 0):
-                    return menu
-                time.sleep(0.5)
-            return None
-
-        pin = find_menu(pin_names, 3)
-        if pin is None:
-            more = find_menu(more_names, 2)
-            if more is not None:
-                try:
-                    more.GetInvokePattern().Invoke()
-                except Exception:  # noqa: BLE001
-                    more.Click(simulateMove=False)
-                time.sleep(1)
-                pin = find_menu(pin_names, 5)
-        if pin is None:
-            return False, "A opcao 'Fixar na barra de tarefas' nao apareceu no menu do Windows."
-        try:
-            pin.GetInvokePattern().Invoke()
-        except Exception:  # noqa: BLE001
-            pin.Click(simulateMove=False)
-
-        deadline = time.time() + 15
-        while time.time() < deadline:
-            if _already_pinned(shortcut):
-                return True, "Outlook fixado na barra de tarefas."
-            time.sleep(1)
-        return True, "O Windows aceitou a fixacao visual do Outlook na barra de tarefas."
-    except Exception as exc:  # noqa: BLE001
-        return False, f"Falha na fixacao visual do Outlook: {exc}"
+            LAYOUT_DIR.mkdir(parents=True, exist_ok=True)
+            temporary = LAYOUT_PATH.with_suffix(".tmp")
+            temporary.write_text(xml, "utf-8")
+            os.replace(temporary, LAYOUT_PATH)
+            winreg.SetValueEx(key, "StartLayoutFile", 0, winreg.REG_EXPAND_SZ, str(LAYOUT_PATH))
+            winreg.SetValueEx(key, "LockedStartLayout", 0, winreg.REG_DWORD, 1)
+        return True, "Politica de fixacao na barra de tarefas aplicada."
+    except OSError as exc:
+        return False, f"Falha ao aplicar a politica da barra de tarefas: {exc}"
 
 
-def _pin_shortcut(shortcut: Path) -> tuple[bool, str]:
-    """Usa o verbo oficial do shell na sessao do usuario e confirma o pedido."""
-    if _already_pinned(shortcut):
-        return True, "O Outlook ja estava fixado na barra de tarefas."
+def _layout_has(shortcut_rel: str) -> bool:
     try:
-        from comtypes.client import CreateObject  # type: ignore
+        return shortcut_rel.lower() in LAYOUT_PATH.read_text("utf-8").lower()
+    except OSError:
+        return False
 
-        shell = CreateObject("Shell.Application", dynamic=True)
-        folder = shell.Namespace(str(shortcut.parent))
-        item = folder.ParseName(shortcut.name) if folder else None
-        verbs = item.Verbs() if item else None
-        if verbs is None:
-            return _pin_shortcut_with_ui(shortcut)
 
-        wanted = ("fixar na barra de tarefas", "pin to taskbar")
-        invoked = False
-        for index in range(int(verbs.Count)):
-            verb = verbs.Item(index)
-            name = _norm(str(getattr(verb, "Name", "")))
-            if any(target in name for target in wanted):
-                verb.DoIt()
-                invoked = True
-                break
-        if not invoked:
-            return _pin_shortcut_with_ui(shortcut)
-
-        deadline = time.time() + 15
-        while time.time() < deadline:
-            if _already_pinned(shortcut):
-                return True, "Outlook fixado na barra de tarefas."
-            time.sleep(1)
-        # Em builds recentes do Windows 11 o shell nao materializa o pin na
-        # pasta legada, embora aceite o verbo. O pedido ainda foi confirmado.
-        return True, "O Windows aceitou a fixacao do Outlook na barra de tarefas."
-    except Exception as exc:  # noqa: BLE001 - erro COM vira diagnostico do job
-        visual_ok, visual_message = _pin_shortcut_with_ui(shortcut)
-        if visual_ok:
-            return visual_ok, visual_message
-        return False, f"Falha ao fixar o Outlook na barra de tarefas: {exc}. {visual_message}"
+def _restart_explorer() -> None:
+    """Reinicia so o Explorer do proprio usuario, para ler o layout novo."""
+    subprocess.run(["taskkill.exe", "/F", "/IM", "explorer.exe"],
+                   capture_output=True, timeout=20, creationflags=NO_WINDOW)
+    time.sleep(2)
+    subprocess.Popen(["explorer.exe"], close_fds=True)
 
 
 def _outlook_window_visible(timeout: int) -> bool:
@@ -388,17 +362,36 @@ def configure_for_current_user(step_id: int, logger: logging.Logger) -> int:
         # cuida de instalar e fixar a PWA; o login em si e do usuario.
         _outlook_window_visible(60)
 
-        _write_result(step_id, PHASE_PINNING, "Fixando o atalho do Outlook na barra de tarefas.")
-        pinned, pin_message = _pin_shortcut(shortcut)
-        if not pinned:
-            _write_result(step_id, PHASE_VERIFYING, pin_message, False)
+        if _already_pinned(shortcut):
+            _write_result(step_id, PHASE_VERIFYING, "Outlook PWA instalado e ja fixado na barra de tarefas.", True)
+            return 0
+
+        # Pede ao servico (SYSTEM) a politica de layout com este atalho e
+        # espera o XML refleti-lo. O caminho vai relativo ao %APPDATA%.
+        try:
+            shortcut_rel = str(shortcut.resolve().relative_to(Path(os.environ.get("APPDATA", "")).resolve()))
+        except ValueError:
+            _write_result(step_id, PHASE_VERIFYING, "O atalho do Outlook nao esta no Menu Iniciar do usuario.", False)
+            return 1
+        _write_result(step_id, PHASE_PINNING, "Aplicando a fixacao do Outlook na barra de tarefas.",
+                      shortcut=shortcut_rel)
+        deadline = time.time() + 180
+        while time.time() < deadline and not _layout_has(shortcut_rel):
+            time.sleep(3)
+        if not _layout_has(shortcut_rel):
+            _write_result(step_id, PHASE_VERIFYING, "O servico nao aplicou a politica da barra de tarefas a tempo.", False)
             return 1
 
-        _write_result(step_id, PHASE_VERIFYING, "Outlook PWA instalado e fixado; validacao concluida.")
+        _restart_explorer()
+        deadline = time.time() + 20
+        while time.time() < deadline and not _already_pinned(shortcut):
+            time.sleep(2)
+        pinned_now = _already_pinned(shortcut)
         _write_result(
             step_id,
             PHASE_VERIFYING,
-            "Outlook PWA instalado e fixado na barra de tarefas. O login e via SSO do Entra ou manual (TAP).",
+            "Outlook PWA instalado e fixado na barra de tarefas." if pinned_now else
+            "Outlook PWA instalado; a fixacao na barra foi aplicada pela politica do Windows e aparece no proximo logon.",
             True,
         )
         logger.info("Outlook PWA concluido para o usuario da sessao.")
