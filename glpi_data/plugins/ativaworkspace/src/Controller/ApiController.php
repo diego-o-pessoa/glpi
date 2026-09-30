@@ -16,6 +16,7 @@ use GlpiPlugin\Ativaworkspace\MachineAction;
 use GlpiPlugin\Ativaworkspace\MachineIdentity;
 use GlpiPlugin\Ativaworkspace\ProvisioningEngine;
 use GlpiPlugin\Ativaworkspace\StepType;
+use GlpiPlugin\Ativaworkspace\VpnProfile;
 use GlpiPlugin\Ativaworkspace\WorkspaceConfig;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -257,6 +258,91 @@ final class ApiController extends AbstractController
         $response = new BinaryFileResponse($path);
         $response->headers->set('Content-Type', 'application/octet-stream');
         $response->headers->set('X-Installer-Sha256', (string) ($app->fields['file_sha256'] ?? ''));
+        $response->headers->set('Cache-Control', 'no-store');
+        return $response;
+    }
+
+    /**
+     * Etapa OpenVPN corrente do job, da maquina que pede (GUID). Null se a etapa
+     * nao e OpenVPN, nao esta em execucao ou pertence a outra maquina.
+     *
+     * @return array{step: array<string, mixed>, config: array<string, mixed>, job_id: int}|JsonResponse
+     */
+    private function currentVpnStep(int $stepId, string $guid): array|JsonResponse
+    {
+        global $DB;
+
+        $step = $DB->request(['FROM' => JobStep::getTable(), 'WHERE' => ['id' => $stepId], 'LIMIT' => 1])->current();
+        $config = is_array($step) ? json_decode((string) ($step['config'] ?? ''), true) : null;
+        if (!is_array($step) || (string) $step['step_type'] !== StepType::CONFIGURATION || !VpnProfile::isVpnConfig($config)) {
+            return $this->error('NOT_VPN', 'Etapa não encontrada ou não é OpenVPN.', 404);
+        }
+        if (in_array((string) $step['status'], [JobStep::SUCCESS, JobStep::FAILED, JobStep::SKIPPED, JobStep::CANCELED], true)) {
+            return $this->error('STEP_CLOSED', 'Esta etapa já foi encerrada.', 409);
+        }
+        $jobId = (int) $step[JobStep::JOB_FK];
+        $job = $DB->request(['SELECT' => ['computers_id', 'plugin_ativaworkspace_jobsteps_id'], 'FROM' => Job::getTable(), 'WHERE' => ['id' => $jobId], 'LIMIT' => 1])->current();
+        if (!is_array($job) || (int) $job['plugin_ativaworkspace_jobsteps_id'] !== $stepId) {
+            return $this->error('STEP_NOT_CURRENT', 'Esta etapa não está em execução.', 409);
+        }
+        // O perfil e as credenciais so vao para o computador do provisionamento.
+        $guid = mb_strtolower(trim($guid));
+        if (!preg_match('/^[a-f0-9-]{16,64}$/D', $guid) || MachineIdentity::computerFromGuid($guid) !== (int) $job['computers_id']) {
+            Event::log(Event::LEVEL_SECURITY, 'provisioning', 'Pedido de VPN de outra máquina recusado', [], $jobId, $stepId);
+            return $this->error('WRONG_MACHINE', 'Esta etapa pertence a outro computador.', 403);
+        }
+        return ['step' => $step, 'config' => $config, 'job_id' => $jobId];
+    }
+
+    /** Baixa o .zip do perfil do OpenVPN da etapa corrente (SHA-256 no cabecalho). */
+    #[Route('/api/v1/steps/{stepId}/vpn-profile', name: 'ativaworkspace_api_vpn_profile', requirements: ['stepId' => '\d+'], methods: ['GET'])]
+    public function vpnProfile(Request $request, int $stepId): Response
+    {
+        if ($error = $this->checkAuth($request)) {
+            return $error;
+        }
+        $vpn = $this->currentVpnStep($stepId, (string) $request->query->get('guid', ''));
+        if ($vpn instanceof JsonResponse) {
+            return $vpn;
+        }
+        $stored = (string) ($vpn['config']['vpn_file'] ?? '');
+        $path = $stored !== '' ? InstallerStorage::path($stored) : null;
+        if ($path === null || !is_file($path)) {
+            return $this->error('FILE_MISSING', 'Perfil do OpenVPN não disponível para esta etapa.', 404);
+        }
+        $response = new BinaryFileResponse($path);
+        $response->headers->set('Content-Type', 'application/zip');
+        $response->headers->set('X-Installer-Sha256', (string) ($vpn['config']['vpn_file_sha256'] ?? ''));
+        $response->headers->set('Cache-Control', 'no-store');
+        return $response;
+    }
+
+    /**
+     * Usuario e senha da VPN do funcionario, para a etapa OpenVPN corrente e
+     * so para o computador do job. Nunca vai para log; e apagada do servidor
+     * quando a etapa conclui.
+     */
+    #[Route('/api/v1/steps/{stepId}/vpn-credentials', name: 'ativaworkspace_api_vpn_credentials', requirements: ['stepId' => '\d+'], methods: ['POST'])]
+    public function vpnCredentials(Request $request, int $stepId): Response
+    {
+        if ($error = $this->checkAuth($request)) {
+            return $error;
+        }
+        $body = $this->json($request) ?? [];
+        $vpn = $this->currentVpnStep($stepId, (string) ($body['machine_guid'] ?? ''));
+        if ($vpn instanceof JsonResponse) {
+            return $vpn;
+        }
+
+        global $DB;
+        $job = $DB->request(['SELECT' => ['vpn_user', 'vpn_secret'], 'FROM' => Job::getTable(), 'WHERE' => ['id' => $vpn['job_id']], 'LIMIT' => 1])->current();
+        $user = is_array($job) ? (string) ($job['vpn_user'] ?? '') : '';
+        $password = is_array($job) ? VpnProfile::decryptSecret((string) ($job['vpn_secret'] ?? '')) : '';
+        if ($user === '' || $password === '') {
+            return $this->error('NO_VPN_CREDENTIALS', 'Provisionamento sem usuário/senha da VPN (já usados ou não informados).', 422);
+        }
+        Event::log(Event::LEVEL_SECURITY, 'provisioning', 'Credenciais da VPN entregues ao executor', ['usuario' => $user], $vpn['job_id'], $stepId);
+        $response = new JsonResponse(['username' => $user, 'password' => $password]);
         $response->headers->set('Cache-Control', 'no-store');
         return $response;
     }

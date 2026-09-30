@@ -243,6 +243,10 @@ function plugin_ativaworkspace_do_install(): bool
                 'profile_name'                     => "varchar(255) NOT NULL DEFAULT ''",
                 'plugin_ativaworkspace_jobsteps_id'=> "int {$sign} NOT NULL DEFAULT '0'",
                 'progress'                         => "int NOT NULL DEFAULT '0'",
+                // 0.13.0: OpenVPN. Senha criptografada (GLPIKey), apagada ao
+                // concluir a etapa ou encerrar/cancelar o job.
+                'vpn_user'                         => "varchar(255) NOT NULL DEFAULT ''",
+                'vpn_secret'                       => 'text',
             ],
             'glpi_plugin_ativaworkspace_jobsteps' => [
                 'plugin_ativaworkspace_applications_id' => "int {$sign} NOT NULL DEFAULT '0'",

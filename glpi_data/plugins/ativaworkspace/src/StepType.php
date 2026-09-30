@@ -21,10 +21,13 @@ final class StepType
     public const INVENTORY           = 'INVENTORY';
     public const CUSTOM              = 'CUSTOM';
 
+    /** Configuracao do OpenVPN: pede o .zip do perfil na etapa e usuario/senha no job. */
+    public const OPENVPN = 'openvpn';
+
     /** Configuracoes predefinidas para CONFIGURATION (o executor sabera aplicar). */
     public const CONFIGURATION_KEYS = [
         'vpn_ativa'   => 'VPN Ativa (em desenvolvimento)',
-        'openvpn'     => 'Perfil do OpenVPN (em desenvolvimento)',
+        self::OPENVPN => 'OpenVPN',
         'outlook_pwa' => 'Outlook PWA',
         'onedrive'    => 'OneDrive (em desenvolvimento)',
         'teams'       => 'Microsoft Teams (em desenvolvimento)',
@@ -47,7 +50,7 @@ final class StepType
             self::CONFIGURATION => [
                 'label'       => 'Configuração',
                 'icon'        => 'ti ti-adjustments',
-                'description' => 'Aplica uma configuração predefinida. Outlook PWA é automático; as demais opções estão sinalizadas como em desenvolvimento.',
+                'description' => 'Aplica uma configuração predefinida. Outlook PWA e OpenVPN são automáticos; as demais opções estão sinalizadas como em desenvolvimento.',
                 'application' => false,
                 'config'      => [
                     'configuration_key' => [

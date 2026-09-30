@@ -29,6 +29,7 @@ Page::render('provisioning', 'provisioning.html.twig', [
     'can_provision' => $canProvision,
     'profiles'      => $canProvision ? ProvisioningProfile::activeChoices() : [],
     'upn_profiles'  => $canProvision ? ProvisioningProfile::entraProfileIds() : [],
+    'vpn_profiles'  => $canProvision ? ProvisioningProfile::vpnProfileIds() : [],
     'profiles_url'  => Page::href('profiles'),
     'base_url'      => Page::href('provisioning'),
 ]);

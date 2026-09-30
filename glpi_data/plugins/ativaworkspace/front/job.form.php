@@ -28,7 +28,9 @@ try {
         (int) ($_POST['computers_id'] ?? 0),
         (int) ($_POST['plugin_ativaworkspace_provisioningprofiles_id'] ?? 0),
         (string) ($_POST['employee_name'] ?? ''),
-        (string) ($_POST['upn'] ?? '')
+        (string) ($_POST['upn'] ?? ''),
+        (string) ($_POST['vpn_user'] ?? ''),
+        (string) ($_POST['vpn_password'] ?? '')
     );
 } catch (RuntimeException $exception) {
     http_response_code(422);

@@ -128,7 +128,7 @@ def _install_winget(winget_id: str, timeout: int, logger: logging.Logger) -> tup
 
 def install_winget(winget_id: str, timeout: int, logger: logging.Logger) -> tuple[bool, str]:
     """Interface controlada para configuracoes que dependem de um pacote conhecido."""
-    if winget_id not in {"Google.Chrome"}:
+    if winget_id not in {"Google.Chrome", "OpenVPNTechnologies.OpenVPN"}:
         return False, "Pacote winget nao autorizado para uma configuracao automatica."
     return _install_winget(winget_id, timeout, logger)
 

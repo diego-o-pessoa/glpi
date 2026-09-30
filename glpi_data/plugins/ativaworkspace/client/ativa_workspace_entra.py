@@ -184,12 +184,25 @@ class WorkspaceApi:
                                   {"ok": ok, "message": message[:200]})
         return status in (200, 202)
 
-    def download_installer(self, step_id: int, dest: Path, timeout: int = 600) -> tuple[bool, str, str]:
+    def vpn_credentials(self, step_id: int) -> tuple[dict | None, str]:
+        """Usuario/senha da VPN da etapa OpenVPN (so para esta maquina). Nunca logar."""
+        status, body = self._request("POST", f"/steps/{step_id}/vpn-credentials",
+                                     {"machine_guid": self.machine_guid}, timeout=30)
+        if status == 200 and isinstance(body, dict) and body.get("username") and body.get("password"):
+            return body, ""
+        return None, describe_http_error(status, body)
+
+    def download_vpn_profile(self, step_id: int, dest: Path, timeout: int = 300) -> tuple[bool, str, str]:
+        """Baixa o .zip do perfil do OpenVPN (mesmo contrato do download_installer)."""
+        return self.download_installer(step_id, dest, timeout,
+                                       path=f"/steps/{step_id}/vpn-profile?guid={self.machine_guid}")
+
+    def download_installer(self, step_id: int, dest: Path, timeout: int = 600, path: str = "") -> tuple[bool, str, str]:
         """
         Baixa o instalador da etapa para `dest`. Retorna (ok, sha256_do_servidor,
         erro). O SHA-256 vem no cabecalho X-Installer-Sha256 (o chamador confere).
         """
-        request = Request(self.base_url + f"/steps/{step_id}/installer", method="GET")
+        request = Request(self.base_url + (path or f"/steps/{step_id}/installer"), method="GET")
         request.add_header("Authorization", f"Bearer {self.token}")
         try:
             with self.opener.open(request, timeout=timeout) as response:

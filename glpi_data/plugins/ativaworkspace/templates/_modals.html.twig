@@ -4,7 +4,7 @@
 {% if can_provision %}
 <div class="modal fade" id="aw-new-provisioning" tabindex="-1" aria-labelledby="aw-new-provisioning-title" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
-        <form class="modal-content" data-aw-new-form data-aw-upn-profiles="{{ (upn_profiles ?? [])|json_encode }}">
+        <form class="modal-content" data-aw-new-form data-aw-upn-profiles="{{ (upn_profiles ?? [])|json_encode }}" data-aw-vpn-profiles="{{ (vpn_profiles ?? [])|json_encode }}">
             <div class="modal-header">
                 <h5 class="modal-title" id="aw-new-provisioning-title">
                     <i class="ti ti-rocket me-2 text-primary"></i>Novo provisionamento
@@ -41,6 +41,21 @@
                             'helper': 'Ex.: joao.silva@ativalocacao.com.br. Obrigatória em perfis com Autenticação Microsoft. Nenhuma senha é pedida.',
                             'additional_attributes': {'autocomplete': 'off', 'data-aw-upn': '1'}
                         }) }}
+                    </div>
+                    {# OpenVPN: so aparece em perfis com a etapa. A senha vai criptografada
+                       e e apagada do servidor quando a VPN conecta. #}
+                    <div class="row d-none" data-aw-vpn-fields>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required" for="aw-new-vpn-user">Usuário da VPN</label>
+                            <input type="text" class="form-control" id="aw-new-vpn-user" name="vpn_user" maxlength="255" autocomplete="off" />
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label required" for="aw-new-vpn-password">Senha da VPN</label>
+                            <input type="password" class="form-control" id="aw-new-vpn-password" name="vpn_password" maxlength="512" autocomplete="new-password" />
+                        </div>
+                        <div class="col-12 form-hint mt-n2">
+                            <i class="ti ti-lock me-1"></i>Usadas uma vez para conectar o OpenVPN na máquina; a senha fica criptografada e é apagada do servidor ao concluir.
+                        </div>
                     </div>
                     <div class="text-muted small mt-2">
                         <i class="ti ti-info-circle me-1"></i>

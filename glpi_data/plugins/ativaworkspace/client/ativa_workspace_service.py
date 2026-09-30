@@ -29,6 +29,7 @@ import re
 import sys
 import time
 import unicodedata
+import zipfile
 from ctypes import wintypes
 from pathlib import Path
 from typing import Any
@@ -37,13 +38,14 @@ import ativa_workspace_entra as lib
 import ativa_workspace_install as installer
 import ativa_workspace_inventory as inventory
 import ativa_workspace_logon as logon
+import ativa_workspace_openvpn as openvpn
 import ativa_workspace_outlook as outlook
 import ativa_workspace_uninstall as uninstall
 
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.8.10"
+WORKSPACE_AGENT_VERSION = "1.8.11"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -63,6 +65,8 @@ MUTEX_NAME = r"Global\AtivaWorkspaceService"
 WEB_SIGNIN_MARKER = PRODUCT_DIR / "websignin.json"  # legado: Web sign-in ligado por versao antiga
 SOFTWARE_STATE_PATH = PRODUCT_DIR / "software-install.lock"  # instalacao em andamento
 CONFIGURATION_STATE_PATH = PRODUCT_DIR / "configuration-state.json"
+OPENVPN_STATE_PATH = PRODUCT_DIR / "openvpn-state.json"
+OPENVPN_CONNECT_TIMEOUT = 3 * 60  # tempo para a VPN conectar depois de mandar o GUI
 SOFTWARE_LOCK_SECONDS = 4 * 60 * 60  # nao reentra na instalacao dentro disto
 INVENTORY_MARKER = PRODUCT_DIR / "inventory.stamp"  # ultimo envio de inventario
 INVENTORY_INTERVAL = 60  # coleta e envia o inventario a cada 1 min
@@ -448,7 +452,7 @@ class WorkspaceRuntime:
         config_state = load_json(CONFIGURATION_STATE_PATH)
         if int(config_state.get("step_id", 0) or 0) > 0:
             outlook.clear_result(int(config_state["step_id"]))
-        for path in (STATE_PATH, SOFTWARE_STATE_PATH, CONFIGURATION_STATE_PATH):
+        for path in (STATE_PATH, SOFTWARE_STATE_PATH, CONFIGURATION_STATE_PATH, OPENVPN_STATE_PATH):
             try:
                 path.unlink(missing_ok=True)
             except OSError:
@@ -518,6 +522,9 @@ class WorkspaceRuntime:
     ) -> None:
         """Executa configuracoes predefinidas; hoje, Outlook PWA."""
         key = str(payload.get("configuration_key", ""))
+        if key == "openvpn":
+            self._handle_openvpn(logger, api, step_id, payload)
+            return
         if key != "outlook_pwa":
             api.result(
                 step_id,
@@ -630,6 +637,101 @@ class WorkspaceRuntime:
                 message or ("Outlook PWA configurado." if ok else "Falha ao configurar o Outlook PWA."),
             )
             self._finish_configuration(step_id)
+
+    def _handle_openvpn(self, logger: logging.Logger, api: "lib.WorkspaceApi", step_id: int, payload: dict) -> None:
+        """
+        OpenVPN: instala (se faltar), coloca o perfil na pasta config do OpenVPN,
+        grava usuario/senha da VPN (arquivo protegido) e conecta pelo OpenVPN GUI
+        na sessao do usuario. Confirma pelo log do OpenVPN.
+        """
+        state = load_json(OPENVPN_STATE_PATH)
+        if int(state.get("step_id", 0) or 0) != step_id:
+            state = {"step_id": step_id, "started_at": time.time()}
+            save_json(OPENVPN_STATE_PATH, state)
+
+        def fail(message: str) -> None:
+            api.result(step_id, FAILED, message)
+            OPENVPN_STATE_PATH.unlink(missing_ok=True)
+
+        # O GUI (icone da bandeja) roda na sessao do usuario: precisa de alguem logado.
+        sessions = user_sessions()
+        if not sessions:
+            api.progress(step_id, "WAITING_USER_SESSION", "Nenhuma sessao interativa esta ativa")
+            return
+        session_id = sessions[0]
+        user_sid = logon.session_user_sid(session_id)
+
+        # Ja mandou conectar: acompanha pelo log do OpenVPN.
+        if state.get("connect_at"):
+            name = str(state.get("profile_name", ""))
+            status, detail = openvpn.connection_status(user_sid, name, float(state["connect_at"]))
+            logger.info("OpenVPN: %s (%s).", status, detail)
+            if status == "connected":
+                api.result(step_id, SUCCESS, f"VPN conectada ({name}).")
+                OPENVPN_STATE_PATH.unlink(missing_ok=True)
+            elif status == "auth_failed":
+                fail("O servidor da VPN recusou o usuario ou a senha informados no provisionamento.")
+            elif status == "error":
+                fail(f"O OpenVPN nao conectou: {detail}")
+            elif time.time() - float(state["connect_at"]) > OPENVPN_CONNECT_TIMEOUT:
+                fail("A VPN nao conectou em 3 minutos. Confira o perfil e o acesso ao servidor da VPN.")
+            return
+
+        # 1) OpenVPN instalado?
+        if not openvpn.installed():
+            api.progress(step_id, "INSTALLING_OPENVPN", "Instalando o OpenVPN pelo winget")
+            ok, message = installer.install_winget(openvpn.WINGET_ID, 15 * 60, logger)
+            if not ok or not openvpn.installed():
+                fail("Nao foi possivel instalar o OpenVPN: " + message)
+                return
+
+        # 2) Perfil (.zip) conferido por SHA-256 e extraido na pasta config.
+        api.progress(step_id, "DOWNLOADING_VPN", "Baixando o perfil do OpenVPN")
+        tmp = PRODUCT_DIR / f"vpn-{step_id}.zip"
+        try:
+            ok, server_sha, error = api.download_vpn_profile(step_id, tmp)
+            if not ok:
+                fail(f"Falha ao baixar o perfil do OpenVPN: {error}")
+                return
+            expected = str(payload.get("vpn_file_sha256", "")).strip().lower() or server_sha
+            if not expected or installer._sha256(tmp) != expected:
+                fail("SHA-256 do perfil do OpenVPN nao confere; arquivo recusado.")
+                return
+            api.progress(step_id, "APPLYING_VPN", "Copiando o perfil para a pasta config do OpenVPN")
+            try:
+                ovpn = openvpn.extract_profile(tmp, str(payload.get("vpn_ovpn", "")))
+            except (ValueError, OSError, zipfile.BadZipFile) as exc:
+                fail(f"Perfil do OpenVPN invalido: {exc}")
+                return
+        finally:
+            tmp.unlink(missing_ok=True)
+        logger.info("OpenVPN: perfil extraido em %s.", ovpn.parent)
+
+        # 3) Usuario/senha: pedidos uma vez, gravados so no arquivo protegido.
+        credentials, error = api.vpn_credentials(step_id)
+        if credentials is None:
+            fail(f"Sem usuario/senha da VPN para esta maquina: {error}")
+            return
+        ok, message = openvpn.apply_credentials(
+            ovpn, str(credentials.get("username", "")), str(credentials.get("password", "")), user_sid,
+        )
+        credentials = None  # nao guarda a senha em memoria alem do necessario
+        if not ok:
+            fail(message)
+            return
+
+        # 4) Conecta pelo OpenVPN GUI na sessao do usuario (icone da bandeja).
+        api.progress(step_id, "CONNECTING_VPN", "Conectando a VPN pelo OpenVPN GUI")
+        name = ovpn.stem
+        names = logon.session_process_names(session_id) or set()
+        for arguments in openvpn.connect_arguments(name, "openvpn-gui.exe" in names):
+            if not launch_in_session(session_id, arguments, logger, elevated=False, executable=openvpn.GUI_EXE):
+                fail("Nao foi possivel abrir o OpenVPN GUI na sessao do usuario.")
+                return
+            time.sleep(3)
+        state.update({"connect_at": time.time(), "profile_name": name})
+        save_json(OPENVPN_STATE_PATH, state)
+        logger.info("OpenVPN: conexao solicitada para o perfil %s.", name)
 
     @staticmethod
     def _finish_configuration(step_id: int) -> None:

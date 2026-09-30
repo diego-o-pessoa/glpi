@@ -90,6 +90,28 @@ final class ProvisioningProfile extends CommonDBTM
     }
 
     /**
+     * Perfis com etapa OpenVPN ativa (o modal pede usuario/senha da VPN).
+     *
+     * @return list<int>
+     */
+    public static function vpnProfileIds(): array
+    {
+        global $DB;
+
+        $ids = [];
+        foreach ($DB->request([
+            'SELECT' => [ProfileStep::PROFILE_FK, 'config'],
+            'FROM'   => ProfileStep::getTable(),
+            'WHERE'  => ['step_type' => StepType::CONFIGURATION, 'is_active' => 1],
+        ]) as $row) {
+            if (VpnProfile::isVpnConfig((string) ($row['config'] ?? ''))) {
+                $ids[] = (int) $row[ProfileStep::PROFILE_FK];
+            }
+        }
+        return array_values(array_unique($ids));
+    }
+
+    /**
      * Numero de etapas por perfil, numa consulta so.
      *
      * @param list<int> $ids

@@ -1,7 +1,7 @@
 {% extends '@ativaworkspace/_layout.html.twig' %}
 
 {% block content %}
-    <form method="post" action="{{ action_url }}" data-aw-step-form>
+    <form method="post" action="{{ action_url }}" enctype="multipart/form-data" data-aw-step-form>
         <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}" />
         <input type="hidden" name="profile" value="{{ profile.id }}" />
         {% if not is_new %}<input type="hidden" name="id" value="{{ step.id }}" />{% endif %}
@@ -73,6 +73,20 @@
                         {% endfor %}
                     {% endfor %}
 
+                    {# OpenVPN: perfil (.zip com a pasta do .ovpn e certificados) #}
+                    {% set vpn_current = step.step_type == 'CONFIGURATION' and (step.config_values.configuration_key ?? '') == openvpn_key
+                        ? (step.config_values.vpn_file_name ?? '') : '' %}
+                    <div class="col-12" data-aw-for-type="CONFIGURATION" data-aw-for-config="{{ openvpn_key }}">
+                        <label class="form-label {{ vpn_current ? '' : 'required' }}" for="aw-step-vpn-zip">Perfil do OpenVPN (.zip)</label>
+                        <input type="file" class="form-control" id="aw-step-vpn-zip" name="vpn_zip" accept=".zip" />
+                        <div class="form-hint">
+                            O .zip com a pasta do perfil (.ovpn e certificados). Na máquina, a pasta é colocada em
+                            <code>C:\Program Files\OpenVPN\config</code> e a VPN é conectada com o usuário e a senha
+                            informados ao criar o provisionamento.
+                            {% if vpn_current %}<br><i class="ti ti-file-zip me-1"></i>Atual: <strong>{{ vpn_current }}</strong> ({{ step.config_values.vpn_ovpn ?? '' }}). Envie outro só para trocar.{% endif %}
+                        </div>
+                    </div>
+
                     <div class="col-12"><hr class="my-1"></div>
 
                     <div class="col-sm-6 col-lg-3">
@@ -115,9 +129,15 @@
         if (!select) {
             return;
         }
+        var configSelect = form.querySelector('[name="config[CONFIGURATION][configuration_key]"]');
         function apply() {
             form.querySelectorAll('[data-aw-for-type]').forEach(function (node) {
                 var visible = node.getAttribute('data-aw-for-type') === select.value;
+                // Campos de uma configuracao especifica (ex.: .zip do OpenVPN).
+                var forConfig = node.getAttribute('data-aw-for-config');
+                if (visible && forConfig) {
+                    visible = !!configSelect && configSelect.value === forConfig;
+                }
                 node.classList.toggle('d-none', !visible);
                 node.querySelectorAll('input, select, textarea').forEach(function (input) {
                     input.disabled = !visible;
@@ -125,6 +145,9 @@
             });
         }
         select.addEventListener('change', apply);
+        if (configSelect) {
+            configSelect.addEventListener('change', apply);
+        }
         apply();
     })();
     </script>

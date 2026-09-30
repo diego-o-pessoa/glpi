@@ -98,7 +98,7 @@ final class ProfileStep extends CommonDBTM
      * @return array<string, mixed> campos prontos para gravar
      * @throws RuntimeException mensagem pronta para o usuario
      */
-    public static function inputFromForm(array $post): array
+    public static function inputFromForm(array $post, array $files = [], array $currentConfig = []): array
     {
         $type = (string) ($post['step_type'] ?? '');
         if (!StepType::exists($type)) {
@@ -129,6 +129,21 @@ final class ProfileStep extends CommonDBTM
             $config = StepType::normalizeConfig($type, is_array($rawConfig) ? $rawConfig : []);
         } catch (\InvalidArgumentException $exception) {
             throw new RuntimeException($exception->getMessage());
+        }
+
+        // OpenVPN: o perfil (.zip) vem como arquivo. Na edicao, sem arquivo
+        // novo, mantem o que ja estava na etapa.
+        if ($type === StepType::CONFIGURATION && VpnProfile::isVpnConfig($config)) {
+            $upload = $files['vpn_zip'] ?? null;
+            if (is_array($upload) && (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $config += VpnProfile::storeUpload($upload);
+            } elseif (($currentConfig['vpn_file'] ?? '') !== '' && VpnProfile::isVpnConfig($currentConfig)) {
+                foreach (['vpn_file', 'vpn_file_name', 'vpn_file_sha256', 'vpn_ovpn'] as $key) {
+                    $config[$key] = (string) ($currentConfig[$key] ?? '');
+                }
+            } else {
+                throw new RuntimeException('Envie o arquivo .zip com o perfil do OpenVPN.');
+            }
         }
 
         $timeout  = (int) ($post['timeout_minutes'] ?? 0);

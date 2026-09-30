@@ -47,7 +47,7 @@ final class ProvisioningEngine
      * @return int id do job
      * @throws RuntimeException mensagem pronta para o usuario
      */
-    public static function create(int $computersId, int $profileId, string $employeeName, string $upn): int
+    public static function create(int $computersId, int $profileId, string $employeeName, string $upn, string $vpnUser = '', string $vpnPassword = ''): int
     {
         global $DB;
 
@@ -91,6 +91,27 @@ final class ProvisioningEngine
             }
         }
 
+        // OpenVPN: usuario/senha da VPN do funcionario. A senha vai criptografada
+        // (GLPIKey) e e apagada quando a etapa conclui ou o job encerra.
+        $vpnUser = trim($vpnUser);
+        $needsVpn = false;
+        foreach ($steps as $step) {
+            if ($step['step_type'] === StepType::CONFIGURATION && VpnProfile::isVpnConfig($step['config_values'] ?? [])) {
+                $needsVpn = true;
+            }
+        }
+        if ($needsVpn && ($vpnUser === '' || $vpnPassword === '')) {
+            throw new RuntimeException('Este perfil tem OpenVPN: informe o usuário e a senha da VPN do funcionário.');
+        }
+        if (mb_strlen($vpnUser) > 255 || strlen($vpnPassword) > 512 || preg_match('/[
+]/', $vpnUser . $vpnPassword)) {
+            throw new RuntimeException('Usuário ou senha da VPN inválidos.');
+        }
+        if (!$needsVpn) {
+            $vpnUser = '';
+            $vpnPassword = '';
+        }
+
         $DB->beginTransaction();
         try {
             // Trava o computador (so leitura/lock, sem alterar a tabela nativa):
@@ -109,6 +130,8 @@ final class ProvisioningEngine
                 'status'        => Job::QUEUED,
                 'employee_name' => $employeeName,
                 'upn'           => $upn,
+                'vpn_user'      => $vpnUser,
+                'vpn_secret'    => $vpnPassword !== '' ? VpnProfile::encryptSecret($vpnPassword) : '',
                 'users_id'      => (int) Session::getLoginUserID(),
                 'progress'      => 0,
                 'message'       => 'Na fila.',
@@ -446,6 +469,10 @@ final class ProvisioningEngine
             'upn'               => (string) ($job['upn'] ?? ''),
             'expected_domain'   => WorkspaceConfig::entraDomain(),
             'expected_tenant'   => WorkspaceConfig::entraTenantId(),
+            // OpenVPN: so o arquivo (hash/nome). Usuario e senha NAO vao aqui:
+            // o executor pede uma vez pela rota /vpn-credentials.
+            'vpn_file_sha256'   => (string) ($config['vpn_file_sha256'] ?? ''),
+            'vpn_ovpn'          => (string) ($config['vpn_ovpn'] ?? ''),
             'outlook_url'       => 'https://outlook.office.com/mail/',
             'install_chrome'    => true,
             'pin_taskbar'       => true,
@@ -585,11 +612,15 @@ final class ProvisioningEngine
         // SOFTWARE/CONFIGURATION: sem prova de ingresso; SUCCESS/FAILED vao
         // direto ao resultado. A prova do tenant pertence somente a ENTRA_LOGIN.
         global $DB;
-        $typeRow = $DB->request(['SELECT' => ['step_type'], 'FROM' => JobStep::getTable(), 'WHERE' => ['id' => $stepId], 'LIMIT' => 1])->current();
+        $typeRow = $DB->request(['SELECT' => ['step_type', 'config'], 'FROM' => JobStep::getTable(), 'WHERE' => ['id' => $stepId], 'LIMIT' => 1])->current();
         $stepType = is_array($typeRow) ? (string) $typeRow['step_type'] : '';
         if (in_array($stepType, [StepType::SOFTWARE, StepType::CONFIGURATION], true)) {
             if ($result === JobStep::WAITING_HUMAN) {
                 throw new RuntimeException('Esta etapa automática não aguarda intervenção.');
+            }
+            // VPN conectada: a senha ja foi usada e nao fica mais no servidor.
+            if ($result === JobStep::SUCCESS && $stepType === StepType::CONFIGURATION && VpnProfile::isVpnConfig($typeRow['config'] ?? '')) {
+                VpnProfile::clearCredentials($jobId);
             }
             self::mergeRuntime($jobId, $stepId, ['substate' => $result === JobStep::SUCCESS ? 'DONE' : 'FAILED']);
             self::recordResult($jobId, $stepId, $result, $message !== ''
@@ -683,6 +714,7 @@ final class ProvisioningEngine
                 'message'  => 'Cancelado por ' . getUserName((int) Session::getLoginUserID()) . '.',
                 'plugin_ativaworkspace_jobsteps_id' => 0,
             ]);
+            VpnProfile::clearCredentials($jobId);
             Event::log(Event::LEVEL_WARNING, 'provisioning', 'Provisionamento cancelado', ['etapas_canceladas' => $canceled], $jobId);
         });
     }
@@ -714,6 +746,7 @@ final class ProvisioningEngine
                 'message'  => 'Provisionamento concluído.',
                 'plugin_ativaworkspace_jobsteps_id' => 0,
             ]);
+            VpnProfile::clearCredentials($jobId);
             Event::log(Event::LEVEL_INFO, 'provisioning', 'Provisionamento concluído', ['etapas' => count($steps)], $jobId);
             return;
         }

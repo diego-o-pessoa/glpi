@@ -670,7 +670,27 @@
         }
         var profileSelect = newForm.querySelector('[name="plugin_ativaworkspace_provisioningprofiles_id"]');
         var upnInput = newForm.querySelector('[name="upn"]');
+        var vpnProfiles = [];
+        try {
+            vpnProfiles = JSON.parse(newForm.getAttribute('data-aw-vpn-profiles') || '[]').map(Number);
+        } catch (e) {
+            vpnProfiles = [];
+        }
+        var vpnBox = newForm.querySelector('[data-aw-vpn-fields]');
+        var syncVpn = function () {
+            if (!profileSelect || !vpnBox) {
+                return;
+            }
+            var needed = vpnProfiles.indexOf(Number(profileSelect.value)) !== -1;
+            vpnBox.classList.toggle('d-none', !needed);
+            vpnBox.querySelectorAll('input').forEach(function (input) {
+                input.required = needed;
+                // Fora de perfil com VPN, nada de senha no POST.
+                input.disabled = !needed;
+            });
+        };
         var syncUpn = function () {
+            syncVpn();
             if (!profileSelect || !upnInput) {
                 return;
             }
@@ -711,6 +731,9 @@
                 missing = 'Informe o funcionário.';
             } else if (upnInput && upnInput.required && !String(formData.get('upn') || '').trim()) {
                 missing = 'Informe a conta Microsoft do funcionário.';
+            } else if (vpnBox && !vpnBox.classList.contains('d-none')
+                && (!String(formData.get('vpn_user') || '').trim() || !String(formData.get('vpn_password') || ''))) {
+                missing = 'Informe o usuário e a senha da VPN do funcionário.';
             }
             if (missing) {
                 if (errorBox) {
@@ -731,6 +754,7 @@
                     modal.hide();
                 }
                 newForm.reset();
+                syncUpn();
                 if (result.url) {
                     window.location.href = result.url;
                     return;

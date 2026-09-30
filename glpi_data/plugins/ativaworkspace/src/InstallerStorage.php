@@ -111,7 +111,7 @@ final class InstallerStorage
      * @return array{file_name: string, file_stored_name: string, file_size: int, file_sha256: string, file_signature_status: string}
      * @throws RuntimeException mensagem pronta para o usuario
      */
-    public static function store(array $upload, string $installerType): array
+    public static function store(array $upload, string $installerType, int $minBytes = 1024): array
     {
         $error = (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE);
         if ($error !== UPLOAD_ERR_OK) {
@@ -139,7 +139,7 @@ final class InstallerStorage
         }
 
         $size = (int) filesize($tmp);
-        if ($size < 1024) {
+        if ($size < $minBytes) {
             throw new RuntimeException('O arquivo é pequeno demais para ser um instalador.');
         }
         if ($size > self::effectiveMaxBytes()) {

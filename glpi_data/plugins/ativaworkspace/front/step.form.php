@@ -39,7 +39,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ProfileStep::remove($profileId, (int) $_POST['delete']);
             Session::addMessageAfterRedirect('Etapa excluída.', false, INFO);
         } elseif (isset($_POST['save'])) {
-            $input = ProfileStep::inputFromForm($_POST);
+            // Config atual da etapa (edicao): preserva o .zip do OpenVPN se nao vier outro.
+            $currentConfig = [];
+            if ($stepId > 0) {
+                $current = new ProfileStep();
+                if ($current->getFromDB($stepId) && (int) $current->fields[ProfileStep::PROFILE_FK] === $profileId) {
+                    $decoded = json_decode((string) ($current->fields['config'] ?? ''), true);
+                    $currentConfig = is_array($decoded) ? $decoded : [];
+                }
+            }
+            $input = ProfileStep::inputFromForm($_POST, $_FILES, $currentConfig);
             if ($stepId > 0) {
                 ProfileStep::change($profileId, $stepId, $input);
             } else {
@@ -102,4 +111,5 @@ Page::render('profiles', 'step_form.html.twig', [
     'catalog_url'  => Page::href('applications'),
     'timeout_max'  => ProfileStep::TIMEOUT_MAX_MINUTES,
     'attempts_max' => ProfileStep::ATTEMPTS_MAX,
+    'openvpn_key'  => StepType::OPENVPN,
 ]);
