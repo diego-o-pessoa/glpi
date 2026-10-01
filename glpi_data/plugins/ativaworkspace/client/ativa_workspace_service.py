@@ -46,7 +46,7 @@ import ativa_workspace_uninstall as uninstall
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.8.14"
+WORKSPACE_AGENT_VERSION = "1.8.15"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -1216,8 +1216,14 @@ def run_sc(*args: str) -> int:
     return completed.returncode
 
 
-def service_is_running() -> bool:
-    """Confirma o estado RUNNING; `sc start` pode retornar antes de o processo cair."""
+SERVICE_STATE_STOPPED = 1
+SERVICE_STATE_START_PENDING = 2
+SERVICE_STATE_RUNNING = 4
+SERVICE_START_WAIT_SECONDS = 45  # exe de arquivo unico se descompacta (e o antivirus examina) a cada start
+
+
+def service_state() -> int:
+    """Estado do servico pelo `sc query` (1 parado, 2 iniciando, 4 rodando); 0 se nao deu para ler."""
     import subprocess
     try:
         completed = subprocess.run(
@@ -1225,10 +1231,29 @@ def service_is_running() -> bool:
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, subprocess.SubprocessError):
-        return False
-    return completed.returncode == 0 and re.search(
-        r"(?:STATE|ESTADO)\s*:\s*4\b", completed.stdout or "", re.IGNORECASE
-    ) is not None
+        return 0
+    match = re.search(r"(?:STATE|ESTADO)\s*:\s*(\d+)", completed.stdout or "", re.IGNORECASE)
+    return int(match.group(1)) if completed.returncode == 0 and match else 0
+
+
+def service_is_running() -> bool:
+    return service_state() == SERVICE_STATE_RUNNING
+
+
+def wait_service_running(timeout: int = SERVICE_START_WAIT_SECONDS) -> int:
+    """
+    Espera o servico chegar a RUNNING. `sc start` volta com o servico ainda
+    "iniciando"; so e falha se ele PARAR ou nao subir dentro do prazo.
+    Devolve o ultimo estado lido.
+    """
+    deadline = time.time() + timeout
+    state = 0
+    while time.time() < deadline:
+        state = service_state()
+        if state in (SERVICE_STATE_RUNNING, SERVICE_STATE_STOPPED):
+            return state
+        time.sleep(1)
+    return state
 
 
 def write_configuration(source: Path, logger: logging.Logger) -> None:
@@ -1269,6 +1294,10 @@ def install_service(logger: logging.Logger) -> int:
     exists = run_sc("query", SERVICE_NAME) == 0
     if exists:
         run_sc("stop", SERVICE_NAME)
+        # O servico pode estar no meio de um ciclo (inventario, acao): espera parar.
+        deadline = time.time() + 30
+        while time.time() < deadline and service_state() not in (SERVICE_STATE_STOPPED, 0):
+            time.sleep(1)
         configured = run_sc("config", SERVICE_NAME, "binPath=", f'"{executable}" --service',
                             "start=", "auto", "DisplayName=", SERVICE_DISPLAY_NAME)
         if configured != 0:
@@ -1282,12 +1311,18 @@ def install_service(logger: logging.Logger) -> int:
     run_sc("failure", SERVICE_NAME, "reset=", "86400",
            "actions=", "restart/60000/restart/60000/restart/60000")
     started = run_sc("start", SERVICE_NAME)
-    if started != 0:
+    # 1056 = ja estava em execucao (ex.: o "stop" acima ainda nao tinha concluido).
+    if started not in (0, 1056):
         raise RuntimeError(f"Nao foi possivel iniciar o servico {SERVICE_NAME} (sc.exe={started}).")
-    time.sleep(2)
-    if not service_is_running():
+    state = wait_service_running()
+    if state == SERVICE_STATE_STOPPED:
         raise RuntimeError(
             f"O servico {SERVICE_NAME} iniciou e encerrou. Consulte {LOG_DIR / 'service.log'}."
+        )
+    if state != SERVICE_STATE_RUNNING:
+        raise RuntimeError(
+            f"O servico {SERVICE_NAME} nao chegou a 'em execucao' em {SERVICE_START_WAIT_SECONDS} s "
+            f"(estado {state}). Consulte {LOG_DIR / 'service.log'}."
         )
     logger.info("Servico %s registrado e iniciado.", SERVICE_NAME)
     return 0
