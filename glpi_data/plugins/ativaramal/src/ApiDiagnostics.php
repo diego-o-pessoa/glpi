@@ -17,9 +17,8 @@ use Toolbox;
  * - Sem seguir redirecionamento: o Location aparece no resultado.
  * - Resposta exibida com campos sensiveis ocultos e tamanho limitado.
  *
- * A lista CANDIDATES NAO vem da documentacao da TW (nao ha documentacao
- * publica): sao caminhos comuns em APIs de PABX, exibidos na tela como
- * "candidatos nao confirmados". O resultado real de cada um e o que vale.
+ * Endpoints: os de consulta (GET) da documentacao oficial "API V3 - TW
+ * CONNECT" (DOCS_URL). Autenticacao: Bearer com o Token do painel da TW.
  */
 final class ApiDiagnostics
 {
@@ -28,44 +27,40 @@ final class ApiDiagnostics
     private const PREVIEW_CHARS = 12000;  // mostra no maximo isto
 
     /** Chaves cujo valor nunca e exibido. */
-    private const SENSITIVE = ['token', 'secret', 'password', 'senha', 'authorization', 'cookie', 'apikey', 'api_key', 'credential'];
+    private const SENSITIVE = ['token', 'secret', 'password', 'pass', 'senha', 'pin', 'authorization', 'cookie', 'apikey', 'api_key', 'credential'];
+
+    /** Documentacao oficial (Postman) enviada pelo suporte da TW. */
+    public const DOCS_URL = 'https://documenter.getpostman.com/view/13040224/TzCTa5yB';
+
+    public const MAPPING_NOTE = 'Endpoints da documentação oficial "API V3 - TW CONNECT" (Postman), só os de consulta (GET). '
+        . 'Ficam de fora: gerarToken (cria um token novo), click2Call (faz uma ligação) e downloads de áudio.';
 
     /**
-     * Grupos testados por "Testar API da TW", na ordem.
+     * Endpoints de consulta da API V3 testados por "Testar API da TW", na ordem.
+     * O historico de chamadas usa o dia de hoje (00:00 ate agora).
      *
-     * @var array<string, array{label: string, paths: list<string>}>
+     * @return array<string, array{label: string, paths: list<string>}>
      */
-    public const CANDIDATES = [
-        'discovery' => [
-            'label' => 'Documentação (Swagger do TW Connect)',
-            'paths' => ['/api/documentation', '/docs'],
-        ],
-        'extensions' => [
-            'label' => 'Ramais',
-            'paths' => ['/api/v1/ramal'],
-        ],
-        'calls' => [
-            'label' => 'Ligações (CDR)',
-            'paths' => ['/api/v1/cdr', '/api/v1/cdr/report'],
-        ],
-        'answered' => [
-            'label' => 'Atendidas / não atendidas (teste de filtro, parâmetro não confirmado)',
-            'paths' => ['/api/v1/cdr?disposition=ANSWERED', '/api/v1/cdr?disposition=NO%20ANSWER'],
-        ],
-        'others' => [
-            'label' => 'Outros recursos encontrados',
-            'paths' => ['/api/v1/did', '/api/v1/usuario', '/api/v1/tronco', '/api/v1/rota', '/api/v1/cliente'],
-        ],
-    ];
+    public static function candidates(): array
+    {
+        $period = http_build_query([
+            'data_inicial' => date('Y-m-d') . ' 00:00:00',
+            'data_final'   => date('Y-m-d H:i:s'),
+        ], '', '&', PHP_QUERY_RFC3986);
 
-    /**
-     * Como a lista acima foi levantada (01/10/2026): GET sem token em
-     * https://ativa-locacao-1.twsolutions.com.br com Accept: application/json.
-     * Rota existente responde 401 "Unauthenticated."; inexistente, 404.
-     * Filas: nenhuma rota encontrada (fila, filas, queue, queues, grupo,
-     * callcenter, atendimento... todas 404).
-     */
-    public const MAPPING_NOTE = 'Rotas confirmadas em 01/10/2026 (respondem 401 sem token = existem). Nenhuma rota de filas foi encontrada (fila, filas, queue, queues, grupo, callcenter… = 404).';
+        return [
+            'extensions' => ['label' => 'Ramais', 'paths' => ['/api/v3/ramal/consultarRamal']],
+            'queues'     => ['label' => 'Filas', 'paths' => ['/api/v3/fila/consultarFila']],
+            'calls'      => ['label' => 'Ligações de hoje (atendidas/não atendidas pelo campo "disposition")', 'paths' => ['/api/v3/chamada/consultarChamada?' . $period]],
+            'realtime'   => ['label' => 'Ligações em tempo real', 'paths' => ['/api/v3/chamada/consultarChamadaTempoReal']],
+            'others'     => ['label' => 'Outros cadastros', 'paths' => [
+                '/api/v3/usuario/consultarUsuario',
+                '/api/v3/grupo/consultarGrupo',
+                '/api/v3/did/consultarDid',
+                '/api/v3/perfil/consultarPerfil',
+            ]],
+        ];
+    }
 
     /** Caminho relativo seguro (com query opcional). */
     public static function normalizePath(string $path): string
@@ -100,6 +95,7 @@ final class ApiDiagnostics
      * usa: o diagnostico testa cada uma e mostra o resultado de todas.
      */
     public const APIKEY_SCHEMES = [
+        'bearer'     => '"Authorization: Bearer <token>" (documentação V3)',
         'headers'    => 'Cabeçalhos "token" e "key"',
         'x_headers'  => 'Cabeçalhos "X-Token" e "X-Key"',
         'bearer_key' => '"Authorization: Bearer <token>" + cabeçalho "key"',
@@ -153,13 +149,19 @@ final class ApiDiagnostics
         }
         $token = RamalConfig::secret('api_token');
         $key = RamalConfig::secret('api_key');
-        if ($token === '' || $key === '') {
-            throw new RuntimeException('Salve o Token e a Key da API (criados no painel da TW) antes de testar.');
+        if ($token === '') {
+            throw new RuntimeException('Salve o Token da API (criado no painel da TW, em /gerenciar-tokens) antes de testar.');
+        }
+        if ($key === '' && $scheme !== 'bearer') {
+            throw new RuntimeException('Esta forma de envio usa também a Key: salve a Key da API.');
         }
         $url = $base . $path;
         $display = $url;
         $headers = [];
         switch ($scheme) {
+            case 'bearer':
+                $headers = ['Authorization' => 'Bearer ' . $token];
+                break;
             case 'headers':
                 $headers = ['token' => $token, 'key' => $key];
                 break;

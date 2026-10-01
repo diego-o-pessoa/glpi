@@ -204,10 +204,11 @@
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <h3 class="card-title mb-0"><i class="ti ti-stethoscope me-2 text-primary"></i>Diagnóstico da API</h3>
                 <div class="d-flex flex-wrap gap-2">
-                    <button type="button" class="btn btn-primary" data-ar-diag-run {{ connected and s.base_url ? '' : 'disabled' }}>
+                    <button type="button" class="btn btn-primary" data-ar-diag-run {{ s.has_api_token and s.base_url ? '' : 'disabled' }}
+                            title="Endpoints da API V3 com Authorization: Bearer <Token da API>">
                         <i class="ti ti-player-play me-1"></i>Testar API da TW
                     </button>
-                    <button type="button" class="btn btn-success" data-ar-diag-run-apikey {{ s.has_api_token and s.has_api_key and s.base_url ? '' : 'disabled' }}
+                    <button type="button" class="btn btn-success" data-ar-diag-run-apikey {{ s.has_api_token and s.base_url ? '' : 'disabled' }}
                             title="Usa o Token + Key criados no painel da TW (Ferramentas)">
                         <i class="ti ti-key me-1"></i>Testar com Token/Key
                     </button>
@@ -221,8 +222,8 @@
                 </div>
             </div>
             <div class="card-body">
-                {% if not connected %}
-                    <div class="alert alert-warning"><i class="ti ti-plug-x me-1"></i>Conecte à TW Solutions (token válido) para testar.</div>
+                {% if not s.has_api_token %}
+                    <div class="alert alert-warning"><i class="ti ti-key-off me-1"></i>Salve o <strong>Token da API</strong> (criado no painel da TW, em /gerenciar-tokens) para testar.</div>
                 {% endif %}
                 <p class="text-muted mb-2">
                     Faz requisições <strong>GET</strong> autenticadas (somente leitura) em <code>{{ s.base_url ?: '(URL base)' }}</code> e mostra,
@@ -230,8 +231,9 @@
                 </p>
                 <div class="alert alert-info small">
                     <i class="ti ti-info-circle me-1"></i>
-                    A TW não publica a documentação da API. {{ diag_note }}
-                    Para outros caminhos (ex.: os que a TW informar), use o campo "Caminho personalizado".
+                    {{ diag_note }} <a href="{{ docs_url }}" target="_blank" rel="noopener">Abrir a documentação</a>.
+                    Autenticação: <code>Authorization: Bearer</code> com o <strong>Token da API</strong> criado no painel da TW (<code>/gerenciar-tokens</code>).
+                    Para outros endpoints de consulta, use o campo "Caminho personalizado".
                 </div>
                 <details class="mb-3">
                     <summary class="text-muted small" style="cursor:pointer">Ver as URLs que serão testadas</summary>
@@ -249,7 +251,7 @@
                 <form class="input-group mb-3" data-ar-diag-custom autocomplete="off">
                     <span class="input-group-text font-monospace small text-truncate" style="max-width:45%">{{ s.base_url ?: '(URL base)' }}</span>
                     <input type="text" class="form-control font-monospace" name="path" placeholder="/caminho?parametro=valor" maxlength="300" aria-label="Caminho personalizado">
-                    <button type="submit" class="btn btn-outline-primary" {{ connected and s.base_url ? '' : 'disabled' }}><i class="ti ti-send me-1"></i>Testar caminho</button>
+                    <button type="submit" class="btn btn-outline-primary" {{ s.has_api_token and s.base_url ? '' : 'disabled' }}><i class="ti ti-send me-1"></i>Testar caminho</button>
                 </form>
                 <div class="d-none mb-2 small text-muted" data-ar-diag-progress></div>
                 <div data-ar-diag-results></div>
@@ -432,7 +434,8 @@
         report.push('');
         runList(list);
     }
-    runBtn.addEventListener('click', function () { runAll('user'); });
+    // Padrao da documentacao V3: Bearer com o Token do painel.
+    runBtn.addEventListener('click', function () { runAll('apikey', 'bearer'); });
     var runClientBtn = card.querySelector('[data-ar-diag-run-client]');
     if (runClientBtn) { runClientBtn.addEventListener('click', function () { runAll('client'); }); }
 
@@ -446,11 +449,11 @@
             results.innerHTML = '';
             report = ['Diagnóstico da API da TW Solutions - ' + new Date().toLocaleString('pt-BR') + ' (Token/Key do painel)', '', 'Formas de envio:'];
             var section = el('div', 'mb-3');
-            section.appendChild(el('h4', 'mb-2', 'Formas de envio do Token/Key (em /api/v1/ramal)'));
+            section.appendChild(el('h4', 'mb-2', 'Formas de envio do Token/Key (em /api/v3/ramal/consultarRamal)'));
             results.appendChild(section);
             var accepted = '';
             var list = Object.keys(schemes).map(function (scheme) {
-                return { path: '/api/v1/ramal', box: section, mode: 'apikey', scheme: scheme, onResult: function (data) {
+                return { path: '/api/v3/ramal/consultarRamal', box: section, mode: 'apikey', scheme: scheme, onResult: function (data) {
                     var st = data.ok ? data.result.status : 0;
                     if (!accepted && st && st !== 401 && st !== 403) { accepted = scheme; }
                 } };
@@ -483,7 +486,7 @@
         section.appendChild(el('h4', 'mb-2', 'Caminho personalizado'));
         results.insertBefore(section, results.firstChild);
         if (!report.length) { report = ['Diagnóstico da API da TW Solutions - ' + new Date().toLocaleString('pt-BR')]; }
-        runList([{ path: input.value.trim(), box: section }]);
+        runList([{ path: input.value.trim(), box: section, mode: 'apikey', scheme: 'bearer' }]);
     });
 
     copyBtn.addEventListener('click', function () {
