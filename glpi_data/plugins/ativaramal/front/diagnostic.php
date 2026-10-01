@@ -29,7 +29,9 @@ if (!Session::haveRight(PluginAtivaramalProfile::RIGHT_CONFIG, UPDATE)) {
 session_write_close();
 
 try {
-    $result = ApiDiagnostics::probe((string) ($_POST['path'] ?? ''));
+    $mode = ($_POST['mode'] ?? '') === 'client' ? 'client' : 'user';
+    $result = ApiDiagnostics::probe((string) ($_POST['path'] ?? ''), $mode);
+    $result['mode'] = $mode;
     echo json_encode(['ok' => true, 'result' => $result], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (RuntimeException $exception) {
     http_response_code(422);

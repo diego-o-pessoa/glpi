@@ -56,6 +56,21 @@ final class OAuthClient
         ]);
     }
 
+    /**
+     * Token "de sistema" (client credentials), so para o diagnostico: nao e
+     * salvo e nao substitui o token da conexao OAuth.
+     *
+     * @return array<string, mixed>
+     */
+    public static function clientCredentials(): array
+    {
+        $params = ['grant_type' => 'client_credentials'];
+        if (RamalConfig::get('scope') !== '') {
+            $params['scope'] = RamalConfig::get('scope');
+        }
+        return self::tokenRequest($params);
+    }
+
     /** @return array<string, mixed> */
     public static function refresh(string $refreshToken): array
     {

@@ -89,18 +89,38 @@ final class ApiDiagnostics
      *
      * @return array<string, mixed>
      */
-    public static function probe(string $path): array
+    /**
+     * Token de sistema (client credentials) pedido uma vez por requisicao do
+     * diagnostico e mantido so em memoria.
+     */
+    private static ?string $clientToken = null;
+
+    /**
+     * @param string $mode 'user' (token da conexao OAuth) ou 'client' (client credentials, nao salvo)
+     * @return array<string, mixed>
+     */
+    public static function probe(string $path, string $mode = 'user'): array
     {
         $path = self::normalizePath($path);
         $base = RamalConfig::baseUrl();
         if (!RamalConfig::isHttpsUrl($base)) {
             throw new RuntimeException('Configure a URL base da API (HTTPS) antes de testar.');
         }
-        $token = TokenManager::accessToken();
+        if ($mode === 'client') {
+            if (self::$clientToken === null) {
+                $response = OAuthClient::clientCredentials();
+                self::$clientToken = (string) ($response['access_token'] ?? '');
+                Logger::info('Diagnóstico: token client credentials obtido (não salvo)');
+            }
+            $token = self::$clientToken;
+            $type = 'Bearer';
+        } else {
+            $token = TokenManager::accessToken();
+            $type = RamalConfig::get('token_type') ?: 'Bearer';
+        }
         if ($token === '') {
             throw new RuntimeException('Sem access token: conecte à TW Solutions antes de testar.');
         }
-        $type = RamalConfig::get('token_type') ?: 'Bearer';
         $url = $base . $path;
 
         $started = microtime(true);

@@ -206,6 +206,10 @@
                     <button type="button" class="btn btn-primary" data-ar-diag-run {{ connected and s.base_url ? '' : 'disabled' }}>
                         <i class="ti ti-player-play me-1"></i>Testar API da TW
                     </button>
+                    <button type="button" class="btn btn-outline-primary" data-ar-diag-run-client {{ s.client_id and s.has_client_secret and s.base_url ? '' : 'disabled' }}
+                            title="Pede um token de sistema (client credentials) só para este teste; não é salvo e não muda a conexão">
+                        <i class="ti ti-robot me-1"></i>Testar com token de sistema
+                    </button>
                     <button type="button" class="btn btn-outline-secondary d-none" data-ar-diag-copy>
                         <i class="ti ti-copy me-1"></i>Copiar relatório
                     </button>
@@ -315,9 +319,10 @@
         return 'Erro do servidor';
     }
 
-    function call(path) {
+    function call(path, mode) {
         var body = new FormData();
         body.append('path', path);
+        body.append('mode', mode || 'user');
         return fetch(url, { method: 'POST', body: body, credentials: 'same-origin',
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrf } })
             .then(function (resp) { return resp.json().catch(function () { return { ok: false, message: 'Erro ' + resp.status + ' no GLPI.' }; }); })
@@ -339,9 +344,10 @@
         var r = data.result;
         head.appendChild(el('span', 'badge ' + badgeClass(r.status) + ' text-white', r.status ? String(r.status) : '—'));
         head.appendChild(el('span', 'font-monospace small text-break', 'GET ' + r.url));
+        if (r.mode === 'client') { head.appendChild(el('span', 'badge bg-purple-lt', 'token de sistema')); }
         head.appendChild(el('span', 'small text-muted', meaning(r) + ' · ' + r.ms + ' ms · ' + r.bytes + ' bytes' + (r.content_type ? ' · ' + r.content_type : '')));
         item.appendChild(head);
-        report.push(['[' + (r.status || 'sem resposta') + ']', 'GET ' + r.url, '-', meaning(r), '(' + r.ms + ' ms)'].join(' '));
+        report.push(['[' + (r.status || 'sem resposta') + ']', 'GET ' + r.url, '-', meaning(r), '(' + r.ms + ' ms)', r.mode === 'client' ? '[token de sistema]' : ''].join(' '));
 
         var hasDetails = r.preview || (r.fields && r.fields.length) || (r.headers && Object.keys(r.headers).length);
         if (hasDetails) {
@@ -393,25 +399,29 @@
             }
             var job = list[i++];
             progress.textContent = 'Testando ' + i + ' de ' + list.length + ': ' + (job.path || '/');
-            call(job.path).then(function (data) { render(job.box, job.path, data); next(); });
+            call(job.path, job.mode).then(function (data) { render(job.box, job.path, data); next(); });
         }
         next();
     }
 
-    runBtn.addEventListener('click', function () {
+    function runAll(mode) {
         if (running) { return; }
         results.innerHTML = '';
-        report = ['Diagnóstico da API da TW Solutions - ' + new Date().toLocaleString('pt-BR')];
+        report = ['Diagnóstico da API da TW Solutions - ' + new Date().toLocaleString('pt-BR')
+            + (mode === 'client' ? ' (token de sistema / client credentials)' : ' (token da conexão OAuth)')];
         var list = [];
         Object.keys(groups).forEach(function (key) {
             var section = el('div', 'mb-3');
             section.appendChild(el('h4', 'mb-2', groups[key].label));
             results.appendChild(section);
-            groups[key].paths.forEach(function (path) { list.push({ path: path, box: section }); });
+            groups[key].paths.forEach(function (path) { list.push({ path: path, box: section, mode: mode }); });
         });
         report.push('');
         runList(list);
-    });
+    }
+    runBtn.addEventListener('click', function () { runAll('user'); });
+    var runClientBtn = card.querySelector('[data-ar-diag-run-client]');
+    if (runClientBtn) { runClientBtn.addEventListener('click', function () { runAll('client'); }); }
 
     card.querySelector('[data-ar-diag-custom]').addEventListener('submit', function (event) {
         event.preventDefault();
