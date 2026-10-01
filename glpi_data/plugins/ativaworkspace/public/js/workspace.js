@@ -255,6 +255,9 @@
         toggle.type = 'button';
         toggle.setAttribute('data-bs-toggle', 'dropdown');
         toggle.setAttribute('data-bs-boundary', 'viewport');
+        // Posicao fixa: o menu escapa do container com rolagem da tabela
+        // (sem isso ele era cortado; com overflow visivel a tabela vazava do card).
+        toggle.setAttribute('data-bs-popper-config', '{"strategy":"fixed"}');
         toggle.setAttribute('aria-expanded', 'false');
         toggle.setAttribute('aria-label', 'Mais ações');
         toggle.appendChild(icon('ti-dots-vertical'));

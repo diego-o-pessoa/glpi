@@ -225,18 +225,10 @@
 
 /* --------------------------------------------------------------- tabela */
 
-/* O menu de acoes (dropdown) era recortado pelo overflow do container.
-   overflow visivel deixa o menu aparecer por cima; o min-width mantem a
-   rolagem horizontal na pagina quando a tabela fica larga demais. */
-/* O card do Bootstrap tem overflow:hidden (corta o menu no rodape). */
-.ativaworkspace .aw-jobs-card {
-    overflow: visible;
-}
-
-.ativaworkspace .aw-jobs-scroll {
-    overflow: visible;
-}
-
+/* A tabela rola DENTRO do card (table-responsive). O menu de acoes (⋮) usa
+   posicao fixa (popper strategy "fixed", no workspace.js), entao nao e
+   cortado pelo overflow; overflow visivel aqui fazia a tabela vazar por cima
+   do box ao lado. */
 .ativaworkspace .aw-jobs-scroll .aw-jobs-table {
     min-width: 900px;
 }
