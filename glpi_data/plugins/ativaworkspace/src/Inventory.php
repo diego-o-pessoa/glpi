@@ -152,6 +152,7 @@ final class Inventory
             'disks'        => is_array($data['disks'] ?? null) ? $data['disks'] : [],
             'programs'     => is_array($data['programs'] ?? null) ? $data['programs'] : [],
             'processes'    => is_array($data['processes'] ?? null) ? $data['processes'] : [],
+            'network'      => is_array($data['network'] ?? null) ? $data['network'] : [],
         ];
     }
 }

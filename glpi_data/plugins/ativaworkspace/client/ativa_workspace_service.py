@@ -46,7 +46,7 @@ import ativa_workspace_uninstall as uninstall
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.8.13"
+WORKSPACE_AGENT_VERSION = "1.8.14"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -511,7 +511,12 @@ class WorkspaceRuntime:
             last = 0.0
         if now - last < INVENTORY_INTERVAL:
             return
-        data = inventory.collect(WORKSPACE_AGENT_VERSION)
+        def vpn_profiles() -> list[str]:
+            # Perfil do OpenVPN conectado pelo usuario da sessao (pelo log do GUI).
+            sessions = user_sessions()
+            return openvpn.connected_profiles(logon.session_user_sid(sessions[0])) if sessions else []
+
+        data = inventory.collect(WORKSPACE_AGENT_VERSION, api.base_url, vpn_profiles)
         if api.report_inventory(data):
             INVENTORY_MARKER.write_text(str(int(now)), "utf-8")
             logger.info("Inventario enviado (%s programas).", len(data.get("programs", [])))

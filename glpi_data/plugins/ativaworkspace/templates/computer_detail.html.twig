@@ -37,6 +37,104 @@
         </div>
     </div>
 
+    {# ------------------------------------------------ Rede #}
+    {% set net = inv.network ?? {} %}
+    <div class="card mb-3">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h3 class="card-title mb-0"><i class="ti ti-network me-2 text-primary"></i>Rede</h3>
+            {% if net.vpn is defined %}
+                {% if net.vpn.connected %}
+                    <span class="badge bg-green-lt"><i class="ti ti-shield-check me-1"></i>VPN conectada{{ net.vpn.profile ? ': ' ~ net.vpn.profile : '' }}</span>
+                {% else %}
+                    <span class="badge bg-secondary-lt"><i class="ti ti-shield-off me-1"></i>VPN desconectada</span>
+                {% endif %}
+            {% endif %}
+        </div>
+        {% if net is empty %}
+            <div class="card-body text-muted">
+                Sem dados de rede ainda. Eles chegam no próximo inventário (serviço Ativa Workspace 1.8.14 ou superior).
+            </div>
+        {% else %}
+            {% set latency = net.latency_ms ?? null %}
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-sm-6 col-xl-3">
+                        <div class="text-muted small">Conexão</div>
+                        {% if net.connection == 'wifi' %}
+                            {% set signal = net.wifi.signal ?? null %}
+                            <div class="fw-semibold"><i class="ti ti-wifi me-1"></i>Wi-Fi{{ net.wifi.ssid ?? '' ? ' · ' ~ net.wifi.ssid : '' }}</div>
+                            {% if signal is not null %}
+                                <div class="d-flex align-items-center gap-2 mt-1">
+                                    <div class="progress flex-grow-1" style="height:6px;max-width:120px">
+                                        <div class="progress-bar {{ signal >= 70 ? 'bg-green' : (signal >= 40 ? 'bg-yellow' : 'bg-red') }}" style="width: {{ signal }}%"></div>
+                                    </div>
+                                    <span class="small text-muted">sinal {{ signal }}%</span>
+                                </div>
+                            {% endif %}
+                        {% elseif net.connection == 'ethernet' %}
+                            <div class="fw-semibold"><i class="ti ti-plug-connected me-1"></i>Cabo{{ net.speed ? ' · ' ~ net.speed : '' }}</div>
+                        {% else %}
+                            <div class="fw-semibold text-muted">Sem conexão ativa</div>
+                        {% endif %}
+                        <div class="small text-muted text-truncate" title="{{ net.adapter }}">{{ net.adapter }}</div>
+                    </div>
+                    <div class="col-sm-6 col-xl-3">
+                        <div class="text-muted small">IP local</div>
+                        <div class="fw-semibold font-monospace">{{ net.ip ?: '—' }}</div>
+                        <div class="small text-muted">Gateway <span class="font-monospace">{{ net.gateway ?: '—' }}</span></div>
+                    </div>
+                    <div class="col-sm-6 col-xl-3">
+                        <div class="text-muted small">IP público</div>
+                        <div class="fw-semibold font-monospace">{{ net.public_ip ?: '—' }}</div>
+                        <div class="small text-muted" title="IP de onde o serviço falou com o GLPI">Visto pelo GLPI <span class="font-monospace">{{ net.server_seen_ip ?? '' ?: '—' }}</span></div>
+                    </div>
+                    <div class="col-sm-6 col-xl-3">
+                        <div class="text-muted small">Latência até o GLPI</div>
+                        {% if latency is null %}
+                            <div class="fw-semibold text-danger">Sem resposta</div>
+                        {% else %}
+                            <div class="fw-semibold {{ latency < 80 ? 'text-green' : (latency < 200 ? 'text-yellow' : 'text-red') }}">{{ latency }} ms</div>
+                        {% endif %}
+                        <div class="small text-muted">
+                            VPN {% if net.vpn.connected ?? false %}<span class="font-monospace">{{ net.vpn.ip }}</span>{% else %}desconectada{% endif %}
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-xl-3">
+                        <div class="text-muted small">DNS</div>
+                        <div class="font-monospace small">{{ (net.dns ?? [])|join(', ') ?: '—' }}</div>
+                    </div>
+                    <div class="col-sm-6 col-xl-3">
+                        <div class="text-muted small">MAC</div>
+                        <div class="font-monospace small">{{ net.mac ?: '—' }}</div>
+                    </div>
+                </div>
+
+                {% if (net.adapters ?? [])|length > 0 %}
+                    <details class="mt-3">
+                        <summary class="text-muted small" style="cursor:pointer">Todos os adaptadores ativos ({{ net.adapters|length }})</summary>
+                        <div class="table-responsive mt-2">
+                            <table class="table table-sm card-table mb-0">
+                                <thead><tr><th>Adaptador</th><th>Tipo</th><th>IP</th><th>Gateway</th><th>MAC</th><th>Velocidade</th></tr></thead>
+                                <tbody>
+                                    {% for a in net.adapters %}
+                                        <tr>
+                                            <td><span title="{{ a.description }}">{{ a.name }}</span></td>
+                                            <td>{{ a.type == 'wifi' ? 'Wi-Fi' : (a.type == 'vpn' ? 'VPN' : 'Cabo') }}</td>
+                                            <td class="font-monospace small">{{ a.ipv4|join(', ') ?: '—' }}</td>
+                                            <td class="font-monospace small">{{ a.gateway|join(', ') ?: '—' }}</td>
+                                            <td class="font-monospace small">{{ a.mac ?: '—' }}</td>
+                                            <td class="small">{{ a.speed ?: '—' }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
     {% if can_manage %}
     {# ------------------------------------------------ Acoes remotas #}
     {% set power = {'restart': remote_actions.restart, 'shutdown': remote_actions.shutdown} %}

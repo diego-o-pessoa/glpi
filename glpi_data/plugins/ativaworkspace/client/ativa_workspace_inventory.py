@@ -15,6 +15,8 @@ import subprocess
 import time
 from ctypes import wintypes
 
+import ativa_workspace_network as network
+
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
@@ -185,7 +187,7 @@ def _processes(limit: int = 25) -> list[dict]:
     return [{"name": name[:80], "ram_mb": round(kb / 1024)} for name, kb in ordered]
 
 
-def collect(agent_version: str) -> dict:
+def collect(agent_version: str, server_url: str = "", vpn_profiles=None) -> dict:
     """Snapshot completo. Cada bloco falha isolado (retorna vazio, nao derruba)."""
     def safe(fn, default):
         try:
@@ -207,4 +209,5 @@ def collect(agent_version: str) -> dict:
         "disks": safe(_disks, []),
         "programs": safe(_programs, []),
         "processes": safe(_processes, []),
+        "network": safe(lambda: network.collect(server_url, vpn_profiles), {}),
     }

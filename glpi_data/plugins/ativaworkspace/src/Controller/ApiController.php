@@ -366,6 +366,11 @@ final class ApiController extends AbstractController
         } catch (\JsonException) {
             return $this->error('INVALID_JSON', 'Corpo inválido.', 400);
         }
+        // IP de onde o servico falou com o GLPI (ex.: o da VPN), visto pelo servidor.
+        if (is_array($data)) {
+            $data['network'] = is_array($data['network'] ?? null) ? $data['network'] : [];
+            $data['network']['server_seen_ip'] = mb_substr((string) $request->getClientIp(), 0, 45);
+        }
         if (!is_array($data) || !Inventory::store($guid, $data)) {
             return $this->error('MACHINE_UNKNOWN', 'Máquina não vinculada de forma única ao inventário.', 404);
         }
