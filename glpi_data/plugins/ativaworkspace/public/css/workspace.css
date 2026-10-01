@@ -233,6 +233,45 @@
     min-width: 900px;
 }
 
+/* Visao Geral (card estreito): sem Inicio (7a) e Responsavel (8a); a tabela
+   completa fica na aba Provisionamento. */
+.ativaworkspace .aw-jobs-compact .aw-jobs-table {
+    min-width: 640px;
+}
+
+.ativaworkspace .aw-jobs-compact .aw-jobs-table th:nth-child(7),
+.ativaworkspace .aw-jobs-compact .aw-jobs-table td:nth-child(7),
+.ativaworkspace .aw-jobs-compact .aw-jobs-table th:nth-child(8),
+.ativaworkspace .aw-jobs-compact .aw-jobs-table td:nth-child(8) {
+    display: none;
+}
+
+/* Acoes sempre visiveis: a coluna fica presa a direita mesmo quando a
+   tabela precisa rolar dentro do card. Fundo solido para nao sobrepor texto. */
+.ativaworkspace .aw-jobs-table th:last-child,
+.ativaworkspace .aw-jobs-table td:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    white-space: nowrap;
+    background-color: var(--tblr-bg-surface, #fff);
+    box-shadow: -8px 0 8px -8px rgba(20, 42, 91, 0.18);
+}
+
+.ativaworkspace .aw-jobs-table thead th:last-child {
+    background-color: var(--tblr-bg-surface-secondary, #f6f8fb);
+}
+
+.ativaworkspace .aw-jobs-table tr.aw-row-failed td:last-child {
+    background-image: linear-gradient(rgba(214, 57, 57, 0.035), rgba(214, 57, 57, 0.035));
+}
+
+/* Linha vazia (colspan) nao e coluna de acoes. */
+.ativaworkspace .aw-jobs-table .aw-empty-row td:last-child {
+    position: static;
+    box-shadow: none;
+}
+
 .ativaworkspace .aw-jobs-table thead th {
     background: rgba(108, 122, 145, 0.07);
     font-size: 0.8rem;
