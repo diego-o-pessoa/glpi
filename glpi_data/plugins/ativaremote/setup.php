@@ -9,6 +9,17 @@ define('PLUGIN_ATIVAREMOTE_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVAREMOTE_MAX_GLPI', '12.0.0');
 
 /**
+ * Roda ANTES de o GLPI iniciar a sessao PHP. A API dos servicos (token
+ * Bearer) tem que ser registrada aqui como stateless; registrada no
+ * plugin_init (que roda depois), cada chamada criava um arquivo em
+ * files/_sessions.
+ */
+function plugin_ativaremote_boot(): void
+{
+    SessionManager::registerPluginStatelessPath('ativaremote', '#^/api/v1(?:/|$)#');
+}
+
+/**
  * Init the hooks of the plugin
  */
 function plugin_init_ativaremote(): void
@@ -17,8 +28,6 @@ function plugin_init_ativaremote(): void
 
     $PLUGIN_HOOKS['csrf_compliant']['ativaremote'] = true;
 
-    // API used by the Ativa Updater service (token authentication, no session).
-    SessionManager::registerPluginStatelessPath('ativaremote', '#^/api/v1(?:/|$)#');
     
     Plugin::registerClass('PluginAtivaremoteMenu');
     $PLUGIN_HOOKS['menu_toadd']['ativaremote']['admin'] = 'PluginAtivaremoteMenu';

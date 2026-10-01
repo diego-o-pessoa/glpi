@@ -31,6 +31,17 @@ function plugin_version_ativaworkspace(): array
     ];
 }
 
+/**
+ * Roda ANTES de o GLPI iniciar a sessao PHP. A API dos servicos (token
+ * Bearer) tem que ser registrada aqui como stateless; registrada no
+ * plugin_init (que roda depois), cada chamada criava um arquivo em
+ * files/_sessions.
+ */
+function plugin_ativaworkspace_boot(): void
+{
+    SessionManager::registerPluginStatelessPath('ativaworkspace', '#^/api/v1(?:/|$)#');
+}
+
 function plugin_init_ativaworkspace(): void
 {
     global $PLUGIN_HOOKS;
@@ -44,8 +55,6 @@ function plugin_init_ativaworkspace(): void
         'graph_client_secret',
     ]);
 
-    // API do executor (servico nas maquinas): token Bearer proprio, sem sessao.
-    SessionManager::registerPluginStatelessPath('ativaworkspace', '#^/api/v1(?:/|$)#');
 
     $plugin = new Plugin();
     if (!$plugin->isActivated('ativaworkspace')) {

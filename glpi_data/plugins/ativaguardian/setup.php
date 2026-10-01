@@ -30,15 +30,23 @@ function plugin_version_ativaguardian(): array
     ];
 }
 
+/**
+ * Roda ANTES de o GLPI iniciar a sessao PHP. A API dos servicos (token
+ * Bearer) tem que ser registrada aqui como stateless; registrada no
+ * plugin_init (que roda depois), cada chamada criava um arquivo em
+ * files/_sessions.
+ */
+function plugin_ativaguardian_boot(): void
+{
+    SessionManager::registerPluginStatelessPath('ativaguardian', '#^/api/v1(?:/|$)#');
+}
+
 function plugin_init_ativaguardian(): void
 {
     global $PLUGIN_HOOKS;
 
     $PLUGIN_HOOKS[Hooks::CSRF_COMPLIANT]['ativaguardian'] = true;
 
-    // The heartbeat API authenticates with a bearer token, not a GLPI session.
-    // Same stateless-path registration the Ativa Updater uses for its service API.
-    SessionManager::registerPluginStatelessPath('ativaguardian', '#^/api/v1(?:/|$)#');
 
     $plugin = new Plugin();
     if (!$plugin->isActivated('ativaguardian')) {

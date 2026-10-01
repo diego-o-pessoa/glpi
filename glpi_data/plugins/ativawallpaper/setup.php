@@ -31,15 +31,23 @@ function plugin_version_ativawallpaper(): array
     ];
 }
 
+/**
+ * Roda ANTES de o GLPI iniciar a sessao PHP. A API dos servicos (token
+ * Bearer) tem que ser registrada aqui como stateless; registrada no
+ * plugin_init (que roda depois), cada chamada criava um arquivo em
+ * files/_sessions.
+ */
+function plugin_ativawallpaper_boot(): void
+{
+    SessionManager::registerPluginStatelessPath('ativawallpaper', '#^/api/v1(?:/|$)#');
+}
+
 function plugin_init_ativawallpaper(): void
 {
     global $PLUGIN_HOOKS;
 
     $PLUGIN_HOOKS[Hooks::CSRF_COMPLIANT]['ativawallpaper'] = true;
 
-    // The API authenticates with a plugin-scoped bearer token and must not
-    // lock the interactive GLPI PHP session during long-running downloads.
-    SessionManager::registerPluginStatelessPath('ativawallpaper', '#^/api/v1(?:/|$)#');
 
     $plugin = new Plugin();
     if (!$plugin->isActivated('ativawallpaper')) {

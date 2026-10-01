@@ -30,14 +30,23 @@ function plugin_version_ativaupdater(): array
     ];
 }
 
+/**
+ * Roda ANTES de o GLPI iniciar a sessao PHP. A API dos servicos (token
+ * Bearer) tem que ser registrada aqui como stateless; registrada no
+ * plugin_init (que roda depois), cada chamada criava um arquivo em
+ * files/_sessions.
+ */
+function plugin_ativaupdater_boot(): void
+{
+    SessionManager::registerPluginStatelessPath('ativaupdater', '#^/api/v1(?:/|$)#');
+}
+
 function plugin_init_ativaupdater(): void
 {
     global $PLUGIN_HOOKS;
 
     $PLUGIN_HOOKS[Hooks::CSRF_COMPLIANT]['ativaupdater'] = true;
 
-    // Register API stateless path for token authentication
-    SessionManager::registerPluginStatelessPath('ativaupdater', '#^/api/v1(?:/|$)#');
 
     $plugin = new Plugin();
     if (!$plugin->isActivated('ativaupdater')) {
