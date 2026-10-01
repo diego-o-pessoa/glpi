@@ -144,6 +144,7 @@ function plugin_ativaworkspace_tables(): array
             `target` varchar(255) NOT NULL DEFAULT '',
             `scope` varchar(16) NOT NULL DEFAULT '',
             `reg_key` varchar(255) NOT NULL DEFAULT '',
+            `params` text,
             `status` varchar(16) NOT NULL DEFAULT 'queued',
             `message` varchar(255) NOT NULL DEFAULT '',
             `users_id` int {$sign} NOT NULL DEFAULT '0',
@@ -247,6 +248,11 @@ function plugin_ativaworkspace_do_install(): bool
                 // concluir a etapa ou encerrar/cancelar o job.
                 'vpn_user'                         => "varchar(255) NOT NULL DEFAULT ''",
                 'vpn_secret'                       => 'text',
+            ],
+            // 0.14.0: acoes remotas (reiniciar, mensagem, encerrar processo...).
+            // Parametros validados da acao (JSON); nunca um comando.
+            'glpi_plugin_ativaworkspace_machineactions' => [
+                'params' => 'text',
             ],
             'glpi_plugin_ativaworkspace_jobsteps' => [
                 'plugin_ativaworkspace_applications_id' => "int {$sign} NOT NULL DEFAULT '0'",

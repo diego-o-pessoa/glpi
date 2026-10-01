@@ -39,13 +39,14 @@ import ativa_workspace_install as installer
 import ativa_workspace_inventory as inventory
 import ativa_workspace_logon as logon
 import ativa_workspace_openvpn as openvpn
+import ativa_workspace_remote as remote
 import ativa_workspace_outlook as outlook
 import ativa_workspace_uninstall as uninstall
 
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.8.12"
+WORKSPACE_AGENT_VERSION = "1.8.13"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -475,8 +476,21 @@ class WorkspaceRuntime:
             return
         action_id = int(action.get("id", 0))
         kind = str(action.get("action", ""))
-        if kind != "uninstall" or action_id <= 0:
-            api.report_action(action_id, False, f"Acao nao suportada: {kind}")
+        if action_id <= 0:
+            return
+        if kind != "uninstall":
+            # Acoes remotas (reiniciar, mensagem, encerrar processo, manutencao).
+            params = action.get("params") if isinstance(action.get("params"), dict) else {}
+            if kind in ("restart", "shutdown"):
+                # Reporta antes: depois o Windows desliga e o servico para.
+                ok, message = remote.run(kind, params, user_sessions(), logger)
+                api.report_action(action_id, ok, message)
+                return
+            ok, message = remote.run(kind, params, user_sessions(), logger)
+            logger.info("Acao remota %s -> %s (%s)", kind, "ok" if ok else "falhou", message)
+            api.report_action(action_id, ok, message)
+            if kind in ("kill_process", "clean_temp"):
+                INVENTORY_MARKER.unlink(missing_ok=True)  # processos/disco mudaram
             return
         target = str(action.get("target", ""))
         logger.info("Acao: desinstalar '%s'.", target)

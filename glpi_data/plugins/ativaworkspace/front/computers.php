@@ -45,6 +45,13 @@ if ($computerId > 0) {
         'back_url'   => Page::href('computers'),
         'can_manage' => (bool) Session::haveRight(PluginAtivaworkspaceProfile::RIGHT_PROVISION, UPDATE),
         'actions'    => $actions,
+        // Acoes remotas: botoes, historico e processos que nao podem ser encerrados.
+        'remote_actions'      => MachineAction::REMOTE_ACTIONS,
+        'remote_history'      => MachineAction::remoteHistory($computerId),
+        'protected_processes' => MachineAction::PROTECTED_PROCESSES,
+        // O servico envia inventario a cada minuto: sem relato ha 3 min, esta offline.
+        'online'              => $inventory['reported_at'] !== ''
+            && strtotime((string) $inventory['reported_at']) >= strtotime((string) ($_SESSION['glpi_currenttime'] ?? 'now')) - 180,
         'action_url' => Page::href('computer_action'),
         'data_url'   => Page::href('computer_data'),
         'csrf'       => Session::getNewCSRFToken(),

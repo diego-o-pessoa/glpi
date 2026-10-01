@@ -37,6 +37,94 @@
         </div>
     </div>
 
+    {% if can_manage %}
+    {# ------------------------------------------------ Acoes remotas #}
+    {% set power = {'restart': remote_actions.restart, 'shutdown': remote_actions.shutdown} %}
+    {% set quick = ['clean_temp', 'gpupdate', 'flush_dns', 'restart_spooler', 'sync_time', 'windows_update_scan'] %}
+    <div class="card mb-3" data-aw-remote data-url="{{ data_url }}" data-action="{{ action_url }}"
+         data-computer="{{ computers_id }}" data-csrf="{{ csrf }}">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h3 class="card-title mb-0"><i class="ti ti-remote me-2 text-primary"></i>Ações remotas</h3>
+            {% if online %}
+                <span class="badge bg-green-lt"><i class="ti ti-point-filled me-1"></i>Online: executa em até 15 s</span>
+            {% else %}
+                <span class="badge bg-yellow-lt" title="O serviço não envia inventário há mais de 3 minutos.">
+                    <i class="ti ti-clock me-1"></i>Sem contato recente: executa quando o computador voltar
+                </span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-lg-7">
+                    <div class="text-muted small fw-semibold text-uppercase mb-2">Energia e usuário</div>
+                    <div class="d-flex flex-wrap gap-2 mb-4">
+                        <button type="button" class="btn btn-outline-primary" data-aw-remote-open="restart">
+                            <i class="ti ti-refresh me-1"></i>Reiniciar
+                        </button>
+                        <button type="button" class="btn btn-outline-danger" data-aw-remote-open="shutdown">
+                            <i class="ti ti-power me-1"></i>Desligar
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" data-aw-remote-open="message">
+                            <i class="ti ti-message me-1"></i>Enviar mensagem
+                        </button>
+                    </div>
+                    <div class="text-muted small fw-semibold text-uppercase mb-2">Manutenção</div>
+                    <div class="row g-2">
+                        {% for key in quick %}
+                            <div class="col-sm-6">
+                                <button type="button" class="btn btn-outline-secondary w-100 justify-content-start text-start"
+                                        data-aw-remote-run="{{ key }}" data-label="{{ remote_actions[key].label }}">
+                                    <i class="ti {{ remote_actions[key].icon }} me-2"></i>{{ remote_actions[key].label }}
+                                </button>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="text-muted small fw-semibold text-uppercase mb-2">Histórico</div>
+                    <div class="list-group list-group-flush border rounded" data-aw-remote-history style="max-height: 300px; overflow-y: auto;">
+                        <div class="list-group-item text-muted small">Nenhuma ação remota ainda.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="aw-remote-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" data-aw-remote-form autocomplete="off">
+                <div class="modal-header">
+                    <h5 class="modal-title" data-aw-remote-title>Ação remota</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3" data-aw-remote-delay-box>
+                        <label class="form-label" for="aw-remote-delay">Quando</label>
+                        <select class="form-select" id="aw-remote-delay" name="delay">
+                            <option value="0">Agora</option>
+                            <option value="60" selected>Em 1 minuto</option>
+                            <option value="300">Em 5 minutos</option>
+                            <option value="600">Em 10 minutos</option>
+                            <option value="1800">Em 30 minutos</option>
+                        </select>
+                        <div class="form-hint">O Windows mostra um aviso ao usuário com a contagem; trabalho não salvo pode ser perdido.</div>
+                    </div>
+                    <div>
+                        <label class="form-label" for="aw-remote-message" data-aw-remote-message-label>Mensagem ao usuário (opcional)</label>
+                        <textarea class="form-control" id="aw-remote-message" name="message" rows="3" maxlength="500"
+                                  placeholder="Ex.: Salve seus arquivos, o computador vai reiniciar para atualizar."></textarea>
+                    </div>
+                    <div class="alert alert-danger mt-3 mb-0 d-none" data-aw-remote-error></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" data-aw-remote-submit><i class="ti ti-send me-1"></i>Enviar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="row row-cards">
         <div class="col-lg-4">
             <div class="card mb-3">
@@ -61,12 +149,12 @@
                 <div class="card-header"><h3 class="card-title"><i class="ti ti-cpu me-2"></i>Processos (maior uso de memória)</h3></div>
                 <div class="table-responsive" style="max-height: 320px; overflow-y:auto;">
                     <table class="table table-sm card-table">
-                        <thead><tr><th>Processo</th><th class="text-end">RAM (MB)</th></tr></thead>
+                        <thead><tr><th>Processo</th><th class="text-end">RAM (MB)</th>{% if can_manage %}<th class="text-end" style="width:1%"></th>{% endif %}</tr></thead>
                         <tbody>
                             {% for p in inv.processes %}
-                                <tr><td>{{ p.name }}</td><td class="text-end">{{ p.ram_mb }}</td></tr>
+                                <tr><td>{{ p.name }}</td><td class="text-end">{{ p.ram_mb }}</td>{% if can_manage %}<td class="text-end">{% if p.name|lower not in protected_processes and p.name|lower ends with '.exe' %}<button type="button" class="btn btn-sm btn-ghost-danger py-0" data-aw-kill="{{ p.name }}" title="Encerrar {{ p.name }} (todas as instâncias)"><i class="ti ti-square-x"></i></button>{% endif %}</td>{% endif %}</tr>
                             {% else %}
-                                <tr><td colspan="2" class="text-muted">Sem dados de processos.</td></tr>
+                                <tr><td colspan="{{ can_manage ? 3 : 2 }}" class="text-muted">Sem dados de processos.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -313,5 +401,164 @@
     </script>
     {% else %}
     <script>window.setTimeout(function () { window.location.reload(); }, 60000);</script>
+    {% endif %}
+    {% if can_manage %}
+    <script>
+    (function () {
+        // Acoes remotas: envia a chave da acao + parametros; acompanha o historico ao vivo.
+        var card = document.querySelector('[data-aw-remote]');
+        if (!card) { return; }
+        var dataUrl = card.dataset.url, actionUrl = card.dataset.action;
+        var computer = card.dataset.computer, csrf = card.dataset.csrf;
+        var historyBox = card.querySelector('[data-aw-remote-history]');
+        var modalEl = document.getElementById('aw-remote-modal');
+        var modal = window.bootstrap ? window.bootstrap.Modal.getOrCreateInstance(modalEl) : null;
+        var form = modalEl.querySelector('[data-aw-remote-form]');
+        var errorBox = form.querySelector('[data-aw-remote-error]');
+        var submit = form.querySelector('[data-aw-remote-submit]');
+        var mode = '';
+        var timer = null;
+
+        var STATUS = {
+            queued:  ['bg-blue-lt', 'Na fila'],
+            running: ['bg-blue-lt', 'Executando…'],
+            done:    ['bg-green-lt', 'Concluído'],
+            failed:  ['bg-danger-lt', 'Falhou']
+        };
+        var TITLES = {
+            restart:  '<i class="ti ti-refresh me-2"></i>Reiniciar o computador',
+            shutdown: '<i class="ti ti-power me-2"></i>Desligar o computador',
+            message:  '<i class="ti ti-message me-2"></i>Enviar mensagem ao usuário'
+        };
+
+        function toast(message, ok) {
+            var box = document.createElement('div');
+            box.className = 'alert ' + (ok ? 'alert-success' : 'alert-danger') + ' position-fixed shadow';
+            box.style.cssText = 'right:18px;bottom:18px;z-index:2000;max-width:420px';
+            box.textContent = message;
+            document.body.appendChild(box);
+            window.setTimeout(function () { box.remove(); }, 4500);
+        }
+
+        function send(remote, fields) {
+            var body = new FormData();
+            body.append('_glpi_csrf_token', csrf);
+            body.append('computer', computer);
+            body.append('action', 'remote');
+            body.append('remote', remote);
+            Object.keys(fields || {}).forEach(function (k) { body.append(k, fields[k]); });
+            return fetch(actionUrl, { method: 'POST', credentials: 'same-origin', body: body,
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrf } })
+                .then(function (r) { return r.json().catch(function () { return { ok: false, message: 'Erro ' + r.status + ' no GLPI.' }; }); })
+                .catch(function () { return { ok: false, message: 'Falha de comunicação com o GLPI.' }; });
+        }
+
+        function afterSend(result) {
+            toast(result.message || (result.ok ? 'Enviado.' : 'Não foi possível enviar.'), !!result.ok);
+            if (result.ok) { poll(); }
+        }
+
+        function renderHistory(items) {
+            historyBox.innerHTML = '';
+            if (!items || !items.length) {
+                var empty = document.createElement('div');
+                empty.className = 'list-group-item text-muted small';
+                empty.textContent = 'Nenhuma ação remota ainda.';
+                historyBox.appendChild(empty);
+                return;
+            }
+            items.forEach(function (it) {
+                var meta = STATUS[it.status] || ['bg-secondary-lt', it.status];
+                var row = document.createElement('div');
+                row.className = 'list-group-item py-2';
+                var top = document.createElement('div');
+                top.className = 'd-flex justify-content-between align-items-center gap-2';
+                var name = document.createElement('span');
+                name.className = 'small fw-semibold text-truncate';
+                var ic = document.createElement('i');
+                ic.className = 'ti ' + it.icon + ' me-1 text-muted';
+                name.appendChild(ic);
+                name.appendChild(document.createTextNode(it.target));
+                var badge = document.createElement('span');
+                badge.className = 'badge ' + meta[0];
+                badge.textContent = meta[1];
+                top.appendChild(name);
+                top.appendChild(badge);
+                row.appendChild(top);
+                var sub = document.createElement('div');
+                sub.className = 'small text-muted';
+                var when = it.requested_at ? it.requested_at.replace(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2}).*$/, '$3/$2 $4') : '';
+                sub.textContent = [when, it.requester].filter(Boolean).join(' · ') + (it.message ? ' — ' + it.message : '');
+                row.appendChild(sub);
+                historyBox.appendChild(row);
+            });
+        }
+
+        function poll() {
+            window.clearTimeout(timer);
+            fetch(dataUrl + '?computer=' + encodeURIComponent(computer), { credentials: 'same-origin', cache: 'no-store' })
+                .then(function (r) { return r.json().catch(function () { return {}; }); })
+                .then(function (data) {
+                    var items = (data && data.remote) || [];
+                    renderHistory(items);
+                    var active = items.some(function (it) { return it.status === 'queued' || it.status === 'running'; });
+                    timer = window.setTimeout(poll, active ? 3000 : 15000);
+                })
+                .catch(function () { timer = window.setTimeout(poll, 15000); });
+        }
+
+        // Reiniciar / desligar / mensagem: abre o modal.
+        card.addEventListener('click', function (event) {
+            var open = event.target.closest('[data-aw-remote-open]');
+            if (open) {
+                mode = open.dataset.awRemoteOpen;
+                form.reset();
+                errorBox.classList.add('d-none');
+                modalEl.querySelector('[data-aw-remote-title]').innerHTML = TITLES[mode];
+                var isPower = mode !== 'message';
+                form.querySelector('[data-aw-remote-delay-box]').classList.toggle('d-none', !isPower);
+                form.querySelector('[data-aw-remote-message-label]').textContent = isPower ? 'Mensagem ao usuário (opcional)' : 'Mensagem';
+                form.querySelector('[name="message"]').required = !isPower;
+                submit.className = 'btn ' + (mode === 'shutdown' ? 'btn-danger' : 'btn-primary');
+                if (modal) { modal.show(); }
+                return;
+            }
+            var run = event.target.closest('[data-aw-remote-run]');
+            if (run && window.confirm(run.dataset.label + ' neste computador?')) {
+                run.disabled = true;
+                send(run.dataset.awRemoteRun).then(function (result) { run.disabled = false; afterSend(result); });
+            }
+        });
+
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            var fields = { message: form.querySelector('[name="message"]').value };
+            if (mode !== 'message') { fields.delay = form.querySelector('[name="delay"]').value; }
+            submit.disabled = true;
+            send(mode, fields).then(function (result) {
+                submit.disabled = false;
+                if (!result.ok) {
+                    errorBox.textContent = result.message || 'Não foi possível enviar.';
+                    errorBox.classList.remove('d-none');
+                    return;
+                }
+                if (modal) { modal.hide(); }
+                afterSend(result);
+            });
+        });
+
+        // Encerrar processo (lista de processos).
+        document.addEventListener('click', function (event) {
+            var kill = event.target.closest('[data-aw-kill]');
+            if (!kill) { return; }
+            var name = kill.dataset.awKill;
+            if (!window.confirm('Encerrar ' + name + ' neste computador? Todas as janelas desse programa serão fechadas sem salvar.')) { return; }
+            kill.disabled = true;
+            send('kill_process', { process: name }).then(function (result) { kill.disabled = false; afterSend(result); });
+        });
+
+        poll();
+    })();
+    </script>
     {% endif %}
 {% endblock %}

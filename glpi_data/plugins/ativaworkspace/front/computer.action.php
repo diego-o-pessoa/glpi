@@ -69,6 +69,33 @@ if ($action === 'uninstall') {
         false,
         $queued > 0 ? INFO : ERROR
     );
+} elseif ($action === 'remote') {
+    // Acao remota (reiniciar, mensagem, encerrar processo, acoes prontas).
+    // So a chave da acao e parametros validados vao para a fila.
+    $remote = (string) ($_POST['remote'] ?? '');
+    $userId = (int) Session::getLoginUserID();
+    try {
+        MachineAction::queueRemote($computerId, $remote, [
+            'delay'   => $_POST['delay'] ?? 60,
+            'message' => (string) ($_POST['message'] ?? ''),
+            'process' => (string) ($_POST['process'] ?? ''),
+        ], $userId);
+        $label = MachineAction::REMOTE_ACTIONS[$remote]['label'];
+        Event::log(Event::LEVEL_INFO, 'computer', 'Ação remota solicitada: ' . $label, [
+            'computador' => $computerId,
+            'por'        => $userId,
+            'processo'   => $remote === 'kill_process' ? (string) ($_POST['process'] ?? '') : null,
+        ]);
+        $result = ['ok' => true, 'message' => $label . ': enviado. O computador executa em até 15 segundos.'];
+    } catch (RuntimeException $exception) {
+        $result = ['ok' => false, 'message' => $exception->getMessage()];
+    }
+    if ($isAjax) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        return;
+    }
+    Session::addMessageAfterRedirect($result['message'], false, $result['ok'] ? INFO : ERROR);
 } elseif ($isAjax) {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['ok' => false, 'message' => 'Ação desconhecida.']);

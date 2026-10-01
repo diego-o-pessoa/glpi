@@ -20,4 +20,7 @@ if ($computerId <= 0) {
     return;
 }
 
-echo json_encode(['ok' => true] + MachineAction::progressForComputer($computerId), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+echo json_encode(
+    ['ok' => true, 'remote' => MachineAction::remoteHistory($computerId)] + MachineAction::progressForComputer($computerId),
+    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+);
