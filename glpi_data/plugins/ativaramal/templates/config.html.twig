@@ -48,7 +48,7 @@
                             <div class="col-12">
                                 <label class="form-label" for="ar-base-url">URL base da API</label>
                                 <input type="url" class="form-control" id="ar-base-url" name="base_url" value="{{ s.base_url }}"
-                                       placeholder="https://api.twsolutions.com.br" pattern="https://.*">
+                                       placeholder="https://ativa-locacao-1.twsolutions.com.br" pattern="https://.*">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label" for="ar-authorize-url">URL de autorização (OAuth)</label>
@@ -221,9 +221,8 @@
                 </p>
                 <div class="alert alert-info small">
                     <i class="ti ti-info-circle me-1"></i>
-                    A TW não publica a documentação da API. Por isso a lista abaixo são <strong>caminhos candidatos, não confirmados</strong>:
-                    primeiro a documentação automática (OpenAPI/Swagger), depois caminhos comuns em APIs de PABX. Vale o resultado real de cada um.
-                    Se a TW informar os caminhos corretos, teste-os no campo "Caminho personalizado".
+                    A TW não publica a documentação da API. {{ diag_note }}
+                    Para outros caminhos (ex.: os que a TW informar), use o campo "Caminho personalizado".
                 </div>
                 <details class="mb-3">
                     <summary class="text-muted small" style="cursor:pointer">Ver as URLs que serão testadas</summary>

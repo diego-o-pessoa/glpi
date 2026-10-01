@@ -37,26 +37,35 @@ final class ApiDiagnostics
      */
     public const CANDIDATES = [
         'discovery' => [
-            'label' => 'Documentação / raiz da API',
-            'paths' => ['', '/openapi.json', '/swagger.json', '/swagger/v1/swagger.json', '/api-docs', '/v1', '/api'],
+            'label' => 'Documentação (Swagger do TW Connect)',
+            'paths' => ['/api/documentation', '/docs'],
         ],
         'extensions' => [
             'label' => 'Ramais',
-            'paths' => ['/extensions', '/ramais', '/v1/extensions', '/api/extensions', '/api/v1/extensions'],
-        ],
-        'queues' => [
-            'label' => 'Filas',
-            'paths' => ['/queues', '/filas', '/v1/queues', '/api/queues', '/api/v1/queues'],
+            'paths' => ['/api/v1/ramal'],
         ],
         'calls' => [
-            'label' => 'Ligações recentes',
-            'paths' => ['/calls', '/cdr', '/call-history', '/chamadas', '/ligacoes', '/v1/calls', '/api/calls', '/api/cdr'],
+            'label' => 'Ligações (CDR)',
+            'paths' => ['/api/v1/cdr', '/api/v1/cdr/report'],
         ],
         'answered' => [
-            'label' => 'Atendidas / não atendidas',
-            'paths' => ['/calls?status=answered', '/calls?status=missed', '/cdr?disposition=ANSWERED', '/cdr?disposition=NO%20ANSWER'],
+            'label' => 'Atendidas / não atendidas (teste de filtro, parâmetro não confirmado)',
+            'paths' => ['/api/v1/cdr?disposition=ANSWERED', '/api/v1/cdr?disposition=NO%20ANSWER'],
+        ],
+        'others' => [
+            'label' => 'Outros recursos encontrados',
+            'paths' => ['/api/v1/did', '/api/v1/usuario', '/api/v1/tronco', '/api/v1/rota', '/api/v1/cliente'],
         ],
     ];
+
+    /**
+     * Como a lista acima foi levantada (01/10/2026): GET sem token em
+     * https://ativa-locacao-1.twsolutions.com.br com Accept: application/json.
+     * Rota existente responde 401 "Unauthenticated."; inexistente, 404.
+     * Filas: nenhuma rota encontrada (fila, filas, queue, queues, grupo,
+     * callcenter, atendimento... todas 404).
+     */
+    public const MAPPING_NOTE = 'Rotas confirmadas em 01/10/2026 (respondem 401 sem token = existem). Nenhuma rota de filas foi encontrada (fila, filas, queue, queues, grupo, callcenter… = 404).';
 
     /** Caminho relativo seguro (com query opcional). */
     public static function normalizePath(string $path): string
@@ -108,11 +117,12 @@ final class ApiDiagnostics
                 'stream'  => true,
             ]);
         } catch (Throwable $exception) {
-            Logger::warning('Diagnóstico: falha de conexão', ['url' => $url, 'erro' => get_class($exception)]);
+            $reason = self::connectionReason($exception);
+            Logger::warning('Diagnóstico: falha de conexão', ['url' => $url, 'motivo' => $reason]);
             return [
                 'url' => $url, 'path' => $path, 'status' => 0, 'ms' => (int) round((microtime(true) - $started) * 1000),
                 'content_type' => '', 'bytes' => 0, 'json' => false, 'fields' => [], 'preview' => '',
-                'error' => 'Sem resposta (rede, TLS ou tempo esgotado).', 'location' => '', 'headers' => [],
+                'error' => $reason, 'location' => '', 'headers' => [],
             ];
         }
         $ms = (int) round((microtime(true) - $started) * 1000);
@@ -158,6 +168,26 @@ final class ApiDiagnostics
             'headers'      => self::interestingHeaders($response->getHeaders()),
             'error'        => '',
         ];
+    }
+
+    /** Motivo legivel da falha de conexao, pelo codigo do cURL (sem URL/cabecalhos). */
+    private static function connectionReason(Throwable $exception): string
+    {
+        $errno = 0;
+        if (method_exists($exception, 'getHandlerContext')) {
+            $errno = (int) ($exception->getHandlerContext()['errno'] ?? 0);
+        }
+        if ($errno === 0 && preg_match('/cURL error (\d+)/', $exception->getMessage(), $matches)) {
+            $errno = (int) $matches[1];
+        }
+        return match ($errno) {
+            6       => 'O endereço não existe (DNS não encontrou o host). Confira a URL base.',
+            7       => 'O servidor recusou a conexão (porta fechada ou bloqueada).',
+            28      => 'Tempo esgotado: o servidor não respondeu.',
+            35, 60  => 'Erro de TLS/certificado ao conectar.',
+            0       => 'Sem resposta (' . (new \ReflectionClass($exception))->getShortName() . ').',
+            default => 'Falha de conexão (cURL ' . $errno . ').',
+        };
     }
 
     /** Oculta valores de chaves sensiveis e strings com cara de token. */

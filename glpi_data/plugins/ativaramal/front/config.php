@@ -116,6 +116,7 @@ TemplateRenderer::getInstance()->display('@ativaramal/config.html.twig', [
     'action_url'    => $selfUrl,
     'diag_url'      => $CFG_GLPI['root_doc'] . '/plugins/ativaramal/front/diagnostic.php',
     'diag_groups'   => ApiDiagnostics::CANDIDATES,
+    'diag_note'     => ApiDiagnostics::MAPPING_NOTE,
     'now'           => time(),
 ]);
 Html::footer();
