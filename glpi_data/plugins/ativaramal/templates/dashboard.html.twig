@@ -1,0 +1,373 @@
+<style>
+.rd{--rd-ink:#142a5b;--rd-muted:#6d7da7;--rd-border:#dfe5f1;--rd-soft:#f5f8fd;--rd-blue:#356fd1;--rd-green:#2fb35a;--rd-red:#dd3f4a;--rd-amber:#e89a0c;color:var(--rd-ink);padding:4px 2px 24px}
+.rd-hero{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.rd-brand{display:flex;align-items:center;gap:13px}.rd-brand-icon{width:50px;height:50px;border-radius:13px;background:#e1ecff;color:var(--rd-blue);display:grid;place-items:center;font-size:26px}
+.rd-brand h1{font-size:23px;margin:0;font-weight:750}.rd-brand p{margin:2px 0 0;color:var(--rd-muted);font-size:13px}
+.rd-live{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;background:#e8f7ee;color:#1f7a43;font-size:12px;font-weight:650}
+.rd-live i{width:8px;height:8px;border-radius:50%;background:var(--rd-green);animation:rd-pulse 1.8s infinite}
+.rd-live.is-off{background:#fdecee;color:#a8232d}.rd-live.is-off i{background:var(--rd-red);animation:none}
+@keyframes rd-pulse{0%{box-shadow:0 0 0 0 #2fb35a80}70%{box-shadow:0 0 0 7px #2fb35a00}100%{box-shadow:0 0 0 0 #2fb35a00}}
+.rd-kpis{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:11px;margin-bottom:14px}
+.rd-kpi{background:#fff;border:1px solid var(--rd-border);border-radius:10px;padding:12px 13px;box-shadow:0 2px 7px #20335c0a}
+.rd-kpi span{display:block;color:var(--rd-muted);font-size:12px}.rd-kpi strong{display:block;font-size:24px;line-height:1.15;font-weight:750}
+.rd-kpi small{color:var(--rd-muted);font-size:11.5px}
+.rd-kpi.is-green strong{color:#1f7a43}.rd-kpi.is-red strong{color:#b4232e}.rd-kpi.is-blue strong{color:var(--rd-blue)}
+.rd-card{background:#fff;border:1px solid var(--rd-border);border-radius:10px;box-shadow:0 2px 7px #20335c0a;margin-bottom:14px;overflow:hidden}
+.rd-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 15px;border-bottom:1px solid var(--rd-border);flex-wrap:wrap}
+.rd-card-head h2{font-size:16px;font-weight:700;margin:0;display:flex;align-items:center;gap:8px}
+.rd-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.rd-filters .form-select,.rd-filters .form-control{min-width:160px}
+.rd-search{position:relative}.rd-search i{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--rd-muted)}.rd-search input{padding-left:32px}
+.rd-branch{border-bottom:1px solid var(--rd-border)}.rd-branch:last-child{border-bottom:0}
+.rd-branch-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 15px;background:var(--rd-soft);cursor:pointer;flex-wrap:wrap}
+.rd-branch-head h3{font-size:15px;font-weight:700;margin:0;display:flex;align-items:center;gap:7px}
+.rd-chips{display:flex;gap:6px;flex-wrap:wrap}
+.rd-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:650;background:#eef1f6;color:#56627c}
+.rd-chip.is-green{background:#e3f6ea;color:#1f7a43}.rd-chip.is-red{background:#fdecee;color:#a8232d}.rd-chip.is-blue{background:#e1ecff;color:var(--rd-blue)}
+.rd-sector{padding:8px 15px 4px}.rd-sector h4{font-size:13px;font-weight:700;margin:6px 0 6px;color:#3d5078;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rd-table{margin:0 0 8px}.rd-table th{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--rd-muted);font-weight:650;background:#fff;border-bottom:1px solid var(--rd-border);white-space:nowrap}
+.rd-table td{vertical-align:middle;border-color:#eef1f7;font-size:13px}
+.rd-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#b9c3d8;margin-right:6px}.rd-dot.is-on{background:var(--rd-green);box-shadow:0 0 0 3px #2fb35a26}
+.rd-person{display:block;font-size:11.5px;color:var(--rd-muted)}
+.rd-busy{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:0 7px;border-radius:999px;background:#fff3dc;color:#9a6200;font-size:10.5px;font-weight:700}
+.rd-list{max-height:430px;overflow-y:auto}
+.rd-item{display:flex;gap:10px;align-items:flex-start;padding:9px 15px;border-bottom:1px solid #eef1f7}.rd-item:last-child{border-bottom:0}
+.rd-item-icon{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:none;font-size:16px}
+.rd-in{background:#e1ecff;color:var(--rd-blue)}.rd-out{background:#e3f6ea;color:#1f7a43}.rd-int{background:#eef1f6;color:#56627c}.rd-miss{background:#fdecee;color:#b4232e}
+.rd-item-main{flex:1;min-width:0}.rd-item-main strong{font-size:13px;display:block}.rd-item-main small{color:var(--rd-muted);font-size:11.5px;display:block}
+.rd-item-side{text-align:right;font-size:11.5px;color:var(--rd-muted);white-space:nowrap}
+.rd-empty{padding:26px 15px;text-align:center;color:var(--rd-muted)}
+@media(max-width:1400px){.rd-kpis{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:700px){.rd-kpis{grid-template-columns:repeat(2,1fr)}}
+</style>
+
+<div class="rd" data-rd data-url="{{ data_url }}">
+    <header class="rd-hero">
+        <div class="rd-brand">
+            <span class="rd-brand-icon"><i class="ti ti-phone"></i></span>
+            <span>
+                <h1>Ativa Ramal</h1>
+                <p>Telefonia TW Solutions · hoje, <span data-rd-today></span></p>
+            </span>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="rd-live" data-rd-live><i></i><span>Ao vivo</span></span>
+            <span class="text-muted small">Atualizado às <span data-rd-updated>—</span></span>
+            {% if ramais_url %}
+                <a href="{{ ramais_url }}" class="btn btn-outline-secondary btn-sm"><i class="ti ti-sitemap me-1"></i>Filial e setor</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <div data-rd-errors></div>
+
+    <div class="rd-kpis">
+        <div class="rd-kpi is-green"><span>Ramais online</span><strong data-rd-k="online">—</strong><small data-rd-k="ramais_label"></small></div>
+        <div class="rd-kpi is-blue"><span>Ligações hoje</span><strong data-rd-k="ligacoes">—</strong><small data-rd-k="dir_label"></small></div>
+        <div class="rd-kpi is-green"><span>Atendidas</span><strong data-rd-k="atendidas">—</strong><small>tempo falado médio <b data-rd-k="tempo_medio"></b></small></div>
+        <div class="rd-kpi is-red"><span>Não atendidas</span><strong data-rd-k="nao_atendidas">—</strong><small data-rd-k="sem_ramal_label"></small></div>
+        <div class="rd-kpi"><span>Atendimento (entrada)</span><strong data-rd-k="taxa">—</strong><small>das ligações recebidas</small></div>
+        <div class="rd-kpi is-blue"><span>Em andamento</span><strong data-rd-k="em_andamento">—</strong><small data-rd-k="fila_label"></small></div>
+        <div class="rd-kpi"><span>Filiais</span><strong data-rd-k="filiais">—</strong><small data-rd-k="setores_label"></small></div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-xl-8">
+            <div class="rd-card">
+                <div class="rd-card-head">
+                    <h2><i class="ti ti-building text-primary"></i>Ramais por filial e setor</h2>
+                    <div class="rd-filters">
+                        <select class="form-select form-select-sm" data-rd-filter="filial"><option value="">Todas as filiais</option></select>
+                        <select class="form-select form-select-sm" data-rd-filter="setor"><option value="">Todos os setores</option></select>
+                        <label class="rd-search mb-0"><i class="ti ti-search"></i>
+                            <input type="search" class="form-control form-control-sm" placeholder="Nome ou ramal" data-rd-filter="busca" autocomplete="off">
+                        </label>
+                        <label class="form-check form-switch mb-0 small">
+                            <input class="form-check-input" type="checkbox" data-rd-filter="online"><span class="form-check-label">Só online</span>
+                        </label>
+                    </div>
+                </div>
+                <div data-rd-tree></div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="rd-card">
+                <div class="rd-card-head"><h2><i class="ti ti-phone-call text-primary"></i>Em andamento agora</h2><span class="rd-chip is-blue" data-rd-live-count>0</span></div>
+                <div class="rd-list" data-rd-live-list></div>
+            </div>
+            <div class="rd-card">
+                <div class="rd-card-head"><h2><i class="ti ti-history text-primary"></i>Últimas ligações</h2></div>
+                <div class="rd-list" data-rd-recent></div>
+            </div>
+        </div>
+    </div>
+    <div class="text-muted small">
+        <i class="ti ti-info-circle me-1"></i>Atendida/não atendida e entrada/saída/interna vêm de códigos numéricos da TW cujo significado foi deduzido dos dados (a confirmar com a TW).
+        Ligações recebidas não atendidas na URA/fila não têm ramal e entram só nos totais.
+    </div>
+</div>
+
+<script type="application/json" data-rd-initial>{{ initial|json_encode|raw }}</script>
+<script>
+(function () {
+    var root = document.querySelector('[data-rd]');
+    if (!root) { return; }
+    var state = { data: null, filial: '', setor: '', busca: '', online: false, closed: {} };
+    var POLL_MS = 15000;
+
+    function el(tag, cls, text) {
+        var n = document.createElement(tag);
+        if (cls) { n.className = cls; }
+        if (text !== undefined && text !== null) { n.textContent = text; }
+        return n;
+    }
+    function icon(name) { return el('i', 'ti ' + name); }
+    function norm(t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+    function dur(sec) {
+        sec = Math.max(0, Math.round(sec || 0));
+        var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+        return h ? h + 'h' + String(m).padStart(2, '0') : m + ':' + String(s).padStart(2, '0');
+    }
+    function setK(key, value) {
+        root.querySelectorAll('[data-rd-k="' + key + '"]').forEach(function (n) { n.textContent = value; });
+    }
+    function chip(cls, iconName, text, title) {
+        var c = el('span', 'rd-chip ' + (cls || ''));
+        if (iconName) { c.appendChild(icon(iconName)); }
+        c.appendChild(document.createTextNode(text));
+        if (title) { c.title = title; }
+        return c;
+    }
+    function statChips(stats, online, total) {
+        var box = el('span', 'rd-chips');
+        if (total !== undefined) { box.appendChild(chip('is-green', 'ti-plug-connected', online + '/' + total + ' online')); }
+        box.appendChild(chip('is-blue', 'ti-phone', stats.total + ' ligações'));
+        box.appendChild(chip('is-green', 'ti-check', stats.atendidas + ' atendidas'));
+        if (stats.nao_atendidas) { box.appendChild(chip('is-red', 'ti-phone-x', stats.nao_atendidas + ' não atendidas')); }
+        return box;
+    }
+
+    // ---------------------------------------------------------- filtros
+    function matchRamal(r) {
+        if (state.online && !r.online) { return false; }
+        if (!state.busca) { return true; }
+        return norm(r.nome + ' ' + r.ramal + ' ' + r.pessoa).indexOf(state.busca) !== -1;
+    }
+    function fillSelect(select, values, current, allLabel) {
+        var keep = current;
+        select.innerHTML = '';
+        select.appendChild(new Option(allLabel, ''));
+        values.forEach(function (v) { select.appendChild(new Option(v, v)); });
+        select.value = values.indexOf(keep) !== -1 ? keep : '';
+        return select.value;
+    }
+
+    // ---------------------------------------------------------- render
+    function renderKpis(d) {
+        var k = d.kpis;
+        setK('online', k.online + '/' + k.ramais);
+        setK('ramais_label', k.ramais ? Math.round(100 * k.online / k.ramais) + '% registrados' : '');
+        setK('ligacoes', k.ligacoes);
+        setK('dir_label', '↓ ' + k.entrada + ' entrada · ↑ ' + k.saida + ' saída · ↔ ' + k.interna);
+        setK('atendidas', k.atendidas);
+        setK('tempo_medio', dur(k.tempo_medio));
+        setK('nao_atendidas', k.nao_atendidas);
+        setK('sem_ramal_label', k.sem_ramal ? k.sem_ramal + ' na URA/fila (sem ramal)' : '');
+        setK('taxa', k.taxa_atendimento === null ? '—' : k.taxa_atendimento + '%');
+        setK('em_andamento', k.em_andamento);
+        setK('fila_label', k.em_fila ? k.em_fila + ' aguardando na fila' : 'nenhuma na fila');
+        setK('filiais', d.tree.length);
+        var sectors = 0;
+        d.tree.forEach(function (b) { sectors += b.setores.length; });
+        setK('setores_label', sectors + ' setor(es)');
+    }
+
+    function renderTree(d) {
+        var box = root.querySelector('[data-rd-tree]');
+        var filialSel = root.querySelector('[data-rd-filter="filial"]');
+        var setorSel = root.querySelector('[data-rd-filter="setor"]');
+        state.filial = fillSelect(filialSel, d.tree.map(function (b) { return b.nome; }), state.filial, 'Todas as filiais');
+        var sectorNames = {};
+        d.tree.forEach(function (b) {
+            if (!state.filial || b.nome === state.filial) { b.setores.forEach(function (s) { sectorNames[s.nome] = true; }); }
+        });
+        state.setor = fillSelect(setorSel, Object.keys(sectorNames).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); }), state.setor, 'Todos os setores');
+
+        box.innerHTML = '';
+        var shown = 0;
+        d.tree.forEach(function (branch) {
+            if (state.filial && branch.nome !== state.filial) { return; }
+            var sectors = branch.setores.map(function (s) {
+                return { s: s, ramais: s.ramais.filter(matchRamal) };
+            }).filter(function (x) { return (!state.setor || x.s.nome === state.setor) && x.ramais.length; });
+            if (!sectors.length) { return; }
+            shown++;
+            var wrap = el('div', 'rd-branch');
+            var head = el('div', 'rd-branch-head');
+            var title = el('h3');
+            title.appendChild(icon(state.closed[branch.nome] ? 'ti-chevron-right' : 'ti-chevron-down'));
+            title.appendChild(icon('ti-building'));
+            title.appendChild(document.createTextNode(branch.nome));
+            head.appendChild(title);
+            head.appendChild(statChips(branch.stats, branch.online, branch.total));
+            head.addEventListener('click', function () { state.closed[branch.nome] = !state.closed[branch.nome]; renderTree(state.data); });
+            wrap.appendChild(head);
+
+            if (!state.closed[branch.nome]) {
+                sectors.forEach(function (x) {
+                    var sec = el('div', 'rd-sector');
+                    var h = el('h4');
+                    h.appendChild(icon('ti-users-group'));
+                    h.appendChild(document.createTextNode(x.s.nome));
+                    h.appendChild(statChips(x.s.stats, x.s.online, x.s.total));
+                    sec.appendChild(h);
+                    var table = el('table', 'table table-sm rd-table');
+                    var thead = el('thead');
+                    var tr = el('tr');
+                    ['Nome', 'Ramal', 'Ligações', 'Atendidas', 'Não atend.', 'Tempo falado'].forEach(function (t, i) {
+                        tr.appendChild(el('th', i > 1 ? 'text-end' : '', t));
+                    });
+                    thead.appendChild(tr);
+                    table.appendChild(thead);
+                    var tbody = el('tbody');
+                    x.ramais.forEach(function (r) {
+                        var row = el('tr');
+                        var name = el('td');
+                        var dot = el('span', 'rd-dot' + (r.online ? ' is-on' : ''));
+                        dot.title = r.online ? 'Telefone registrado (online)' : 'Telefone não registrado (offline)';
+                        name.appendChild(dot);
+                        name.appendChild(document.createTextNode(r.nome));
+                        if (r.em_ligacao) { var b = el('span', 'rd-busy'); b.appendChild(icon('ti-phone-call')); b.appendChild(document.createTextNode('em ligação')); name.appendChild(b); }
+                        if (r.pessoa && norm(r.pessoa) !== norm(r.nome)) { name.appendChild(el('span', 'rd-person', r.pessoa + ' (GLPI)')); }
+                        row.appendChild(name);
+                        row.appendChild(el('td', 'font-monospace', r.ramal));
+                        var calls = el('td', 'text-end');
+                        calls.textContent = r.stats.total;
+                        calls.title = '↓ ' + r.stats.entrada + ' entrada · ↑ ' + r.stats.saida + ' saída · ↔ ' + r.stats.interna + ' interna';
+                        row.appendChild(calls);
+                        row.appendChild(el('td', 'text-end text-green', r.stats.atendidas || ''));
+                        row.appendChild(el('td', 'text-end text-red', r.stats.nao_atendidas || ''));
+                        row.appendChild(el('td', 'text-end text-muted', r.stats.falado ? dur(r.stats.falado) : ''));
+                        tbody.appendChild(row);
+                    });
+                    table.appendChild(tbody);
+                    var resp = el('div', 'table-responsive');
+                    resp.appendChild(table);
+                    sec.appendChild(resp);
+                    wrap.appendChild(sec);
+                });
+            }
+            box.appendChild(wrap);
+        });
+        if (!shown) { box.appendChild(el('div', 'rd-empty', d.tree.length ? 'Nenhum ramal para este filtro.' : 'Sem ramais (confira a integração).')); }
+    }
+
+    function renderLive(d) {
+        var list = root.querySelector('[data-rd-live-list]');
+        root.querySelector('[data-rd-live-count]').textContent = d.live.length;
+        list.innerHTML = '';
+        if (!d.live.length) { list.appendChild(el('div', 'rd-empty', 'Nenhuma ligação em andamento.')); return; }
+        d.live.forEach(function (c) {
+            var item = el('div', 'rd-item');
+            var ic = el('span', 'rd-item-icon ' + (c.ramal ? 'rd-out' : 'rd-in'));
+            ic.appendChild(icon(c.fila && !c.ramal ? 'ti-hourglass' : 'ti-phone-call'));
+            item.appendChild(ic);
+            var main = el('div', 'rd-item-main');
+            main.appendChild(el('strong', '', c.externo || 'Ligação interna'));
+            main.appendChild(el('small', '', c.ramal ? c.ramal + (c.setor ? ' · ' + c.setor : '') : 'Aguardando atendimento'));
+            if (c.fila) { main.appendChild(el('small', '', 'Fila ' + c.fila)); }
+            item.appendChild(main);
+            item.appendChild(el('div', 'rd-item-side', c.duracao));
+            list.appendChild(item);
+        });
+    }
+
+    function renderRecent(d) {
+        var list = root.querySelector('[data-rd-recent]');
+        list.innerHTML = '';
+        if (!d.recent.length) { list.appendChild(el('div', 'rd-empty', 'Nenhuma ligação hoje.')); return; }
+        var icons = { entrada: ['rd-in', 'ti-phone-incoming'], saida: ['rd-out', 'ti-phone-outgoing'], interna: ['rd-int', 'ti-arrows-left-right'] };
+        d.recent.forEach(function (c) {
+            var spec = c.status === 'nao_atendida' ? ['rd-miss', 'ti-phone-x'] : (icons[c.direcao] || ['rd-int', 'ti-phone']);
+            var item = el('div', 'rd-item');
+            var ic = el('span', 'rd-item-icon ' + spec[0]);
+            ic.appendChild(icon(spec[1]));
+            ic.title = c.direcao + ' · ' + c.status_label;
+            item.appendChild(ic);
+            var main = el('div', 'rd-item-main');
+            var who = c.direcao === 'saida' ? c.para : (c.nome ? c.nome + ' · ' + c.de : c.de);
+            main.appendChild(el('strong', '', who));
+            main.appendChild(el('small', '', c.ramal ? c.ramal + (c.setor ? ' · ' + c.setor : '') : (c.direcao === 'entrada' ? 'Para ' + c.para : '')));
+            item.appendChild(main);
+            var side = el('div', 'rd-item-side');
+            side.appendChild(el('div', '', c.hora));
+            side.appendChild(el('div', c.status === 'nao_atendida' ? 'text-red' : '', c.status === 'nao_atendida' ? c.status_label : dur(c.falado)));
+            item.appendChild(side);
+            list.appendChild(item);
+        });
+    }
+
+    function renderErrors(d) {
+        var box = root.querySelector('[data-rd-errors]');
+        box.innerHTML = '';
+        (d.errors || []).forEach(function (msg) {
+            var a = el('div', 'alert alert-warning py-2');
+            a.appendChild(icon('ti-alert-triangle me-1'));
+            a.appendChild(document.createTextNode(msg));
+            box.appendChild(a);
+        });
+    }
+
+    function render() {
+        var d = state.data;
+        if (!d) { return; }
+        root.querySelector('[data-rd-updated]').textContent = d.updated || '—';
+        renderErrors(d);
+        renderKpis(d);
+        renderTree(d);
+        renderLive(d);
+        renderRecent(d);
+    }
+
+    // ---------------------------------------------------------- ao vivo
+    var timer = 0, busy = false;
+    var liveEl = root.querySelector('[data-rd-live]');
+    function setLive(ok) {
+        liveEl.classList.toggle('is-off', !ok);
+        liveEl.querySelector('span').textContent = ok ? 'Ao vivo' : 'Reconectando…';
+    }
+    function poll() {
+        clearTimeout(timer);
+        if (!busy) {
+            busy = true;
+            var url = root.dataset.url + '?signature=' + encodeURIComponent((state.data && state.data.signature) || '');
+            fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } })
+                .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.json(); })
+                .then(function (data) {
+                    setLive(true);
+                    if (data.unchanged) { root.querySelector('[data-rd-updated]').textContent = data.updated; return; }
+                    state.data = data;
+                    render();
+                })
+                .catch(function () { setLive(false); })
+                .then(function () { busy = false; });
+        }
+        timer = setTimeout(poll, document.visibilityState === 'visible' ? POLL_MS : POLL_MS * 4);
+    }
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { poll(); } });
+
+    root.querySelectorAll('[data-rd-filter]').forEach(function (input) {
+        var key = input.dataset.rdFilter;
+        input.addEventListener(input.tagName === 'SELECT' || input.type === 'checkbox' ? 'change' : 'input', function () {
+            if (key === 'online') { state.online = input.checked; }
+            else if (key === 'busca') { state.busca = norm(input.value.trim()); }
+            else { state[key] = input.value; if (key === 'filial') { state.setor = ''; } }
+            renderTree(state.data);
+        });
+    });
+
+    root.querySelector('[data-rd-today]').textContent = new Date().toLocaleDateString('pt-BR');
+    try { state.data = JSON.parse(root.ownerDocument.querySelector('[data-rd-initial]').textContent); } catch (e) { state.data = null; }
+    render();
+    timer = setTimeout(poll, POLL_MS);
+})();
+</script>

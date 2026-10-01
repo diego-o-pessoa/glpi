@@ -1,0 +1,103 @@
+<datalist id="ar-locations">{% for name in locations %}<option value="{{ name }}">{% endfor %}</datalist>
+<datalist id="ar-glpi-groups">{% for name in glpi_groups %}<option value="{{ name }}">{% endfor %}</datalist>
+
+<div class="row">
+    <div class="col-12 mb-3">
+        <h2 class="mb-1"><i class="ti ti-sitemap me-2 text-primary"></i>Ramais: filial e setor</h2>
+        <div class="text-muted">
+            A TW não informa filial nem setor. O dashboard usa, nesta ordem:
+            <strong>1)</strong> o ajuste manual do ramal (abaixo);
+            <strong>2)</strong> o usuário do GLPI que tem o ramal no Telefone, Telefone 2 ou Celular (Localização = filial, Grupo = setor) — hoje {{ glpi_users }} ramal(is) encontrado(s) assim;
+            <strong>3)</strong> o grupo de captura da TW.
+        </div>
+    </div>
+    {% if error %}
+        <div class="col-12"><div class="alert alert-danger"><i class="ti ti-alert-triangle me-1"></i>{{ error }}</div></div>
+    {% endif %}
+
+    <div class="col-12 mb-3">
+        <form class="card" method="post" action="{{ action_url }}">
+            <div class="card-header"><h3 class="card-title"><i class="ti ti-users-group me-2"></i>Grupos de captura da TW</h3></div>
+            <div class="card-body">
+                <p class="text-muted small">Cada ramal da TW tem um grupo de captura (número). Dê a filial e o setor de cada grupo: vale para todos os ramais dele que não estiverem num usuário do GLPI.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-vcenter">
+                        <thead><tr><th>Grupo</th><th>Ramais</th><th>Exemplos</th><th style="min-width:200px">Filial</th><th style="min-width:200px">Setor</th></tr></thead>
+                        <tbody>
+                        {% for g in groups %}
+                            <tr>
+                                <td class="font-monospace">{{ g.grupo }}</td>
+                                <td>{{ g.total }}</td>
+                                <td class="small text-muted">{{ g.exemplos|join(', ') }}</td>
+                                <td><input class="form-control form-control-sm" name="grupo[{{ g.grupo }}][filial]" value="{{ g.filial }}" list="ar-locations" maxlength="255" {{ can_edit ? '' : 'disabled' }}></td>
+                                <td><input class="form-control form-control-sm" name="grupo[{{ g.grupo }}][setor]" value="{{ g.setor }}" list="ar-glpi-groups" maxlength="255" {{ can_edit ? '' : 'disabled' }}></td>
+                            </tr>
+                        {% else %}
+                            <tr><td colspan="5" class="text-muted">Nenhum grupo de captura (ou a TW não respondeu).</td></tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% if can_edit %}
+                <div class="card-footer text-end">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="save_groups">
+                    <button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy me-1"></i>Salvar grupos</button>
+                </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <div class="col-12 mb-3">
+        <form class="card" method="post" action="{{ action_url }}">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h3 class="card-title mb-0"><i class="ti ti-phone me-2"></i>Ramais ({{ extensions|length }})</h3>
+                <input type="search" class="form-control form-control-sm" style="max-width:260px" placeholder="Filtrar por nome ou ramal" data-ar-filter>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Preencha só quando o automático estiver errado. Deixe em branco para voltar ao automático.</p>
+                <div class="table-responsive" style="max-height:620px;overflow-y:auto">
+                    <table class="table table-sm table-vcenter" data-ar-table>
+                        <thead><tr><th>Ramal</th><th>Nome (TW)</th><th>Grupo</th><th>Hoje no dashboard</th><th style="min-width:180px">Filial (ajuste)</th><th style="min-width:180px">Setor (ajuste)</th></tr></thead>
+                        <tbody>
+                        {% for e in extensions %}
+                            <tr data-ar-text="{{ (e.ramal ~ ' ' ~ e.nome)|lower }}">
+                                <td class="font-monospace">{{ e.ramal }}</td>
+                                <td>{{ e.nome }}{% if e.resolved.pessoa %}<div class="small text-muted"><i class="ti ti-user"></i> {{ e.resolved.pessoa }} (GLPI)</div>{% endif %}</td>
+                                <td class="font-monospace small">{{ e.grupo ?: '—' }}</td>
+                                <td class="small">
+                                    {{ e.resolved.filial }} / {{ e.resolved.setor }}
+                                    <span class="badge bg-secondary-lt ms-1" title="De onde veio: manual, glpi ou grupo">{{ e.resolved.fonte }}</span>
+                                </td>
+                                <td><input class="form-control form-control-sm" name="ramal[{{ e.ramal }}][filial]" value="{{ e.filial }}" list="ar-locations" maxlength="255" {{ can_edit ? '' : 'disabled' }}></td>
+                                <td><input class="form-control form-control-sm" name="ramal[{{ e.ramal }}][setor]" value="{{ e.setor }}" list="ar-glpi-groups" maxlength="255" {{ can_edit ? '' : 'disabled' }}></td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% if can_edit %}
+                <div class="card-footer text-end">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="save_extensions">
+                    <button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy me-1"></i>Salvar ajustes</button>
+                </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    var input = document.querySelector('[data-ar-filter]');
+    if (!input) { return; }
+    input.addEventListener('input', function () {
+        var q = input.value.trim().toLowerCase();
+        document.querySelectorAll('[data-ar-table] tbody tr').forEach(function (tr) {
+            tr.classList.toggle('d-none', q !== '' && (tr.dataset.arText || '').indexOf(q) === -1);
+        });
+    });
+})();
+</script>

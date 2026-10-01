@@ -37,7 +37,17 @@ class PluginAtivaramalMenu extends CommonGLPI
             'title'            => self::getMenuName(),
             'is_multi_entries' => true,
         ];
+        $menu['dashboard'] = [
+            'title' => 'Dashboard',
+            'page'  => $CFG_GLPI['root_doc'] . '/plugins/ativaramal/front/dashboard.php',
+            'icon'  => 'ti ti-chart-bar',
+        ];
         if (Session::haveRight(PluginAtivaramalProfile::RIGHT_CONFIG, READ)) {
+            $menu['ramais'] = [
+                'title' => 'Ramais (filial e setor)',
+                'page'  => $CFG_GLPI['root_doc'] . '/plugins/ativaramal/front/ramais.php',
+                'icon'  => 'ti ti-sitemap',
+            ];
             $menu['config'] = [
                 'title' => 'Integração TW Solutions',
                 'page'  => $CFG_GLPI['root_doc'] . '/plugins/ativaramal/front/config.php',
