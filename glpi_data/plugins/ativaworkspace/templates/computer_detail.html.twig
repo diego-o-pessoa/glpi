@@ -274,6 +274,10 @@
                 if (it.status === 'failed' && it.message) { badge.title = it.message; }
                 row.appendChild(name); row.appendChild(badge);
                 list.appendChild(row);
+                // So pinta a linha durante uma desinstalacao em andamento nesta
+                // pagina. O historico antigo nao vale: o programa pode ter sido
+                // reinstalado (o servidor ja decide isso ao montar a lista).
+                if (!data.active && !wasActive) { return; }
                 var cell = root.querySelector('tr[data-aw-row-key="' + (window.CSS && CSS.escape ? CSS.escape(it.key) : it.key) + '"] [data-aw-row-status]');
                 if (cell) { cell.innerHTML = '<span class="badge ' + meta[0] + '">' + meta[1] + '</span>'; }
             });
