@@ -23,7 +23,7 @@ final class RamalConfig
     public const CONTEXT = 'plugin:ativaramal';
 
     /** Campos guardados criptografados (espelha o registerSecureConfigs). */
-    public const SECRET_KEYS = ['client_secret', 'access_token', 'refresh_token', 'webhook_token'];
+    public const SECRET_KEYS = ['client_secret', 'access_token', 'refresh_token', 'webhook_token', 'api_token', 'api_key'];
 
     public const CALLBACK_PATH = '/plugins/ativaramal/oauth/callback';
     public const WEBHOOK_PATH  = '/plugins/ativaramal/api/webhook';
@@ -32,6 +32,8 @@ final class RamalConfig
         'base_url', 'authorize_url', 'token_url', 'scope', 'client_id', 'client_secret',
         'access_token', 'refresh_token', 'token_type', 'token_expires_at', 'token_obtained_at',
         'last_refresh_at', 'last_refresh_error', 'webhook_token', 'webhook_last_at',
+        // Token + Key criados no painel da TW (Ferramentas > Token).
+        'api_token', 'api_key',
     ];
 
     // ------------------------------------------------------------ leitura/gravacao
@@ -250,6 +252,8 @@ final class RamalConfig
             'has_client_secret' => self::hasSecret('client_secret'),
             'has_access_token'  => $hasAccess,
             'has_refresh_token' => self::hasSecret('refresh_token'),
+            'has_api_token'     => self::hasSecret('api_token'),
+            'has_api_key'       => self::hasSecret('api_key'),
             'token_expires_at'  => $expires,
             'token_expired'     => $hasAccess && $expires > 0 && $expires <= time(),
             'token_obtained_at' => (int) self::get('token_obtained_at', '0'),

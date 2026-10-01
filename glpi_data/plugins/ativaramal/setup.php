@@ -34,6 +34,8 @@ function plugin_ativaramal_register_secure_configs(): void
         'access_token',
         'refresh_token',
         'webhook_token',
+        'api_token',
+        'api_key',
     ]);
 }
 

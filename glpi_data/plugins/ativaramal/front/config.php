@@ -45,7 +45,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     }
                 }
                 // Segredos: campo vazio mantem o atual; a caixa "remover" apaga.
-                foreach (['client_secret', 'access_token', 'refresh_token'] as $key) {
+                foreach (['client_secret', 'access_token', 'refresh_token', 'api_token', 'api_key'] as $key) {
                     $typed = trim((string) ($_POST[$key] ?? ''));
                     if (!empty($_POST['clear_' . $key])) {
                         $values[$key] = '';
@@ -117,6 +117,7 @@ TemplateRenderer::getInstance()->display('@ativaramal/config.html.twig', [
     'diag_url'      => $CFG_GLPI['root_doc'] . '/plugins/ativaramal/front/diagnostic.php',
     'diag_groups'   => ApiDiagnostics::CANDIDATES,
     'diag_note'     => ApiDiagnostics::MAPPING_NOTE,
+    'apikey_schemes' => ApiDiagnostics::APIKEY_SCHEMES,
     'now'           => time(),
 ]);
 Html::footer();

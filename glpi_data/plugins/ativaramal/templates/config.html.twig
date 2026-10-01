@@ -70,7 +70,7 @@
                                 <input type="text" class="form-control" id="ar-scope" name="scope" value="{{ s.scope }}" maxlength="255" placeholder="separados por espaço">
                             </div>
 
-                            {% for key, label in {'client_secret': 'Client Secret', 'access_token': 'Access Token', 'refresh_token': 'Refresh Token'} %}
+                            {% for key, label in {'client_secret': 'Client Secret', 'access_token': 'Access Token', 'refresh_token': 'Refresh Token', 'api_token': 'Token da API (painel TW)', 'api_key': 'Key da API (painel TW)'} %}
                                 {% set stored = s['has_' ~ key] %}
                                 <div class="col-md-{{ key == 'client_secret' ? 12 : 6 }}">
                                     <label class="form-label" for="ar-{{ key }}">
@@ -79,7 +79,7 @@
                                     </label>
                                     <input type="password" class="form-control font-monospace" id="ar-{{ key }}" name="{{ key }}" value=""
                                            autocomplete="new-password" spellcheck="false"
-                                           placeholder="{{ stored ? '•••••••• (deixe em branco para manter)' : (key == 'client_secret' ? 'Cole o Client Secret' : 'Preenchido ao conectar (ou cole aqui)') }}">
+                                           placeholder="{{ stored ? '•••••••• (deixe em branco para manter)' : (key == 'client_secret' ? 'Cole o Client Secret' : (key starts with 'api_' ? 'Cole o valor gerado no painel da TW' : 'Preenchido ao conectar (ou cole aqui)')) }}">
                                     {% if stored %}
                                         <label class="form-check mt-1 mb-0">
                                             <input class="form-check-input" type="checkbox" name="clear_{{ key }}" value="1">
@@ -199,12 +199,17 @@
     {# ------------------------------------------------ Diagnostico da API #}
     {% if can_edit %}
     <div class="col-12 mb-3">
-        <div class="card" data-ar-diag data-url="{{ diag_url }}" data-groups="{{ diag_groups|json_encode|e('html_attr') }}">
+        <div class="card" data-ar-diag data-url="{{ diag_url }}" data-groups="{{ diag_groups|json_encode|e('html_attr') }}"
+             data-schemes="{{ apikey_schemes|json_encode|e('html_attr') }}">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <h3 class="card-title mb-0"><i class="ti ti-stethoscope me-2 text-primary"></i>Diagnóstico da API</h3>
                 <div class="d-flex flex-wrap gap-2">
                     <button type="button" class="btn btn-primary" data-ar-diag-run {{ connected and s.base_url ? '' : 'disabled' }}>
                         <i class="ti ti-player-play me-1"></i>Testar API da TW
+                    </button>
+                    <button type="button" class="btn btn-success" data-ar-diag-run-apikey {{ s.has_api_token and s.has_api_key and s.base_url ? '' : 'disabled' }}
+                            title="Usa o Token + Key criados no painel da TW (Ferramentas)">
+                        <i class="ti ti-key me-1"></i>Testar com Token/Key
                     </button>
                     <button type="button" class="btn btn-outline-primary" data-ar-diag-run-client {{ s.client_id and s.has_client_secret and s.base_url ? '' : 'disabled' }}
                             title="Pede um token de sistema (client credentials) só para este teste; não é salvo e não muda a conexão">
@@ -319,10 +324,11 @@
         return 'Erro do servidor';
     }
 
-    function call(path, mode) {
+    function call(path, mode, scheme) {
         var body = new FormData();
         body.append('path', path);
         body.append('mode', mode || 'user');
+        if (scheme) { body.append('scheme', scheme); }
         return fetch(url, { method: 'POST', body: body, credentials: 'same-origin',
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrf } })
             .then(function (resp) { return resp.json().catch(function () { return { ok: false, message: 'Erro ' + resp.status + ' no GLPI.' }; }); })
@@ -345,9 +351,11 @@
         head.appendChild(el('span', 'badge ' + badgeClass(r.status) + ' text-white', r.status ? String(r.status) : '—'));
         head.appendChild(el('span', 'font-monospace small text-break', 'GET ' + r.url));
         if (r.mode === 'client') { head.appendChild(el('span', 'badge bg-purple-lt', 'token de sistema')); }
+        if (r.mode === 'apikey') { head.appendChild(el('span', 'badge bg-green-lt', 'Token/Key: ' + r.scheme_label)); }
         head.appendChild(el('span', 'small text-muted', meaning(r) + ' · ' + r.ms + ' ms · ' + r.bytes + ' bytes' + (r.content_type ? ' · ' + r.content_type : '')));
         item.appendChild(head);
-        report.push(['[' + (r.status || 'sem resposta') + ']', 'GET ' + r.url, '-', meaning(r), '(' + r.ms + ' ms)', r.mode === 'client' ? '[token de sistema]' : ''].join(' '));
+        report.push(['[' + (r.status || 'sem resposta') + ']', 'GET ' + r.url, '-', meaning(r), '(' + r.ms + ' ms)',
+            r.mode === 'client' ? '[token de sistema]' : (r.mode === 'apikey' ? '[Token/Key: ' + r.scheme_label + ']' : '')].join(' '));
 
         var hasDetails = r.preview || (r.fields && r.fields.length) || (r.headers && Object.keys(r.headers).length);
         if (hasDetails) {
@@ -384,7 +392,7 @@
         container.appendChild(item);
     }
 
-    function runList(list) {
+    function runList(list, onDone) {
         running = true;
         runBtn.disabled = true;
         progress.classList.remove('d-none');
@@ -395,16 +403,21 @@
                 runBtn.disabled = false;
                 progress.textContent = 'Concluído: ' + list.length + ' URL(s) testada(s).';
                 copyBtn.classList.remove('d-none');
+                if (onDone) { onDone(); }
                 return;
             }
             var job = list[i++];
             progress.textContent = 'Testando ' + i + ' de ' + list.length + ': ' + (job.path || '/');
-            call(job.path, job.mode).then(function (data) { render(job.box, job.path, data); next(); });
+            call(job.path, job.mode, job.scheme).then(function (data) {
+                render(job.box, job.path, data);
+                if (job.onResult) { job.onResult(data); }
+                next();
+            });
         }
         next();
     }
 
-    function runAll(mode) {
+    function runAll(mode, scheme) {
         if (running) { return; }
         results.innerHTML = '';
         report = ['Diagnóstico da API da TW Solutions - ' + new Date().toLocaleString('pt-BR')
@@ -414,7 +427,7 @@
             var section = el('div', 'mb-3');
             section.appendChild(el('h4', 'mb-2', groups[key].label));
             results.appendChild(section);
-            groups[key].paths.forEach(function (path) { list.push({ path: path, box: section, mode: mode }); });
+            groups[key].paths.forEach(function (path) { list.push({ path: path, box: section, mode: mode, scheme: scheme }); });
         });
         report.push('');
         runList(list);
@@ -422,6 +435,45 @@
     runBtn.addEventListener('click', function () { runAll('user'); });
     var runClientBtn = card.querySelector('[data-ar-diag-run-client]');
     if (runClientBtn) { runClientBtn.addEventListener('click', function () { runAll('client'); }); }
+
+    // Token/Key: 1) testa /api/v1/ramal em cada forma de envio; 2) com a
+    // primeira que nao for recusada (401/403), testa todas as rotas.
+    var schemes = JSON.parse(card.dataset.schemes || '{}');
+    var runKeyBtn = card.querySelector('[data-ar-diag-run-apikey]');
+    if (runKeyBtn) {
+        runKeyBtn.addEventListener('click', function () {
+            if (running) { return; }
+            results.innerHTML = '';
+            report = ['Diagnóstico da API da TW Solutions - ' + new Date().toLocaleString('pt-BR') + ' (Token/Key do painel)', '', 'Formas de envio:'];
+            var section = el('div', 'mb-3');
+            section.appendChild(el('h4', 'mb-2', 'Formas de envio do Token/Key (em /api/v1/ramal)'));
+            results.appendChild(section);
+            var accepted = '';
+            var list = Object.keys(schemes).map(function (scheme) {
+                return { path: '/api/v1/ramal', box: section, mode: 'apikey', scheme: scheme, onResult: function (data) {
+                    var st = data.ok ? data.result.status : 0;
+                    if (!accepted && st && st !== 401 && st !== 403) { accepted = scheme; }
+                } };
+            });
+            runList(list, function () {
+                if (!accepted) {
+                    section.appendChild(el('div', 'alert alert-warning small', 'Nenhuma forma de envio foi aceita (todas 401/403). Peça à TW como enviar o Token e a Key nas requisições.'));
+                    report.push('', 'Nenhuma forma de envio aceita.');
+                    return;
+                }
+                section.appendChild(el('div', 'alert alert-success small', 'Aceita: ' + schemes[accepted] + '. Testando todas as rotas com ela…'));
+                report.push('', 'Forma aceita: ' + schemes[accepted], '');
+                var full = [];
+                Object.keys(groups).forEach(function (key) {
+                    var box = el('div', 'mb-3');
+                    box.appendChild(el('h4', 'mb-2', groups[key].label));
+                    results.appendChild(box);
+                    groups[key].paths.forEach(function (path) { full.push({ path: path, box: box, mode: 'apikey', scheme: accepted }); });
+                });
+                runList(full);
+            });
+        });
+    }
 
     card.querySelector('[data-ar-diag-custom]').addEventListener('submit', function (event) {
         event.preventDefault();

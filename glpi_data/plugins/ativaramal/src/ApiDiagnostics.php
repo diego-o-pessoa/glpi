@@ -96,15 +96,30 @@ final class ApiDiagnostics
     private static ?string $clientToken = null;
 
     /**
-     * @param string $mode 'user' (token da conexao OAuth) ou 'client' (client credentials, nao salvo)
+     * Formas de enviar o Token + Key do painel da TW. A TW nao documenta qual
+     * usa: o diagnostico testa cada uma e mostra o resultado de todas.
+     */
+    public const APIKEY_SCHEMES = [
+        'headers'    => 'Cabeçalhos "token" e "key"',
+        'x_headers'  => 'Cabeçalhos "X-Token" e "X-Key"',
+        'bearer_key' => '"Authorization: Bearer <token>" + cabeçalho "key"',
+        'query'      => 'Parâmetros ?token=…&key=… na URL',
+    ];
+
+    /**
+     * @param string $mode 'user' (token da conexao OAuth), 'client' (client
+     *                     credentials, nao salvo) ou 'apikey' (Token + Key do painel)
      * @return array<string, mixed>
      */
-    public static function probe(string $path, string $mode = 'user'): array
+    public static function probe(string $path, string $mode = 'user', string $scheme = ''): array
     {
         $path = self::normalizePath($path);
         $base = RamalConfig::baseUrl();
         if (!RamalConfig::isHttpsUrl($base)) {
             throw new RuntimeException('Configure a URL base da API (HTTPS) antes de testar.');
+        }
+        if ($mode === 'apikey') {
+            return self::probeApiKey($base, $path, $scheme);
         }
         if ($mode === 'client') {
             if (self::$clientToken === null) {
@@ -121,8 +136,60 @@ final class ApiDiagnostics
         if ($token === '') {
             throw new RuntimeException('Sem access token: conecte à TW Solutions antes de testar.');
         }
-        $url = $base . $path;
+        $authorization = (strcasecmp($type, 'bearer') === 0 ? 'Bearer' : $type) . ' ' . $token;
+        return self::request($base . $path, $base . $path, $path, ['Authorization' => $authorization]);
+    }
 
+    /**
+     * Token + Key do painel da TW, na forma de envio $scheme (APIKEY_SCHEMES).
+     * Na forma "query" a URL exibida/logada tem os valores ocultos.
+     *
+     * @return array<string, mixed>
+     */
+    private static function probeApiKey(string $base, string $path, string $scheme): array
+    {
+        if (!isset(self::APIKEY_SCHEMES[$scheme])) {
+            throw new RuntimeException('Forma de envio do Token/Key inválida.');
+        }
+        $token = RamalConfig::secret('api_token');
+        $key = RamalConfig::secret('api_key');
+        if ($token === '' || $key === '') {
+            throw new RuntimeException('Salve o Token e a Key da API (criados no painel da TW) antes de testar.');
+        }
+        $url = $base . $path;
+        $display = $url;
+        $headers = [];
+        switch ($scheme) {
+            case 'headers':
+                $headers = ['token' => $token, 'key' => $key];
+                break;
+            case 'x_headers':
+                $headers = ['X-Token' => $token, 'X-Key' => $key];
+                break;
+            case 'bearer_key':
+                $headers = ['Authorization' => 'Bearer ' . $token, 'key' => $key];
+                break;
+            case 'query':
+                $glue = str_contains($url, '?') ? '&' : '?';
+                $url .= $glue . http_build_query(['token' => $token, 'key' => $key], '', '&', PHP_QUERY_RFC3986);
+                $display .= $glue . 'token=[oculto]&key=[oculto]';
+                break;
+        }
+        $result = self::request($url, $display, $path, $headers);
+        $result['scheme'] = $scheme;
+        $result['scheme_label'] = self::APIKEY_SCHEMES[$scheme];
+        return $result;
+    }
+
+    /**
+     * GET com os cabecalhos de autenticacao dados. $displayUrl e a URL sem
+     * segredos (vai para a tela e para o log).
+     *
+     * @param array<string, string> $authHeaders
+     * @return array<string, mixed>
+     */
+    private static function request(string $url, string $displayUrl, string $path, array $authHeaders): array
+    {
         $started = microtime(true);
         try {
             $response = Toolbox::getGuzzleClient([
@@ -130,17 +197,14 @@ final class ApiDiagnostics
                 'http_errors'     => false,
                 'allow_redirects' => false,
             ])->get($url, [
-                'headers' => [
-                    'Accept'        => 'application/json',
-                    'Authorization' => (strcasecmp($type, 'bearer') === 0 ? 'Bearer' : $type) . ' ' . $token,
-                ],
+                'headers' => ['Accept' => 'application/json'] + $authHeaders,
                 'stream'  => true,
             ]);
         } catch (Throwable $exception) {
             $reason = self::connectionReason($exception);
-            Logger::warning('Diagnóstico: falha de conexão', ['url' => $url, 'motivo' => $reason]);
+            Logger::warning('Diagnóstico: falha de conexão', ['url' => $displayUrl, 'motivo' => $reason]);
             return [
-                'url' => $url, 'path' => $path, 'status' => 0, 'ms' => (int) round((microtime(true) - $started) * 1000),
+                'url' => $displayUrl, 'path' => $path, 'status' => 0, 'ms' => (int) round((microtime(true) - $started) * 1000),
                 'content_type' => '', 'bytes' => 0, 'json' => false, 'fields' => [], 'preview' => '',
                 'error' => $reason, 'location' => '', 'headers' => [],
             ];
@@ -171,10 +235,10 @@ final class ApiDiagnostics
             $preview = mb_substr($preview, 0, self::PREVIEW_CHARS) . "\n… (cortado)";
         }
 
-        Logger::info('Diagnóstico da API', ['url' => $url, 'status' => $status, 'ms' => $ms, 'bytes' => strlen($raw)]);
+        Logger::info('Diagnóstico da API', ['url' => $displayUrl, 'status' => $status, 'ms' => $ms, 'bytes' => strlen($raw)]);
 
         return [
-            'url'          => $url,
+            'url'          => $displayUrl,
             'path'         => $path,
             'status'       => $status,
             'ms'           => $ms,
