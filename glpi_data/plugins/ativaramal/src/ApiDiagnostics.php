@@ -1,0 +1,259 @@
+<?php
+
+declare(strict_types=1);
+
+namespace GlpiPlugin\Ativaramal;
+
+use RuntimeException;
+use Throwable;
+use Toolbox;
+
+/**
+ * Diagnostico da API da TW Solutions: requisicoes GET autenticadas para
+ * descobrir quais endpoints e campos existem antes do dashboard.
+ *
+ * - So GET (nada e alterado na TW) e so no host da URL base configurada:
+ *   o caminho e relativo e validado (sem "://", "..", espacos).
+ * - Sem seguir redirecionamento: o Location aparece no resultado.
+ * - Resposta exibida com campos sensiveis ocultos e tamanho limitado.
+ *
+ * A lista CANDIDATES NAO vem da documentacao da TW (nao ha documentacao
+ * publica): sao caminhos comuns em APIs de PABX, exibidos na tela como
+ * "candidatos nao confirmados". O resultado real de cada um e o que vale.
+ */
+final class ApiDiagnostics
+{
+    private const TIMEOUT = 12;
+    private const MAX_BODY = 262144;      // le no maximo 256 KB
+    private const PREVIEW_CHARS = 12000;  // mostra no maximo isto
+
+    /** Chaves cujo valor nunca e exibido. */
+    private const SENSITIVE = ['token', 'secret', 'password', 'senha', 'authorization', 'cookie', 'apikey', 'api_key', 'credential'];
+
+    /**
+     * Grupos testados por "Testar API da TW", na ordem.
+     *
+     * @var array<string, array{label: string, paths: list<string>}>
+     */
+    public const CANDIDATES = [
+        'discovery' => [
+            'label' => 'Documentação / raiz da API',
+            'paths' => ['', '/openapi.json', '/swagger.json', '/swagger/v1/swagger.json', '/api-docs', '/v1', '/api'],
+        ],
+        'extensions' => [
+            'label' => 'Ramais',
+            'paths' => ['/extensions', '/ramais', '/v1/extensions', '/api/extensions', '/api/v1/extensions'],
+        ],
+        'queues' => [
+            'label' => 'Filas',
+            'paths' => ['/queues', '/filas', '/v1/queues', '/api/queues', '/api/v1/queues'],
+        ],
+        'calls' => [
+            'label' => 'Ligações recentes',
+            'paths' => ['/calls', '/cdr', '/call-history', '/chamadas', '/ligacoes', '/v1/calls', '/api/calls', '/api/cdr'],
+        ],
+        'answered' => [
+            'label' => 'Atendidas / não atendidas',
+            'paths' => ['/calls?status=answered', '/calls?status=missed', '/cdr?disposition=ANSWERED', '/cdr?disposition=NO%20ANSWER'],
+        ],
+    ];
+
+    /** Caminho relativo seguro (com query opcional). */
+    public static function normalizePath(string $path): string
+    {
+        $path = trim($path);
+        if ($path === '') {
+            return '';
+        }
+        if ($path[0] !== '/') {
+            $path = '/' . $path;
+        }
+        if (strlen($path) > 300 || str_contains($path, '://') || str_contains($path, '..')
+            || preg_match('/[\s\\\\@#]/', $path) || str_starts_with($path, '//')) {
+            throw new RuntimeException('Caminho inválido: use só o caminho relativo à URL base (ex.: /extensions?limit=10).');
+        }
+        return $path;
+    }
+
+    /**
+     * Faz um GET autenticado e devolve o resultado para a tela.
+     *
+     * @return array<string, mixed>
+     */
+    public static function probe(string $path): array
+    {
+        $path = self::normalizePath($path);
+        $base = RamalConfig::baseUrl();
+        if (!RamalConfig::isHttpsUrl($base)) {
+            throw new RuntimeException('Configure a URL base da API (HTTPS) antes de testar.');
+        }
+        $token = TokenManager::accessToken();
+        if ($token === '') {
+            throw new RuntimeException('Sem access token: conecte à TW Solutions antes de testar.');
+        }
+        $type = RamalConfig::get('token_type') ?: 'Bearer';
+        $url = $base . $path;
+
+        $started = microtime(true);
+        try {
+            $response = Toolbox::getGuzzleClient([
+                'timeout'         => self::TIMEOUT,
+                'http_errors'     => false,
+                'allow_redirects' => false,
+            ])->get($url, [
+                'headers' => [
+                    'Accept'        => 'application/json',
+                    'Authorization' => (strcasecmp($type, 'bearer') === 0 ? 'Bearer' : $type) . ' ' . $token,
+                ],
+                'stream'  => true,
+            ]);
+        } catch (Throwable $exception) {
+            Logger::warning('Diagnóstico: falha de conexão', ['url' => $url, 'erro' => get_class($exception)]);
+            return [
+                'url' => $url, 'path' => $path, 'status' => 0, 'ms' => (int) round((microtime(true) - $started) * 1000),
+                'content_type' => '', 'bytes' => 0, 'json' => false, 'fields' => [], 'preview' => '',
+                'error' => 'Sem resposta (rede, TLS ou tempo esgotado).', 'location' => '', 'headers' => [],
+            ];
+        }
+        $ms = (int) round((microtime(true) - $started) * 1000);
+
+        $stream = $response->getBody();
+        $raw = '';
+        while (!$stream->eof() && strlen($raw) < self::MAX_BODY) {
+            $raw .= $stream->read(8192);
+        }
+        $truncated = !$stream->eof();
+
+        $status = $response->getStatusCode();
+        $contentType = $response->getHeaderLine('Content-Type');
+        $decoded = json_decode($raw, true);
+        $isJson = is_array($decoded);
+
+        if ($isJson) {
+            $clean = self::redact($decoded);
+            $preview = (string) json_encode($clean, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $fields = self::fields($decoded);
+        } else {
+            $preview = self::maskText(mb_substr($raw, 0, self::PREVIEW_CHARS));
+            $fields = [];
+        }
+        if (mb_strlen($preview) > self::PREVIEW_CHARS) {
+            $preview = mb_substr($preview, 0, self::PREVIEW_CHARS) . "\n… (cortado)";
+        }
+
+        Logger::info('Diagnóstico da API', ['url' => $url, 'status' => $status, 'ms' => $ms, 'bytes' => strlen($raw)]);
+
+        return [
+            'url'          => $url,
+            'path'         => $path,
+            'status'       => $status,
+            'ms'           => $ms,
+            'content_type' => mb_substr($contentType, 0, 80),
+            'bytes'        => strlen($raw),
+            'truncated'    => $truncated,
+            'json'         => $isJson,
+            'fields'       => $fields,
+            'preview'      => $preview,
+            'location'     => self::maskText(mb_substr($response->getHeaderLine('Location'), 0, 300)),
+            'headers'      => self::interestingHeaders($response->getHeaders()),
+            'error'        => '',
+        ];
+    }
+
+    /** Oculta valores de chaves sensiveis e strings com cara de token. */
+    private static function redact(mixed $value, string $key = ''): mixed
+    {
+        $lower = strtolower($key);
+        foreach (self::SENSITIVE as $needle) {
+            if ($lower !== '' && str_contains($lower, $needle)) {
+                return '[oculto]';
+            }
+        }
+        if (is_array($value)) {
+            $out = [];
+            foreach ($value as $k => $v) {
+                $out[$k] = self::redact($v, (string) $k);
+            }
+            return $out;
+        }
+        return is_string($value) ? self::maskText($value) : $value;
+    }
+
+    private static function maskText(string $text): string
+    {
+        $text = preg_replace('/\b(Bearer|Basic)\s+[A-Za-z0-9._~+\/=-]+/i', '$1 [oculto]', $text) ?? '';
+        return preg_replace('/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/', '[jwt oculto]', $text) ?? '';
+    }
+
+    /**
+     * Estrutura da resposta para descobrir os campos: chaves do topo e, se
+     * houver uma lista de objetos (direto ou em data/items/results...), os
+     * campos do primeiro item com o tipo de cada um.
+     *
+     * @return list<array{path: string, type: string, example: string}>
+     */
+    private static function fields(array $data): array
+    {
+        $fields = [];
+        $list = null;
+        $listPath = '';
+        if (array_is_list($data)) {
+            $list = $data;
+            $listPath = '[]';
+        } else {
+            foreach ($data as $key => $value) {
+                $fields[] = ['path' => (string) $key, 'type' => self::typeOf($value), 'example' => self::example((string) $key, $value)];
+                if ($list === null && is_array($value) && array_is_list($value) && isset($value[0]) && is_array($value[0])) {
+                    $list = $value;
+                    $listPath = $key . '[]';
+                }
+            }
+        }
+        if ($list !== null && isset($list[0]) && is_array($list[0])) {
+            foreach ($list[0] as $key => $value) {
+                $fields[] = ['path' => $listPath . '.' . $key, 'type' => self::typeOf($value), 'example' => self::example((string) $key, $value)];
+            }
+            $fields[] = ['path' => $listPath, 'type' => 'lista com ' . count($list) . ' item(ns)', 'example' => ''];
+        }
+        return array_slice($fields, 0, 80);
+    }
+
+    private static function typeOf(mixed $value): string
+    {
+        return match (true) {
+            is_array($value) && array_is_list($value) => 'lista',
+            is_array($value)                          => 'objeto',
+            is_bool($value)                           => 'booleano',
+            is_int($value), is_float($value)          => 'número',
+            $value === null                           => 'nulo',
+            default                                   => 'texto',
+        };
+    }
+
+    private static function example(string $key, mixed $value): string
+    {
+        $redacted = self::redact($value, $key);
+        if (is_array($redacted)) {
+            return '';
+        }
+        return mb_substr(is_bool($redacted) ? ($redacted ? 'true' : 'false') : (string) $redacted, 0, 60);
+    }
+
+    /**
+     * Cabecalhos uteis para entender a API (paginacao, limites, versao).
+     *
+     * @param array<string, list<string>> $headers
+     * @return array<string, string>
+     */
+    private static function interestingHeaders(array $headers): array
+    {
+        $out = [];
+        foreach ($headers as $name => $values) {
+            $lower = strtolower($name);
+            if (preg_match('/^(x-ratelimit|ratelimit|x-total|x-page|link$|x-api-version|api-version|www-authenticate|allow$|server$)/', $lower)) {
+                $out[$name] = self::maskText(mb_substr(implode(', ', $values), 0, 200));
+            }
+        }
+        return $out;
+    }
+}

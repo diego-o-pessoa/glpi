@@ -196,6 +196,59 @@
             {% endif %}
         </div>
     </div>
+    {# ------------------------------------------------ Diagnostico da API #}
+    {% if can_edit %}
+    <div class="col-12 mb-3">
+        <div class="card" data-ar-diag data-url="{{ diag_url }}" data-groups="{{ diag_groups|json_encode|e('html_attr') }}">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h3 class="card-title mb-0"><i class="ti ti-stethoscope me-2 text-primary"></i>Diagnóstico da API</h3>
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-primary" data-ar-diag-run {{ connected and s.base_url ? '' : 'disabled' }}>
+                        <i class="ti ti-player-play me-1"></i>Testar API da TW
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary d-none" data-ar-diag-copy>
+                        <i class="ti ti-copy me-1"></i>Copiar relatório
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if not connected %}
+                    <div class="alert alert-warning"><i class="ti ti-plug-x me-1"></i>Conecte à TW Solutions (token válido) para testar.</div>
+                {% endif %}
+                <p class="text-muted mb-2">
+                    Faz requisições <strong>GET</strong> autenticadas (somente leitura) em <code>{{ s.base_url ?: '(URL base)' }}</code> e mostra,
+                    para cada URL, o código HTTP, o tempo e a resposta, com tokens e segredos ocultos.
+                </p>
+                <div class="alert alert-info small">
+                    <i class="ti ti-info-circle me-1"></i>
+                    A TW não publica a documentação da API. Por isso a lista abaixo são <strong>caminhos candidatos, não confirmados</strong>:
+                    primeiro a documentação automática (OpenAPI/Swagger), depois caminhos comuns em APIs de PABX. Vale o resultado real de cada um.
+                    Se a TW informar os caminhos corretos, teste-os no campo "Caminho personalizado".
+                </div>
+                <details class="mb-3">
+                    <summary class="text-muted small" style="cursor:pointer">Ver as URLs que serão testadas</summary>
+                    <div class="row mt-2">
+                        {% for key, group in diag_groups %}
+                            <div class="col-md-6 col-xl mb-2">
+                                <div class="small fw-semibold">{{ group.label }}</div>
+                                {% for path in group.paths %}
+                                    <div class="font-monospace small text-muted text-break">{{ s.base_url }}{{ path }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </details>
+                <form class="input-group mb-3" data-ar-diag-custom autocomplete="off">
+                    <span class="input-group-text font-monospace small text-truncate" style="max-width:45%">{{ s.base_url ?: '(URL base)' }}</span>
+                    <input type="text" class="form-control font-monospace" name="path" placeholder="/caminho?parametro=valor" maxlength="300" aria-label="Caminho personalizado">
+                    <button type="submit" class="btn btn-outline-primary" {{ connected and s.base_url ? '' : 'disabled' }}><i class="ti ti-send me-1"></i>Testar caminho</button>
+                </form>
+                <div class="d-none mb-2 small text-muted" data-ar-diag-progress></div>
+                <div data-ar-diag-results></div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <script>
@@ -218,6 +271,167 @@
             var input = document.querySelector('[data-ar-copy-src="' + button.dataset.arShow + '"]');
             if (input) { input.type = input.type === 'password' ? 'text' : 'password'; }
         });
+    });
+})();
+</script>
+
+<script>
+(function () {
+    // Diagnostico da API: um caminho por vez, resultado aparecendo na hora.
+    var card = document.querySelector('[data-ar-diag]');
+    if (!card) { return; }
+    var url = card.dataset.url;
+    var groups = JSON.parse(card.dataset.groups || '{}');
+    var results = card.querySelector('[data-ar-diag-results]');
+    var progress = card.querySelector('[data-ar-diag-progress]');
+    var runBtn = card.querySelector('[data-ar-diag-run]');
+    var copyBtn = card.querySelector('[data-ar-diag-copy]');
+    var csrf = (document.querySelector('meta[property="glpi:csrf_token"]') || {}).content || '';
+    var report = [];
+    var running = false;
+
+    function el(tag, cls, text) {
+        var n = document.createElement(tag);
+        if (cls) { n.className = cls; }
+        if (text !== undefined && text !== null) { n.textContent = text; }
+        return n;
+    }
+    function badgeClass(status) {
+        if (status >= 200 && status < 300) { return 'bg-green'; }
+        if (status >= 300 && status < 400) { return 'bg-blue'; }
+        if (status === 401 || status === 403) { return 'bg-yellow'; }
+        if (status === 404 || status === 405) { return 'bg-secondary'; }
+        return 'bg-red';
+    }
+    function meaning(r) {
+        if (r.error) { return r.error; }
+        var s = r.status;
+        if (s >= 200 && s < 300) { return r.json ? 'Respondeu com JSON' : 'Respondeu (não é JSON)'; }
+        if (s >= 300 && s < 400) { return 'Redireciona' + (r.location ? ' para ' + r.location : ''); }
+        if (s === 401) { return 'Token recusado / sem autenticação para este caminho'; }
+        if (s === 403) { return 'Sem permissão (escopo) para este caminho'; }
+        if (s === 404) { return 'Não existe'; }
+        if (s === 405) { return 'Existe, mas não aceita GET'; }
+        if (s === 422 || s === 400) { return 'Existe, mas faltam parâmetros'; }
+        return 'Erro do servidor';
+    }
+
+    function call(path) {
+        var body = new FormData();
+        body.append('path', path);
+        return fetch(url, { method: 'POST', body: body, credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrf } })
+            .then(function (resp) { return resp.json().catch(function () { return { ok: false, message: 'Erro ' + resp.status + ' no GLPI.' }; }); })
+            .catch(function () { return { ok: false, message: 'Falha de comunicação com o GLPI.' }; });
+    }
+
+    function render(container, path, data) {
+        var item = el('div', 'border rounded mb-2');
+        var head = el('div', 'd-flex flex-wrap align-items-center gap-2 p-2');
+        if (!data.ok) {
+            head.appendChild(el('span', 'badge bg-red', 'erro'));
+            head.appendChild(el('span', 'font-monospace small', path || '/'));
+            head.appendChild(el('span', 'small text-danger', data.message || 'Falhou.'));
+            item.appendChild(head);
+            container.appendChild(item);
+            report.push('[erro] ' + (path || '/') + ' - ' + (data.message || ''));
+            return;
+        }
+        var r = data.result;
+        head.appendChild(el('span', 'badge ' + badgeClass(r.status) + ' text-white', r.status ? String(r.status) : '—'));
+        head.appendChild(el('span', 'font-monospace small text-break', 'GET ' + r.url));
+        head.appendChild(el('span', 'small text-muted', meaning(r) + ' · ' + r.ms + ' ms · ' + r.bytes + ' bytes' + (r.content_type ? ' · ' + r.content_type : '')));
+        item.appendChild(head);
+        report.push(['[' + (r.status || 'sem resposta') + ']', 'GET ' + r.url, '-', meaning(r), '(' + r.ms + ' ms)'].join(' '));
+
+        var hasDetails = r.preview || (r.fields && r.fields.length) || (r.headers && Object.keys(r.headers).length);
+        if (hasDetails) {
+            var det = el('details', 'px-2 pb-2');
+            det.open = r.status >= 200 && r.status < 300;
+            det.appendChild(el('summary', 'small text-muted', 'Detalhes da resposta'));
+            if (r.fields && r.fields.length) {
+                det.appendChild(el('div', 'small fw-semibold mt-2', 'Campos encontrados'));
+                var table = el('table', 'table table-sm small mb-2');
+                var tbody = el('tbody');
+                r.fields.forEach(function (f) {
+                    var tr = el('tr');
+                    tr.appendChild(el('td', 'font-monospace', f.path));
+                    tr.appendChild(el('td', 'text-muted', f.type));
+                    tr.appendChild(el('td', 'text-muted text-break', f.example));
+                    tbody.appendChild(tr);
+                    report.push('    campo ' + f.path + ' (' + f.type + ')');
+                });
+                table.appendChild(tbody);
+                det.appendChild(table);
+            }
+            if (r.headers && Object.keys(r.headers).length) {
+                det.appendChild(el('div', 'small fw-semibold', 'Cabeçalhos relevantes'));
+                Object.keys(r.headers).forEach(function (h) {
+                    det.appendChild(el('div', 'font-monospace small text-muted', h + ': ' + r.headers[h]));
+                });
+            }
+            if (r.preview) {
+                det.appendChild(el('div', 'small fw-semibold mt-2', 'Resposta' + (r.truncated ? ' (cortada)' : '')));
+                det.appendChild(el('pre', 'small bg-light p-2 mb-0', r.preview)).style.maxHeight = '320px';
+            }
+            item.appendChild(det);
+        }
+        container.appendChild(item);
+    }
+
+    function runList(list) {
+        running = true;
+        runBtn.disabled = true;
+        progress.classList.remove('d-none');
+        var i = 0;
+        function next() {
+            if (i >= list.length) {
+                running = false;
+                runBtn.disabled = false;
+                progress.textContent = 'Concluído: ' + list.length + ' URL(s) testada(s).';
+                copyBtn.classList.remove('d-none');
+                return;
+            }
+            var job = list[i++];
+            progress.textContent = 'Testando ' + i + ' de ' + list.length + ': ' + (job.path || '/');
+            call(job.path).then(function (data) { render(job.box, job.path, data); next(); });
+        }
+        next();
+    }
+
+    runBtn.addEventListener('click', function () {
+        if (running) { return; }
+        results.innerHTML = '';
+        report = ['Diagnóstico da API da TW Solutions - ' + new Date().toLocaleString('pt-BR')];
+        var list = [];
+        Object.keys(groups).forEach(function (key) {
+            var section = el('div', 'mb-3');
+            section.appendChild(el('h4', 'mb-2', groups[key].label));
+            results.appendChild(section);
+            groups[key].paths.forEach(function (path) { list.push({ path: path, box: section }); });
+        });
+        report.push('');
+        runList(list);
+    });
+
+    card.querySelector('[data-ar-diag-custom]').addEventListener('submit', function (event) {
+        event.preventDefault();
+        if (running) { return; }
+        var input = event.target.querySelector('[name="path"]');
+        var section = el('div', 'mb-3');
+        section.appendChild(el('h4', 'mb-2', 'Caminho personalizado'));
+        results.insertBefore(section, results.firstChild);
+        if (!report.length) { report = ['Diagnóstico da API da TW Solutions - ' + new Date().toLocaleString('pt-BR')]; }
+        runList([{ path: input.value.trim(), box: section }]);
+    });
+
+    copyBtn.addEventListener('click', function () {
+        var text = report.join('\n');
+        var done = function () {
+            copyBtn.innerHTML = '<i class="ti ti-check me-1"></i>Copiado';
+            setTimeout(function () { copyBtn.innerHTML = '<i class="ti ti-copy me-1"></i>Copiar relatório'; }, 1500);
+        };
+        (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(done, function () { window.prompt('Copie o relatório:', text); });
     });
 })();
 </script>

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Glpi\Application\View\TemplateRenderer;
+use GlpiPlugin\Ativaramal\ApiDiagnostics;
 use GlpiPlugin\Ativaramal\Controller\OAuthController;
 use GlpiPlugin\Ativaramal\Logger;
 use GlpiPlugin\Ativaramal\OAuthClient;
@@ -113,6 +114,8 @@ TemplateRenderer::getInstance()->display('@ativaramal/config.html.twig', [
     'can_edit'      => $canEdit,
     'webhook_token' => $webhookToken,
     'action_url'    => $selfUrl,
+    'diag_url'      => $CFG_GLPI['root_doc'] . '/plugins/ativaramal/front/diagnostic.php',
+    'diag_groups'   => ApiDiagnostics::CANDIDATES,
     'now'           => time(),
 ]);
 Html::footer();
