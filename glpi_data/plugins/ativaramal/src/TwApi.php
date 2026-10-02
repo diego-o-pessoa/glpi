@@ -57,10 +57,24 @@ final class TwApi
      */
     public static function realtime(): array
     {
-        return self::cached('ativaramal_realtime', self::TTL_REALTIME, static fn () => self::only(
-            array_values(array_filter(self::list('/api/v3/chamada/consultarChamadaTempoReal'), static fn (array $e): bool => ($e['Event'] ?? '') === 'CoreShowChannel')),
-            ['Channel', 'ChannelStateDesc', 'CallerIDNum', 'CallerIDName', 'ConnectedLineNum', 'ConnectedLineName', 'Context', 'Exten', 'Application', 'Duration', 'Linkedid', 'Uniqueid']
-        ));
+        return self::cached('ativaramal_realtime', self::TTL_REALTIME, static function (): array {
+            // A TW devolve a saida do AMI: cabecalho ("Channels will follow"),
+            // um item por canal (CoreShowChannel) e outros eventos que tambem
+            // trazem o canal (ex.: RTCPSent). Vale todo item com canal, sem
+            // repetir o mesmo canal; o nome do evento nao e exigido.
+            $channels = [];
+            foreach (self::list('/api/v3/chamada/consultarChamadaTempoReal') as $event) {
+                $channel = (string) ($event['Channel'] ?? $event['channel'] ?? '');
+                if ($channel === '' || isset($channels[$channel])) {
+                    continue;
+                }
+                $channels[$channel] = $event;
+            }
+            return self::only(
+                array_values($channels),
+                ['Channel', 'ChannelStateDesc', 'CallerIDNum', 'CallerIDName', 'ConnectedLineNum', 'ConnectedLineName', 'Context', 'Exten', 'Application', 'Duration', 'Linkedid', 'Uniqueid']
+            );
+        });
     }
 
     /**

@@ -120,8 +120,9 @@ final class Dashboard
             if (($channel['Context'] ?? '') === 'Fila' || ($channel['Application'] ?? '') === 'Queue') {
                 $live[$linked]['fila'] = (string) ($channel['Exten'] ?? '');
             }
-            if (strcmp((string) ($channel['Duration'] ?? ''), $live[$linked]['duracao']) > 0) {
-                $live[$linked]['duracao'] = (string) $channel['Duration'];
+            $duration = self::hms((string) ($channel['Duration'] ?? ''));
+            if (strcmp($duration, $live[$linked]['duracao']) > 0) {
+                $live[$linked]['duracao'] = $duration;
             }
             $live[$linked]['estado'] = (string) ($channel['ChannelStateDesc'] ?? $live[$linked]['estado']);
         }
@@ -181,6 +182,8 @@ final class Dashboard
                 'tempo_medio'     => $answered > 0 ? (int) round($totals['falado'] / $answered) : 0,
                 'em_andamento'    => count($live),
                 'em_fila'         => count(array_filter($live, static fn ($l) => $l['fila'] !== '' && $l['ramal'] === '')),
+                // Diagnostico: quantos canais a TW devolveu no tempo real.
+                'canais_tw'       => count($channels),
             ],
             'tree'    => $tree,
             'live'    => $live,
@@ -260,6 +263,16 @@ final class Dashboard
             return $byNumber[$matches[1]];
         }
         return str_starts_with($channel, 'PJSIP/saida') ? null : ($byNumber[$callerId] ?? null);
+    }
+
+    /** Duracao do canal em HH:MM:SS (aceita "00:01:05" ou segundos). */
+    private static function hms(string $value): string
+    {
+        if (preg_match('/^\d{1,2}:\d{2}:\d{2}$/', $value)) {
+            return str_pad($value, 8, '0', STR_PAD_LEFT);
+        }
+        $seconds = ctype_digit($value) ? (int) $value : 0;
+        return sprintf('%02d:%02d:%02d', intdiv($seconds, 3600), intdiv($seconds % 3600, 60), $seconds % 60);
     }
 
     /** "Fulano <1006>" -> "Fulano"; so numero -> "". */

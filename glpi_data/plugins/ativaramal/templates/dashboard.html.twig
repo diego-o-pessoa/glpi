@@ -265,7 +265,14 @@
         var list = root.querySelector('[data-rd-live-list]');
         root.querySelector('[data-rd-live-count]').textContent = d.live.length;
         list.innerHTML = '';
-        if (!d.live.length) { list.appendChild(el('div', 'rd-empty', 'Nenhuma ligação em andamento.')); return; }
+        if (!d.live.length) {
+            // Mostra o que a TW mandou: separa "sem ligacoes" de "nao interpretado".
+            var raw = d.kpis.canais_tw || 0;
+            list.appendChild(el('div', 'rd-empty', raw
+                ? 'A TW informou ' + raw + ' canal(is) ativo(s), mas nenhum foi reconhecido como ligação. Avise o T.I.'
+                : 'Nenhuma ligação em andamento (a TW não informou canais ativos).'));
+            return;
+        }
         d.live.forEach(function (c) {
             var item = el('div', 'rd-item');
             var ic = el('span', 'rd-item-icon ' + (c.ramal ? 'rd-out' : 'rd-in'));
