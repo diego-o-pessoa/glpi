@@ -50,6 +50,25 @@ final class TwApi
         ));
     }
 
+    /** Campos das ligacoes usados pelos paineis. */
+    private const CALL_FIELDS = ['id', 'calldate', 'clid', 'src', 'dst', 'from_src', 'duration', 'billsec',
+                                 'direction', 'disposition', 'id_ramal', 'transfer', 'hangup', 'linkedid'];
+
+    /**
+     * Ligacoes de um periodo (aba Desempenho). Cache de 2 min: semana/mes
+     * trazem milhares de linhas e nao precisam ser ao vivo.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function callsBetween(string $start, string $end): array
+    {
+        $key = 'ativaramal_calls_' . preg_replace('/\D+/', '', $start . $end);
+        return self::cached($key, 120, static fn () => self::only(
+            self::list('/api/v3/chamada/consultarChamada', ['data_inicial' => $start, 'data_final' => $end]),
+            self::CALL_FIELDS
+        ));
+    }
+
     /**
      * Canais ativos agora (eventos CoreShowChannel do Asterisk).
      *

@@ -35,47 +35,7 @@ final class Dashboard
         $calls = self::safe(static fn () => TwApi::callsToday(), 'ligações', $errors);
         $channels = self::safe(static fn () => TwApi::realtime(), 'tempo real', $errors);
 
-        // --- ramais (com filial/setor) e indices para atribuir as ligacoes
-        $rows = [];
-        $byId = $byNumber = [];
-        foreach ($extensions as $ext) {
-            if ((int) ($ext['ativo'] ?? 1) !== 1) {
-                continue;
-            }
-            $where = ExtensionDirectory::resolve($ext);
-            $number = (string) ($ext['ramal'] ?? '');
-            $key = $number !== '' ? $number : 'id' . (int) ($ext['id'] ?? 0);
-            $rows[$key] = [
-                'ramal'    => $number,
-                'nome'     => trim((string) ($ext['nome'] ?? '')) ?: ('Ramal ' . $number),
-                'pessoa'   => $where['pessoa'],
-                'filial'   => $where['filial'],
-                'setor'    => $where['setor'],
-                'fonte'    => $where['fonte'],
-                'online'   => (int) ($ext['reg_status'] ?? 0) === 1,
-                'grupo'    => (string) ($ext['callgroup'] ?? ''),
-                'em_ligacao' => false,
-                'stats'    => self::emptyStats(),
-            ];
-            $byId[(int) ($ext['id'] ?? 0)] = $key;
-            if ($number !== '') {
-                $byNumber[$number] = $key;
-            }
-            if ((string) ($ext['alias'] ?? '') !== '') {
-                $byNumber[(string) $ext['alias']] = $key;
-            }
-        }
-
-        // --- escopo: fora da filial/setor do usuario, o ramal some de tudo
-        // (os indices continuam apontando para ele, para descartar as
-        // ligacoes desses ramais em vez de deixa-las "sem ramal").
-        if ($scope !== null) {
-            foreach ($rows as $key => $row) {
-                if (!AccessScope::allows($scope, $row['filial'], $row['setor'])) {
-                    unset($rows[$key]);
-                }
-            }
-        }
+        [$rows, $byId, $byNumber] = self::extensionIndex($extensions, $scope);
 
         // --- ligacoes de hoje
         $totals = self::emptyStats() + ['nao_atendidas_sem_ramal' => 0];
@@ -224,8 +184,62 @@ final class Dashboard
         return $payload;
     }
 
+    /**
+     * Ramais ativos com filial/setor e indices (id da TW, numero, alias) para
+     * atribuir ligacoes. Com escopo, os ramais de fora saem de $rows, mas os
+     * indices continuam apontando para eles (para descartar essas ligacoes
+     * em vez de trata-las como "sem ramal").
+     *
+     * @param list<array<string, mixed>> $extensions
+     * @return array{0: array<string, array<string, mixed>>, 1: array<int, string>, 2: array<string, string>}
+     */
+    public static function extensionIndex(array $extensions, ?array $scope): array
+    {
+        $rows = [];
+        $byId = $byNumber = [];
+        foreach ($extensions as $ext) {
+            if ((int) ($ext['ativo'] ?? 1) !== 1) {
+                continue;
+            }
+            $where = ExtensionDirectory::resolve($ext);
+            $number = (string) ($ext['ramal'] ?? '');
+            $key = $number !== '' ? $number : 'id' . (int) ($ext['id'] ?? 0);
+            $rows[$key] = [
+                'ramal'    => $number,
+                'nome'     => trim((string) ($ext['nome'] ?? '')) ?: ('Ramal ' . $number),
+                'pessoa'   => $where['pessoa'],
+                'filial'   => $where['filial'],
+                'setor'    => $where['setor'],
+                'fonte'    => $where['fonte'],
+                'online'   => (int) ($ext['reg_status'] ?? 0) === 1,
+                'grupo'    => (string) ($ext['callgroup'] ?? ''),
+                'em_ligacao' => false,
+                'stats'    => self::emptyStats(),
+            ];
+            $byId[(int) ($ext['id'] ?? 0)] = $key;
+            if ($number !== '') {
+                $byNumber[$number] = $key;
+            }
+            if ((string) ($ext['alias'] ?? '') !== '') {
+                $byNumber[(string) $ext['alias']] = $key;
+            }
+        }
+
+        // --- escopo: fora da filial/setor do usuario, o ramal some de tudo
+        // (os indices continuam apontando para ele, para descartar as
+        // ligacoes desses ramais em vez de deixa-las "sem ramal").
+        if ($scope !== null) {
+            foreach ($rows as $key => $row) {
+                if (!AccessScope::allows($scope, $row['filial'], $row['setor'])) {
+                    unset($rows[$key]);
+                }
+            }
+        }
+        return [$rows, $byId, $byNumber];
+    }
+
     /** @return array<string, int> */
-    private static function emptyStats(): array
+    public static function emptyStats(): array
     {
         return ['total' => 0, 'entrada' => 0, 'saida' => 0, 'interna' => 0, 'atendidas' => 0,
                 'nao_atendidas' => 0, 'entrada_atendidas' => 0, 'falado' => 0];
@@ -269,7 +283,7 @@ final class Dashboard
      * @param array<int, string> $byId
      * @param array<string, string> $byNumber
      */
-    private static function attribute(array $call, string $direction, array $byId, array $byNumber): ?string
+    public static function attribute(array $call, string $direction, array $byId, array $byNumber): ?string
     {
         $id = (int) ($call['id_ramal'] ?? 0);
         if ($id > 0 && isset($byId[$id])) {

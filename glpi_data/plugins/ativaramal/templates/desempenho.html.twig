@@ -1,0 +1,186 @@
+{% macro dur(sec) %}{% apply spaceless %}
+    {% set sec = sec|default(0) %}
+    {% if sec >= 3600 %}{{ (sec // 3600) }}h{{ '%02d'|format((sec % 3600) // 60) }}
+    {% elseif sec >= 60 %}{{ (sec // 60) }}min{{ '%02d'|format(sec % 60) }}s
+    {% else %}{{ sec }}s{% endif %}
+{% endapply %}{% endmacro %}
+{% import _self as h %}
+
+<style>
+.pf-rank li{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #eef1f7}
+.pf-rank li:last-child{border-bottom:0}
+.pf-pos{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:12px;background:#eef1f6;color:#56627c;flex:none}
+.pf-pos.p1{background:#ffe9a8;color:#8a5b00}.pf-pos.p2{background:#e6e9ef;color:#4b5563}.pf-pos.p3{background:#f6dcc6;color:#8a4b14}
+.pf-name{flex:1;min-width:0}.pf-name strong{display:block;font-size:13px}.pf-name small{color:#6d7da7;font-size:11.5px}
+.pf-val{font-weight:700;font-size:14px;white-space:nowrap}
+.pf-bar{height:4px;border-radius:2px;background:#e1ecff;margin-top:3px}.pf-bar span{display:block;height:100%;border-radius:2px;background:#356fd1}
+.pf-table th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#6d7da7;white-space:nowrap;cursor:pointer}
+</style>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+        <h2 class="mb-0"><i class="ti ti-trophy me-2 text-primary"></i>Desempenho</h2>
+        <div class="text-muted small">{{ data.label }} · {{ data.start|date('d/m/Y') }} até {{ data.end|date('d/m/Y H:i') }}</div>
+    </div>
+    <div class="btn-group" role="group" aria-label="Período">
+        {% for key, label in periods %}
+            <a href="{{ self_url }}?periodo={{ key }}" class="btn {{ data.period == key ? 'btn-primary' : 'btn-outline-primary' }}">{{ label }}</a>
+        {% endfor %}
+    </div>
+</div>
+
+{% if data.scope %}
+    {% if data.scope.ok %}
+        <div class="alert alert-info py-2"><i class="ti ti-eye me-1"></i>Você está vendo só <strong>{{ data.scope.filial }}</strong> · <strong>{{ data.scope.setores|join(', ') }}</strong>.</div>
+    {% else %}
+        <div class="alert alert-warning py-2"><i class="ti ti-lock me-1"></i>{{ data.scope.motivo }}</div>
+    {% endif %}
+{% endif %}
+{% if data.error %}
+    <div class="alert alert-danger"><i class="ti ti-alert-triangle me-1"></i>{{ data.error }}</div>
+{% endif %}
+
+<div class="row row-cards mb-3">
+    {% for item in [
+        {'label': 'Atendidas (entrada)', 'value': data.totals.atendeu, 'icon': 'ti-phone-incoming', 'cls': 'text-green'},
+        {'label': 'Ligações feitas', 'value': data.totals.ligou, 'icon': 'ti-phone-outgoing', 'cls': 'text-blue'},
+        {'label': 'Tempo falado', 'value': h.dur(data.totals.falado), 'icon': 'ti-clock', 'cls': ''},
+        {'label': 'Tempo médio de atendimento', 'value': h.dur(data.totals.tma), 'icon': 'ti-hourglass', 'cls': ''},
+    ] %}
+        <div class="col-sm-6 col-xl-3">
+            <div class="card"><div class="card-body d-flex align-items-center gap-3">
+                <span class="avatar bg-primary-lt"><i class="ti {{ item.icon }}"></i></span>
+                <div><div class="text-muted small">{{ item.label }}</div><div class="h2 mb-0 {{ item.cls }}">{{ item.value }}</div></div>
+            </div></div>
+        </div>
+    {% endfor %}
+</div>
+
+<div class="row row-cards mb-3">
+    {% for rank in [
+        {'key': 'atendeu', 'title': 'Quem mais atendeu', 'icon': 'ti-phone-incoming', 'fmt': 'n'},
+        {'key': 'ligou', 'title': 'Quem mais ligou', 'icon': 'ti-phone-outgoing', 'fmt': 'n'},
+        {'key': 'falado', 'title': 'Quem mais falou', 'icon': 'ti-clock', 'fmt': 't'},
+    ] %}
+        {% set list = data.ranking[rank.key] %}
+        {% set top = list|length ? (list|first)[rank.key] : 0 %}
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header"><h3 class="card-title"><i class="ti {{ rank.icon }} me-2 text-primary"></i>{{ rank.title }}</h3></div>
+                <div class="card-body py-2">
+                    {% if list|length == 0 %}
+                        <div class="text-muted text-center py-4">Sem ligações no período.</div>
+                    {% else %}
+                        <ol class="list-unstyled pf-rank mb-0">
+                            {% for p in list %}
+                                <li>
+                                    <span class="pf-pos {{ loop.index <= 3 ? 'p' ~ loop.index : '' }}">{{ loop.index }}</span>
+                                    <span class="pf-name">
+                                        <strong>{{ p.nome }}</strong>
+                                        <small>{{ p.ramal }} · {{ p.setor }}</small>
+                                        <span class="pf-bar d-block"><span style="width: {{ top > 0 ? (100 * p[rank.key] / top)|round : 0 }}%"></span></span>
+                                    </span>
+                                    <span class="pf-val">{{ rank.fmt == 't' ? h.dur(p[rank.key]) : p[rank.key] }}</span>
+                                </li>
+                            {% endfor %}
+                        </ol>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+
+<div class="card mb-3">
+    <div class="card-header"><h3 class="card-title"><i class="ti ti-users-group me-2 text-primary"></i>Tempo médio de atendimento por setor</h3></div>
+    <div class="table-responsive">
+        <table class="table table-vcenter card-table pf-table" data-pf-sort>
+            <thead><tr>
+                <th>Filial</th><th>Setor</th><th class="text-end">Pessoas</th><th class="text-end">Atendidas</th>
+                <th class="text-end">Não atendidas</th><th class="text-end">Ligações feitas</th><th class="text-end">Tempo falado</th><th class="text-end">Tempo médio</th>
+            </tr></thead>
+            <tbody>
+            {% for s in data.sectors %}
+                <tr>
+                    <td>{{ s.filial }}</td><td><strong>{{ s.setor }}</strong></td>
+                    <td class="text-end" data-v="{{ s.pessoas }}">{{ s.pessoas }}</td>
+                    <td class="text-end text-green" data-v="{{ s.atendeu }}">{{ s.atendeu }}</td>
+                    <td class="text-end text-red" data-v="{{ s.nao_atendidas }}">{{ s.nao_atendidas }}</td>
+                    <td class="text-end" data-v="{{ s.ligou }}">{{ s.ligou }}</td>
+                    <td class="text-end" data-v="{{ s.falado }}">{{ h.dur(s.falado) }}</td>
+                    <td class="text-end fw-bold" data-v="{{ s.tma }}">{{ s.atendeu ? h.dur(s.tma) : '—' }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="8" class="text-muted text-center">Sem dados.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h3 class="card-title mb-0"><i class="ti ti-user me-2 text-primary"></i>Tempo médio de atendimento por pessoa</h3>
+        <input type="search" class="form-control form-control-sm" style="max-width:240px" placeholder="Filtrar por nome ou ramal" data-pf-filter>
+    </div>
+    <div class="table-responsive" style="max-height:600px;overflow-y:auto">
+        <table class="table table-vcenter card-table pf-table" data-pf-sort data-pf-people>
+            <thead><tr>
+                <th>Pessoa</th><th>Ramal</th><th>Setor</th><th class="text-end">Atendidas</th><th class="text-end">Não atendidas</th>
+                <th class="text-end">Ligações feitas</th><th class="text-end">Tempo falado</th><th class="text-end">Tempo médio</th>
+            </tr></thead>
+            <tbody>
+            {% for p in data.people %}
+                <tr data-pf-text="{{ (p.nome ~ ' ' ~ p.ramal ~ ' ' ~ p.pessoa)|lower }}">
+                    <td><strong>{{ p.nome }}</strong>{% if p.pessoa and p.pessoa|lower != p.nome|lower %}<div class="small text-muted">{{ p.pessoa }} (GLPI)</div>{% endif %}</td>
+                    <td class="font-monospace">{{ p.ramal }}</td>
+                    <td>{{ p.setor }}<div class="small text-muted">{{ p.filial }}</div></td>
+                    <td class="text-end text-green" data-v="{{ p.atendeu }}">{{ p.atendeu }}</td>
+                    <td class="text-end text-red" data-v="{{ p.nao_atendidas }}">{{ p.nao_atendidas }}</td>
+                    <td class="text-end" data-v="{{ p.ligou }}">{{ p.ligou }}</td>
+                    <td class="text-end" data-v="{{ p.falado }}">{{ h.dur(p.falado) }}</td>
+                    <td class="text-end fw-bold" data-v="{{ p.tma }}">{{ p.atendeu ? h.dur(p.tma) : '—' }}</td>
+                </tr>
+            {% else %}
+                <tr><td colspan="8" class="text-muted text-center">Sem ligações no período.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="text-muted small mt-2">
+    <i class="ti ti-info-circle me-1"></i>Atendidas = ligações de entrada atendidas pela pessoa. Tempo médio = tempo falado médio dessas ligações.
+    Clique no título de uma coluna para ordenar.
+</div>
+
+<script>
+(function () {
+    // Ordenacao por coluna (numeros pelo data-v) e filtro por nome/ramal.
+    document.querySelectorAll('[data-pf-sort]').forEach(function (table) {
+        table.querySelectorAll('thead th').forEach(function (th, index) {
+            var asc = false;
+            th.addEventListener('click', function () {
+                asc = !asc;
+                var tbody = table.querySelector('tbody');
+                var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr')).filter(function (r) { return r.children.length > 1; });
+                rows.sort(function (a, b) {
+                    var ca = a.children[index], cb = b.children[index];
+                    var va = ca.dataset.v !== undefined ? Number(ca.dataset.v) : ca.textContent.trim().toLowerCase();
+                    var vb = cb.dataset.v !== undefined ? Number(cb.dataset.v) : cb.textContent.trim().toLowerCase();
+                    return (va > vb ? 1 : va < vb ? -1 : 0) * (asc ? 1 : -1);
+                });
+                rows.forEach(function (r) { tbody.appendChild(r); });
+            });
+        });
+    });
+    var filter = document.querySelector('[data-pf-filter]');
+    if (filter) {
+        filter.addEventListener('input', function () {
+            var q = filter.value.trim().toLowerCase();
+            document.querySelectorAll('[data-pf-people] tbody tr[data-pf-text]').forEach(function (tr) {
+                tr.classList.toggle('d-none', q !== '' && tr.dataset.pfText.indexOf(q) === -1);
+            });
+        });
+    }
+})();
+</script>
