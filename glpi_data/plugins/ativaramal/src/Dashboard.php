@@ -85,7 +85,8 @@ final class Dashboard
             if ($linked === '') {
                 continue;
             }
-            $live[$linked] ??= ['externo' => '', 'ramal' => '', 'fila' => '', 'duracao' => '00:00:00', 'estado' => ''];
+            $live[$linked] ??= ['externo' => '', 'externo_nome' => '', 'ramal' => '', 'fila' => '', 'fila_nome' => '',
+                                'duracao' => '00:00:00', 'estado' => ''];
             $ext = self::channelExtension((string) ($channel['Channel'] ?? ''), (string) ($channel['CallerIDNum'] ?? ''), $byNumber);
             if ($ext !== null && !isset($rows[$ext])) {
                 // Ramal fora do escopo: nao identifica nem conta.
@@ -99,9 +100,11 @@ final class Dashboard
                 $other = (string) ($channel['ConnectedLineNum'] ?? '');
                 if ($live[$linked]['externo'] === '' && $other !== '' && !isset($byNumber[$other])) {
                     $live[$linked]['externo'] = $other;
+                    $live[$linked]['externo_nome'] = self::personName((string) ($channel['ConnectedLineName'] ?? ''), $other);
                 }
             } elseif ($live[$linked]['externo'] === '') {
                 $live[$linked]['externo'] = (string) ($channel['CallerIDNum'] ?? '');
+                $live[$linked]['externo_nome'] = self::personName((string) ($channel['CallerIDName'] ?? ''), $live[$linked]['externo']);
             }
             if (($channel['Context'] ?? '') === 'Fila' || ($channel['Application'] ?? '') === 'Queue') {
                 $live[$linked]['fila'] = (string) ($channel['Exten'] ?? '');
@@ -112,9 +115,22 @@ final class Dashboard
             }
             $live[$linked]['estado'] = (string) ($channel['ChannelStateDesc'] ?? $live[$linked]['estado']);
         }
+        // Nome da fila: cadastro do plugin (tela Ramais) e, se a TW liberar a
+        // consulta de filas, o nome da TW.
+        $queueRules = ExtensionDirectory::queueRules();
+        $twQueues = TwApi::queueNames();
+        foreach ($live as &$call) {
+            $rule = $call['fila'] !== '' ? ($queueRules[$call['fila']] ?? null) : null;
+            $call['fila_nome'] = $call['fila'] === '' ? '' : (($rule['nome'] ?? '') !== '' ? $rule['nome'] : ($twQueues[$call['fila']] ?? ''));
+            $call['fila_filial'] = (string) ($rule['filial'] ?? '');
+            $call['fila_setor'] = (string) ($rule['setor'] ?? '');
+        }
+        unset($call);
         if ($scope !== null) {
-            // So ligacoes com um ramal visivel (sem fila/URA de outros setores).
-            $live = array_filter($live, static fn (array $call): bool => $call['ramal'] !== '');
+            // Ligacoes com ramal visivel, ou aguardando numa fila cadastrada
+            // para a filial/setor do usuario (sem fila/URA de outros setores).
+            $live = array_filter($live, static fn (array $call): bool => $call['ramal'] !== ''
+                || ($call['fila_setor'] !== '' && AccessScope::allows($scope, $call['fila_filial'], $call['fila_setor'])));
         }
         $live = array_values($live);
 
@@ -318,6 +334,13 @@ final class Dashboard
         }
         $seconds = ctype_digit($value) ? (int) $value : 0;
         return sprintf('%02d:%02d:%02d', intdiv($seconds, 3600), intdiv($seconds % 3600, 60), $seconds % 60);
+    }
+
+    /** Nome de quem liga, quando a operadora informa (so numero -> ""). */
+    private static function personName(string $name, string $number): string
+    {
+        $name = trim($name, " \"'");
+        return ($name === '' || $name === $number || preg_match('/^\+?\d+$/', $name)) ? '' : mb_substr($name, 0, 60);
     }
 
     /** "Fulano <1006>" -> "Fulano"; so numero -> "". */

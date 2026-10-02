@@ -26,7 +26,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         throw new AccessDeniedHttpException();
     }
     $action = (string) ($_POST['action'] ?? '');
-    if ($action === 'save_prefixes') {
+    if ($action === 'save_queues') {
+        $count = ExtensionDirectory::saveQueueRules(array_values(is_array($_POST['fila'] ?? null) ? $_POST['fila'] : []));
+        Logger::info('Filas cadastradas', ['filas' => $count]);
+        Session::addMessageAfterRedirect($count . ' fila(s) salva(s).', false, INFO);
+    } elseif ($action === 'save_prefixes') {
         $count = ExtensionDirectory::savePrefixRules(array_values(is_array($_POST['faixa'] ?? null) ? $_POST['faixa'] : []));
         Logger::info('Regras por faixa de ramal salvas', ['regras' => $count]);
         Session::addMessageAfterRedirect($count . ' regra(s) por faixa salva(s).', false, INFO);
@@ -104,5 +108,7 @@ TemplateRenderer::getInstance()->display('@ativaramal/ramais.html.twig', [
     'action_url' => $selfUrl,
     'glpi_users' => count(ExtensionDirectory::glpiUsers()),
     'prefixes'   => ExtensionDirectory::prefixRules(),
+    'queues'     => ExtensionDirectory::queueRules(),
+    'tw_queues'  => TwApi::queueNames(),
 ]);
 Html::footer();

@@ -283,14 +283,23 @@
             return;
         }
         d.live.forEach(function (c) {
+            var waiting = !c.ramal;
             var item = el('div', 'rd-item');
-            var ic = el('span', 'rd-item-icon ' + (c.ramal ? 'rd-out' : 'rd-in'));
-            ic.appendChild(icon(c.fila && !c.ramal ? 'ti-hourglass' : 'ti-phone-call'));
+            var ic = el('span', 'rd-item-icon ' + (waiting ? 'rd-in' : 'rd-out'));
+            ic.appendChild(icon(waiting && c.fila ? 'ti-hourglass' : 'ti-phone-call'));
             item.appendChild(ic);
             var main = el('div', 'rd-item-main');
-            main.appendChild(el('strong', '', c.externo || 'Ligação interna'));
-            main.appendChild(el('small', '', c.ramal ? c.ramal + (c.setor ? ' · ' + c.setor : '') : 'Aguardando atendimento'));
-            if (c.fila) { main.appendChild(el('small', '', 'Fila ' + c.fila)); }
+            // Quem esta ligando: nome (quando a operadora informa) e numero.
+            main.appendChild(el('strong', '', c.externo_nome ? c.externo_nome + ' · ' + c.externo : (c.externo || 'Ligação interna')));
+            if (c.fila) {
+                var queue = el('span', 'rd-chip is-blue mt-1');
+                queue.appendChild(icon('ti-list-details'));
+                queue.appendChild(document.createTextNode('Fila ' + (c.fila_nome ? c.fila_nome + ' (' + c.fila + ')' : c.fila)));
+                main.appendChild(queue);
+            }
+            main.appendChild(el('small', '', waiting
+                ? 'Aguardando atendimento' + (c.fila_setor ? ' · ' + c.fila_setor : '')
+                : 'Atendendo: ' + c.ramal + (c.setor ? ' · ' + c.setor : '')));
             item.appendChild(main);
             item.appendChild(el('div', 'rd-item-side', c.duracao));
             list.appendChild(item);

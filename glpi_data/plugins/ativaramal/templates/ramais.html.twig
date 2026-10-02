@@ -18,6 +18,51 @@
 
     <div class="col-12 mb-3">
         <form class="card" method="post" action="{{ action_url }}">
+            <div class="card-header"><h3 class="card-title"><i class="ti ti-list-details me-2"></i>Filas</h3></div>
+            <div class="card-body">
+                <p class="text-muted small">
+                    Nome de cada fila (o número aparece nas ligações em andamento, ex.: 58). Com filial e setor, a ligação que está
+                    <strong>aguardando nessa fila</strong> também aparece para o gestor daquele setor.
+                    {% if tw_queues|length %}Filas informadas pela TW: {% for n, nome in tw_queues %}<code>{{ n }}</code> {{ nome }}{{ loop.last ? '' : ', ' }}{% endfor %}.{% else %}A TW ainda não libera a lista de filas (permissão): cadastre aqui.{% endif %}
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-vcenter">
+                        <thead><tr><th style="width:120px">Número</th><th style="min-width:180px">Nome da fila</th><th style="min-width:180px">Filial</th><th style="min-width:180px">Setor</th></tr></thead>
+                        <tbody>
+                        {% for numero, q in queues %}
+                            <tr>
+                                <td><input class="form-control form-control-sm font-monospace" name="fila[{{ loop.index0 }}][numero]" value="{{ numero }}" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" {{ can_edit ? '' : 'disabled' }}></td>
+                                <td><input class="form-control form-control-sm" name="fila[{{ loop.index0 }}][nome]" value="{{ q.nome }}" maxlength="100" {{ can_edit ? '' : 'disabled' }}></td>
+                                <td><input class="form-control form-control-sm" name="fila[{{ loop.index0 }}][filial]" value="{{ q.filial }}" list="ar-locations" maxlength="255" {{ can_edit ? '' : 'disabled' }}></td>
+                                <td><input class="form-control form-control-sm" name="fila[{{ loop.index0 }}][setor]" value="{{ q.setor }}" list="ar-glpi-groups" maxlength="255" {{ can_edit ? '' : 'disabled' }}></td>
+                            </tr>
+                        {% endfor %}
+                        {% if can_edit %}
+                            {% for n in 1..3 %}
+                                <tr>
+                                    <td><input class="form-control form-control-sm font-monospace" name="fila[{{ queues|length + n }}][numero]" placeholder="ex.: 58" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8"></td>
+                                    <td><input class="form-control form-control-sm" name="fila[{{ queues|length + n }}][nome]" placeholder="ex.: Comercial" maxlength="100"></td>
+                                    <td><input class="form-control form-control-sm" name="fila[{{ queues|length + n }}][filial]" list="ar-locations" maxlength="255"></td>
+                                    <td><input class="form-control form-control-sm" name="fila[{{ queues|length + n }}][setor]" list="ar-glpi-groups" maxlength="255"></td>
+                                </tr>
+                            {% endfor %}
+                        {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% if can_edit %}
+                <div class="card-footer text-end">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="save_queues">
+                    <button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy me-1"></i>Salvar filas</button>
+                </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <div class="col-12 mb-3">
+        <form class="card" method="post" action="{{ action_url }}">
             <div class="card-header"><h3 class="card-title"><i class="ti ti-arrows-sort me-2"></i>Regras por faixa de ramal</h3></div>
             <div class="card-body">
                 <p class="text-muted small">Todo ramal que <strong>começa com</strong> o prefixo recebe a filial e o setor da regra (ex.: prefixo 15 vale para 1501, 1530…). Se dois prefixos servirem, vale o mais longo. Apague a linha para remover a regra.</p>

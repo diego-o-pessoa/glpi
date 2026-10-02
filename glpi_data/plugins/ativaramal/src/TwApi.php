@@ -158,6 +158,30 @@ final class TwApi
     }
 
     /**
+     * Nomes das filas por numero (id), se a TW liberar fila/consultarFila.
+     * Hoje responde 403: devolve vazio sem erro e tenta de novo em 10 min.
+     *
+     * @return array<string, string>
+     */
+    public static function queueNames(): array
+    {
+        $rows = self::cached('ativaramal_filas', 600, static function (): array {
+            try {
+                return self::only(self::list('/api/v3/fila/consultarFila'), ['id', 'nome']);
+            } catch (RuntimeException) {
+                return [];
+            }
+        });
+        $names = [];
+        foreach ($rows as $row) {
+            if (isset($row['id']) && trim((string) ($row['nome'] ?? '')) !== '') {
+                $names[(string) $row['id']] = str_replace('_', ' ', trim((string) $row['nome']));
+            }
+        }
+        return $names;
+    }
+
+    /**
      * Canais ativos agora (eventos CoreShowChannel do Asterisk).
      *
      * @return list<array<string, mixed>>

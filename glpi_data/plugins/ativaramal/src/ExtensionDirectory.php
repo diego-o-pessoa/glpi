@@ -150,6 +150,51 @@ final class ExtensionDirectory
         return count($rules);
     }
 
+    // ------------------------------------------------------------ filas
+
+    /**
+     * Filas cadastradas: numero => nome, filial e setor (filial/setor deixam a
+     * fila aparecer para o gestor daquele setor quando ainda nao tem ramal).
+     *
+     * @return array<string, array{nome: string, filial: string, setor: string}>
+     */
+    public static function queueRules(): array
+    {
+        $decoded = json_decode(RamalConfig::get('queue_rules'), true);
+        $rules = [];
+        foreach (is_array($decoded) ? $decoded : [] as $number => $rule) {
+            if (is_array($rule) && preg_match('/^\d{1,8}$/', (string) $number)) {
+                $rules[(string) $number] = [
+                    'nome'   => (string) ($rule['nome'] ?? ''),
+                    'filial' => (string) ($rule['filial'] ?? ''),
+                    'setor'  => (string) ($rule['setor'] ?? ''),
+                ];
+            }
+        }
+        return $rules;
+    }
+
+    /** @param list<array{numero?: string, nome?: string, filial?: string, setor?: string}> $rows */
+    public static function saveQueueRules(array $rows): int
+    {
+        $rules = [];
+        foreach ($rows as $row) {
+            $number = preg_replace('/\D+/', '', (string) ($row['numero'] ?? '')) ?? '';
+            $nome = mb_substr(trim((string) ($row['nome'] ?? '')), 0, 100);
+            if ($number === '' || strlen($number) > 8 || $nome === '') {
+                continue;
+            }
+            $rules[$number] = [
+                'nome'   => $nome,
+                'filial' => mb_substr(trim((string) ($row['filial'] ?? '')), 0, 255),
+                'setor'  => mb_substr(trim((string) ($row['setor'] ?? '')), 0, 255),
+            ];
+        }
+        ksort($rules, SORT_NATURAL);
+        RamalConfig::set(['queue_rules' => json_encode($rules === [] ? new \stdClass() : $rules, JSON_UNESCAPED_UNICODE)]);
+        return count($rules);
+    }
+
     // ------------------------------------------------------------ cadastro do plugin
 
     /** @return array<string, array{filial: string, setor: string}> */

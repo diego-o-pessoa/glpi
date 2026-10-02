@@ -36,6 +36,8 @@ final class RamalConfig
         'api_token', 'api_key',
         // Regras de filial/setor por inicio do numero do ramal (JSON).
         'prefix_rules',
+        // Nome (e filial/setor) de cada fila, por numero (JSON).
+        'queue_rules',
     ];
 
     // ------------------------------------------------------------ leitura/gravacao
