@@ -160,7 +160,11 @@ final class ExtensionDirectory
      */
     public static function queueRules(): array
     {
-        $decoded = json_decode(RamalConfig::get('queue_rules'), true);
+        $stored = RamalConfig::get('queue_rules');
+        if ($stored === '') {
+            return self::defaultQueues();
+        }
+        $decoded = json_decode($stored, true);
         $rules = [];
         foreach (is_array($decoded) ? $decoded : [] as $number => $rule) {
             if (is_array($rule) && preg_match('/^\d{1,8}$/', (string) $number)) {
@@ -169,6 +173,23 @@ final class ExtensionDirectory
                     'filial' => (string) ($rule['filial'] ?? ''),
                     'setor'  => (string) ($rule['setor'] ?? ''),
                 ];
+            }
+        }
+        return $rules;
+    }
+
+    /**
+     * Filas padrao (valem ate a primeira gravacao na tela "Ramais"):
+     * Fila12 a Fila18 = Matriz/Comercial; Fila21 a Fila27 = Matriz/Suporte.
+     *
+     * @return array<string, array{nome: string, filial: string, setor: string}>
+     */
+    public static function defaultQueues(): array
+    {
+        $rules = [];
+        foreach ([[12, 18, 'Comercial'], [21, 27, 'Suporte']] as [$from, $to, $setor]) {
+            for ($number = $from; $number <= $to; $number++) {
+                $rules[(string) $number] = ['nome' => 'Fila' . $number, 'filial' => 'Matriz', 'setor' => $setor];
             }
         }
         return $rules;

@@ -339,15 +339,23 @@ final class Dashboard
     /** Nome de quem liga, quando a operadora informa (so numero -> ""). */
     private static function personName(string $name, string $number): string
     {
-        $name = trim($name, " \"'");
-        return ($name === '' || $name === $number || preg_match('/^\+?\d+$/', $name)) ? '' : mb_substr($name, 0, 60);
+        $name = trim($name, " \"'<>");
+        return ($name === '' || $name === $number || preg_match('/^\+?\d+$/', $name) || self::isPlaceholderName($name))
+            ? '' : mb_substr($name, 0, 60);
     }
 
     /** "Fulano <1006>" -> "Fulano"; so numero -> "". */
     private static function callerName(string $clid): string
     {
-        $name = trim(preg_replace('/\s*<[^>]*>\s*$/', '', $clid) ?? '', " \"'");
-        return preg_match('/^\+?\d+$/', $name) ? '' : mb_substr($name, 0, 60);
+        $name = trim(preg_replace('/\s*<[^>]*>\s*$/', '', $clid) ?? '', " \"'<>");
+        return (preg_match('/^\+?\d+$/', $name) || self::isPlaceholderName($name)) ? '' : mb_substr($name, 0, 60);
+    }
+
+    /** Textos que o Asterisk/operadora usam quando nao ha nome (ex.: "<unknown>"). */
+    private static function isPlaceholderName(string $name): bool
+    {
+        return in_array(mb_strtolower(trim($name, " <>\"'")), ['', 'unknown', 'anonymous', 'anonimo', 'anônimo',
+            'desconhecido', 'restricted', 'private', 'privado', 'unavailable', 'indisponivel', 'indisponível'], true);
     }
 
     /**
