@@ -122,8 +122,9 @@ final class Performance
             'error'    => $error,
             // Dias que a TW nao devolveu (HTTP 500): ficam fora dos numeros.
             'warning'  => $missingDays === [] ? '' : 'A TW não devolveu as ligações de '
-                . implode(', ', array_map(static fn ($d) => date('d/m', strtotime($d)), $missingDays))
-                . ' (erro no servidor da TW). Esses dias ficaram fora dos números.',
+                . implode(', ', array_map(static fn ($h) => date('d/m', strtotime(substr($h, 0, 10))) . ' das '
+                    . substr($h, 11, 2) . 'h às ' . substr($h, 11, 2) . 'h59', $missingDays))
+                . ' (erro no servidor da TW). Esse trecho ficou fora dos números.',
             'scope'    => $scope,
             'totals'   => [
                 'atendeu' => $totalAnswered,

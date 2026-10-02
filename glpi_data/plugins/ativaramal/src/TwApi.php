@@ -80,7 +80,14 @@ final class TwApi
                         try {
                             array_push($rows, ...self::list($path, ['data_inicial' => $dayFrom, 'data_final' => $dayTo]));
                         } catch (RuntimeException) {
-                            $failed[] = substr($dayFrom, 0, 10);
+                            // Dia com erro: tenta hora a hora e pula so a hora ruim.
+                            foreach (self::hourChunks($dayFrom, $dayTo) as [$hourFrom, $hourTo]) {
+                                try {
+                                    array_push($rows, ...self::list($path, ['data_inicial' => $hourFrom, 'data_final' => $hourTo]));
+                                } catch (RuntimeException) {
+                                    $failed[] = substr($hourFrom, 0, 13);
+                                }
+                            }
                         }
                     }
                 }
@@ -93,6 +100,24 @@ final class TwApi
             }
             return ['calls' => self::only(array_values($calls), self::CALL_FIELDS), 'falhas' => $failed];
         });
+    }
+
+    /**
+     * Divide [inicio, fim] em horas.
+     *
+     * @return list<array{0: string, 1: string}>
+     */
+    private static function hourChunks(string $start, string $end): array
+    {
+        $chunks = [];
+        $from = strtotime($start);
+        $limit = strtotime($end);
+        while ($from !== false && $limit !== false && $from <= $limit) {
+            $hourEnd = strtotime(date('Y-m-d H:59:59', $from));
+            $chunks[] = [date('Y-m-d H:i:s', $from), date('Y-m-d H:i:s', min($hourEnd, $limit))];
+            $from = $hourEnd + 1;
+        }
+        return $chunks;
     }
 
     /**
