@@ -9,16 +9,25 @@ namespace GlpiPlugin\Ativaramal;
  *
  * Ordem de prioridade:
  *   1. ajuste manual do ramal (tela "Ramais", glpi_plugin_ativaramal_extensions);
- *   2. usuario do GLPI com o ramal no Telefone/Telefone 2/Celular:
+ *   2. regra por faixa: o ramal comeca com um prefixo cadastrado (a mais
+ *      longa vence; config prefix_rules, padrao 15 = Matriz/Comercial e
+ *      14 = Matriz/Suporte);
+ *   3. usuario do GLPI com o ramal no Telefone/Telefone 2/Celular:
  *      Localizacao = filial, Grupo (padrao ou primeiro) = setor;
- *   3. grupo de captura (callgroup) cadastrado na tela "Ramais"
+ *   4. grupo de captura (callgroup) cadastrado na tela "Ramais"
  *      (glpi_plugin_ativaramal_groups);
- *   4. "Sem filial" / "Sem setor".
+ *   5. "Sem filial" / "Sem setor".
  */
 final class ExtensionDirectory
 {
     public const GROUPS_TABLE     = 'glpi_plugin_ativaramal_groups';
     public const EXTENSIONS_TABLE = 'glpi_plugin_ativaramal_extensions';
+
+    /** Regras iniciais por faixa (valem ate a primeira gravacao na tela "Ramais"). */
+    public const DEFAULT_PREFIXES = [
+        '15' => ['filial' => 'Matriz', 'setor' => 'Comercial'],
+        '14' => ['filial' => 'Matriz', 'setor' => 'Suporte'],
+    ];
 
     public const NO_BRANCH = 'Sem filial';
     public const NO_SECTOR = 'Sem setor';
@@ -43,12 +52,13 @@ final class ExtensionDirectory
         $group = trim((string) ($extension['callgroup'] ?? ''));
 
         $manual = self::overrides()[$ramal] ?? null;
+        $byPrefix = self::matchPrefix($ramal);
         $user = self::glpiUsers()[$ramal] ?? ($alias !== '' ? (self::glpiUsers()[$alias] ?? null) : null);
         $byGroup = $group !== '' ? (self::groups()[$group] ?? null) : null;
 
         $filial = $setor = '';
         $fonte = [];
-        foreach ([['manual', $manual], ['glpi', $user], ['grupo', $byGroup]] as [$source, $data]) {
+        foreach ([['manual', $manual], ['faixa', $byPrefix], ['glpi', $user], ['grupo', $byGroup]] as [$source, $data]) {
             if (!is_array($data)) {
                 continue;
             }
@@ -69,6 +79,75 @@ final class ExtensionDirectory
             'pessoa'   => is_array($user) ? $user['pessoa'] : '',
             'users_id' => is_array($user) ? $user['users_id'] : 0,
         ];
+    }
+
+    // ------------------------------------------------------------ regras por faixa
+
+    /** @var array<string, array{filial: string, setor: string}>|null */
+    private static ?array $prefixes = null;
+
+    /**
+     * Regras "o ramal comeca com X". Config vazia = regras padrao; "[]" =
+     * nenhuma regra (o usuario apagou todas).
+     *
+     * @return array<string, array{filial: string, setor: string}>
+     */
+    public static function prefixRules(): array
+    {
+        if (self::$prefixes !== null) {
+            return self::$prefixes;
+        }
+        $stored = RamalConfig::get('prefix_rules');
+        if ($stored === '') {
+            return self::$prefixes = self::DEFAULT_PREFIXES;
+        }
+        $decoded = json_decode($stored, true);
+        $rules = [];
+        foreach (is_array($decoded) ? $decoded : [] as $prefix => $rule) {
+            if (is_array($rule) && preg_match('/^\d{1,8}$/', (string) $prefix)) {
+                $rules[(string) $prefix] = ['filial' => (string) ($rule['filial'] ?? ''), 'setor' => (string) ($rule['setor'] ?? '')];
+            }
+        }
+        return self::$prefixes = $rules;
+    }
+
+    /** Regra do prefixo mais longo que casa com o numero do ramal. */
+    private static function matchPrefix(string $ramal): ?array
+    {
+        $best = null;
+        $bestLength = 0;
+        foreach (self::prefixRules() as $prefix => $rule) {
+            $prefix = (string) $prefix;
+            if (strlen($prefix) > $bestLength && str_starts_with($ramal, $prefix)) {
+                $best = $rule;
+                $bestLength = strlen($prefix);
+            }
+        }
+        return $best;
+    }
+
+    /**
+     * Grava as regras por faixa (linhas sem prefixo ou sem filial/setor sao
+     * ignoradas). Devolve quantas regras ficaram.
+     *
+     * @param list<array{prefixo?: string, filial?: string, setor?: string}> $rows
+     */
+    public static function savePrefixRules(array $rows): int
+    {
+        $rules = [];
+        foreach ($rows as $row) {
+            $prefix = preg_replace('/\D+/', '', (string) ($row['prefixo'] ?? '')) ?? '';
+            $filial = mb_substr(trim((string) ($row['filial'] ?? '')), 0, 255);
+            $setor = mb_substr(trim((string) ($row['setor'] ?? '')), 0, 255);
+            if ($prefix === '' || strlen($prefix) > 8 || ($filial === '' && $setor === '')) {
+                continue;
+            }
+            $rules[$prefix] = ['filial' => $filial, 'setor' => $setor];
+        }
+        ksort($rules, SORT_STRING);
+        RamalConfig::set(['prefix_rules' => json_encode($rules === [] ? new \stdClass() : $rules, JSON_UNESCAPED_UNICODE)]);
+        self::$prefixes = null;
+        return count($rules);
     }
 
     // ------------------------------------------------------------ cadastro do plugin

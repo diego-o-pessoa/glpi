@@ -26,7 +26,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         throw new AccessDeniedHttpException();
     }
     $action = (string) ($_POST['action'] ?? '');
-    if ($action === 'save_groups') {
+    if ($action === 'save_prefixes') {
+        $count = ExtensionDirectory::savePrefixRules(array_values(is_array($_POST['faixa'] ?? null) ? $_POST['faixa'] : []));
+        Logger::info('Regras por faixa de ramal salvas', ['regras' => $count]);
+        Session::addMessageAfterRedirect($count . ' regra(s) por faixa salva(s).', false, INFO);
+    } elseif ($action === 'save_groups') {
         $changed = ExtensionDirectory::save(ExtensionDirectory::GROUPS_TABLE, 'callgroup', is_array($_POST['grupo'] ?? null) ? $_POST['grupo'] : []);
         Logger::info('Filial/setor por grupo de captura salvos', ['alterados' => $changed]);
         Session::addMessageAfterRedirect($changed . ' grupo(s) atualizado(s).', false, INFO);
@@ -99,5 +103,6 @@ TemplateRenderer::getInstance()->display('@ativaramal/ramais.html.twig', [
     'glpi_groups' => $groups,
     'action_url' => $selfUrl,
     'glpi_users' => count(ExtensionDirectory::glpiUsers()),
+    'prefixes'   => ExtensionDirectory::prefixRules(),
 ]);
 Html::footer();

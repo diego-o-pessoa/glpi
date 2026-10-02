@@ -34,6 +34,8 @@ final class RamalConfig
         'last_refresh_at', 'last_refresh_error', 'webhook_token', 'webhook_last_at',
         // Token + Key criados no painel da TW (Ferramentas > Token).
         'api_token', 'api_key',
+        // Regras de filial/setor por inicio do numero do ramal (JSON).
+        'prefix_rules',
     ];
 
     // ------------------------------------------------------------ leitura/gravacao
