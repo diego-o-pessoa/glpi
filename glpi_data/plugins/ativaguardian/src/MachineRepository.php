@@ -46,7 +46,14 @@ final class MachineRepository
         ];
 
         if (count($existing) === 1) {
-            $machinesId = (int) $existing->current()['id'];
+            $current = $existing->current();
+            $machinesId = (int) $current['id'];
+            // Oculta do painel: volta sozinha quando a maquina e reinstalada
+            // (o Guardian passa a reportar outra versao).
+            if (!empty($current['hidden_at']) && (string) ($current['hidden_version'] ?? '') !== (string) $data['guardian_version']) {
+                $row['hidden_at'] = null;
+                $row['hidden_version'] = '';
+            }
             if (!$DB->update(self::MACHINES_TABLE, $row, ['id' => $machinesId])) {
                 return 0;
             }
@@ -94,6 +101,41 @@ final class MachineRepository
      *
      * @return array<int, array>
      */
+    /** Oculta (ou reexibe) uma maquina do painel. Devolve false se nao existe. */
+    public static function setHidden(int $machinesId, bool $hidden): bool
+    {
+        global $DB;
+
+        $row = $DB->request(['FROM' => self::MACHINES_TABLE, 'WHERE' => ['id' => $machinesId], 'LIMIT' => 1])->current();
+        if (!is_array($row)) {
+            return false;
+        }
+        return (bool) $DB->update(self::MACHINES_TABLE, $hidden
+            ? ['hidden_at' => ServerClock::now(), 'hidden_version' => (string) $row['guardian_version']]
+            : ['hidden_at' => null, 'hidden_version' => ''], ['id' => $machinesId]);
+    }
+
+    /** @return list<array{id: int, hostname: string, username: string, hidden_at: string}> */
+    public static function hiddenMachines(): array
+    {
+        global $DB;
+
+        if (!$DB->fieldExists(self::MACHINES_TABLE, 'hidden_at')) {
+            return [];
+        }
+        $list = [];
+        foreach ($DB->request([
+            'SELECT' => ['id', 'hostname', 'username', 'hidden_at'],
+            'FROM'   => self::MACHINES_TABLE,
+            'WHERE'  => ['NOT' => ['hidden_at' => null]],
+            'ORDER'  => ['hostname ASC'],
+        ]) as $row) {
+            $list[] = ['id' => (int) $row['id'], 'hostname' => (string) $row['hostname'],
+                       'username' => (string) $row['username'], 'hidden_at' => (string) $row['hidden_at']];
+        }
+        return $list;
+    }
+
     public static function loadAll(): array
     {
         global $DB;
@@ -104,6 +146,8 @@ final class MachineRepository
         $machines = [];
         foreach ($DB->request([
             'FROM'  => self::MACHINES_TABLE,
+            // Maquinas ocultas pelo tecnico nao aparecem no painel.
+            'WHERE' => $DB->fieldExists(self::MACHINES_TABLE, 'hidden_at') ? ['hidden_at' => null] : [],
             'ORDER' => ['last_contact DESC', 'id ASC'],
         ]) as $row) {
             $row['components'] = [];

@@ -31,6 +31,23 @@ echo "<header class='ag-card-head'>"
     . '</header>';
 echo "<div class='ag-card-body' id='ag-machines-body'>" . MachinesView::renderTable($data, $canManage) . '</div></section>';
 
+// Maquinas ocultas: lista recolhida, com "Reexibir" para quem gerencia.
+$hiddenMachines = $canManage ? GlpiPlugin\Ativaguardian\MachineRepository::hiddenMachines() : [];
+if ($hiddenMachines !== []) {
+    echo "<details class='ag-card' style='padding:12px 16px;margin-top:12px'><summary style='cursor:pointer'>"
+        . '<i class="fas fa-eye-slash"></i> Máquinas ocultas (' . count($hiddenMachines) . ')</summary>'
+        . "<div style='margin-top:10px'>";
+    foreach ($hiddenMachines as $hidden) {
+        echo "<div style='display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid #eef1f7'>"
+            . '<span><strong>' . htmlescape($hidden['hostname']) . '</strong>'
+            . ($hidden['username'] !== '' ? ' <small>' . htmlescape($hidden['username']) . '</small>' : '')
+            . ' <small style="color:#6d7da7">· oculta em ' . htmlescape($hidden['hidden_at']) . '</small></span>'
+            . "<button type='button' class='btn btn-sm btn-outline-secondary' data-ag-unhide='" . (int) $hidden['id'] . "'>"
+            . "<i class='fas fa-eye'></i> Reexibir</button></div>";
+    }
+    echo '</div></details>';
+}
+
 echo PageLayout::footer();
 
 // Modal de operação: fica travado enquanto a ação roda, como no Ativa Updater.
@@ -191,6 +208,27 @@ echo <<<'HTML'
     modalDone.addEventListener('click', closeModal);
     layer.addEventListener('click', (event) => { if (event.target === layer) closeModal(); });
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeModal(); });
+
+    // Ocultar / reexibir maquina no painel (nao mexe no computador).
+    document.addEventListener('click', async (event) => {
+        const hide = event.target.closest('[data-ag-hide]');
+        const unhide = event.target.closest('[data-ag-unhide]');
+        if (!hide && !unhide) return;
+        event.preventDefault();
+        closeMenus(null);
+        const machine = hide?.closest('tr')?.querySelector('.ag-machine strong')?.textContent || 'esta máquina';
+        if (hide && !window.confirm('Ocultar ' + machine + ' do painel? Ela volta quando o pacote unificado for reinstalado.')) return;
+        const form = new FormData();
+        form.append('machines_id', (hide || unhide).dataset[hide ? 'agHide' : 'agUnhide']);
+        form.append('hide', hide ? '1' : '0');
+        const response = await fetch('hide.php', {
+            method: 'POST', body: form, credentials: 'same-origin',
+            headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrf()},
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.ok) { window.alert(data?.message || 'Não foi possível concluir.'); return; }
+        window.location.reload();
+    });
 
     document.addEventListener('click', async (event) => {
         const button = event.target.closest('[data-ag-action]');

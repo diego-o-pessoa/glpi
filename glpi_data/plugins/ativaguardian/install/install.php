@@ -20,6 +20,11 @@ function plugin_ativaguardian_do_install(): bool
         if ($DB->tableExists($machinesTable) && !$DB->fieldExists($machinesTable, 'username')) {
             $migration->addField($machinesTable, 'username', "varchar(255) NOT NULL DEFAULT ''", ['after' => 'hostname']);
         }
+        // 1.9.2: ocultar maquina do painel ate ela ser reinstalada.
+        if ($DB->tableExists($machinesTable) && !$DB->fieldExists($machinesTable, 'hidden_at')) {
+            $migration->addField($machinesTable, 'hidden_at', 'datetime NULL DEFAULT NULL');
+            $migration->addField($machinesTable, 'hidden_version', "varchar(32) NOT NULL DEFAULT ''");
+        }
 
         require_once PLUGIN_ATIVAGUARDIAN_DIR . '/src/ConfigService.php';
         ConfigService::installDefaults();

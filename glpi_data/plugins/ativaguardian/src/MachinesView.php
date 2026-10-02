@@ -189,10 +189,9 @@ final class MachinesView
             }
         }
 
-        if ($items === '') {
-            return "<td class='ag-col-actions'><button type='button' class='ag-kebab' disabled"
-                . " title='Nenhuma ação disponível'><i class='fas fa-ellipsis-vertical'></i></button></td>";
-        }
+        // Some do painel ate a maquina ser reinstalada (nao mexe no computador).
+        $items .= "<button type='button' class='ag-menu-item' data-ag-hide='{$machinesId}'>"
+            . "<i class='fas fa-eye-slash'></i>Ocultar do painel</button>";
 
         return "<td class='ag-col-actions'><div class='ag-menu'>"
             . "<button type='button' class='ag-kebab' data-ag-menu title='Ações'>"
