@@ -85,3 +85,41 @@ function plugin_ativaramal_uninstall(): bool
     PluginAtivaramalProfile::uninstallRights();
     return true;
 }
+
+/**
+ * Pagina inicial do GLPI: quem so tem acesso ao Ativa Ramal (sem chamados,
+ * ativos nem configuracao) vai direto ao dashboard. Os demais nao sao afetados.
+ */
+function plugin_ativaramal_display_central(): void
+{
+    global $CFG_GLPI;
+
+    if (!class_exists(PluginAtivaramalProfile::class) || !PluginAtivaramalProfile::isDashboardOnly()) {
+        return;
+    }
+    $url = $CFG_GLPI['root_doc'] . '/plugins/ativaramal/front/dashboard.php';
+    echo '<script>window.location.replace(' . json_encode($url, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) . ');</script>';
+}
+
+/**
+ * Usuario com dashboard restrito (sem "ver todos os setores") editando o
+ * proprio cadastro: a Localizacao ja definida nao muda (ela e a filial que
+ * ele enxerga). Primeiro preenchimento (vazia) continua liberado. Quem pode
+ * editar usuarios no GLPI (T.I.) nao e afetado.
+ */
+function plugin_ativaramal_pre_user_update(User $user): void
+{
+    $self = (int) Session::getLoginUserID();
+    if ($self <= 0 || (int) $user->getID() !== $self || Session::haveRight('user', UPDATE)) {
+        return;
+    }
+    if (!class_exists(PluginAtivaramalProfile::class)
+        || !PluginAtivaramalProfile::canView()
+        || PluginAtivaramalProfile::canViewAll()) {
+        return;
+    }
+    $current = (int) ($user->fields['locations_id'] ?? 0);
+    if ($current > 0 && isset($user->input['locations_id']) && (int) $user->input['locations_id'] !== $current) {
+        $user->input['locations_id'] = $current;
+    }
+}

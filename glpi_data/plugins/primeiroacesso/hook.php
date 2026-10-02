@@ -1,4 +1,20 @@
 <?php
+/**
+ * Perfis obrigados a preencher Filial, Setor e Cargo antes de usar o GLPI:
+ * Self-Service (ID 1 ou pelo nome) e "Ativa - Gestor" (dashboard do Ativa
+ * Ramal, que usa a Filial e o Setor para limitar o que a pessoa ve).
+ */
+function plugin_primeiroacesso_profile_required() {
+    if (!isset($_SESSION['glpiactiveprofile'])) {
+        return false;
+    }
+    $profile = $_SESSION['glpiactiveprofile'];
+    $name = (string) ($profile['name'] ?? '');
+    return $profile['id'] == 1
+        || stripos($name, 'self-service') !== false
+        || stripos($name, 'ativa - gestor') !== false;
+}
+
 function plugin_primeiroacesso_check_location() {
     global $CFG_GLPI;
 
@@ -23,12 +39,8 @@ function plugin_primeiroacesso_check_location() {
     $user = new User();
     if ($user->getFromDB(Session::getLoginUserID())) {
         
-        // Verifica se o usuário logado está com o perfil "Self-Service" ativo (ID padrão = 1 ou pelo nome)
-        $is_self_service = false;
-        if (isset($_SESSION['glpiactiveprofile']) && 
-           ($_SESSION['glpiactiveprofile']['id'] == 1 || stripos($_SESSION['glpiactiveprofile']['name'], 'self-service') !== false)) {
-            $is_self_service = true;
-        }
+        // Perfis que precisam passar pelo primeiro acesso (Self-Service e Ativa - Gestor)
+        $is_self_service = plugin_primeiroacesso_profile_required();
 
         if ($is_self_service) {
             global $DB;
@@ -53,12 +65,8 @@ function plugin_primeiroacesso_check_location() {
     }
 
     
-    // Injeta o bloqueio visual nos formulários de usuário/preferências apenas para Self-Service
-    $is_self_service = false;
-    if (isset($_SESSION['glpiactiveprofile']) && 
-       ($_SESSION['glpiactiveprofile']['id'] == 1 || stripos($_SESSION['glpiactiveprofile']['name'], 'self-service') !== false)) {
-        $is_self_service = true;
-    }
+    // Injeta o bloqueio visual nos formulários de usuário/preferências (mesmos perfis)
+    $is_self_service = plugin_primeiroacesso_profile_required();
 
     if ($is_self_service && (strpos($_SERVER['REQUEST_URI'], 'front/user.form.php') !== false || 
         strpos($_SERVER['REQUEST_URI'], 'front/preference.php') !== false)) {

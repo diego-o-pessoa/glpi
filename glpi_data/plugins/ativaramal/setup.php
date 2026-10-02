@@ -6,7 +6,7 @@ use Glpi\Http\SessionManager;
 use Glpi\Plugin\HookManager;
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_ATIVARAMAL_VERSION', '0.2.0');
+define('PLUGIN_ATIVARAMAL_VERSION', '0.2.1');
 define('PLUGIN_ATIVARAMAL_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVARAMAL_MAX_GLPI', '12.0.0');
 define('PLUGIN_ATIVARAMAL_DIR', __DIR__);
@@ -65,6 +65,14 @@ function plugin_init_ativaramal(): void
     if (Session::haveRight(PluginAtivaramalProfile::RIGHT_CONFIG, READ)) {
         $PLUGIN_HOOKS[Hooks::CONFIG_PAGE]['ativaramal'] = 'front/config.php';
     }
+
+    // Perfil "so dashboard" (ex.: Ativa - Gestor): a pagina inicial do GLPI
+    // leva direto ao dashboard do Ativa Ramal.
+    $PLUGIN_HOOKS[Hooks::DISPLAY_CENTRAL]['ativaramal'] = 'plugin_ativaramal_display_central';
+
+    // A Localizacao define a filial que o gestor ve no dashboard: ele nao pode
+    // troca-la sozinho depois de definida (o primeiro acesso ainda preenche).
+    $PLUGIN_HOOKS[Hooks::PRE_ITEM_UPDATE]['ativaramal'] = [User::class => 'plugin_ativaramal_pre_user_update'];
 }
 
 function plugin_version_ativaramal(): array

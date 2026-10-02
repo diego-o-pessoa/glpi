@@ -58,6 +58,15 @@
         </div>
     </header>
 
+    {% if initial.scope %}
+        {% if initial.scope.ok %}
+            <div class="alert alert-info py-2"><i class="ti ti-eye me-1"></i>
+                Você está vendo só <strong>{{ initial.scope.filial }}</strong> · <strong>{{ initial.scope.setores|join(', ') }}</strong>.
+            </div>
+        {% else %}
+            <div class="alert alert-warning py-2"><i class="ti ti-lock me-1"></i>{{ initial.scope.motivo }}</div>
+        {% endif %}
+    {% endif %}
     <div data-rd-errors></div>
 
     <div class="rd-kpis">

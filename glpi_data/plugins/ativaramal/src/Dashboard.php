@@ -23,8 +23,12 @@ final class Dashboard
 
     private const RECENT_LIMIT = 40;
 
-    /** @return array<string, mixed> */
-    public static function payload(): array
+    /**
+     * @param array{filial: string, setores: list<string>, ok: bool, motivo: string}|null $scope
+     *        null = tudo; senao so os ramais da filial/setores (AccessScope)
+     * @return array<string, mixed>
+     */
+    public static function payload(?array $scope = null): array
     {
         $errors = [];
         $extensions = self::safe(static fn () => TwApi::extensions(), 'ramais', $errors);
@@ -62,6 +66,17 @@ final class Dashboard
             }
         }
 
+        // --- escopo: fora da filial/setor do usuario, o ramal some de tudo
+        // (os indices continuam apontando para ele, para descartar as
+        // ligacoes desses ramais em vez de deixa-las "sem ramal").
+        if ($scope !== null) {
+            foreach ($rows as $key => $row) {
+                if (!AccessScope::allows($scope, $row['filial'], $row['setor'])) {
+                    unset($rows[$key]);
+                }
+            }
+        }
+
         // --- ligacoes de hoje
         $totals = self::emptyStats() + ['nao_atendidas_sem_ramal' => 0];
         $recent = [];
@@ -70,6 +85,13 @@ final class Dashboard
             $direction = self::DIRECTIONS[(int) ($call['direction'] ?? 0)] ?? 'outra';
             $answered = (int) ($call['disposition'] ?? 0) === self::DISPOSITION_ANSWERED;
             $key = self::attribute($call, $direction, $byId, $byNumber);
+            // Com escopo: so ligacoes de ramais visiveis (nada de URA/fila sem ramal).
+            if ($scope !== null && ($key === null || !isset($rows[$key]))) {
+                continue;
+            }
+            if ($key !== null && !isset($rows[$key])) {
+                $key = null;
+            }
 
             self::count($totals, $direction, $answered, (int) ($call['billsec'] ?? 0));
             if ($key !== null) {
@@ -105,6 +127,10 @@ final class Dashboard
             }
             $live[$linked] ??= ['externo' => '', 'ramal' => '', 'fila' => '', 'duracao' => '00:00:00', 'estado' => ''];
             $ext = self::channelExtension((string) ($channel['Channel'] ?? ''), (string) ($channel['CallerIDNum'] ?? ''), $byNumber);
+            if ($ext !== null && !isset($rows[$ext])) {
+                // Ramal fora do escopo: nao identifica nem conta.
+                continue;
+            }
             if ($ext !== null) {
                 $rows[$ext]['em_ligacao'] = true;
                 $live[$linked]['ramal'] = $rows[$ext]['nome'] . ' (' . $rows[$ext]['ramal'] . ')';
@@ -125,6 +151,10 @@ final class Dashboard
                 $live[$linked]['duracao'] = $duration;
             }
             $live[$linked]['estado'] = (string) ($channel['ChannelStateDesc'] ?? $live[$linked]['estado']);
+        }
+        if ($scope !== null) {
+            // So ligacoes com um ramal visivel (sem fila/URA de outros setores).
+            $live = array_filter($live, static fn (array $call): bool => $call['ramal'] !== '');
         }
         $live = array_values($live);
 
@@ -188,6 +218,7 @@ final class Dashboard
             'tree'    => $tree,
             'live'    => $live,
             'recent'  => $recent,
+            'scope'   => $scope,
         ];
         $payload['signature'] = sha1((string) json_encode([$payload['kpis'], $tree, $live, $recent, $errors]));
         return $payload;

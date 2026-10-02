@@ -13,6 +13,8 @@ class PluginAtivaramalProfile extends Profile
 {
     public const RIGHT_VIEW   = 'plugin_ativaramal_view';
     public const RIGHT_CONFIG = 'plugin_ativaramal_config';
+    /** Sem este direito, o dashboard mostra so a filial e os setores do usuario. */
+    public const RIGHT_ALL_SECTORS = 'plugin_ativaramal_allsectors';
 
     public static $rightname = 'profile';
 
@@ -47,6 +49,11 @@ class PluginAtivaramalProfile extends Profile
                 'field'  => self::RIGHT_VIEW,
             ],
             [
+                'rights' => [READ => __('Read')],
+                'label'  => 'Ver todos os setores e filiais (sem isso: só a filial e o setor do usuário)',
+                'field'  => self::RIGHT_ALL_SECTORS,
+            ],
+            [
                 // UPDATE: alterar credenciais, conectar/desconectar a TW Solutions.
                 'rights' => [READ => __('Read'), UPDATE => __('Update')],
                 'label'  => 'Gerenciar integração (TW Solutions)',
@@ -58,6 +65,25 @@ class PluginAtivaramalProfile extends Profile
     public static function canView(): bool
     {
         return (bool) Session::haveRight(self::RIGHT_VIEW, READ);
+    }
+
+    /** Ve todas as filiais/setores (quem gerencia a integracao tambem). */
+    public static function canViewAll(): bool
+    {
+        return (bool) Session::haveRight(self::RIGHT_ALL_SECTORS, READ)
+            || (bool) Session::haveRight(self::RIGHT_CONFIG, UPDATE);
+    }
+
+    /**
+     * Perfil "so dashboard": ve o Ativa Ramal e nao tem acesso a chamados,
+     * ativos nem configuracao do GLPI (ex.: perfil "Ativa - Gestor").
+     */
+    public static function isDashboardOnly(): bool
+    {
+        return self::canView()
+            && !Session::haveRightsOr('ticket', [CREATE, Ticket::READMY, Ticket::READALL])
+            && !Session::haveRight('computer', READ)
+            && !Session::haveRight('config', READ);
     }
 
     private function showRightsForm(int $profilesId): void
@@ -136,6 +162,6 @@ class PluginAtivaramalProfile extends Profile
 
     public static function uninstallRights(): void
     {
-        ProfileRight::deleteProfileRights([self::RIGHT_VIEW, self::RIGHT_CONFIG]);
+        ProfileRight::deleteProfileRights([self::RIGHT_VIEW, self::RIGHT_CONFIG, self::RIGHT_ALL_SECTORS]);
     }
 }
