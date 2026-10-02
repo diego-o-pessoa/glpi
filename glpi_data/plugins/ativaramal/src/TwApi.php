@@ -55,26 +55,62 @@ final class TwApi
                                  'direction', 'disposition', 'id_ramal', 'transfer', 'hangup', 'linkedid'];
 
     /**
-     * Ligacoes de um periodo (aba Desempenho). Cache de 2 min: semana/mes
-     * trazem milhares de linhas e nao precisam ser ao vivo.
+     * Ligacoes de um periodo (aba Desempenho), em pedacos por mes. Cache de
+     * 2 min: semana/mes trazem milhares de linhas e nao precisam ser ao vivo.
      *
-     * @return list<array<string, mixed>>
+     * A TW responde HTTP 500 em alguns trechos (ex.: periodo com dias de
+     * setembro). Quando um mes falha, consulta dia a dia e pula so os dias
+     * com erro, devolvidos em "falhas" para a tela avisar.
+     *
+     * @return array{calls: list<array<string, mixed>>, falhas: list<string>}
      */
     public static function callsBetween(string $start, string $end): array
     {
         $key = 'ativaramal_calls_' . preg_replace('/\D+/', '', $start . $end);
         return self::cached($key, 120, static function () use ($start, $end): array {
-            // A TW responde HTTP 500 quando o periodo atravessa a virada do mes
-            // (ex.: semana de 28/09 a 02/10): consulta mes a mes e junta,
-            // sem repetir ligacao (pelo id).
+            $path = '/api/v3/chamada/consultarChamada';
             $calls = [];
+            $failed = [];
             foreach (self::monthChunks($start, $end) as [$from, $to]) {
-                foreach (self::list('/api/v3/chamada/consultarChamada', ['data_inicial' => $from, 'data_final' => $to]) as $call) {
+                try {
+                    $rows = self::list($path, ['data_inicial' => $from, 'data_final' => $to]);
+                } catch (RuntimeException) {
+                    $rows = [];
+                    foreach (self::dayChunks($from, $to) as [$dayFrom, $dayTo]) {
+                        try {
+                            array_push($rows, ...self::list($path, ['data_inicial' => $dayFrom, 'data_final' => $dayTo]));
+                        } catch (RuntimeException) {
+                            $failed[] = substr($dayFrom, 0, 10);
+                        }
+                    }
+                }
+                foreach ($rows as $call) {
                     $calls[(string) ($call['id'] ?? count($calls))] = $call;
                 }
             }
-            return self::only(array_values($calls), self::CALL_FIELDS);
+            if ($failed !== []) {
+                Logger::warning('API TW: dias sem resposta na consulta de ligações', ['dias' => implode(',', $failed)]);
+            }
+            return ['calls' => self::only(array_values($calls), self::CALL_FIELDS), 'falhas' => $failed];
         });
+    }
+
+    /**
+     * Divide [inicio, fim] em dias.
+     *
+     * @return list<array{0: string, 1: string}>
+     */
+    private static function dayChunks(string $start, string $end): array
+    {
+        $chunks = [];
+        $from = strtotime($start);
+        $limit = strtotime($end);
+        while ($from !== false && $limit !== false && $from <= $limit) {
+            $dayEnd = strtotime(date('Y-m-d 23:59:59', $from));
+            $chunks[] = [date('Y-m-d H:i:s', $from), date('Y-m-d H:i:s', min($dayEnd, $limit))];
+            $from = $dayEnd + 1;
+        }
+        return $chunks;
     }
 
     /**

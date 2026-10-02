@@ -38,9 +38,12 @@ final class Performance
         $period = isset(self::PERIODS[$period]) ? $period : 'hoje';
         [$start, $end] = self::range($period);
         $error = '';
+        $missingDays = [];
         try {
             [$rows, $byId, $byNumber] = Dashboard::extensionIndex(TwApi::extensions(), $scope);
-            $calls = TwApi::callsBetween($start, $end);
+            $result = TwApi::callsBetween($start, $end);
+            $calls = $result['calls'];
+            $missingDays = $result['falhas'];
         } catch (RuntimeException $exception) {
             $rows = $byId = $byNumber = $calls = [];
             $error = $exception->getMessage();
@@ -117,6 +120,10 @@ final class Performance
             'start'    => $start,
             'end'      => $end,
             'error'    => $error,
+            // Dias que a TW nao devolveu (HTTP 500): ficam fora dos numeros.
+            'warning'  => $missingDays === [] ? '' : 'A TW não devolveu as ligações de '
+                . implode(', ', array_map(static fn ($d) => date('d/m', strtotime($d)), $missingDays))
+                . ' (erro no servidor da TW). Esses dias ficaram fora dos números.',
             'scope'    => $scope,
             'totals'   => [
                 'atendeu' => $totalAnswered,

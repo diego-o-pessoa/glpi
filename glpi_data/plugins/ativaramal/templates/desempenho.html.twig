@@ -36,6 +36,9 @@
         <div class="alert alert-warning py-2"><i class="ti ti-lock me-1"></i>{{ data.scope.motivo }}</div>
     {% endif %}
 {% endif %}
+{% if data.warning %}
+    <div class="alert alert-warning py-2"><i class="ti ti-alert-triangle me-1"></i>{{ data.warning }}</div>
+{% endif %}
 {% if data.error %}
     <div class="alert alert-danger"><i class="ti ti-alert-triangle me-1"></i>{{ data.error }}</div>
 {% endif %}
