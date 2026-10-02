@@ -51,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.5.1"
+GUARDIAN_VERSION = "1.5.2"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -1634,6 +1634,9 @@ def install_service(logger: logging.Logger) -> int:
 
     if query_service(SERVICE_NAME) is not None:
         run_sc("stop", SERVICE_NAME)
+        # Numa atualizacao o processo antigo pode estar no meio de um ciclo:
+        # sem esperar ele parar, o "start" abaixo falhava em silencio.
+        _wait_service_state({SERVICE_STOPPED, None}, 30)
         run_sc("config", SERVICE_NAME, "binPath=", f'"{executable}" --service',
                "start=", "auto", "DisplayName=", SERVICE_DISPLAY_NAME)
     else:
@@ -1643,9 +1646,31 @@ def install_service(logger: logging.Logger) -> int:
     # Se o processo morrer, o proprio Windows o levanta de novo.
     run_sc("failure", SERVICE_NAME, "reset=", "86400",
            "actions=", "restart/60000/restart/60000/restart/60000")
-    run_sc("start", SERVICE_NAME)
-    logger.info("Servico %s registrado e iniciado.", SERVICE_NAME)
+    # O exe de arquivo unico se descompacta a cada start: espera o estado real
+    # e tenta de novo uma vez se o servico parar logo no inicio.
+    state = None
+    for attempt in (1, 2):
+        run_sc("start", SERVICE_NAME)
+        state = _wait_service_state({SERVICE_RUNNING, SERVICE_STOPPED}, 45)
+        if state == SERVICE_RUNNING:
+            break
+        logger.warning("Servico %s nao subiu na tentativa %d (estado %s).", SERVICE_NAME, attempt, state)
+        time.sleep(3)
+    if state == SERVICE_RUNNING:
+        logger.info("Servico %s registrado e iniciado.", SERVICE_NAME)
+    else:
+        logger.warning("Servico %s registrado, mas nao confirmou o inicio; o Windows tenta de novo pela politica de falha.", SERVICE_NAME)
     return 0
+
+
+def _wait_service_state(wanted: set, timeout: float) -> int | None:
+    """Espera o servico chegar a um dos estados (None = nao existe). Devolve o ultimo lido."""
+    deadline = time.monotonic() + timeout
+    state = query_service(SERVICE_NAME)
+    while state not in wanted and time.monotonic() < deadline:
+        time.sleep(1)
+        state = query_service(SERVICE_NAME)
+    return state
 
 
 def uninstall_service(logger: logging.Logger) -> int:

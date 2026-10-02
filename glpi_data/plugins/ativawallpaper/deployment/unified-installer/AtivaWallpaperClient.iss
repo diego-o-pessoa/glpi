@@ -239,8 +239,11 @@ begin
     '--install-service'
   );
 
-  { Confirma que ficou realmente Running; o SCM leva alguns segundos. }
-  for Attempt := 1 to 20 do begin
+  { Confirma que ficou realmente Running; o SCM leva alguns segundos. Na
+    metade da espera, se ainda nao subiu, pede o inicio mais uma vez. }
+  for Attempt := 1 to 40 do begin
+    if Attempt = 20 then
+      Exec(ExpandConstant('{sys}\sc.exe'), 'start AtivaGuardian', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     if Exec(ExpandConstant('{cmd}'),
       '/C ""' + ExpandConstant('{sys}\sc.exe') + '" query AtivaGuardian | "' + ExpandConstant('{sys}\find.exe') + '" "RUNNING""',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then begin

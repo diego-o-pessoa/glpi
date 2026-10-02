@@ -17,7 +17,15 @@ param(
     [switch]$InstallInnoSetup,
     [switch]$InstallBuildTools,
     # Rebuild a bundle version that already exists in dist (only for packages never distributed).
-    [switch]$AllowOverwrite
+    [switch]$AllowOverwrite,
+    # Assinatura digital (Authenticode) dos executaveis e do instalador.
+    # Antivirus como o Bitdefender confiam em codigo assinado; sem assinatura,
+    # um exe PyInstaller que instala servico como SYSTEM costuma ser apagado.
+    # Use o certificado instalado no Windows (impressao digital) OU um .pfx;
+    # a senha do .pfx vem SO da variavel de ambiente ATIVA_SIGN_PFX_PASSWORD.
+    [string]$SignCertThumbprint = $env:ATIVA_SIGN_THUMBPRINT,
+    [string]$SignCertFile = $env:ATIVA_SIGN_PFX,
+    [string]$TimestampUrl = "http://timestamp.digicert.com"
 )
 
 $ErrorActionPreference = "Stop"
@@ -59,6 +67,61 @@ $ExpectedUpdaterApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativaup
 $ExpectedGuardianApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativaguardian/api/v1"
 $ExpectedWorkspaceApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativaworkspace/api/v1"
 $ExpectedAgentServer = "https://chamados.ativalocacao.com.br:8443/marketplace/glpiinventory/"
+
+function Find-SignTool {
+    $Command = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($Command) {
+        return $Command.Source
+    }
+    $Kits = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"
+    if (Test-Path -LiteralPath $Kits) {
+        $Found = Get-ChildItem -LiteralPath $Kits -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+        if ($Found) {
+            return $Found.FullName
+        }
+    }
+    return $null
+}
+
+$script:SignTool = $null
+$script:SigningEnabled = [bool]($SignCertThumbprint -or $SignCertFile)
+
+function Invoke-CodeSign([string]$Path) {
+    if (-not $script:SigningEnabled) {
+        return
+    }
+    if (-not $script:SignTool) {
+        $script:SignTool = Find-SignTool
+        if (-not $script:SignTool) {
+            throw "signtool.exe nao encontrado. Instale o Windows SDK (componente 'Signing Tools') ou rode sem certificado."
+        }
+    }
+    $Arguments = @("sign", "/fd", "sha256", "/tr", $TimestampUrl, "/td", "sha256")
+    if ($SignCertThumbprint) {
+        $Arguments += @("/sha1", ($SignCertThumbprint -replace '\s', ''))
+    } else {
+        if (-not (Test-Path -LiteralPath $SignCertFile -PathType Leaf)) {
+            throw "Certificado nao encontrado: $SignCertFile"
+        }
+        $Arguments += @("/f", $SignCertFile)
+        if ($env:ATIVA_SIGN_PFX_PASSWORD) {
+            $Arguments += @("/p", $env:ATIVA_SIGN_PFX_PASSWORD)
+        }
+    }
+    Write-Host "Assinando $(Split-Path -Leaf $Path)..."
+    # Saida do signtool nao e exibida: em erro, nao vaza argumentos (senha).
+    $null = & $script:SignTool @Arguments $Path 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Falha ao assinar $(Split-Path -Leaf $Path) (signtool codigo $LASTEXITCODE). Confira o certificado e o servidor de carimbo de tempo."
+    }
+    $null = & $script:SignTool verify /pa $Path 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "A assinatura de $(Split-Path -Leaf $Path) nao foi validada (signtool verify /pa)."
+    }
+}
 
 function Find-InnoSetupCompiler {
     $Command = Get-Command ISCC.exe -ErrorAction SilentlyContinue
@@ -346,6 +409,16 @@ if ($WorkspaceVersion -notmatch '^\d+\.\d+\.\d+$') {
     throw "Nao foi possivel identificar a versao do servico Ativa Workspace compilado."
 }
 
+# Assinatura dos executaveis que vao dentro do instalador (antes de empacotar).
+if ($script:SigningEnabled) {
+    foreach ($Executable in @($ClientExe, $UnifiedUpdaterExe, $GuardianExe, $WorkspaceExe)) {
+        Invoke-CodeSign $Executable
+    }
+} else {
+    Write-Warning ("Executaveis e instalador SEM assinatura digital. Antivirus como o Bitdefender podem " +
+        "bloquear ou apagar o instalador. Informe -SignCertThumbprint (ou -SignCertFile) para assinar.")
+}
+
 $Iscc = Find-InnoSetupCompiler
 if (-not $Iscc -and ($InstallInnoSetup -or $InstallBuildTools)) {
     $Winget = Get-WingetExecutable
@@ -421,6 +494,7 @@ try {
     if (-not (Test-Path -LiteralPath $CompiledUnifiedInstaller)) {
         throw "O Inno Setup nao gerou o instalador esperado: $CompiledUnifiedInstaller"
     }
+    Invoke-CodeSign $CompiledUnifiedInstaller
     # Alguns antivirus abrem o novo .exe exatamente durante a copia e o
     # Copy-Item termina com AccessDenied mesmo quando a pasta esta gravavel.
     # Primeiro copia com extensao neutra e depois faz uma renomeacao atomica,
