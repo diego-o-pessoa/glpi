@@ -63,10 +63,37 @@ final class TwApi
     public static function callsBetween(string $start, string $end): array
     {
         $key = 'ativaramal_calls_' . preg_replace('/\D+/', '', $start . $end);
-        return self::cached($key, 120, static fn () => self::only(
-            self::list('/api/v3/chamada/consultarChamada', ['data_inicial' => $start, 'data_final' => $end]),
-            self::CALL_FIELDS
-        ));
+        return self::cached($key, 120, static function () use ($start, $end): array {
+            // A TW responde HTTP 500 quando o periodo atravessa a virada do mes
+            // (ex.: semana de 28/09 a 02/10): consulta mes a mes e junta,
+            // sem repetir ligacao (pelo id).
+            $calls = [];
+            foreach (self::monthChunks($start, $end) as [$from, $to]) {
+                foreach (self::list('/api/v3/chamada/consultarChamada', ['data_inicial' => $from, 'data_final' => $to]) as $call) {
+                    $calls[(string) ($call['id'] ?? count($calls))] = $call;
+                }
+            }
+            return self::only(array_values($calls), self::CALL_FIELDS);
+        });
+    }
+
+    /**
+     * Divide [inicio, fim] em pedacos que nao atravessam a virada do mes.
+     *
+     * @return list<array{0: string, 1: string}>
+     */
+    private static function monthChunks(string $start, string $end): array
+    {
+        $chunks = [];
+        $from = strtotime($start);
+        $limit = strtotime($end);
+        while ($from !== false && $limit !== false && $from <= $limit) {
+            $monthEnd = strtotime(date('Y-m-t 23:59:59', $from));
+            $to = min($monthEnd, $limit);
+            $chunks[] = [date('Y-m-d H:i:s', $from), date('Y-m-d H:i:s', $to)];
+            $from = $monthEnd + 1;
+        }
+        return $chunks;
     }
 
     /**
