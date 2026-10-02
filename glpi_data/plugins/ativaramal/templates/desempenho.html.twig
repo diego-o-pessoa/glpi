@@ -4,160 +4,246 @@
     {% elseif sec >= 60 %}{{ (sec // 60) }}min{{ '%02d'|format(sec % 60) }}s
     {% else %}{{ sec }}s{% endif %}
 {% endapply %}{% endmacro %}
+{% macro initials(nome) %}{% apply spaceless %}
+    {% set parts = nome|trim|split(' ')|filter(w => w|length > 1) %}
+    {{ ((parts|first|default('?'))|first ~ (parts|length > 1 ? (parts|last)|first : ''))|upper }}
+{% endapply %}{% endmacro %}
+{% macro laurel(side) %}
+    <svg class="pd-laurel pd-laurel-{{ side }}" viewBox="0 0 60 120" aria-hidden="true">
+        <path d="M44 116 C20 92 14 56 30 6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+        {% for y in [100, 84, 68, 52, 36, 20] %}
+            <ellipse cx="{{ 22 + (116 - y) // 9 }}" cy="{{ y }}" rx="5" ry="11" transform="rotate(-38 {{ 22 + (116 - y) // 9 }} {{ y }})" fill="currentColor"/>
+            <ellipse cx="{{ 38 + (116 - y) // 14 }}" cy="{{ y - 6 }}" rx="5" ry="11" transform="rotate(32 {{ 38 + (116 - y) // 14 }} {{ y - 6 }})" fill="currentColor" opacity=".85"/>
+        {% endfor %}
+    </svg>
+{% endmacro %}
 {% import _self as h %}
 
 <style>
-.pf-rank li{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #eef1f7}
-.pf-rank li:last-child{border-bottom:0}
-.pf-pos{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:12px;background:#eef1f6;color:#56627c;flex:none}
-.pf-pos.p1{background:#ffe9a8;color:#8a5b00}.pf-pos.p2{background:#e6e9ef;color:#4b5563}.pf-pos.p3{background:#f6dcc6;color:#8a4b14}
-.pf-name{flex:1;min-width:0}.pf-name strong{display:block;font-size:13px}.pf-name small{color:#6d7da7;font-size:11.5px}
-.pf-val{font-weight:700;font-size:14px;white-space:nowrap}
-.pf-bar{height:4px;border-radius:2px;background:#e1ecff;margin-top:3px}.pf-bar span{display:block;height:100%;border-radius:2px;background:#356fd1}
-.pf-table th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#6d7da7;white-space:nowrap;cursor:pointer}
+.pd{--pd-ink:#1d2b4f;--pd-muted:#6d7a99;--pd-border:#e7eaf2;--pd-amber:#f5b324;--pd-amber-soft:#fff6df;--pd-gold:#e8a91a;--pd-silver:#a9b3c4;--pd-bronze:#d0895a;color:var(--pd-ink)}
+.pd-head{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.pd-head h2{margin:0;font-size:26px;font-weight:800;display:flex;align-items:center;gap:10px}.pd-head h2 i{color:var(--pd-amber)}
+.pd-head small{color:var(--pd-muted)}
+.pd-seg{display:inline-flex;border:1px solid #f3d27c;border-radius:10px;overflow:hidden;background:#fff}
+.pd-seg a{padding:9px 18px;font-weight:600;color:#c88a00;text-decoration:none;border-left:1px solid #f3d27c}.pd-seg a:first-child{border-left:0}
+.pd-seg a.is-on{background:linear-gradient(180deg,#ffc845,#f5b324);color:#3b2a00}
+.pd-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.pd-kpi{background:#fff;border:1px solid var(--pd-border);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 3px 12px #1d2b4f0a}
+.pd-kpi-icon{width:46px;height:46px;border-radius:11px;background:var(--pd-amber-soft);color:#e09b00;display:grid;place-items:center;font-size:22px;flex:none}
+.pd-kpi span{display:block;color:var(--pd-muted);font-size:13px}.pd-kpi strong{display:block;font-size:24px;font-weight:800;line-height:1.2}
+.pd-card{background:#fff;border:1px solid var(--pd-border);border-radius:14px;box-shadow:0 3px 12px #1d2b4f0a;margin-bottom:16px;overflow:hidden}
+.pd-card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--pd-border)}
+.pd-card-head h3{margin:0;font-size:17px;font-weight:700;display:flex;align-items:center;gap:9px}.pd-card-head h3 i{color:var(--pd-amber)}
+.pd-tabs{display:inline-flex;gap:6px;background:#f4f6fa;padding:4px;border-radius:10px}
+.pd-tabs button{border:0;background:none;padding:6px 14px;border-radius:7px;font-weight:600;font-size:13px;color:var(--pd-muted)}
+.pd-tabs button.is-on{background:#fff;color:var(--pd-ink);box-shadow:0 1px 4px #1d2b4f1a}
+.pd-stage{position:relative;padding:26px 20px 0;background:radial-gradient(ellipse at 50% 100%,#fff7e0 0,#fff 70%);overflow:hidden}
+.pd-podium{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1.15fr 1fr;align-items:end;gap:18px;max-width:1000px;margin:0 auto}
+.pd-place{display:flex;flex-direction:column;align-items:center;text-align:center}
+.pd-avatar-wrap{position:relative;display:flex;align-items:center;justify-content:center;width:190px;height:150px}
+.pd-avatar{position:relative;z-index:1;width:104px;height:104px;border-radius:50%;display:grid;place-items:center;font-size:34px;font-weight:800;color:#fff;border:5px solid #fff;box-shadow:0 8px 22px #1d2b4f26}
+.pd-first .pd-avatar{width:128px;height:128px;font-size:42px}
+.pd-medal{position:absolute;top:-6px;left:50%;transform:translateX(-50%);z-index:2;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:15px;color:#fff;border:3px solid #fff;box-shadow:0 4px 10px #1d2b4f33}
+.pd-first .pd-medal{width:48px;height:48px;font-size:17px;top:-12px}
+.pd-laurel{position:absolute;bottom:4px;width:52px;height:110px}
+.pd-laurel-l{left:6px}.pd-laurel-r{right:6px;transform:scaleX(-1)}
+.pd-first .pd-laurel{width:60px;height:128px}
+.pd-name{font-weight:800;font-size:16px;margin-top:6px;max-width:240px;color:var(--pd-ink)}.pd-first .pd-name{font-size:18px}
+.pd-sub{color:var(--pd-muted);font-size:13px;margin-bottom:10px}
+.pd-block{width:100%;border-radius:12px 12px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#2a1d00;box-shadow:inset 0 2px 0 #ffffff80,0 -6px 24px #1d2b4f14}
+.pd-block strong{font-size:38px;font-weight:900;line-height:1}.pd-block span{font-size:14px;font-weight:600}
+.pd-second .pd-block{height:110px;background:linear-gradient(180deg,#eef1f6,#c8cfdb);color:#1d2b4f}
+.pd-first .pd-block{height:150px;background:linear-gradient(180deg,#ffd76a,#e8a91a);box-shadow:inset 0 2px 0 #ffffff99,0 -10px 40px #f5b32466}
+.pd-third .pd-block{height:90px;background:linear-gradient(180deg,#f1c7a6,#cf8a5c);color:#3a1d07}
+.pd-second{color:var(--pd-silver)}.pd-first{color:var(--pd-gold)}.pd-third{color:var(--pd-bronze)}
+.pd-second .pd-medal{background:var(--pd-silver)}.pd-first .pd-medal{background:linear-gradient(180deg,#ffcf4a,#e8a91a)}.pd-third .pd-medal{background:var(--pd-bronze)}
+.pd-place.is-empty .pd-avatar{background:#eef1f6!important;color:#b6bfd0}
+.pd-confetti i{position:absolute;width:9px;height:16px;border-radius:2px;background:var(--pd-amber);opacity:.55;animation:pd-float 6s ease-in-out infinite}
+@keyframes pd-float{0%,100%{transform:translateY(0) rotate(var(--r))}50%{transform:translateY(-8px) rotate(calc(var(--r) + 25deg))}}
+.pd-list{list-style:none;margin:0;padding:6px 20px 12px}
+.pd-list li{display:grid;grid-template-columns:40px 46px 1fr 70px minmax(120px,320px);align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #f0f2f7}
+.pd-list li:last-child{border-bottom:0}
+.pd-pos{width:30px;height:30px;border-radius:50%;background:#f1f3f8;display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--pd-muted)}
+.pd-mini{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:800;font-size:14px}
+.pd-who strong{display:block;font-size:14px}.pd-who small{color:var(--pd-muted)}
+.pd-num{font-weight:800;text-align:right}
+.pd-bar{height:7px;border-radius:4px;background:#e9edf6;overflow:hidden}.pd-bar span{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,#3d7ae0,#2f5fc4)}
+.pd-table th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--pd-muted);white-space:nowrap;cursor:pointer}
+@media(max-width:992px){.pd-kpis{grid-template-columns:repeat(2,1fr)}.pd-podium{grid-template-columns:1fr;max-width:340px}.pd-first{order:-1}.pd-list li{grid-template-columns:34px 40px 1fr 56px}.pd-list .pd-bar{display:none}}
 </style>
 
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <div>
-        <h2 class="mb-0"><i class="ti ti-trophy me-2 text-primary"></i>Desempenho</h2>
-        <div class="text-muted small">{{ data.label }} · {{ data.start|date('d/m/Y') }} até {{ data.end|date('d/m/Y H:i') }}</div>
-    </div>
-    <div class="btn-group" role="group" aria-label="Período">
-        {% for key, label in periods %}
-            <a href="{{ self_url }}?periodo={{ key }}" class="btn {{ data.period == key ? 'btn-primary' : 'btn-outline-primary' }}">{{ label }}</a>
-        {% endfor %}
-    </div>
-</div>
+{% set palette = ['#4f7cf0', '#e2557b', '#18a389', '#8a5cf0', '#f08a24', '#2b9fd8', '#c2489b', '#5b8c2a'] %}
+{% set metrics = {
+    'atendeu': {'title': 'Quem mais atendeu', 'tab': 'Atenderam', 'unit': 'atendimentos', 'icon': 'ti-phone-incoming', 'time': false},
+    'ligou':   {'title': 'Quem mais ligou', 'tab': 'Ligaram', 'unit': 'ligações', 'icon': 'ti-phone-outgoing', 'time': false},
+    'falado':  {'title': 'Quem mais falou', 'tab': 'Falaram', 'unit': 'falados', 'icon': 'ti-clock', 'time': true},
+} %}
 
-{% if data.scope %}
-    {% if data.scope.ok %}
-        <div class="alert alert-info py-2"><i class="ti ti-eye me-1"></i>Você está vendo só <strong>{{ data.scope.filial }}</strong> · <strong>{{ data.scope.setores|join(', ') }}</strong>.</div>
-    {% else %}
-        <div class="alert alert-warning py-2"><i class="ti ti-lock me-1"></i>{{ data.scope.motivo }}</div>
-    {% endif %}
-{% endif %}
-{% if data.warning %}
-    <div class="alert alert-warning py-2"><i class="ti ti-alert-triangle me-1"></i>{{ data.warning }}</div>
-{% endif %}
-{% if data.error %}
-    <div class="alert alert-danger"><i class="ti ti-alert-triangle me-1"></i>{{ data.error }}</div>
-{% endif %}
-
-<div class="row row-cards mb-3">
-    {% for item in [
-        {'label': 'Atendidas (entrada)', 'value': data.totals.atendeu, 'icon': 'ti-phone-incoming', 'cls': 'text-green'},
-        {'label': 'Ligações feitas', 'value': data.totals.ligou, 'icon': 'ti-phone-outgoing', 'cls': 'text-blue'},
-        {'label': 'Tempo falado', 'value': h.dur(data.totals.falado), 'icon': 'ti-clock', 'cls': ''},
-        {'label': 'Tempo médio de atendimento', 'value': h.dur(data.totals.tma), 'icon': 'ti-hourglass', 'cls': ''},
-    ] %}
-        <div class="col-sm-6 col-xl-3">
-            <div class="card"><div class="card-body d-flex align-items-center gap-3">
-                <span class="avatar bg-primary-lt"><i class="ti {{ item.icon }}"></i></span>
-                <div><div class="text-muted small">{{ item.label }}</div><div class="h2 mb-0 {{ item.cls }}">{{ item.value }}</div></div>
-            </div></div>
+<div class="pd">
+    <div class="pd-head">
+        <div>
+            <h2><i class="ti ti-trophy"></i>Desempenho</h2>
+            <small>{{ data.label }} · {{ data.start|date('d/m/Y') }} até {{ data.end|date('d/m/Y H:i') }}</small>
         </div>
-    {% endfor %}
-</div>
+        <nav class="pd-seg" aria-label="Período">
+            {% for key, label in periods %}
+                <a href="{{ self_url }}?periodo={{ key }}" class="{{ data.period == key ? 'is-on' : '' }}">{{ label }}</a>
+            {% endfor %}
+        </nav>
+    </div>
 
-<div class="row row-cards mb-3">
-    {% for rank in [
-        {'key': 'atendeu', 'title': 'Quem mais atendeu', 'icon': 'ti-phone-incoming', 'fmt': 'n'},
-        {'key': 'ligou', 'title': 'Quem mais ligou', 'icon': 'ti-phone-outgoing', 'fmt': 'n'},
-        {'key': 'falado', 'title': 'Quem mais falou', 'icon': 'ti-clock', 'fmt': 't'},
-    ] %}
-        {% set list = data.ranking[rank.key] %}
-        {% set top = list|length ? (list|first)[rank.key] : 0 %}
-        <div class="col-lg-4">
-            <div class="card h-100">
-                <div class="card-header"><h3 class="card-title"><i class="ti {{ rank.icon }} me-2 text-primary"></i>{{ rank.title }}</h3></div>
-                <div class="card-body py-2">
-                    {% if list|length == 0 %}
-                        <div class="text-muted text-center py-4">Sem ligações no período.</div>
-                    {% else %}
-                        <ol class="list-unstyled pf-rank mb-0">
-                            {% for p in list %}
-                                <li>
-                                    <span class="pf-pos {{ loop.index <= 3 ? 'p' ~ loop.index : '' }}">{{ loop.index }}</span>
-                                    <span class="pf-name">
-                                        <strong>{{ p.nome }}</strong>
-                                        <small>{{ p.ramal }} · {{ p.setor }}</small>
-                                        <span class="pf-bar d-block"><span style="width: {{ top > 0 ? (100 * p[rank.key] / top)|round : 0 }}%"></span></span>
+    {% if data.scope %}
+        {% if data.scope.ok %}
+            <div class="alert alert-info py-2"><i class="ti ti-eye me-1"></i>Você está vendo só <strong>{{ data.scope.filial }}</strong> · <strong>{{ data.scope.setores|join(', ') }}</strong>.</div>
+        {% else %}
+            <div class="alert alert-warning py-2"><i class="ti ti-lock me-1"></i>{{ data.scope.motivo }}</div>
+        {% endif %}
+    {% endif %}
+    {% if data.warning %}<div class="alert alert-warning py-2"><i class="ti ti-alert-triangle me-1"></i>{{ data.warning }}</div>{% endif %}
+    {% if data.error %}<div class="alert alert-danger"><i class="ti ti-alert-triangle me-1"></i>{{ data.error }}</div>{% endif %}
+
+    <div class="pd-kpis">
+        <div class="pd-kpi"><span class="pd-kpi-icon"><i class="ti ti-phone-incoming"></i></span><div><span>Atendidas (entrada)</span><strong class="text-green">{{ data.totals.atendeu }}</strong></div></div>
+        <div class="pd-kpi"><span class="pd-kpi-icon"><i class="ti ti-phone-outgoing"></i></span><div><span>Ligações feitas</span><strong class="text-blue">{{ data.totals.ligou }}</strong></div></div>
+        <div class="pd-kpi"><span class="pd-kpi-icon"><i class="ti ti-clock"></i></span><div><span>Tempo falado</span><strong>{{ h.dur(data.totals.falado) }}</strong></div></div>
+        <div class="pd-kpi"><span class="pd-kpi-icon"><i class="ti ti-hourglass"></i></span><div><span>Tempo médio de atendimento</span><strong>{{ h.dur(data.totals.tma) }}</strong></div></div>
+    </div>
+
+    {% for key, m in metrics %}
+        {% set list = data.ranking[key] %}
+        {% set top = list|length ? (list|first)[key] : 0 %}
+        <section class="pd-pane" data-pd-pane="{{ key }}" {{ loop.first ? '' : 'hidden' }}>
+            <div class="pd-card">
+                <div class="pd-card-head">
+                    <h3><i class="ti ti-trophy"></i>Top 3 — {{ m.title }}</h3>
+                    <div class="pd-tabs">
+                        {% for k2, m2 in metrics %}
+                            <button type="button" class="{{ k2 == key ? 'is-on' : '' }}" data-pd-tab="{{ k2 }}"><i class="ti {{ m2.icon }} me-1"></i>{{ m2.tab }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="pd-stage">
+                    <div class="pd-confetti" aria-hidden="true">
+                        {% for c in [[8,30,-20],[14,62,35],[24,18,60],[33,74,-40],[42,8,15],[58,12,-30],[66,70,40],[76,22,-55],[86,58,25],[92,14,-10],[50,40,70],[20,85,-65]] %}
+                            <i style="left:{{ c[0] }}%;top:{{ c[1] }}%;--r:{{ c[2] }}deg;animation-delay:{{ loop.index0 * 0.4 }}s"></i>
+                        {% endfor %}
+                    </div>
+                    <div class="pd-podium">
+                        {% for slot in [{'pos': 2, 'cls': 'pd-second'}, {'pos': 1, 'cls': 'pd-first'}, {'pos': 3, 'cls': 'pd-third'}] %}
+                            {% set p = list[slot.pos - 1] ?? null %}
+                            <div class="pd-place {{ slot.cls }} {{ p ? '' : 'is-empty' }}">
+                                <div class="pd-avatar-wrap">
+                                    {{ h.laurel('l') }}{{ h.laurel('r') }}
+                                    <span class="pd-avatar" style="background: {{ p ? palette[(p.ramal|default(0)) % (palette|length)] : '#eef1f6' }}">
+                                        {{ p ? h.initials(p.nome) : '?' }}
+                                        <span class="pd-medal">{{ slot.pos }}º</span>
                                     </span>
-                                    <span class="pf-val">{{ rank.fmt == 't' ? h.dur(p[rank.key]) : p[rank.key] }}</span>
-                                </li>
-                            {% endfor %}
-                        </ol>
-                    {% endif %}
+                                </div>
+                                <div class="pd-name">{{ p ? p.nome : '—' }}</div>
+                                <div class="pd-sub">{{ p ? p.ramal ~ ' · ' ~ p.setor : 'Ninguém ainda' }}</div>
+                                <div class="pd-block">
+                                    <strong>{{ p ? (m.time ? h.dur(p[key]) : p[key]) : '–' }}</strong>
+                                    <span>{{ m.unit }}</span>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
-        </div>
+
+            <div class="pd-card">
+                <div class="pd-card-head"><h3><i class="ti ti-list-numbers"></i>Ranking completo — Top 10</h3></div>
+                {% if list|length > 3 %}
+                    <ol class="pd-list">
+                        {% for p in list|slice(3) %}
+                            <li>
+                                <span class="pd-pos">{{ loop.index + 3 }}</span>
+                                <span class="pd-mini" style="background: {{ palette[(p.ramal|default(0)) % (palette|length)] }}">{{ h.initials(p.nome) }}</span>
+                                <span class="pd-who"><strong>{{ p.nome }}</strong><small>{{ p.ramal }} · {{ p.setor }}</small></span>
+                                <span class="pd-num">{{ m.time ? h.dur(p[key]) : p[key] }}</span>
+                                <span class="pd-bar"><span style="width: {{ top > 0 ? (100 * p[key] / top)|round : 0 }}%"></span></span>
+                            </li>
+                        {% endfor %}
+                    </ol>
+                {% else %}
+                    <div class="text-muted text-center py-4">{{ list|length ? 'Só há o pódio neste período.' : 'Sem ligações no período.' }}</div>
+                {% endif %}
+            </div>
+        </section>
     {% endfor %}
-</div>
 
-<div class="card mb-3">
-    <div class="card-header"><h3 class="card-title"><i class="ti ti-users-group me-2 text-primary"></i>Tempo médio de atendimento por setor</h3></div>
-    <div class="table-responsive">
-        <table class="table table-vcenter card-table pf-table" data-pf-sort>
-            <thead><tr>
-                <th>Filial</th><th>Setor</th><th class="text-end">Pessoas</th><th class="text-end">Atendidas</th>
-                <th class="text-end">Não atendidas</th><th class="text-end">Ligações feitas</th><th class="text-end">Tempo falado</th><th class="text-end">Tempo médio</th>
-            </tr></thead>
-            <tbody>
-            {% for s in data.sectors %}
-                <tr>
-                    <td>{{ s.filial }}</td><td><strong>{{ s.setor }}</strong></td>
-                    <td class="text-end" data-v="{{ s.pessoas }}">{{ s.pessoas }}</td>
-                    <td class="text-end text-green" data-v="{{ s.atendeu }}">{{ s.atendeu }}</td>
-                    <td class="text-end text-red" data-v="{{ s.nao_atendidas }}">{{ s.nao_atendidas }}</td>
-                    <td class="text-end" data-v="{{ s.ligou }}">{{ s.ligou }}</td>
-                    <td class="text-end" data-v="{{ s.falado }}">{{ h.dur(s.falado) }}</td>
-                    <td class="text-end fw-bold" data-v="{{ s.tma }}">{{ s.atendeu ? h.dur(s.tma) : '—' }}</td>
-                </tr>
-            {% else %}
-                <tr><td colspan="8" class="text-muted text-center">Sem dados.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
+    <div class="pd-card">
+        <div class="pd-card-head"><h3><i class="ti ti-users-group"></i>Tempo médio de atendimento por setor</h3></div>
+        <div class="table-responsive">
+            <table class="table table-vcenter card-table pd-table" data-pf-sort>
+                <thead><tr>
+                    <th>Filial</th><th>Setor</th><th class="text-end">Pessoas</th><th class="text-end">Atendidas</th>
+                    <th class="text-end">Não atendidas</th><th class="text-end">Ligações feitas</th><th class="text-end">Tempo falado</th><th class="text-end">Tempo médio</th>
+                </tr></thead>
+                <tbody>
+                {% for s in data.sectors %}
+                    <tr>
+                        <td>{{ s.filial }}</td><td><strong>{{ s.setor }}</strong></td>
+                        <td class="text-end" data-v="{{ s.pessoas }}">{{ s.pessoas }}</td>
+                        <td class="text-end text-green" data-v="{{ s.atendeu }}">{{ s.atendeu }}</td>
+                        <td class="text-end text-red" data-v="{{ s.nao_atendidas }}">{{ s.nao_atendidas }}</td>
+                        <td class="text-end" data-v="{{ s.ligou }}">{{ s.ligou }}</td>
+                        <td class="text-end" data-v="{{ s.falado }}">{{ h.dur(s.falado) }}</td>
+                        <td class="text-end fw-bold" data-v="{{ s.tma }}">{{ s.atendeu ? h.dur(s.tma) : '—' }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="8" class="text-muted text-center">Sem dados.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
 
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <h3 class="card-title mb-0"><i class="ti ti-user me-2 text-primary"></i>Tempo médio de atendimento por pessoa</h3>
-        <input type="search" class="form-control form-control-sm" style="max-width:240px" placeholder="Filtrar por nome ou ramal" data-pf-filter>
+    <div class="pd-card">
+        <div class="pd-card-head">
+            <h3><i class="ti ti-user"></i>Tempo médio de atendimento por pessoa</h3>
+            <input type="search" class="form-control form-control-sm" style="max-width:240px" placeholder="Filtrar por nome ou ramal" data-pf-filter>
+        </div>
+        <div class="table-responsive" style="max-height:600px;overflow-y:auto">
+            <table class="table table-vcenter card-table pd-table" data-pf-sort data-pf-people>
+                <thead><tr>
+                    <th>Pessoa</th><th>Ramal</th><th>Setor</th><th class="text-end">Atendidas</th><th class="text-end">Não atendidas</th>
+                    <th class="text-end">Ligações feitas</th><th class="text-end">Tempo falado</th><th class="text-end">Tempo médio</th>
+                </tr></thead>
+                <tbody>
+                {% for p in data.people %}
+                    <tr data-pf-text="{{ (p.nome ~ ' ' ~ p.ramal ~ ' ' ~ p.pessoa)|lower }}">
+                        <td><strong>{{ p.nome }}</strong>{% if p.pessoa and p.pessoa|lower != p.nome|lower %}<div class="small text-muted">{{ p.pessoa }} (GLPI)</div>{% endif %}</td>
+                        <td class="font-monospace">{{ p.ramal }}</td>
+                        <td>{{ p.setor }}<div class="small text-muted">{{ p.filial }}</div></td>
+                        <td class="text-end text-green" data-v="{{ p.atendeu }}">{{ p.atendeu }}</td>
+                        <td class="text-end text-red" data-v="{{ p.nao_atendidas }}">{{ p.nao_atendidas }}</td>
+                        <td class="text-end" data-v="{{ p.ligou }}">{{ p.ligou }}</td>
+                        <td class="text-end" data-v="{{ p.falado }}">{{ h.dur(p.falado) }}</td>
+                        <td class="text-end fw-bold" data-v="{{ p.tma }}">{{ p.atendeu ? h.dur(p.tma) : '—' }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="8" class="text-muted text-center">Sem ligações no período.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-    <div class="table-responsive" style="max-height:600px;overflow-y:auto">
-        <table class="table table-vcenter card-table pf-table" data-pf-sort data-pf-people>
-            <thead><tr>
-                <th>Pessoa</th><th>Ramal</th><th>Setor</th><th class="text-end">Atendidas</th><th class="text-end">Não atendidas</th>
-                <th class="text-end">Ligações feitas</th><th class="text-end">Tempo falado</th><th class="text-end">Tempo médio</th>
-            </tr></thead>
-            <tbody>
-            {% for p in data.people %}
-                <tr data-pf-text="{{ (p.nome ~ ' ' ~ p.ramal ~ ' ' ~ p.pessoa)|lower }}">
-                    <td><strong>{{ p.nome }}</strong>{% if p.pessoa and p.pessoa|lower != p.nome|lower %}<div class="small text-muted">{{ p.pessoa }} (GLPI)</div>{% endif %}</td>
-                    <td class="font-monospace">{{ p.ramal }}</td>
-                    <td>{{ p.setor }}<div class="small text-muted">{{ p.filial }}</div></td>
-                    <td class="text-end text-green" data-v="{{ p.atendeu }}">{{ p.atendeu }}</td>
-                    <td class="text-end text-red" data-v="{{ p.nao_atendidas }}">{{ p.nao_atendidas }}</td>
-                    <td class="text-end" data-v="{{ p.ligou }}">{{ p.ligou }}</td>
-                    <td class="text-end" data-v="{{ p.falado }}">{{ h.dur(p.falado) }}</td>
-                    <td class="text-end fw-bold" data-v="{{ p.tma }}">{{ p.atendeu ? h.dur(p.tma) : '—' }}</td>
-                </tr>
-            {% else %}
-                <tr><td colspan="8" class="text-muted text-center">Sem ligações no período.</td></tr>
-            {% endfor %}
-            </tbody>
-        </table>
+    <div class="text-muted small">
+        <i class="ti ti-info-circle me-1"></i>Atendidas = ligações de entrada atendidas pela pessoa. Tempo médio = tempo falado médio dessas ligações. Clique no título de uma coluna para ordenar.
     </div>
-</div>
-<div class="text-muted small mt-2">
-    <i class="ti ti-info-circle me-1"></i>Atendidas = ligações de entrada atendidas pela pessoa. Tempo médio = tempo falado médio dessas ligações.
-    Clique no título de uma coluna para ordenar.
 </div>
 
 <script>
 (function () {
+    // Troca o podio/ranking entre atenderam, ligaram e falaram.
+    document.querySelectorAll('[data-pd-tab]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            document.querySelectorAll('[data-pd-pane]').forEach(function (pane) {
+                pane.hidden = pane.dataset.pdPane !== button.dataset.pdTab;
+            });
+        });
+    });
     // Ordenacao por coluna (numeros pelo data-v) e filtro por nome/ramal.
     document.querySelectorAll('[data-pf-sort]').forEach(function (table) {
         table.querySelectorAll('thead th').forEach(function (th, index) {
