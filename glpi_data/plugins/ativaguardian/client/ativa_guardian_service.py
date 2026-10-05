@@ -51,7 +51,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.5.2"
+GUARDIAN_VERSION = "1.5.3"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -1087,9 +1087,26 @@ def repair_component(component: str, logger: logging.Logger, action_id: int = 0)
     try:
         exit_code = process.wait(timeout=INSTALL_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
-        return False, "O instalador excedeu o tempo limite."
-    finally:
         _safe_unlink(package)
+        return False, "O instalador excedeu o tempo limite."
+    _safe_unlink(package)
+
+    # O instalador abriu uma janela de manutencao para poder parar o Guardian.
+    # Se falhar antes de chegar ao --setup-protection (por exemplo, o Wallpaper
+    # devolve 404), o servico ficaria parado e a janela permaneceria aberta.
+    # Feche-a antes de devolver o resultado do reparo; o comando restaura os
+    # servicos que estavam em execucao antes da manutencao.
+    try:
+        protection = subprocess.run(
+            [str(SERVICE_EXE), "--enforce-protection"],
+            capture_output=True, text=True, timeout=120, creationflags=NO_WINDOW,
+        )
+        if protection.returncode:
+            logger.warning("Reparo: protecao pos-instalacao falhou (codigo %s).", protection.returncode)
+        else:
+            logger.info("Reparo: protecao pos-instalacao restaurada.")
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("Reparo: nao foi possivel restaurar a protecao: %s", exc)
 
     # 0 = ok; 3010/1641 = sucesso pedindo reinicio.
     if exit_code not in (0, 1641, 3010):

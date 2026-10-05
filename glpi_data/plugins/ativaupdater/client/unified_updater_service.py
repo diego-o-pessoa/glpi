@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.14"
+UPDATER_VERSION = "1.7.15"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -830,6 +830,35 @@ def ensure_guardian_running(logger: logging.Logger) -> None:
         logger.warning("Falha ao reinstalar para recuperar o Guardian: %s", exc)
 
 
+def close_install_maintenance(logger: logging.Logger) -> None:
+    """Fecha a janela aberta pelo ``--authorize-install`` do instalador.
+
+    O Inno Setup autoriza a troca dos binarios antes de parar o Guardian. Se
+    uma etapa anterior (por exemplo, o registro do Wallpaper) falhar, o fluxo
+    nunca chega ao ``--setup-protection`` e a janela de manutencao fica ativa;
+    nesse estado o watchdog deliberadamente nao inicia o Guardian. O executor
+    roda como SYSTEM e pode fechar com seguranca somente a janela que ele mesmo
+    abriu, restaurando tambem os servicos que estavam em execucao.
+    """
+    if os.name != "nt" or not GUARDIAN_EXE.is_file():
+        return
+    try:
+        completed = subprocess.run(
+            [str(GUARDIAN_EXE), "--enforce-protection"],
+            capture_output=True, text=True, timeout=120,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if completed.returncode:
+            logger.warning(
+                "Guardian: nao foi possivel encerrar a manutencao pos-instalacao (codigo %s).",
+                completed.returncode,
+            )
+        else:
+            logger.info("Guardian: manutencao pos-instalacao encerrada; protecao restaurada.")
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("Guardian: falha ao encerrar a manutencao pos-instalacao: %s", exc)
+
+
 def ensure_workspace_running(logger: logging.Logger) -> None:
     """Garante que o servico do Ativa Workspace exista e esteja em execucao.
 
@@ -1549,6 +1578,7 @@ def run_install_package(logger: logging.Logger, package: Path, version: str, sha
             # O instalador para o Guardian para trocar o executavel. Garanta a
             # recuperacao mesmo quando o instalador termina com erro antes de
             # executar a etapa InstallGuardian do Inno Setup.
+            close_install_maintenance(logger)
             ensure_guardian_running(logger)
             ensure_workspace_running(logger)
         finally:
