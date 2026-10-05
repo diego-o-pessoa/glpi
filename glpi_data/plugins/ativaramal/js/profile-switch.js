@@ -20,7 +20,7 @@
 
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = `${window.CFG_GLPI?.root_doc || ''}/Session/ChangeProfile`;
+        form.action = `${window.CFG_GLPI?.root_doc || ''}/plugins/ativaramal/front/switch_profile.php`;
         form.dataset.ativaramalProfileSwitch = '1';
 
         const id = document.createElement('input');
