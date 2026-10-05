@@ -38,7 +38,8 @@
         const button = document.createElement('button');
         button.type = 'submit';
         button.className = 'dropdown-item';
-        button.innerHTML = '<i class="ti ti-switch-2 me-2"></i>Mudar para Ativa - Gestor';
+        button.title = 'Perfil Ativa - Gestor';
+        button.innerHTML = '<i class="ti ti-switch-2 me-2"></i>Mudar para admin';
         form.appendChild(button);
 
         menu.insertBefore(divider, menu.firstChild);
