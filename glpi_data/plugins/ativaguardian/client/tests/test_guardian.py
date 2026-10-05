@@ -800,6 +800,7 @@ class SilentInstallTests(unittest.TestCase):
                  mock.patch.object(guardian, "REPAIR_STATE_PATH", root / "state.json"), \
                  mock.patch.object(guardian, "LOG_DIR", root), \
                  mock.patch.object(guardian.subprocess, "Popen", side_effect=fake_popen), \
+                 mock.patch.object(guardian.subprocess, "run", return_value=mock.Mock(returncode=0)), \
                  mock.patch.object(guardian, "verify_repair", return_value=(True, "ok")):
                 ok, _ = guardian.repair_component("updater", quiet_logger(), action_id=3)
 
