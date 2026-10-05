@@ -46,9 +46,22 @@
         menu.insertBefore(form, divider.nextSibling);
     };
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', addProfileSwitch, {once: true});
-    } else {
+    // O menu do usuario pode ser montado tardiamente por layouts/interface
+    // helpdesk. Tente no carregamento, ao abrir o menu e quando o GLPI inserir
+    // seus elementos no DOM.
+    const install = () => {
         addProfileSwitch();
+        document.querySelectorAll('.user-menu-dropdown-toggle').forEach((toggle) => {
+            toggle.addEventListener('shown.bs.dropdown', addProfileSwitch, {once: true});
+        });
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', install, {once: true});
+    } else {
+        install();
     }
+
+    const observer = new MutationObserver(addProfileSwitch);
+    observer.observe(document.documentElement, {childList: true, subtree: true});
 })();

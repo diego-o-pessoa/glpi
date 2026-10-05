@@ -74,6 +74,8 @@ class PluginAtivaramalProfile extends Profile
      */
     public static function availableGestorProfileId(): ?int
     {
+        global $DB;
+
         // A lista de perfis e montada no login. Se um administrador atribuir o
         // perfil depois que o usuario ja estiver conectado, a sessao antiga
         // nao o enxerga e o atalho desaparece. Recarregue a lista uma vez por
@@ -93,6 +95,40 @@ class PluginAtivaramalProfile extends Profile
                 return (int) $profileId;
             }
         }
+
+        // Fallback para sessoes/interface antigas: confirme a atribuicao no
+        // banco. O perfil nunca e concedido aqui; somente uma atribuicao real
+        // em glpi_profiles_users pode ser usada.
+        if ($loginUserId > 0 && $DB->tableExists('glpi_profiles_users')) {
+            $profile = $DB->request([
+                'SELECT' => ['glpi_profiles.id'],
+                'FROM' => 'glpi_profiles_users',
+                'INNER JOIN' => [
+                    'glpi_profiles' => [
+                        'ON' => [
+                            'glpi_profiles_users' => 'profiles_id',
+                            'glpi_profiles' => 'id',
+                        ],
+                    ],
+                ],
+                'WHERE' => [
+                    'glpi_profiles_users.users_id' => $loginUserId,
+                    'glpi_profiles.name' => 'Ativa - Gestor',
+                ],
+                'LIMIT' => 1,
+            ])->current();
+
+            $profileId = (int) ($profile['id'] ?? 0);
+            if ($profileId > 0 && $profileId !== $active) {
+                // Garante que Session::changeProfile() possa validar o alvo
+                // no endpoint, sem exigir que o usuario faca novo login.
+                Session::initEntityProfiles($loginUserId);
+                if (!empty($_SESSION['glpiprofiles'][$profileId]['entities'])) {
+                    return $profileId;
+                }
+            }
+        }
+
         return null;
     }
 
