@@ -1,5 +1,5 @@
 <?php
-define('PAINEL_VERSION', '1.0.0');
+define('PAINEL_VERSION', '1.0.1');
 
 function plugin_init_painel() {
     global $PLUGIN_HOOKS;

@@ -13,23 +13,8 @@ if (!$user->getFromDB($user_id)) {
 global $DB, $CFG_GLPI;
 
 // Verifica se o usuário é Super-Admin
-$has_super_admin = false;
-$super_admin_prof_id = 0;
-$prof_it = $DB->request([
-    'SELECT' => ['glpi_profiles.id'],
-    'FROM' => 'glpi_profiles_users',
-    'INNER JOIN' => [
-        'glpi_profiles' => ['ON' => ['glpi_profiles_users' => 'profiles_id', 'glpi_profiles' => 'id']]
-    ],
-    'WHERE' => [
-        'glpi_profiles_users.users_id' => Session::getLoginUserID(),
-        'glpi_profiles.name' => 'Super-Admin'
-    ]
-]);
-foreach ($prof_it as $row) {
-    $has_super_admin = true;
-    $super_admin_prof_id = $row['id'];
-}
+$super_admin_prof_id = plugin_painel_get_admin_profile_id();
+$has_super_admin = $super_admin_prof_id > 0;
 
 if (isset($_GET['switch_to_admin']) && $has_super_admin) {
     Session::changeProfile($super_admin_prof_id);

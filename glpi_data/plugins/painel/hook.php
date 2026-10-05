@@ -1,4 +1,31 @@
 <?php
+
+/**
+ * Perfil que deve ser oferecido pelo atalho "Trocar para Admin" do painel.
+ * Ativa - Gestor usa o mesmo fluxo do Super-Admin, mas com escopo limitado.
+ */
+function plugin_painel_get_admin_profile_id(): int
+{
+    $userId = (int) Session::getLoginUserID();
+    if ($userId > 0) {
+        Session::initEntityProfiles($userId);
+    }
+
+    $activeId = (int) ($_SESSION['glpiactiveprofile']['id'] ?? 0);
+    foreach (['Super-Admin', 'Ativa - Gestor'] as $profileName) {
+        foreach (($_SESSION['glpiprofiles'] ?? []) as $profileId => $profile) {
+            if (
+                (int) $profileId !== $activeId
+                && strcasecmp(trim((string) ($profile['name'] ?? '')), $profileName) === 0
+                && !empty($profile['entities'])
+            ) {
+                return (int) $profileId;
+            }
+        }
+    }
+
+    return 0;
+}
 function plugin_painel_install() {
     return true;
 }
