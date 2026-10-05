@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.13"
+UPDATER_VERSION = "1.7.14"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -1448,7 +1448,7 @@ def ensure_service_running(logger: logging.Logger) -> bool:
     return started
 
 
-def reconcile_install_state(version: str, logger: logging.Logger, not_before: float = 0.0) -> bool:
+def reconcile_install_state(version: str, logger: logging.Logger) -> bool:
     """Ensure a successful setup leaves the bundle version in state.json.
 
     Older unified installers could finish with exit code 0 while the
@@ -1462,12 +1462,16 @@ def reconcile_install_state(version: str, logger: logging.Logger, not_before: fl
     if not SERVICE_EXE.is_file() or not CONFIG_PATH.is_file():
         logger.error("Instalacao concluida sem executavel/configuracao do updater.")
         return False
+    # Nao use o mtime como prova de instalacao. Em Windows, o Inno Setup pode
+    # restaurar/copiar o arquivo preservando o timestamp, e o servico pode
+    # reescreve-lo alguns instantes depois de o runner validar o instalador.
+    # Isso gerava falsos negativos (setup concluido com codigo 0, mas tentativa
+    # marcada como falha). A existencia e a validade do JSON sao a verificacao
+    # confiavel neste ponto.
     try:
-        config_mtime = CONFIG_PATH.stat().st_mtime
-    except OSError:
-        return False
-    if not_before and config_mtime < not_before - 5:
-        logger.error("Instalacao concluida sem regravar a configuracao do updater.")
+        validate_config(load_json(CONFIG_PATH))
+    except (UpdaterError, ValueError, TypeError, OSError) as exc:
+        logger.error("Instalacao concluida com configuracao invalida do updater: %s", exc)
         return False
 
     state = get_state()
@@ -1524,7 +1528,7 @@ def run_install_package(logger: logging.Logger, package: Path, version: str, sha
             logger.info("Instalador terminou com codigo %s.", code)
             result.update(outcome="exited", exit_code=code)
             exit_code = int(code or 0)
-            if exit_code == 0 and not reconcile_install_state(version, logger, started_at):
+            if exit_code == 0 and not reconcile_install_state(version, logger):
                 result.update(
                     outcome="error",
                     exit_code=1,
