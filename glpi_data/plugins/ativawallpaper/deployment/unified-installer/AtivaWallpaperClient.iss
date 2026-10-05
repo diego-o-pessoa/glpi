@@ -396,8 +396,12 @@ var
 begin
   Exe := ExpandConstant('{commonappdata}\AtivaLocacao\Workspace\AtivaWorkspace.exe');
   ConfigSrc := ExpandConstant('{tmp}\ativaworkspace-service-config.json');
-  if (not FileExists(Exe)) or (not FileExists(ConfigSrc)) then
-    exit;
+  { O Workspace faz parte obrigatoria do pacote unificado. Nao silencie um
+    pacote incompleto: o updater precisa registrar a falha e tentar novamente. }
+  if not FileExists(Exe) then
+    RaiseException('Ativa Workspace nao foi incluido no instalador: ' + Exe);
+  if not FileExists(ConfigSrc) then
+    RaiseException('Configuracao do Ativa Workspace ausente no instalador: ' + ConfigSrc);
   RunRequired('Configurando o Ativa Workspace...', Exe, '--configure "' + ConfigSrc + '"');
   RunRequired('Registrando o servico Ativa Workspace...', Exe, '--install-service');
   Log('Servico Ativa Workspace instalado.');

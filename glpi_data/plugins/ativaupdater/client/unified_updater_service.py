@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.12"
+UPDATER_VERSION = "1.7.13"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -746,6 +746,11 @@ def launch_in_session(session_id: int, executable: Path) -> None:
 GUARDIAN_SERVICE_NAME = "AtivaGuardian"
 GUARDIAN_EXE = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Ativa Locacao" / "Guardian" / "AtivaGuardian.exe"
 GUARDIAN_RECOVERY_MARKER = PRODUCT_DIR / "guardian-recovery.json"
+# O Workspace e instalado pelo mesmo pacote unificado, mas possui ciclo de vida
+# proprio.  O Updater tambem o vigia para recuperar uma instalacao em que o
+# servico foi removido/parado durante a atualizacao.
+WORKSPACE_SERVICE_NAME = "AtivaWorkspace"
+WORKSPACE_EXE = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Workspace" / "AtivaWorkspace.exe"
 # Evita um laco reinstalar sem parar quando um antivirus fica reapagando o exe.
 GUARDIAN_RECOVERY_MIN_INTERVAL = 1800
 
@@ -803,8 +808,9 @@ def ensure_guardian_running(logger: logging.Logger) -> None:
             service = query_service(GUARDIAN_SERVICE_NAME)
         if service is None or service[0] not in (SERVICE_STATE_RUNNING, SERVICE_STATE_START_PENDING):
             logger.info("Guardian: servico parado; iniciando.")
+            run_sc("config", GUARDIAN_SERVICE_NAME, "start=", "auto")
             run_sc("start", GUARDIAN_SERVICE_NAME)
-            if not wait_service_state(SERVICE_STATE_RUNNING, 30):
+            if not wait_service_state(SERVICE_STATE_RUNNING, 30, service_name=GUARDIAN_SERVICE_NAME):
                 logger.error("Guardian: servico nao confirmou estado RUNNING apos a atualizacao.")
         return
 
@@ -822,6 +828,48 @@ def ensure_guardian_running(logger: logging.Logger) -> None:
         reinstall_unified_package(logger)
     except Exception as exc:  # noqa: BLE001 - nunca derruba o poll
         logger.warning("Falha ao reinstalar para recuperar o Guardian: %s", exc)
+
+
+def ensure_workspace_running(logger: logging.Logger) -> None:
+    """Garante que o servico do Ativa Workspace exista e esteja em execucao.
+
+    O Workspace e um componente opcional em pacotes antigos.  Se o executavel
+    nao estiver presente, apenas registramos o motivo: nao ha como criar um
+    servico sem o binario.  Depois que um pacote novo o instala, esta rotina
+    re-registra e inicia o servico automaticamente.
+    """
+    if os.name != "nt" or guardian_maintenance_active():
+        return
+    try:
+        service = query_service(WORKSPACE_SERVICE_NAME)
+    except OSError:
+        return
+    if not WORKSPACE_EXE.is_file():
+        if service is not None:
+            logger.warning("Workspace: servico instalado, mas executavel ausente em %s.", WORKSPACE_EXE)
+        else:
+            logger.warning("Workspace: executavel ausente; instale um pacote unificado que inclua o Workspace.")
+        return
+    if service is None:
+        logger.info("Workspace: servico ausente com executavel presente; re-registrando.")
+        try:
+            subprocess.run(
+                [str(WORKSPACE_EXE), "--install-service"],
+                capture_output=True, timeout=120,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.warning("Workspace: nao foi possivel re-registrar o servico: %s", exc)
+        try:
+            service = query_service(WORKSPACE_SERVICE_NAME)
+        except OSError:
+            return
+    if service is None or service[0] not in (SERVICE_STATE_RUNNING, SERVICE_STATE_START_PENDING):
+        logger.info("Workspace: servico parado; iniciando.")
+        run_sc("config", WORKSPACE_SERVICE_NAME, "start=", "auto")
+        run_sc("start", WORKSPACE_SERVICE_NAME)
+        if not wait_service_state(SERVICE_STATE_RUNNING, 30, service_name=WORKSPACE_SERVICE_NAME):
+            logger.error("Workspace: servico nao confirmou estado RUNNING apos a atualizacao.")
 
 
 def process_session_ids(image: Path) -> set[int]:
@@ -1498,6 +1546,7 @@ def run_install_package(logger: logging.Logger, package: Path, version: str, sha
             # recuperacao mesmo quando o instalador termina com erro antes de
             # executar a etapa InstallGuardian do Inno Setup.
             ensure_guardian_running(logger)
+            ensure_workspace_running(logger)
         finally:
             lock.__exit__()
     return exit_code
@@ -2209,10 +2258,15 @@ def run_sc(*arguments: str, timeout: int = 60) -> int:
         return -1
 
 
-def wait_service_state(expected: int, timeout_seconds: float, sleep: Callable[[float], None] = time.sleep) -> bool:
+def wait_service_state(
+    expected: int,
+    timeout_seconds: float,
+    sleep: Callable[[float], None] = time.sleep,
+    service_name: str = SERVICE_NAME,
+) -> bool:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        current = query_service()
+        current = query_service(service_name)
         if current is not None and current[0] == expected:
             return True
         sleep(2)
@@ -2754,6 +2808,10 @@ class ServiceRuntime:
                 ensure_guardian_running(logger)
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Watchdog do Guardian falhou neste ciclo: %s", exc)
+            try:
+                ensure_workspace_running(logger)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Watchdog do Workspace falhou neste ciclo: %s", exc)
             self.stop_event.wait(COMMAND_POLL_SECONDS)
 
     def run(self, logger: logging.Logger, start_poller: bool = True) -> None:

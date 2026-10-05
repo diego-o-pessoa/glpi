@@ -50,8 +50,8 @@ class GuardianMaintenanceTests(unittest.TestCase):
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.7.12")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 12))
+        self.assertEqual(updater.UPDATER_VERSION, "1.7.13")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 13))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -339,6 +339,7 @@ class InstallRunnerTests(unittest.TestCase):
             "kill_process_tree": lambda pid: self.steps.append(f"kill {pid}"),
             "ensure_service_running": lambda _logger: self.steps.append("ensure_service") or True,
             "ensure_guardian_running": lambda _logger: self.steps.append("ensure_guardian"),
+            "ensure_workspace_running": lambda _logger: self.steps.append("ensure_workspace"),
         }.items():
             patcher = mock.patch.object(updater, name, value)
             patcher.start()
@@ -361,7 +362,7 @@ class InstallRunnerTests(unittest.TestCase):
 
     def test_same_order_as_the_deploy_script(self) -> None:
         self.assertEqual(self.run_package(), 0)
-        self.assertEqual(self.steps, ["stop_service", "kill_leftovers", "setup", "ensure_service", "ensure_guardian"])
+        self.assertEqual(self.steps, ["stop_service", "kill_leftovers", "setup", "ensure_service", "ensure_guardian", "ensure_workspace"])
         self.assertIn("/NOCLOSEAPPLICATIONS", self.started[0])
         self.assertEqual(self.started[0][0], str(self.package))
         result = self.result()
@@ -371,7 +372,7 @@ class InstallRunnerTests(unittest.TestCase):
         self.supervision = ("exited", 5)
         self.assertEqual(self.run_package(), 5)
         self.assertEqual((self.result()["outcome"], self.result()["exit_code"]), ("exited", 5))
-        self.assertEqual(self.steps[-1], "ensure_guardian")
+        self.assertEqual(self.steps[-2:], ["ensure_guardian", "ensure_workspace"])
 
     def test_hung_setup_is_killed(self) -> None:
         self.supervision = ("timeout", None)
@@ -379,11 +380,11 @@ class InstallRunnerTests(unittest.TestCase):
         self.assertIn("kill 4242", self.steps)
         self.assertIn("kill 4243", self.steps)
         self.assertEqual(self.result()["outcome"], "timeout")
-        self.assertEqual(self.steps[-1], "ensure_guardian")
+        self.assertEqual(self.steps[-2:], ["ensure_guardian", "ensure_workspace"])
 
     def test_package_with_another_hash_is_not_installed(self) -> None:
         self.assertEqual(self.run_package("c" * 64), 1)
-        self.assertEqual(self.steps, ["ensure_service", "ensure_guardian"], "nothing is stopped or run, the services stay up")
+        self.assertEqual(self.steps, ["ensure_service", "ensure_guardian", "ensure_workspace"], "nothing is stopped or run, the services stay up")
         self.assertEqual(self.result()["outcome"], "error")
         self.assertIn("SHA-256", self.result()["message"])
 
