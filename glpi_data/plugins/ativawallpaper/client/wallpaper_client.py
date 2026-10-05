@@ -199,8 +199,13 @@ def should_download(server: dict[str, Any], local: dict[str, Any]) -> bool:
 
 
 def user_key() -> str:
-    identity = "\\".join(filter(None, [os.environ.get("USERDOMAIN"), os.environ.get("USERNAME") or os.environ.get("USER")]))
+    identity = "\\".join(filter(None, [os.environ.get("USERDOMAIN"), current_username()]))
     return hashlib.sha256(identity.encode("utf-8", "replace")).hexdigest()[:16]
+
+
+def current_username() -> str:
+    """Return the interactive Windows account without its domain prefix."""
+    return str(os.environ.get("USERNAME") or os.environ.get("USER") or "").strip()
 
 
 def machine_guid() -> str:
@@ -1191,6 +1196,7 @@ def install_client(args: argparse.Namespace) -> None:
     identity = {
         "hostname": socket.gethostname(),
         "machine_guid": machine_guid(),
+        "username": current_username(),
         "client_version": CLIENT_VERSION,
         "os_version": windows_product_name(),
     }

@@ -114,6 +114,20 @@ quando a verificacao nao exigir atualizacao. Teste cada pacote novamente no
 grupo piloto. Trocas comuns de wallpaper nao usam Deploy; somente upgrades do
 cliente usam este fluxo.
 
+## Associacao automatica do usuario
+
+O cliente envia o nome da conta Windows ao registrar, no heartbeat e ao
+reportar o status. Quando o nome identifica um unico usuario ativo no GLPI, o
+mesmo usuario pode ser atribuido a varios computadores (por exemplo, desktop e
+notebook); nao existe uma restricao de um computador por usuario.
+
+Se o computador ainda estiver sem usuario, o primeiro login no GLPI (inclusive
+Microsoft/SSO) tenta associar a sessao ao computador Ativa que fez contato pelo
+mesmo IP nos ultimos 15 minutos. A associacao so ocorre quando ha exatamente
+uma maquina candidata e nunca substitui um usuario ja preenchido. Em redes com
+NAT ou VPN compartilhada, a associacao automatica fica sem efeito por seguranca;
+o proximo inventario/heartbeat ainda pode preencher o usuario pelo nome da conta.
+
 ## Problemas conhecidos
 
 `Deploy task not supported by server0` indica que o Agent esta apontando para o

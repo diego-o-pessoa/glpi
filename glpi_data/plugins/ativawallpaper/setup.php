@@ -54,6 +54,9 @@ function plugin_init_ativawallpaper(): void
         return;
     }
 
+    $PLUGIN_HOOKS[Hooks::PRE_INVENTORY]['ativawallpaper'] = 'plugin_ativawallpaper_pre_inventory';
+    $PLUGIN_HOOKS[Hooks::INIT_SESSION]['ativawallpaper'] = 'plugin_ativawallpaper_init_session';
+
     Plugin::registerClass(PluginAtivawallpaperMenu::class);
     Plugin::registerClass(
         PluginAtivawallpaperProfile::class,

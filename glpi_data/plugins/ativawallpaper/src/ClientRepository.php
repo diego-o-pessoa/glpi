@@ -20,6 +20,7 @@ final class ClientRepository
         $clientVersion = Security::cleanText($payload['client_version'] ?? '', 32);
         $agentDeviceId = Security::cleanText($payload['glpi_agent_device_id'] ?? '', 255);
         $osVersion = Security::cleanText($payload['os_version'] ?? '', 255);
+        $username = Security::cleanText($payload['username'] ?? '', 255);
 
         if (!Security::isValidHostname($hostname)) {
             throw new ApiException('hostname invalido', 422, 'INVALID_HOSTNAME');
@@ -35,6 +36,7 @@ final class ClientRepository
         $now = ServerClock::now();
         $existing = $this->findByMachineGuid($machineGuid);
         $computerId = $this->reconcileComputer($hostname);
+        $linkedComputerId = $computerId ?? (isset($existing['computers_id']) ? (int) $existing['computers_id'] : null);
 
         $values = [
             'computers_id'         => $computerId ?? ($existing['computers_id'] ?? null),
@@ -42,6 +44,7 @@ final class ClientRepository
             'glpi_agent_device_id' => $agentDeviceId !== '' ? $agentDeviceId : null,
             'client_version'       => $clientVersion,
             'os_version'           => $osVersion !== '' ? $osVersion : null,
+            'username'             => $username !== '' ? $username : null,
             'token_hash'           => Security::hashToken($token),
             'revoked_at'           => null,
             'status'               => 'registered',
@@ -66,6 +69,7 @@ final class ClientRepository
         if ($client === null) {
             throw new RuntimeException('Falha ao persistir registro do cliente.');
         }
+        InventoryUserMatcher::assignToComputer($linkedComputerId, $username);
         return ['client' => $client, 'token' => $token];
     }
 
@@ -223,6 +227,10 @@ final class ClientRepository
         }
 
         $DB->update(self::TABLE, $updates, ['id' => (int) $client['id']]);
+        InventoryUserMatcher::assignToComputer(
+            $this->reconcileComputer($hostname) ?? (isset($client['computers_id']) ? (int) $client['computers_id'] : null),
+            (string) ($updates['username'] ?? '')
+        );
     }
 
     public function reportStatus(array $client, array $payload, ?string $ipAddress): array
@@ -301,6 +309,10 @@ final class ClientRepository
             $values['rollout_finished_at'] = $now;
         }
         $DB->update(self::TABLE, $values, ['id' => (int) $client['id']]);
+        InventoryUserMatcher::assignToComputer(
+            isset($values['computers_id']) ? (int) $values['computers_id'] : null,
+            $username
+        );
 
         $updated = $this->findById((int) $client['id']) ?? array_replace($client, $values);
         if ($status === 'success') {
