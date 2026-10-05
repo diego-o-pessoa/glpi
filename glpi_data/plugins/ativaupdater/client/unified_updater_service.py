@@ -800,9 +800,12 @@ def ensure_guardian_running(logger: logging.Logger) -> None:
                 )
             except (OSError, subprocess.SubprocessError) as exc:
                 logger.warning("Nao foi possivel re-registrar o Guardian: %s", exc)
-        elif service[0] not in (SERVICE_STATE_RUNNING, SERVICE_STATE_START_PENDING):
+            service = query_service(GUARDIAN_SERVICE_NAME)
+        if service is None or service[0] not in (SERVICE_STATE_RUNNING, SERVICE_STATE_START_PENDING):
             logger.info("Guardian: servico parado; iniciando.")
             run_sc("start", GUARDIAN_SERVICE_NAME)
+            if not wait_service_state(SERVICE_STATE_RUNNING, 30):
+                logger.error("Guardian: servico nao confirmou estado RUNNING apos a atualizacao.")
         return
 
     # Executavel ausente (antivirus ou exclusao manual): so o pacote unificado
@@ -1397,7 +1400,7 @@ def ensure_service_running(logger: logging.Logger) -> bool:
     return started
 
 
-def reconcile_install_state(version: str, logger: logging.Logger) -> bool:
+def reconcile_install_state(version: str, logger: logging.Logger, not_before: float = 0.0) -> bool:
     """Ensure a successful setup leaves the bundle version in state.json.
 
     Older unified installers could finish with exit code 0 while the
@@ -1410,6 +1413,13 @@ def reconcile_install_state(version: str, logger: logging.Logger) -> bool:
         return False
     if not SERVICE_EXE.is_file() or not CONFIG_PATH.is_file():
         logger.error("Instalacao concluida sem executavel/configuracao do updater.")
+        return False
+    try:
+        config_mtime = CONFIG_PATH.stat().st_mtime
+    except OSError:
+        return False
+    if not_before and config_mtime < not_before - 5:
+        logger.error("Instalacao concluida sem regravar a configuracao do updater.")
         return False
 
     state = get_state()
@@ -1441,8 +1451,9 @@ def run_install_package(logger: logging.Logger, package: Path, version: str, sha
     except UpdaterError:
         logger.warning("Outra instalacao ja esta em andamento; nada a fazer.")
         return 0
+    started_at = time.time()
     result: dict[str, Any] = {
-        "version": version, "sha256": sha256.lower(), "started_at": time.time(), "installer_log": str(install_log),
+        "version": version, "sha256": sha256.lower(), "started_at": started_at, "installer_log": str(install_log),
     }
     exit_code = 1
     try:
@@ -1465,7 +1476,7 @@ def run_install_package(logger: logging.Logger, package: Path, version: str, sha
             logger.info("Instalador terminou com codigo %s.", code)
             result.update(outcome="exited", exit_code=code)
             exit_code = int(code or 0)
-            if exit_code == 0 and not reconcile_install_state(version, logger):
+            if exit_code == 0 and not reconcile_install_state(version, logger, started_at):
                 result.update(
                     outcome="error",
                     exit_code=1,
@@ -1483,6 +1494,10 @@ def run_install_package(logger: logging.Logger, package: Path, version: str, sha
             logger.exception("Nao foi possivel gravar %s.", INSTALL_RESULT_PATH)
         try:
             ensure_service_running(logger)
+            # O instalador para o Guardian para trocar o executavel. Garanta a
+            # recuperacao mesmo quando o instalador termina com erro antes de
+            # executar a etapa InstallGuardian do Inno Setup.
+            ensure_guardian_running(logger)
         finally:
             lock.__exit__()
     return exit_code
