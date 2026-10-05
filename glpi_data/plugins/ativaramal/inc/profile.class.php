@@ -74,6 +74,15 @@ class PluginAtivaramalProfile extends Profile
      */
     public static function availableGestorProfileId(): ?int
     {
+        // A lista de perfis e montada no login. Se um administrador atribuir o
+        // perfil depois que o usuario ja estiver conectado, a sessao antiga
+        // nao o enxerga e o atalho desaparece. Recarregue a lista uma vez por
+        // requisicao antes de consulta-la; isso nao cria nenhuma atribuicao.
+        $loginUserId = (int) Session::getLoginUserID();
+        if ($loginUserId > 0) {
+            Session::initEntityProfiles($loginUserId);
+        }
+
         $active = (int) ($_SESSION['glpiactiveprofile']['id'] ?? 0);
         foreach (($_SESSION['glpiprofiles'] ?? []) as $profileId => $profile) {
             if (

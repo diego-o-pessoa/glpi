@@ -8,6 +8,14 @@ include '../../../inc/includes.php';
 
 Session::checkLoginUser();
 
+// A atribuicao pode ter sido feita enquanto a pessoa estava conectada.
+// Recarregue os perfis antes de validar o alvo; o metodo continua exigindo
+// uma atribuicao real em glpi_profiles_users.
+$loginUserId = (int) Session::getLoginUserID();
+if ($loginUserId > 0) {
+    Session::initEntityProfiles($loginUserId);
+}
+
 $targetProfileId = PluginAtivaramalProfile::availableGestorProfileId();
 if ($targetProfileId === null) {
     throw new AccessDeniedHttpException();
