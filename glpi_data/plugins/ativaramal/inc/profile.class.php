@@ -45,7 +45,7 @@ class PluginAtivaramalProfile extends Profile
         return [
             [
                 'rights' => [READ => __('Read')],
-                'label'  => 'Visualizar Ativa Ramal',
+                'label'  => 'Visualizar Ativa Ramal (Dashboard e Desempenho)',
                 'field'  => self::RIGHT_VIEW,
             ],
             [
@@ -157,6 +157,35 @@ class PluginAtivaramalProfile extends Profile
                     $_SESSION['glpiactiveprofile'][$right['field']] = $value;
                 }
             }
+        }
+
+        // O perfil comercial restrito e uma configuracao conhecida do
+        // ambiente.  Deixe-o pronto para uso apos a instalacao/atualizacao do
+        // plugin: interface central para exibir a secao Ativa Ramal, acesso
+        // somente ao dashboard/desempenho e escopo resolvido pelo grupo e
+        // localizacao do proprio usuario.  Nao conceda configuracao nem
+        // visualizacao de todos os setores.
+        $gestor = $DB->request([
+            'SELECT' => ['id'],
+            'FROM'   => 'glpi_profiles',
+            'WHERE'  => ['name' => 'Ativa - Gestor'],
+            'LIMIT'  => 1,
+        ])->current();
+        if (is_array($gestor) && (int) ($gestor['id'] ?? 0) > 0) {
+            $gestorId = (int) $gestor['id'];
+            $DB->update('glpi_profiles', ['interface' => 'central'], ['id' => $gestorId]);
+            $DB->update('glpi_profilerights', ['rights' => READ], [
+                'profiles_id' => $gestorId,
+                'name'        => self::RIGHT_VIEW,
+            ]);
+            $DB->update('glpi_profilerights', ['rights' => 0], [
+                'profiles_id' => $gestorId,
+                'name'        => self::RIGHT_CONFIG,
+            ]);
+            $DB->update('glpi_profilerights', ['rights' => 0], [
+                'profiles_id' => $gestorId,
+                'name'        => self::RIGHT_ALL_SECTORS,
+            ]);
         }
     }
 

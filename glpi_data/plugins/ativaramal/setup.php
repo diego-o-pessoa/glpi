@@ -6,7 +6,7 @@ use Glpi\Http\SessionManager;
 use Glpi\Plugin\HookManager;
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_ATIVARAMAL_VERSION', '0.2.1');
+define('PLUGIN_ATIVARAMAL_VERSION', '0.2.2');
 define('PLUGIN_ATIVARAMAL_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVARAMAL_MAX_GLPI', '12.0.0');
 define('PLUGIN_ATIVARAMAL_DIR', __DIR__);
