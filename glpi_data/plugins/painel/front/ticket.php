@@ -35,8 +35,17 @@ $picture = $user->fields['picture'] ?? '';
 $avatar_url = $picture ? $CFG_GLPI['root_doc'] . '/front/document.send.php?file=_pictures/' . $picture : '';
 
 // Verifica se o usuário tem perfil de Admin na sessão
-$super_admin_prof_id = plugin_painel_get_admin_profile_id();
-$has_super_admin = $super_admin_prof_id > 0;
+$has_super_admin = false;
+$super_admin_prof_id = 0;
+if (isset($_SESSION['glpiprofiles'])) {
+    foreach ($_SESSION['glpiprofiles'] as $id => $prof) {
+        if (stripos($prof['name'], 'admin') !== false) {
+            $has_super_admin = true;
+            $super_admin_prof_id = $id;
+            break;
+        }
+    }
+}
 
 if (isset($_GET['switch_to_admin']) && $has_super_admin) {
     Session::changeProfile($super_admin_prof_id);
