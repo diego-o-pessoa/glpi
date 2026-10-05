@@ -50,8 +50,8 @@ class GuardianMaintenanceTests(unittest.TestCase):
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.7.10")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 10))
+        self.assertEqual(updater.UPDATER_VERSION, "1.7.12")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 12))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -323,8 +323,13 @@ class InstallRunnerTests(unittest.TestCase):
         self.steps: list[str] = []
         self.started: list[list[str]] = []
         self.supervision = ("exited", 0)
+        (self.root / "AtivaUnifiedUpdater.exe").write_bytes(b"updater")
+        (self.root / "service-config.json").write_text("{}", encoding="utf-8")
         for name, value in {
             "INSTALL_RESULT_PATH": self.root / "install-result.json",
+            "STATE_PATH": self.root / "state.json",
+            "SERVICE_EXE": self.root / "AtivaUnifiedUpdater.exe",
+            "CONFIG_PATH": self.root / "service-config.json",
             "SingleInstance": mock.MagicMock(),
             "stop_updater_service": lambda _logger: self.steps.append("stop_service"),
             "kill_leftover_processes": lambda _logger: self.steps.append("kill_leftovers"),

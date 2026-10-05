@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.11"
+UPDATER_VERSION = "1.7.12"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -1397,6 +1397,38 @@ def ensure_service_running(logger: logging.Logger) -> bool:
     return started
 
 
+def reconcile_install_state(version: str, logger: logging.Logger) -> bool:
+    """Ensure a successful setup leaves the bundle version in state.json.
+
+    Older unified installers could finish with exit code 0 while the
+    ``--configure`` helper did not persist ``installed_version`` (for example
+    after replacing the updater executable under SYSTEM). The runner has the
+    authoritative package version, so repair only this metadata after the
+    setup has produced both the service executable and its configuration.
+    """
+    if not version_tuple(version):
+        return False
+    if not SERVICE_EXE.is_file() or not CONFIG_PATH.is_file():
+        logger.error("Instalacao concluida sem executavel/configuracao do updater.")
+        return False
+
+    state = get_state()
+    if str(state.get("installed_version", "")) == version:
+        return True
+
+    state.update({
+        "installed_version": version,
+        "installed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "last_result": "installed",
+        "last_error": "",
+    })
+    clear_pending_install(state)
+    clear_install_failures(state)
+    atomic_json(STATE_PATH, state)
+    logger.warning("Estado local corrigido apos instalacao: installed_version=%s.", version)
+    return True
+
+
 def run_install_package(logger: logging.Logger, package: Path, version: str, sha256: str, install_log: Path) -> int:
     """Install runner: the steps of Deploy-AtivaUnifiedAgent.ps1, started by the service.
 
@@ -1433,6 +1465,13 @@ def run_install_package(logger: logging.Logger, package: Path, version: str, sha
             logger.info("Instalador terminou com codigo %s.", code)
             result.update(outcome="exited", exit_code=code)
             exit_code = int(code or 0)
+            if exit_code == 0 and not reconcile_install_state(version, logger):
+                result.update(
+                    outcome="error",
+                    exit_code=1,
+                    message="o instalador terminou sem registrar a nova versao e o updater nao confirmou sua configuracao",
+                )
+                exit_code = 1
     except Exception as exc:
         logger.exception("Falha no executor da instalacao.")
         result.update(outcome="error", message=str(exc)[:500])
