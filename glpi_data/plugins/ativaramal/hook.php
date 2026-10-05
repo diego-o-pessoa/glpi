@@ -102,6 +102,22 @@ function plugin_ativaramal_display_central(): void
 }
 
 /**
+ * O perfil Ativa - Gestor usa somente o Ativa Ramal. Remova as categorias
+ * nativas de chamados e ferramentas da barra lateral, sem alterar os demais
+ * perfis nem as permissões de administradores.
+ */
+function plugin_ativaramal_redefine_menus(array $menu): array
+{
+    $activeName = trim((string) ($_SESSION['glpiactiveprofile']['name'] ?? ''));
+    if (strcasecmp($activeName, 'Ativa - Gestor') !== 0) {
+        return $menu;
+    }
+
+    unset($menu['helpdesk'], $menu['tools']);
+    return $menu;
+}
+
+/**
  * Usuario com dashboard restrito (sem "ver todos os setores") editando o
  * proprio cadastro: a Localizacao ja definida nao muda (ela e a filial que
  * ele enxerga). Primeiro preenchimento (vazia) continua liberado. Quem pode
