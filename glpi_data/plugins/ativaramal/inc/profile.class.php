@@ -67,6 +67,26 @@ class PluginAtivaramalProfile extends Profile
         return (bool) Session::haveRight(self::RIGHT_VIEW, READ);
     }
 
+    /**
+     * Retorna o perfil Ativa - Gestor disponivel para a sessao atual quando
+     * ele ainda nao e o perfil ativo. O endpoint nativo do GLPI valida
+     * novamente essa lista e o token CSRF antes de efetuar a troca.
+     */
+    public static function availableGestorProfileId(): ?int
+    {
+        $active = (int) ($_SESSION['glpiactiveprofile']['id'] ?? 0);
+        foreach (($_SESSION['glpiprofiles'] ?? []) as $profileId => $profile) {
+            if (
+                (int) $profileId !== $active
+                && strcasecmp(trim((string) ($profile['name'] ?? '')), 'Ativa - Gestor') === 0
+                && !empty($profile['entities'])
+            ) {
+                return (int) $profileId;
+            }
+        }
+        return null;
+    }
+
     /** Ve todas as filiais/setores (quem gerencia a integracao tambem). */
     public static function canViewAll(): bool
     {
