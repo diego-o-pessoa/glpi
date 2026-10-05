@@ -95,6 +95,15 @@ if (isset($_SESSION['glpiprofiles'])) {
             break;
         }
     }
+    if (!$has_super_admin) {
+        foreach ($_SESSION['glpiprofiles'] as $id => $prof) {
+            if (strcasecmp(trim((string) $prof['name']), 'Ativa - Gestor') === 0) {
+                $has_super_admin = true;
+                $super_admin_prof_id = $id;
+                break;
+            }
+        }
+    }
 }
 
 if (isset($_GET['switch_to_admin']) && $has_super_admin) {
