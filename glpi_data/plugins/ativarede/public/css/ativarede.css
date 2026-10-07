@@ -357,6 +357,49 @@
 
 .ar-empty-hint { color: var(--ar-muted); font-size: .875rem; }
 
+/* "Quem senta nesta mesa?" */
+.ar-picker-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 300px;
+    overflow: auto;
+    border: 1px solid var(--tblr-border-color, #e2e8f0);
+    border-radius: 8px;
+}
+
+.ar-picker-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: .1rem .75rem;
+    width: 100%;
+    padding: .5rem .75rem;
+    border: 0;
+    border-top: 1px solid var(--tblr-border-color, #e2e8f0);
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ar-picker-list li:first-child .ar-picker-item { border-top: 0; }
+.ar-picker-item:hover,
+.ar-picker-item:focus-visible { background: rgba(29, 79, 145, .07); outline: none; }
+.ar-picker-item:disabled { opacity: .5; cursor: wait; }
+.ar-picker-who { font-weight: 600; font-size: .875rem; }
+.ar-picker-what { grid-column: 1; color: var(--ar-muted); font-size: .8125rem; }
+.ar-picker-item .ar-port-tag { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+
+.ar-draggable { cursor: grab; }
+.ar-draggable:active { cursor: grabbing; }
+.ar-draggable > .ti-grip-vertical { color: var(--ar-muted); }
+
+.ar-desk.is-drop {
+    box-shadow: 0 0 0 3px var(--ar-green), 0 6px 14px rgba(15, 23, 42, .25);
+    transform: scale(1.08);
+    z-index: 6;
+}
+
 .ar-toast {
     position: fixed;
     right: 1.25rem;

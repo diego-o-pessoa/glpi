@@ -209,6 +209,25 @@
 
             if (editing) {
                 attachDrag(node, desk);
+                // Soltar uma pessoa da lista "sem mesa" em cima da mesa.
+                node.addEventListener('dragover', function (ev) {
+                    if (ev.dataTransfer && Array.prototype.indexOf.call(ev.dataTransfer.types, 'application/x-ativarede-port') !== -1) {
+                        ev.preventDefault();
+                        node.classList.add('is-drop');
+                    }
+                });
+                node.addEventListener('dragleave', function () { node.classList.remove('is-drop'); });
+                node.addEventListener('drop', function (ev) {
+                    node.classList.remove('is-drop');
+                    var raw = ev.dataTransfer ? ev.dataTransfer.getData('application/x-ativarede-port') : '';
+                    if (!raw) { return; }
+                    ev.preventDefault();
+                    try {
+                        var target = JSON.parse(raw);
+                        selectedId = desk.id;
+                        saveDesk(desk, { switches_id: target.switches_id, port: target.port });
+                    } catch (e) { /* ignora arraste de outra origem */ }
+                });
             } else {
                 node.addEventListener('click', function () { select(desk.id); });
             }
@@ -269,7 +288,8 @@
         if (!desk.machines.length) {
             panel.appendChild(el('p', 'ar-empty-hint', desk.port
                 ? 'Nenhuma máquina nesta porta agora.'
-                : 'Defina a porta desta mesa (modo edição) para ver a máquina que está nela.'));
+                : (canManage ? 'Escolha abaixo quem senta nesta mesa.' : 'Esta mesa ainda não tem porta definida.')));
+            if (canManage) { panel.appendChild(personPicker(desk)); }
         }
 
         desk.machines.forEach(function (m) {
@@ -323,6 +343,59 @@
         }
     }
 
+    /* "Quem senta aqui?": as portas com maquina e sem mesa, pelo nome da
+     * pessoa. Um clique define a porta da mesa. */
+    function unmappedLabel(u) {
+        return u.machines.map(function (m) {
+            return (m.user || 'Sem usuário no GLPI') + (m.group ? ' · ' + m.group : '');
+        }).join(' / ');
+    }
+
+    function personPicker(desk) {
+        var box = el('div', 'ar-picker');
+        box.appendChild(el('div', 'fw-semibold mb-1', 'Quem senta nesta mesa?'));
+        if (!state.unmapped.length) {
+            box.appendChild(el('p', 'ar-empty-hint small mb-0',
+                'Nenhuma máquina sem mesa no momento. As máquinas aparecem aqui depois do primeiro envio do Ativa Guardian (até 15 min após ligar).'));
+            return box;
+        }
+        box.appendChild(el('div', 'text-muted small mb-2',
+            state.unmapped.length + ' máquina(s) ligada(s) por cabo ainda sem mesa. A porta do switch vem junto, automaticamente.'));
+        var search = el('input', 'form-control form-control-sm mb-2');
+        search.type = 'search';
+        search.placeholder = 'Buscar por pessoa, setor ou computador...';
+        box.appendChild(search);
+        var list = el('ul', 'ar-picker-list');
+        var items = state.unmapped.slice().sort(function (a, b) {
+            return unmappedLabel(a).localeCompare(unmappedLabel(b), 'pt-BR');
+        });
+        items.forEach(function (u) {
+            var li = el('li');
+            var b = el('button', 'ar-picker-item');
+            b.type = 'button';
+            var who = el('span', 'ar-picker-who', unmappedLabel(u));
+            var what = el('span', 'ar-picker-what', u.machines.map(function (m) { return m.computer || m.hostname; }).join(', '));
+            b.appendChild(who);
+            b.appendChild(what);
+            b.appendChild(el('span', 'ar-port-tag', u.switch + ' · porta ' + u.port));
+            b.setAttribute('data-search', (unmappedLabel(u) + ' ' + what.textContent + ' ' + u.port).toLowerCase());
+            b.addEventListener('click', function () {
+                b.disabled = true;
+                saveDesk(desk, { switches_id: u.switches_id, port: u.port });
+            });
+            li.appendChild(b);
+            list.appendChild(li);
+        });
+        box.appendChild(list);
+        search.addEventListener('input', function () {
+            var term = search.value.trim().toLowerCase();
+            Array.prototype.forEach.call(list.querySelectorAll('.ar-picker-item'), function (b) {
+                b.parentNode.hidden = term !== '' && b.getAttribute('data-search').indexOf(term) === -1;
+            });
+        });
+        return box;
+    }
+
     function alertItem(a) {
         var box = el('div', 'ar-alert-item');
         box.appendChild(el('div', 'fw-semibold', a.title));
@@ -358,21 +431,27 @@
     function renderSide() {
         side.innerHTML = '';
         if (editing) {
-            side.appendChild(el('h3', 'mb-1', 'Portas com máquina e sem mesa'));
-            side.appendChild(el('p', 'text-muted small', 'Selecione uma mesa na planta e clique em "Usar na mesa" na porta onde está a máquina daquela mesa.'));
+            side.appendChild(el('h3', 'mb-1', 'Pessoas sem mesa'));
+            side.appendChild(el('p', 'text-muted small', 'Arraste a pessoa até a mesa dela na planta (ou selecione a mesa e clique em "Usar na mesa"). A porta do switch é definida automaticamente.'));
             if (!state.unmapped.length) {
                 side.appendChild(el('p', 'ar-empty-hint', 'Todas as portas com máquina já têm mesa.'));
                 return;
             }
             var ul = el('ul', 'ar-unmapped-list');
             state.unmapped.forEach(function (u) {
-                var li = el('li');
-                li.appendChild(el('span', 'ar-port-tag', u.switch + ' · ' + u.port));
+                var li = el('li', 'ar-draggable');
+                li.draggable = true;
+                li.title = 'Arraste até a mesa';
+                li.addEventListener('dragstart', function (ev) {
+                    ev.dataTransfer.setData('application/x-ativarede-port', JSON.stringify({ switches_id: u.switches_id, port: u.port }));
+                    ev.dataTransfer.effectAllowed = 'link';
+                });
+                li.appendChild(icon('grip-vertical'));
                 var who = el('span', 'flex-fill');
-                who.textContent = u.machines.map(function (m) {
-                    return (m.computer || m.hostname) + (m.user ? ' — ' + m.user : '') + (m.group ? ' (' + m.group + ')' : '');
-                }).join('; ');
+                who.appendChild(el('strong', '', unmappedLabel(u)));
+                who.appendChild(el('div', 'text-muted', u.machines.map(function (m) { return m.computer || m.hostname; }).join(', ')));
                 li.appendChild(who);
+                li.appendChild(el('span', 'ar-port-tag', u.switch + ' · ' + u.port));
                 var use = el('button', 'btn btn-sm btn-outline-primary', 'Usar na mesa');
                 use.type = 'button';
                 use.disabled = !selectedId;
@@ -497,6 +576,9 @@
             });
         });
         panel.appendChild(form);
+        var picker = personPicker(desk);
+        picker.classList.add('mt-3', 'pt-3', 'border-top');
+        panel.appendChild(picker);
     }
 
     function saveDesk(desk, changes) {

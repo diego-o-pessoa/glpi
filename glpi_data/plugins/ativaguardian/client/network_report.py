@@ -234,8 +234,9 @@ def _run(runner: Runner, args: list[str], timeout: int = 60) -> subprocess.Compl
 class CaptureLock:
     """Mutex nomeado do Windows; acquired=False quando outra coleta esta em curso."""
 
-    def __init__(self, name: str = CAPTURE_MUTEX) -> None:
+    def __init__(self, name: str = CAPTURE_MUTEX, wait_seconds: float = 0) -> None:
         self.name = name
+        self.wait_ms = max(0, int(wait_seconds * 1000))
         self.handle = None
         self.acquired = False
 
@@ -253,7 +254,7 @@ class CaptureLock:
         self.handle = kernel32.CreateMutexW(None, False, self.name)
         if not self.handle:
             return self  # sem acesso ao mutex de outro processo: tratado como ocupado
-        result = kernel32.WaitForSingleObject(self.handle, 0)
+        result = kernel32.WaitForSingleObject(self.handle, self.wait_ms)
         self.acquired = result in (0x00000000, 0x00000080)  # WAIT_OBJECT_0 / WAIT_ABANDONED
         return self
 
@@ -271,16 +272,21 @@ class CaptureLock:
 
 
 def capture_lldp(work_dir: Path, logger: logging.Logger, wait: Callable[[float], Any] = time.sleep,
-                 runner: Runner = subprocess.run, seconds: int = LLDP_WAIT_SECONDS) -> dict[str, str] | None:
+                 runner: Runner = subprocess.run, seconds: int = LLDP_WAIT_SECONDS,
+                 lock_wait_seconds: float = 0) -> dict[str, str] | None:
     """Escuta um quadro LLDP com o pktmon. None se nao houver (ou sem suporte).
 
-    Uma coleta por vez (CaptureLock). Se outra ferramenta ja estiver usando o
-    pktmon, o start falha e esta coleta e pulada sem interromper a outra.
+    Uma coleta por vez (CaptureLock): o servico pula o ciclo se ja houver uma
+    em curso; o --network espera (lock_wait_seconds) a automatica terminar.
+    Se outra ferramenta ja estiver usando o pktmon, o start falha e esta
+    coleta e pulada sem interromper a outra.
     """
     if not PKTMON.is_file():
         logger.info("Ativa Rede: pktmon nao existe neste Windows; porta do switch nao sera informada.")
         return None
-    with CaptureLock() as lock:
+    if lock_wait_seconds > 0:
+        logger.info("Ativa Rede: aguardando a coleta automatica em andamento (se houver) terminar...")
+    with CaptureLock(wait_seconds=lock_wait_seconds) as lock:
         if not lock.acquired:
             logger.info("Ativa Rede: outra coleta do LLDP ja esta em andamento; esta foi pulada.")
             return None
@@ -429,10 +435,12 @@ def build_report(machine_id: str, hostname: str, guardian_version: str, system: 
 
 
 def collect_report(machine_id: str, hostname: str, guardian_version: str, work_dir: Path,
-                   logger: logging.Logger, wait: Callable[[float], Any] = time.sleep) -> dict[str, Any]:
+                   logger: logging.Logger, wait: Callable[[float], Any] = time.sleep,
+                   lock_wait_seconds: float = 0) -> dict[str, Any]:
     system = collect_system(logger)
     adapter = system.get("adapter") if isinstance(system.get("adapter"), dict) else None
-    lldp = capture_lldp(work_dir, logger, wait=wait) if link_type(adapter) == "wired" else None
+    lldp = capture_lldp(work_dir, logger, wait=wait, lock_wait_seconds=lock_wait_seconds) \
+        if link_type(adapter) == "wired" else None
     return build_report(machine_id, hostname, guardian_version, system, lldp)
 
 

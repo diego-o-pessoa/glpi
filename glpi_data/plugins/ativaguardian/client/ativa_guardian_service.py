@@ -55,7 +55,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.6.1"
+GUARDIAN_VERSION = "1.6.2"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -1878,8 +1878,11 @@ def main() -> int:
             if not is_elevated():
                 print("Aviso: sem privilegio de administrador o pktmon nao captura; a porta do switch vai sair vazia.",
                       file=sys.stderr)
+            # Se o servico estiver no meio da coleta automatica, espera ela
+            # terminar (ate ~2,5 min) em vez de desistir.
             payload = network_report.collect_report(
-                machine_identity(logger), hostname(), GUARDIAN_VERSION, NETWORK_WORK_DIR, logger
+                machine_identity(logger), hostname(), GUARDIAN_VERSION, NETWORK_WORK_DIR, logger,
+                lock_wait_seconds=150,
             )
             print(json.dumps(payload, indent=2, ensure_ascii=False))
             return 0

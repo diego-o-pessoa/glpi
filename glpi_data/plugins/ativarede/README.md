@@ -7,7 +7,7 @@ máquina da mesa está ligada, quais **monitores** estão nela e avisa quando um
 ## Como funciona
 
 ```
-Máquina (Ativa Guardian 1.6.1+)                 GLPI (Ativa Rede)
+Máquina (Ativa Guardian 1.6.2+)                 GLPI (Ativa Rede)
 ──────────────────────────────                 ─────────────────
 escuta o LLDP do switch (pktmon) ──┐            ┌─► compara com a última posição
 lê monitores (WMI) e série da BIOS ┼─► /report ─┤   mudou? → alerta
@@ -48,17 +48,23 @@ onde" comparar). Wi-Fi ou cabo sem LLDP mantém a última posição conhecida.
 1. Requisitos: GLPI 11, **Ativa Guardian ativo** (a API usa o mesmo token).
 2. `./update-glpi.sh ativarede` no servidor (instala e ativa).
 3. Perfil → aba **Ativa Rede**: "Visualizar" para quem só consulta; "Editar" para a T.I.
-4. Publicar o pacote unificado **1.8.7** (Guardian 1.6.1) pelo Ativa Updater.
+4. Publicar o pacote unificado **1.8.8** (Guardian 1.6.2) pelo Ativa Updater.
 
 A planta da **Sala principal - Anexo** já vem com as 54 mesas do layout
 (A1–A6, B1–B2, C1–C4 e ilhas D a J, posições 1–3 à esquerda e 4–6 à direita).
 
 ## Mapeando as mesas
 
-1. Depois que as máquinas enviarem a posição, abra **Ativa Rede → Planta → Editar planta**.
-2. A lista "Portas com máquina e sem mesa" mostra cada porta com o computador e o
-   usuário que estão nela. Selecione a mesa na planta e clique em **Usar na mesa**.
-3. Em **Equipamentos → Switches**, dê um apelido curto a cada switch (aparece nas mesas).
+A porta de cada máquina chega sozinha (Guardian, a cada 15 min). Só falta dizer
+em qual mesa cada pessoa senta, uma vez:
+
+1. Em **Ativa Rede → Planta**, clique numa mesa "Sem porta".
+2. Em **Quem senta nesta mesa?**, busque e clique na pessoa (nome, setor,
+   computador e porta aparecem juntos). A porta do switch vai para a mesa.
+3. Ou, em **Editar planta**, arraste a pessoa da lista "Pessoas sem mesa" até a mesa.
+4. Em **Equipamentos → Switches**, dê um apelido curto a cada switch (aparece nas mesas).
+
+Daí em diante, qualquer troca de computador ou monitor vira alerta automaticamente.
 
 ## API
 
