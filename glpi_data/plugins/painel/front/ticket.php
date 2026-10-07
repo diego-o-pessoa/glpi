@@ -437,7 +437,7 @@ unset($item);
                     <?php if ($has_super_admin): ?>
                         <a href="?switch_to_admin=1&id=<?=$ticket_id?>"><i class="fa-solid fa-user-shield"></i> Trocar para Admin</a>
                     <?php endif; ?>
-                    <a href="<?=$CFG_GLPI['root_doc']?>/front/helpdesk.public.php?custom_profile=1"><i class="fa-solid fa-gear"></i> Minhas configurações</a>
+                    <a href="<?=$CFG_GLPI['root_doc']?>/plugins/painel/front/profile.php"><i class="fa-solid fa-gear"></i> Minhas configurações</a>
                     <a href="<?=$CFG_GLPI['root_doc']?>/front/logout.php"><i class="fa-solid fa-arrow-right-from-bracket"></i> Sair</a>
                 </div>
             </div>

@@ -109,5 +109,5 @@ try {
     $_SESSION['profile_error'] = "Erro: " . $e->getMessage();
 }
 
-header("Location: " . $CFG_GLPI['root_doc'] . "/front/helpdesk.public.php?custom_profile=1");
+header("Location: " . $CFG_GLPI['root_doc'] . "/plugins/painel/front/profile.php");
 exit();

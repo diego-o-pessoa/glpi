@@ -176,7 +176,7 @@ $avatar_url = $picture ? $CFG_GLPI['root_doc'] . '/front/document.send.php?file=
                     <?php if ($has_super_admin): ?>
                         <a href="?custom_profile=1&switch_to_admin=1"><i class="fa-solid fa-user-shield"></i> Trocar para Admin</a>
                     <?php endif; ?>
-                    <a href="<?=$CFG_GLPI['root_doc']?>/front/helpdesk.public.php?custom_profile=1"><i class="fa-solid fa-gear"></i> Minhas configurações</a>
+                    <a href="<?=$CFG_GLPI['root_doc']?>/plugins/painel/front/profile.php"><i class="fa-solid fa-gear"></i> Minhas configurações</a>
                     <a href="<?=$CFG_GLPI['root_doc']?>/front/logout.php"><i class="fa-solid fa-arrow-right-from-bracket"></i> Sair</a>
                 </div>
             </div>
@@ -196,7 +196,7 @@ $avatar_url = $picture ? $CFG_GLPI['root_doc'] . '/front/document.send.php?file=
                 <div class="alert alert-error"><?= htmlspecialchars($error_msg) ?></div>
             <?php endif; ?>
 
-            <form action="<?=$CFG_GLPI['root_doc']?>/front/helpdesk.public.php?custom_profile=1" method="POST" enctype="multipart/form-data">
+            <form action="<?=$CFG_GLPI['root_doc']?>/plugins/painel/front/profile_submit.php" method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="update_profile" value="1">
                 <input type="hidden" name="_glpi_csrf_token" value="<?=Session::getNewCSRFToken()?>">
                 
