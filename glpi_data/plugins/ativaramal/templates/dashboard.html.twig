@@ -36,6 +36,16 @@
 .rd-item-main{flex:1;min-width:0}.rd-item-main strong{font-size:13px;display:block}.rd-item-main small{color:var(--rd-muted);font-size:11.5px;display:block}
 .rd-item-side{text-align:right;font-size:11.5px;color:var(--rd-muted);white-space:nowrap}
 .rd-empty{padding:26px 15px;text-align:center;color:var(--rd-muted)}
+.rd-ring-badge{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:0 7px;border-radius:999px;background:#fff1d6;color:#a35d00;font-size:10.5px;font-weight:700;animation:rd-blink 1.2s ease-in-out infinite}
+.rd-phase{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;margin:3px 4px 0 0}
+.rd-phase.is-tocando{background:#fff1d6;color:#a35d00}.rd-phase.is-fila{background:#e1ecff;color:var(--rd-blue)}
+.rd-phase.is-chamando{background:#eef1f6;color:#56627c}.rd-phase.is-conversa{background:#e3f6ea;color:#1f7a43}
+.rd-item.is-tocando{background:#fffaf0}.rd-item.is-tocando .rd-item-icon{background:#fff1d6;color:#a35d00;animation:rd-shake 1s ease-in-out infinite}
+.rd-timer{font-size:15px;font-weight:750;color:var(--rd-ink);font-variant-numeric:tabular-nums}
+.rd-item.is-tocando .rd-timer{color:#a35d00}
+@keyframes rd-blink{50%{opacity:.55}}
+@keyframes rd-shake{0%,100%{transform:rotate(0)}20%{transform:rotate(-12deg)}40%{transform:rotate(10deg)}60%{transform:rotate(-6deg)}80%{transform:rotate(4deg)}}
+@media(prefers-reduced-motion:reduce){.rd-ring-badge,.rd-item.is-tocando .rd-item-icon,.rd-live i{animation:none}}
 @media(max-width:1400px){.rd-kpis{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:700px){.rd-kpis{grid-template-columns:repeat(2,1fr)}}
 </style>
@@ -121,7 +131,10 @@
     var root = document.querySelector('[data-rd]');
     if (!root) { return; }
     var state = { data: null, filial: '', setor: '', busca: '', online: false, closed: {} };
-    var POLL_MS = 15000;
+    // Dados a cada 5 s; os cronometros das ligacoes andam a cada segundo
+    // no navegador, a partir do tempo informado pela TW.
+    var POLL_MS = 5000;
+    var receivedAt = Date.now();
 
     function el(tag, cls, text) {
         var n = document.createElement(tag);
@@ -183,7 +196,10 @@
         setK('sem_ramal_label', k.sem_ramal ? k.sem_ramal + ' na URA/fila (sem ramal)' : '');
         setK('taxa', k.taxa_atendimento === null ? '—' : k.taxa_atendimento + '%');
         setK('em_andamento', k.em_andamento);
-        setK('fila_label', k.em_fila ? k.em_fila + ' aguardando na fila' : 'nenhuma na fila');
+        var liveParts = [];
+        if (k.tocando) { liveParts.push(k.tocando + ' tocando'); }
+        liveParts.push(k.em_fila ? k.em_fila + ' na fila' : 'nenhuma na fila');
+        setK('fila_label', liveParts.join(' · '));
         setK('filiais', d.tree.length);
         var sectors = 0;
         d.tree.forEach(function (b) { sectors += b.setores.length; });
@@ -245,7 +261,8 @@
                         dot.title = r.online ? 'Telefone registrado (online)' : 'Telefone não registrado (offline)';
                         name.appendChild(dot);
                         name.appendChild(document.createTextNode(r.nome));
-                        if (r.em_ligacao) { var b = el('span', 'rd-busy'); b.appendChild(icon('ti-phone-call')); b.appendChild(document.createTextNode('em ligação')); name.appendChild(b); }
+                        if (r.tocando) { var t = el('span', 'rd-ring-badge'); t.appendChild(icon('ti-bell-ringing')); t.appendChild(document.createTextNode('tocando')); name.appendChild(t); }
+                        else if (r.em_ligacao) { var b = el('span', 'rd-busy'); b.appendChild(icon('ti-phone-call')); b.appendChild(document.createTextNode('em ligação')); name.appendChild(b); }
                         if (r.pessoa && norm(r.pessoa) !== norm(r.nome)) { name.appendChild(el('span', 'rd-person', r.pessoa + ' (GLPI)')); }
                         row.appendChild(name);
                         row.appendChild(el('td', 'font-monospace', r.ramal));
@@ -282,29 +299,72 @@
                 : 'Nenhuma ligação em andamento (a TW não informou canais ativos).'));
             return;
         }
+        var PHASE_ICONS = { tocando: 'ti-bell-ringing', fila: 'ti-hourglass', chamando: 'ti-phone-outgoing', conversa: 'ti-phone-call' };
         d.live.forEach(function (c) {
-            var waiting = !c.ramal;
-            var item = el('div', 'rd-item');
-            var ic = el('span', 'rd-item-icon ' + (waiting ? 'rd-in' : 'rd-out'));
-            ic.appendChild(icon(waiting && c.fila ? 'ti-hourglass' : 'ti-phone-call'));
+            var phase = c.fase || 'conversa';
+            var para = c.para || [];
+            var item = el('div', 'rd-item is-' + phase);
+            var ic = el('span', 'rd-item-icon ' + (phase === 'fila' ? 'rd-in' : phase === 'conversa' ? 'rd-out' : 'rd-int'));
+            ic.appendChild(icon(PHASE_ICONS[phase] || 'ti-phone-call'));
             item.appendChild(ic);
+
             var main = el('div', 'rd-item-main');
-            // Quem esta ligando: nome (quando a operadora informa) e numero.
-            main.appendChild(el('strong', '', c.externo_nome ? c.externo_nome + ' · ' + c.externo : (c.externo || 'Ligação interna')));
-            if (c.fila) {
-                var queue = el('span', 'rd-chip is-blue mt-1');
+            // Quem liga -> quem esta sendo chamado / falando.
+            var target = !para.length ? '' : (para.length > 2 ? para.length + ' ramais' : para.map(party).join(', '));
+            main.appendChild(el('strong', '', party(c.de) + (target ? ' → ' + target : '')));
+
+            var line = el('div');
+            line.appendChild(el('span', 'rd-phase is-' + phase, c.fase_label || phase));
+            if (c.fila && (phase === 'fila' || phase === 'tocando')) {
+                var queue = el('span', 'rd-chip is-blue');
                 queue.appendChild(icon('ti-list-details'));
                 queue.appendChild(document.createTextNode('Fila ' + (c.fila_nome ? c.fila_nome + ' (' + c.fila + ')' : c.fila)));
-                main.appendChild(queue);
+                line.appendChild(queue);
             }
-            main.appendChild(el('small', '', waiting
-                ? 'Aguardando atendimento' + (c.fila_setor ? ' · ' + c.fila_setor : '')
-                : 'Atendendo: ' + c.ramal + (c.setor ? ' · ' + c.setor : '')));
+            main.appendChild(line);
+
+            var sectors = sectorsOf(phase === 'fila' ? [] : [c.de].concat(para));
+            var detail = phase === 'tocando' ? 'Tocando para ' + (sectors.length ? sectors.join(', ') : target)
+                : phase === 'fila' ? 'Aguardando atendimento' + (c.fila_setor ? ' · ' + c.fila_setor : '')
+                : phase === 'chamando' ? 'Discando' + (sectors.length ? ' · ' + sectors.join(', ') : '')
+                : (sectors.length ? sectors.join(' ↔ ') : '');
+            if (detail) { main.appendChild(el('small', '', detail)); }
             item.appendChild(main);
-            item.appendChild(el('div', 'rd-item-side', c.duracao));
+
+            var side = el('div', 'rd-item-side');
+            var timer = el('div', 'rd-timer', clock(c.segundos || 0));
+            timer.setAttribute('data-rd-timer', String(c.segundos || 0));
+            side.appendChild(timer);
+            item.appendChild(side);
             list.appendChild(item);
         });
     }
+
+    function party(p) {
+        if (!p) { return '—'; }
+        if (p.tipo === 'ramal') { return p.numero ? p.nome + ' (' + p.numero + ')' : p.nome; }
+        return p.nome ? p.nome + ' · ' + p.numero : (p.numero || 'Número oculto');
+    }
+    function sectorsOf(parties) {
+        var seen = {};
+        var out = [];
+        parties.forEach(function (p) {
+            if (p && p.setor && !seen[p.setor]) { seen[p.setor] = true; out.push(p.setor); }
+        });
+        return out;
+    }
+    function clock(sec) {
+        sec = Math.max(0, Math.floor(sec));
+        var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+        return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(s).padStart(2, '0');
+    }
+    // Cronometros: sobem a cada segundo sem esperar a proxima consulta.
+    setInterval(function () {
+        var elapsed = (Date.now() - receivedAt) / 1000;
+        root.querySelectorAll('[data-rd-timer]').forEach(function (n) {
+            n.textContent = clock(Number(n.getAttribute('data-rd-timer')) + elapsed);
+        });
+    }, 1000);
 
     function renderRecent(d) {
         var list = root.querySelector('[data-rd-recent]');
@@ -371,6 +431,7 @@
                     setLive(true);
                     if (data.unchanged) { root.querySelector('[data-rd-updated]').textContent = data.updated; return; }
                     state.data = data;
+                    receivedAt = Date.now();
                     render();
                 })
                 .catch(function () { setLive(false); })

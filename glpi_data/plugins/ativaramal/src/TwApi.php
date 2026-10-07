@@ -23,7 +23,7 @@ final class TwApi
     /** Validade do cache por consulta (segundos). */
     public const TTL_EXTENSIONS = 60;
     public const TTL_CALLS      = 20;
-    public const TTL_REALTIME   = 8;
+    public const TTL_REALTIME   = 5;
 
     /** @return list<array<string, mixed>> */
     public static function extensions(): array
@@ -194,16 +194,19 @@ final class TwApi
             // trazem o canal (ex.: RTCPSent). Vale todo item com canal, sem
             // repetir o mesmo canal; o nome do evento nao e exigido.
             $channels = [];
+            // Momento da consulta: com o cache, a "Duration" envelhece; o
+            // dashboard soma o tempo desde aqui para o cronometro nao voltar.
+            $fetchedAt = time();
             foreach (self::list('/api/v3/chamada/consultarChamadaTempoReal') as $event) {
                 $channel = (string) ($event['Channel'] ?? $event['channel'] ?? '');
                 if ($channel === '' || isset($channels[$channel])) {
                     continue;
                 }
-                $channels[$channel] = $event;
+                $channels[$channel] = $event + ['FetchedAt' => $fetchedAt];
             }
             return self::only(
                 array_values($channels),
-                ['Channel', 'ChannelStateDesc', 'CallerIDNum', 'CallerIDName', 'ConnectedLineNum', 'ConnectedLineName', 'Context', 'Exten', 'Application', 'Duration', 'Linkedid', 'Uniqueid']
+                ['Channel', 'ChannelStateDesc', 'CallerIDNum', 'CallerIDName', 'ConnectedLineNum', 'ConnectedLineName', 'Context', 'Exten', 'Application', 'Duration', 'Linkedid', 'Uniqueid', 'FetchedAt']
             );
         });
     }

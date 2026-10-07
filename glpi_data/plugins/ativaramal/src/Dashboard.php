@@ -79,42 +79,7 @@ final class Dashboard
         }
 
         // --- tempo real: agrupa os canais por ligacao (Linkedid)
-        $live = [];
-        foreach ($channels as $channel) {
-            $linked = (string) ($channel['Linkedid'] ?? $channel['Uniqueid'] ?? '');
-            if ($linked === '') {
-                continue;
-            }
-            $live[$linked] ??= ['externo' => '', 'externo_nome' => '', 'ramal' => '', 'fila' => '', 'fila_nome' => '',
-                                'duracao' => '00:00:00', 'estado' => ''];
-            $ext = self::channelExtension((string) ($channel['Channel'] ?? ''), (string) ($channel['CallerIDNum'] ?? ''), $byNumber);
-            if ($ext !== null && !isset($rows[$ext])) {
-                // Ramal fora do escopo: nao identifica nem conta.
-                continue;
-            }
-            if ($ext !== null) {
-                $rows[$ext]['em_ligacao'] = true;
-                $live[$linked]['ramal'] = $rows[$ext]['nome'] . ' (' . $rows[$ext]['ramal'] . ')';
-                $live[$linked]['filial'] = $rows[$ext]['filial'];
-                $live[$linked]['setor'] = $rows[$ext]['setor'];
-                $other = (string) ($channel['ConnectedLineNum'] ?? '');
-                if ($live[$linked]['externo'] === '' && $other !== '' && !isset($byNumber[$other])) {
-                    $live[$linked]['externo'] = $other;
-                    $live[$linked]['externo_nome'] = self::personName((string) ($channel['ConnectedLineName'] ?? ''), $other);
-                }
-            } elseif ($live[$linked]['externo'] === '') {
-                $live[$linked]['externo'] = (string) ($channel['CallerIDNum'] ?? '');
-                $live[$linked]['externo_nome'] = self::personName((string) ($channel['CallerIDName'] ?? ''), $live[$linked]['externo']);
-            }
-            if (($channel['Context'] ?? '') === 'Fila' || ($channel['Application'] ?? '') === 'Queue') {
-                $live[$linked]['fila'] = (string) ($channel['Exten'] ?? '');
-            }
-            $duration = self::hms((string) ($channel['Duration'] ?? ''));
-            if (strcmp($duration, $live[$linked]['duracao']) > 0) {
-                $live[$linked]['duracao'] = $duration;
-            }
-            $live[$linked]['estado'] = (string) ($channel['ChannelStateDesc'] ?? $live[$linked]['estado']);
-        }
+        $live = self::liveCalls($channels, $rows, $byNumber);
         // Nome da fila: cadastro do plugin (tela Ramais) e, se a TW liberar a
         // consulta de filas, o nome da TW.
         $queueRules = ExtensionDirectory::queueRules();
@@ -129,9 +94,12 @@ final class Dashboard
         if ($scope !== null) {
             // Ligacoes com ramal visivel, ou aguardando numa fila cadastrada
             // para a filial/setor do usuario (sem fila/URA de outros setores).
-            $live = array_filter($live, static fn (array $call): bool => $call['ramal'] !== ''
+            $live = array_filter($live, static fn (array $call): bool => $call['visivel']
                 || ($call['fila_setor'] !== '' && AccessScope::allows($scope, $call['fila_filial'], $call['fila_setor'])));
         }
+        // Tocando primeiro (precisa de atencao), depois fila, conversa e chamando.
+        $order = ['tocando' => 0, 'fila' => 1, 'chamando' => 2, 'conversa' => 3];
+        usort($live, static fn (array $a, array $b): int => [$order[$a['fase']] ?? 9, -$a['segundos']] <=> [$order[$b['fase']] ?? 9, -$b['segundos']]);
         $live = array_values($live);
 
         // --- filial > setor > ramais
@@ -187,7 +155,8 @@ final class Dashboard
                 'taxa_atendimento' => $totals['entrada'] > 0 ? (int) round(100 * $totals['entrada_atendidas'] / $totals['entrada']) : null,
                 'tempo_medio'     => $answered > 0 ? (int) round($totals['falado'] / $answered) : 0,
                 'em_andamento'    => count($live),
-                'em_fila'         => count(array_filter($live, static fn ($l) => $l['fila'] !== '' && $l['ramal'] === '')),
+                'em_fila'         => count(array_filter($live, static fn ($l) => $l['fase'] === 'fila')),
+                'tocando'         => count(array_filter($live, static fn ($l) => $l['fase'] === 'tocando')),
                 // Diagnostico: quantos canais a TW devolveu no tempo real.
                 'canais_tw'       => count($channels),
             ],
@@ -198,6 +167,163 @@ final class Dashboard
         ];
         $payload['signature'] = sha1((string) json_encode([$payload['kpis'], $tree, $live, $recent, $errors]));
         return $payload;
+    }
+
+    /** Estados do Asterisk em que o aparelho ainda esta tocando / discando. */
+    private const RINGING_STATES = ['Ringing'];
+    private const DIALING_STATES = ['Ring', 'Dialing', 'Pre-ring', 'OffHook'];
+
+    private const PHASE_LABELS = [
+        'tocando'  => 'Tocando',
+        'fila'     => 'Na fila',
+        'chamando' => 'Chamando',
+        'conversa' => 'Em conversa',
+    ];
+
+    /**
+     * Ligacoes em andamento a partir dos canais do Asterisk (um canal por
+     * ponta). Quem liga = canal mais antigo; os demais sao quem e chamado.
+     * Fase: tocando (algum aparelho chamando), fila (aguardando sem ramal),
+     * chamando (discando para fora) ou em conversa.
+     *
+     * Ramal de outro setor (fora do escopo) aparece so como "Outro setor".
+     * Marca em $rows os ramais em ligacao e os que estao tocando.
+     *
+     * @param list<array<string, mixed>> $channels
+     * @param array<string, array<string, mixed>> $rows
+     * @param array<string, string> $byNumber
+     * @return list<array<string, mixed>>
+     */
+    private static function liveCalls(array $channels, array &$rows, array $byNumber): array
+    {
+        $now = time();
+        $groups = [];
+        foreach ($channels as $channel) {
+            $linked = (string) ($channel['Linkedid'] ?? $channel['Uniqueid'] ?? '');
+            if ($linked === '') {
+                continue;
+            }
+            $fetched = (int) ($channel['FetchedAt'] ?? $now);
+            $groups[$linked][] = [
+                'ext'     => self::channelExtension((string) ($channel['Channel'] ?? ''), (string) ($channel['CallerIDNum'] ?? ''), $byNumber),
+                'state'   => (string) ($channel['ChannelStateDesc'] ?? ''),
+                // Idade do canal agora (a consulta pode ter alguns segundos de cache).
+                'seconds' => self::seconds((string) ($channel['Duration'] ?? '')) + max(0, $now - $fetched),
+                'num'     => (string) ($channel['CallerIDNum'] ?? ''),
+                'name'    => (string) ($channel['CallerIDName'] ?? ''),
+                'cnum'    => (string) ($channel['ConnectedLineNum'] ?? ''),
+                'cname'   => (string) ($channel['ConnectedLineName'] ?? ''),
+                'queue'   => (($channel['Context'] ?? '') === 'Fila' || ($channel['Application'] ?? '') === 'Queue') ? (string) ($channel['Exten'] ?? '') : '',
+            ];
+        }
+
+        $live = [];
+        foreach ($groups as $list) {
+            usort($list, static fn (array $a, array $b): int => $b['seconds'] <=> $a['seconds']);
+            $parties = [];
+            $queue = '';
+            $visible = false;
+            foreach ($list as $c) {
+                $queue = $queue !== '' ? $queue : $c['queue'];
+                if ($c['ext'] !== null) {
+                    $key = 'r' . $c['ext'];
+                    if (isset($rows[$c['ext']])) {
+                        $row = $rows[$c['ext']];
+                        $visible = true;
+                        $parties[$key] ??= ['tipo' => 'ramal', 'nome' => $row['nome'], 'numero' => $row['ramal'],
+                                            'setor' => $row['setor'], 'filial' => $row['filial'], 'estado' => $c['state']];
+                    } else {
+                        $parties[$key] ??= ['tipo' => 'ramal', 'nome' => 'Outro setor', 'numero' => '', 'setor' => '', 'filial' => '', 'estado' => $c['state']];
+                    }
+                    // Outra ponta externa que a TW so mostra no canal do ramal.
+                    if ($c['cnum'] !== '' && !isset($byNumber[$c['cnum']])) {
+                        $parties['x' . $c['cnum']] ??= ['tipo' => 'externo', 'nome' => self::personName($c['cname'], $c['cnum']),
+                                                        'numero' => $c['cnum'], 'setor' => '', 'filial' => '', 'estado' => ''];
+                    }
+                } elseif ($c['num'] !== '' && !isset($byNumber[$c['num']])) {
+                    $key = 'x' . $c['num'];
+                    $party = ['tipo' => 'externo', 'nome' => self::personName($c['name'], $c['num']), 'numero' => $c['num'],
+                              'setor' => '', 'filial' => '', 'estado' => $c['state']];
+                    // O canal externo traz o estado real (substitui o deduzido).
+                    $parties[$key] = isset($parties[$key]) ? ['estado' => $c['state']] + $parties[$key] : $party;
+                    if ($parties[$key]['nome'] === '') {
+                        $parties[$key]['nome'] = $party['nome'];
+                    }
+                }
+            }
+            if ($parties === []) {
+                continue;
+            }
+
+            $from = array_shift($parties);
+            $to = array_values($parties);
+            $states = array_column($list, 'state');
+            $ringing = array_values(array_filter($to, static fn (array $p): bool => in_array($p['estado'], self::RINGING_STATES, true)));
+            $answered = array_filter($to, static fn (array $p): bool => $p['estado'] === 'Up');
+
+            if ($ringing !== []) {
+                $phase = 'tocando';
+            } elseif ($queue !== '' && array_filter($to, static fn (array $p): bool => $p['tipo'] === 'ramal') === []) {
+                $phase = 'fila';
+            } elseif ($answered === [] && array_intersect($states, self::DIALING_STATES) !== []) {
+                $phase = 'chamando';
+            } else {
+                $phase = 'conversa';
+            }
+
+            // Ramais marcados na arvore (em ligacao / tocando).
+            foreach ($list as $c) {
+                if ($c['ext'] !== null && isset($rows[$c['ext']])) {
+                    $rows[$c['ext']]['em_ligacao'] = true;
+                    if (in_array($c['state'], self::RINGING_STATES, true)) {
+                        $rows[$c['ext']]['tocando'] = true;
+                    }
+                }
+            }
+
+            $firstRamal = null;
+            foreach (array_merge([$from], $to) as $p) {
+                if ($p['tipo'] === 'ramal' && $p['numero'] !== '') {
+                    $firstRamal = $p;
+                    break;
+                }
+            }
+            $external = null;
+            foreach (array_merge([$from], $to) as $p) {
+                if ($p['tipo'] === 'externo') {
+                    $external = $p;
+                    break;
+                }
+            }
+            $seconds = (int) $list[0]['seconds'];
+            $live[] = [
+                'fase'       => $phase,
+                'fase_label' => self::PHASE_LABELS[$phase],
+                'de'         => $from,
+                'para'       => $phase === 'tocando' ? $ringing : $to,
+                'segundos'   => $seconds,
+                'visivel'    => $visible,
+                // Campos anteriores (mantidos para quem ja usa o payload).
+                'externo'      => $external['numero'] ?? '',
+                'externo_nome' => $external['nome'] ?? '',
+                'ramal'        => $firstRamal ? $firstRamal['nome'] . ' (' . $firstRamal['numero'] . ')' : '',
+                'filial'       => $firstRamal['filial'] ?? '',
+                'setor'        => $firstRamal['setor'] ?? '',
+                'fila'         => $queue,
+                'duracao'      => self::hms((string) $seconds),
+                'estado'       => (string) ($list[0]['state'] ?? ''),
+            ];
+        }
+        return $live;
+    }
+
+    /** "00:01:05" ou "65" -> segundos. */
+    private static function seconds(string $value): int
+    {
+        if (preg_match('/^(\d{1,2}):(\d{2}):(\d{2})$/', $value, $m)) {
+            return (int) $m[1] * 3600 + (int) $m[2] * 60 + (int) $m[3];
+        }
+        return ctype_digit($value) ? (int) $value : 0;
     }
 
     /**
@@ -230,6 +356,7 @@ final class Dashboard
                 'online'   => (int) ($ext['reg_status'] ?? 0) === 1,
                 'grupo'    => (string) ($ext['callgroup'] ?? ''),
                 'em_ligacao' => false,
+                'tocando'  => false,
                 'stats'    => self::emptyStats(),
             ];
             $byId[(int) ($ext['id'] ?? 0)] = $key;
