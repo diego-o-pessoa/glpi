@@ -112,6 +112,8 @@ class FakePktmon:
         rc = 0
         if args[1] == "start":
             rc = self.start_rc
+            if rc == 0:
+                Path(args[args.index("-f") + 1]).write_bytes(b"etl")
         if args[1] == "etl2pcap":
             Path(args[args.index("-o") + 1]).write_bytes(pcapng(self.frames))
         return subprocess.CompletedProcess(args, rc, b"", b"")
@@ -149,6 +151,25 @@ class CaptureTests(unittest.TestCase):
         noise = bytes(12) + struct.pack(">H", 0x0800) + bytes(40)
         fake = FakePktmon(frames=[noise])
         self.assertIsNone(nr.capture_lldp(self.work / "net", quiet_logger(), wait=lambda _s: None, runner=fake))
+
+    def test_concurrent_capture_is_skipped(self):
+        name = "Local\\AtivaRedeTesteLock"
+        with nr.CaptureLock(name) as first:
+            self.assertTrue(first.acquired)
+            if sys.platform == "win32":
+                # Outra thread nao pega o mesmo mutex enquanto o primeiro segura.
+                import threading
+
+                result = {}
+                def other():
+                    with nr.CaptureLock(name) as second:
+                        result["acquired"] = second.acquired
+                t = threading.Thread(target=other)
+                t.start()
+                t.join()
+                self.assertFalse(result["acquired"])
+        with nr.CaptureLock(name) as again:
+            self.assertTrue(again.acquired)
 
     def test_missing_pktmon(self):
         with mock.patch.object(nr, "PKTMON", self.work / "nao-existe.exe"):

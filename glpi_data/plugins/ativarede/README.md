@@ -7,7 +7,7 @@ máquina da mesa está ligada, quais **monitores** estão nela e avisa quando um
 ## Como funciona
 
 ```
-Máquina (Ativa Guardian 1.6.0+)                 GLPI (Ativa Rede)
+Máquina (Ativa Guardian 1.6.1+)                 GLPI (Ativa Rede)
 ──────────────────────────────                 ─────────────────
 escuta o LLDP do switch (pktmon) ──┐            ┌─► compara com a última posição
 lê monitores (WMI) e série da BIOS ┼─► /report ─┤   mudou? → alerta
@@ -48,7 +48,7 @@ onde" comparar). Wi-Fi ou cabo sem LLDP mantém a última posição conhecida.
 1. Requisitos: GLPI 11, **Ativa Guardian ativo** (a API usa o mesmo token).
 2. `./update-glpi.sh ativarede` no servidor (instala e ativa).
 3. Perfil → aba **Ativa Rede**: "Visualizar" para quem só consulta; "Editar" para a T.I.
-4. Publicar o pacote unificado **1.8.6** (Guardian 1.6.0) pelo Ativa Updater.
+4. Publicar o pacote unificado **1.8.7** (Guardian 1.6.1) pelo Ativa Updater.
 
 A planta da **Sala principal - Anexo** já vem com as 54 mesas do layout
 (A1–A6, B1–B2, C1–C4 e ilhas D a J, posições 1–3 à esquerda e 4–6 à direita).
@@ -103,7 +103,7 @@ Em um Prompt **como administrador**:
 "C:\Program Files\Ativa Locacao\Guardian\AtivaGuardian.exe" --network
 ```
 
-Mostra o que seria enviado (leva ~35 s). Em `network.lldp` devem aparecer o switch e a porta.
+Mostra o que seria enviado (leva ~65 s). Em `network.lldp` devem aparecer o switch e a porta.
 Repita numa máquina de cada switch, numa ligada pelo telefone IP e num notebook na dock.
 
 ## Limitações

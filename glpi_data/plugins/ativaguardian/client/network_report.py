@@ -41,8 +41,12 @@ RESEND_SECONDS = 6 * 3600
 FIRST_DELAY_SECONDS = 90
 # Ativa Rede nao instalado no GLPI (404): tenta de novo so depois disto.
 ABSENT_BACKOFF_SECONDS = 6 * 3600
-# O switch anuncia a cada 30 s (padrao LLDP); 35 s garante um quadro.
-LLDP_WAIT_SECONDS = 35
+# O switch anuncia a cada ~30 s (padrao LLDP). 65 s cobre dois anuncios: com
+# 35 s, um anuncio atrasado deixava a captura vazia e o etl2pcap falhava.
+LLDP_WAIT_SECONDS = 65
+# O pktmon tem uma unica sessao no Windows: servico e --network nunca capturam
+# juntos (um derrubaria a captura do outro no meio).
+CAPTURE_MUTEX = "Global\\AtivaRedeLldpCapture"
 API_TIMEOUT_SECONDS = 30
 MAX_MONITORS = 8
 
@@ -207,6 +211,19 @@ def first_lldp(frames: list[bytes]) -> dict[str, str] | None:
     return None
 
 
+def _output(completed: subprocess.CompletedProcess | None) -> str:
+    """Saida do pktmon (console do Windows, nao UTF-8) resumida para o log."""
+    if completed is None:
+        return "nao executou"
+    raw = (completed.stdout or b"") + (completed.stderr or b"")
+    if isinstance(raw, bytes):
+        text = raw.decode("mbcs" if os.name == "nt" else "utf-8", errors="replace")
+    else:
+        text = str(raw)
+    text = re.sub(r"\s+", " ", text).strip()
+    return f"codigo {completed.returncode}: {text[:400]}"
+
+
 def _run(runner: Runner, args: list[str], timeout: int = 60) -> subprocess.CompletedProcess | None:
     try:
         return runner(args, capture_output=True, timeout=timeout, creationflags=NO_WINDOW)
@@ -214,16 +231,64 @@ def _run(runner: Runner, args: list[str], timeout: int = 60) -> subprocess.Compl
         return None
 
 
+class CaptureLock:
+    """Mutex nomeado do Windows; acquired=False quando outra coleta esta em curso."""
+
+    def __init__(self, name: str = CAPTURE_MUTEX) -> None:
+        self.name = name
+        self.handle = None
+        self.acquired = False
+
+    def __enter__(self) -> "CaptureLock":
+        if os.name != "nt":
+            self.acquired = True
+            return self
+        import ctypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateMutexW.restype = ctypes.c_void_p
+        kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+        kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+        self.handle = kernel32.CreateMutexW(None, False, self.name)
+        if not self.handle:
+            return self  # sem acesso ao mutex de outro processo: tratado como ocupado
+        result = kernel32.WaitForSingleObject(self.handle, 0)
+        self.acquired = result in (0x00000000, 0x00000080)  # WAIT_OBJECT_0 / WAIT_ABANDONED
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        if os.name != "nt" or not self.handle:
+            return
+        import ctypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.ReleaseMutex.argtypes = [ctypes.c_void_p]
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        if self.acquired:
+            kernel32.ReleaseMutex(self.handle)
+        kernel32.CloseHandle(self.handle)
+
+
 def capture_lldp(work_dir: Path, logger: logging.Logger, wait: Callable[[float], Any] = time.sleep,
                  runner: Runner = subprocess.run, seconds: int = LLDP_WAIT_SECONDS) -> dict[str, str] | None:
     """Escuta um quadro LLDP com o pktmon. None se nao houver (ou sem suporte).
 
-    Se outra captura do pktmon ja estiver rodando, o start falha e esta
-    coleta e pulada - a sessao de quem estiver usando nao e interrompida.
+    Uma coleta por vez (CaptureLock). Se outra ferramenta ja estiver usando o
+    pktmon, o start falha e esta coleta e pulada sem interromper a outra.
     """
     if not PKTMON.is_file():
         logger.info("Ativa Rede: pktmon nao existe neste Windows; porta do switch nao sera informada.")
         return None
+    with CaptureLock() as lock:
+        if not lock.acquired:
+            logger.info("Ativa Rede: outra coleta do LLDP ja esta em andamento; esta foi pulada.")
+            return None
+        return _capture_locked(work_dir, logger, wait, runner, seconds)
+
+
+def _capture_locked(work_dir: Path, logger: logging.Logger, wait: Callable[[float], Any],
+                    runner: Runner, seconds: int) -> dict[str, str] | None:
     work_dir.mkdir(parents=True, exist_ok=True)
     etl = work_dir / "lldp.etl"
     pcap = work_dir / "lldp.pcapng"
@@ -236,24 +301,29 @@ def capture_lldp(work_dir: Path, logger: logging.Logger, wait: Callable[[float],
     if added is None or added.returncode != 0:
         added = _run(runner, [pktmon, "filter", "add", "AtivaRede-LLDP", "-d", str(LLDP_ETHERTYPE)])
     if added is None or added.returncode != 0:
-        logger.warning("Ativa Rede: pktmon recusou o filtro LLDP; coleta da porta pulada.")
+        logger.warning("Ativa Rede: pktmon recusou o filtro LLDP (%s); coleta da porta pulada.", _output(added))
         return None
 
     started = _run(runner, [pktmon, "start", "--capture", "--comp", "nics", "--pkt-size", "0", "-f", str(etl)])
     if started is None or started.returncode != 0:
         _run(runner, [pktmon, "filter", "remove"])
-        logger.info("Ativa Rede: pktmon nao iniciou (outra captura em andamento ou Windows sem suporte).")
+        logger.info("Ativa Rede: pktmon nao iniciou (%s).", _output(started))
         return None
     try:
         wait(seconds)
     finally:
-        _run(runner, [pktmon, "stop"], timeout=120)
+        stopped = _run(runner, [pktmon, "stop"], timeout=120)
         _run(runner, [pktmon, "filter", "remove"])
+    logger.debug("Ativa Rede: pktmon stop (%s).", _output(stopped))
 
     try:
+        if not etl.is_file():
+            logger.warning("Ativa Rede: o pktmon nao gravou a captura em %s (stop: %s).", etl, _output(stopped))
+            return None
         converted = _run(runner, [pktmon, "etl2pcap", str(etl), "-o", str(pcap)], timeout=120)
         if converted is None or converted.returncode != 0 or not pcap.is_file():
-            logger.warning("Ativa Rede: nao foi possivel converter a captura do pktmon.")
+            logger.warning("Ativa Rede: nao foi possivel converter a captura do pktmon (%s; etl com %d bytes).",
+                           _output(converted), etl.stat().st_size)
             return None
         return first_lldp(read_pcapng_frames(pcap.read_bytes()))
     except OSError as exc:
