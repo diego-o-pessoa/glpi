@@ -95,6 +95,22 @@ class LldpParsingTests(unittest.TestCase):
         self.assertEqual(len(frames), 2)
         self.assertEqual(nr.first_lldp(frames)["port_description"], "7")
 
+    def test_own_windows_announcement_is_ignored(self):
+        # O Windows tambem anuncia LLDP pela placa (chassis = MAC do PC). Visto
+        # em campo: o PC D0:C1:B5:7D:F3:EB virou um "switch" falso.
+        pc = bytes.fromhex("D0C1B57DF3EB")
+        windows = (bytes.fromhex("0180C200000E") + pc + struct.pack(">H", 0x88CC)
+                   + tlv(1, b"\x04" + pc) + tlv(2, b"\x03" + pc) + tlv(3, struct.pack(">H", 120)) + tlv(0, b""))
+        frames = [windows, lldp_frame()]
+        self.assertEqual(nr.first_lldp(frames)["chassis_id"], "D0:C1:B5:7D:F3:EB", "sem filtro pegaria o proprio PC")
+        found = nr.first_lldp(frames, frozenset({"D0-C1-B5-7D-F3-EB"}))
+        self.assertEqual(found["chassis_id"], "14:AB:EC:22:C9:EC")
+        self.assertIsNone(nr.first_lldp([windows], frozenset({"D0:C1:B5:7D:F3:EB"})))
+
+    def test_local_mac_set(self):
+        macs = nr.local_mac_set({"adapter": {"mac": "D0-C1-B5-7D-F3-EB"}, "macs": ["00-15-5D-01-02-03", ""]})
+        self.assertEqual(macs, frozenset({"D0C1B57DF3EB", "00155D010203"}))
+
     def test_pcapng_garbage(self):
         self.assertEqual(nr.read_pcapng_frames(b"\x00\x01\x02"), [])
 
@@ -237,14 +253,15 @@ class ReporterTests(unittest.TestCase):
         )
         return reporter
 
-    def test_sends_only_when_changed(self):
+    def test_sends_change_then_one_confirmation(self):
         reporter = self.make()
         report = nr.build_report("abc", "PC", "1.6.0", ReportTests.SYSTEM, None)
         with mock.patch.object(nr, "collect_report", return_value=report), \
                 mock.patch.object(nr, "send_report") as send:
-            reporter.cycle()
-            reporter.cycle()
-        self.assertEqual(send.call_count, 1)
+            reporter.cycle()  # mudou: envia
+            reporter.cycle()  # igual: reenvia uma vez para o GLPI confirmar
+            reporter.cycle()  # igual de novo: so no reenvio de 6 h
+        self.assertEqual(send.call_count, 2)
         self.assertEqual(send.call_args[0][0], "https://h/plugins/ativarede/api/v1/report")
 
     def test_absent_plugin_backs_off(self):

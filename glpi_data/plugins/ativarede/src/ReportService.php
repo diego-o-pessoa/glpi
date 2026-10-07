@@ -156,6 +156,12 @@ final class ReportService
         // Situacao "sem relatorio" acaba assim que a maquina volta a enviar.
         Events::clear(Events::MACHINE_SILENT, ['machines_id' => $machineDbId]);
 
+        // Guardian anterior ao 1.6.3 podia mandar o anuncio LLDP do proprio
+        // Windows (chassis = MAC da maquina) como se fosse o switch.
+        if ($report['lldp'] !== null && self::isOwnAnnouncement($report['lldp']['chassis_id'], $report['mac'])) {
+            $report['lldp'] = null;
+        }
+
         if ($report['lldp'] !== null && $report['link'] === 'wired') {
             $switchId = self::upsertSwitch($report['lldp'], $now);
             $port = self::portOf($report['lldp']);
@@ -166,6 +172,47 @@ final class ReportService
 
         $events += self::handleMonitors($machineDbId, $report['machine_id'], $report['monitors'], $isFirst, $now);
         return ['events' => $events];
+    }
+
+    public static function isOwnAnnouncement(string $chassisId, string $machineMac): bool
+    {
+        $chassis = preg_replace('/[^0-9A-F]/', '', strtoupper($chassisId)) ?? '';
+        $mac = preg_replace('/[^0-9A-F]/', '', strtoupper($machineMac)) ?? '';
+        return $mac !== '' && $chassis === $mac;
+    }
+
+    /**
+     * Remove switches "falsos": anuncios do proprio Windows gravados por
+     * Guardian antigo (chassis = MAC de uma maquina). Desfaz posicoes e
+     * pendencias que apontavam para eles e fecha os alertas gerados.
+     */
+    public static function cleanupOwnAnnouncements(): int
+    {
+        global $DB;
+
+        $macs = [];
+        foreach ($DB->request(['SELECT' => ['mac'], 'FROM' => Settings::TABLE_MACHINES, 'WHERE' => ['mac' => ['<>', '']]]) as $row) {
+            $macs[preg_replace('/[^0-9A-F]/', '', strtoupper((string) $row['mac']))] = true;
+        }
+        $removed = 0;
+        foreach ($DB->request(['SELECT' => ['id', 'chassis_id'], 'FROM' => Settings::TABLE_SWITCHES]) as $switch) {
+            $chassis = preg_replace('/[^0-9A-F]/', '', strtoupper((string) $switch['chassis_id']));
+            if (!isset($macs[$chassis])) {
+                continue;
+            }
+            $id = (int) $switch['id'];
+            $DB->update(Settings::TABLE_MACHINES, ['pending_switches_id' => 0, 'pending_port' => '', 'pending_count' => 0], ['pending_switches_id' => $id]);
+            $DB->update(Settings::TABLE_MACHINES, ['switches_id' => 0, 'port' => '', 'port_id' => '', 'since' => null], ['switches_id' => $id]);
+            $DB->update(Settings::TABLE_DESKS, ['switches_id' => 0, 'port' => ''], ['switches_id' => $id]);
+            $DB->update(
+                Settings::TABLE_EVENTS,
+                ['status' => Events::CLEARED, 'resolved_at' => date('Y-m-d H:i:s'), 'details' => 'Anúncio do próprio computador (não era o switch).'],
+                ['status' => Events::OPEN, 'OR' => ['from_switches_id' => $id, 'to_switches_id' => $id]]
+            );
+            $DB->delete(Settings::TABLE_SWITCHES, ['id' => $id]);
+            $removed++;
+        }
+        return $removed;
     }
 
     /** Porta = descricao (o numero que aparece no switch); senao o Port ID. */

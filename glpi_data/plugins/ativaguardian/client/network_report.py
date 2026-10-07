@@ -80,6 +80,7 @@ if ($cfg) {
   }
 }
 $r.bios = [string](Get-CimInstance -ClassName Win32_BIOS).SerialNumber
+$r.macs = @(Get-NetAdapter -IncludeHidden | Where-Object { $_.MacAddress } | ForEach-Object { [string]$_.MacAddress })
 $conn = @(Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorConnectionParams)
 $r.monitors = @(Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID | ForEach-Object {
   $id = $_
@@ -203,10 +204,20 @@ def read_pcapng_frames(data: bytes) -> list[bytes]:
     return frames
 
 
-def first_lldp(frames: list[bytes]) -> dict[str, str] | None:
+def normalize_mac(value: str) -> str:
+    return re.sub(r"[^0-9A-F]", "", str(value).upper())
+
+
+def first_lldp(frames: list[bytes], local_macs: set[str] | frozenset[str] = frozenset()) -> dict[str, str] | None:
+    """Primeiro anuncio do SWITCH. O pktmon ve as duas direcoes, e o proprio
+    Windows tambem anuncia LLDP pela placa: quadros que saem de um MAC desta
+    maquina (ou com chassis = MAC local) sao ignorados."""
+    local = {normalize_mac(m) for m in local_macs if normalize_mac(m)}
     for frame in frames:
+        if len(frame) >= 12 and frame[6:12].hex().upper() in local:
+            continue
         parsed = parse_lldp_frame(frame)
-        if parsed:
+        if parsed and normalize_mac(parsed["chassis_id"]) not in local:
             return parsed
     return None
 
@@ -273,7 +284,7 @@ class CaptureLock:
 
 def capture_lldp(work_dir: Path, logger: logging.Logger, wait: Callable[[float], Any] = time.sleep,
                  runner: Runner = subprocess.run, seconds: int = LLDP_WAIT_SECONDS,
-                 lock_wait_seconds: float = 0) -> dict[str, str] | None:
+                 lock_wait_seconds: float = 0, local_macs: frozenset[str] = frozenset()) -> dict[str, str] | None:
     """Escuta um quadro LLDP com o pktmon. None se nao houver (ou sem suporte).
 
     Uma coleta por vez (CaptureLock): o servico pula o ciclo se ja houver uma
@@ -290,11 +301,11 @@ def capture_lldp(work_dir: Path, logger: logging.Logger, wait: Callable[[float],
         if not lock.acquired:
             logger.info("Ativa Rede: outra coleta do LLDP ja esta em andamento; esta foi pulada.")
             return None
-        return _capture_locked(work_dir, logger, wait, runner, seconds)
+        return _capture_locked(work_dir, logger, wait, runner, seconds, local_macs)
 
 
 def _capture_locked(work_dir: Path, logger: logging.Logger, wait: Callable[[float], Any],
-                    runner: Runner, seconds: int) -> dict[str, str] | None:
+                    runner: Runner, seconds: int, local_macs: frozenset[str]) -> dict[str, str] | None:
     work_dir.mkdir(parents=True, exist_ok=True)
     etl = work_dir / "lldp.etl"
     pcap = work_dir / "lldp.pcapng"
@@ -331,7 +342,7 @@ def _capture_locked(work_dir: Path, logger: logging.Logger, wait: Callable[[floa
             logger.warning("Ativa Rede: nao foi possivel converter a captura do pktmon (%s; etl com %d bytes).",
                            _output(converted), etl.stat().st_size)
             return None
-        return first_lldp(read_pcapng_frames(pcap.read_bytes()))
+        return first_lldp(read_pcapng_frames(pcap.read_bytes()), local_macs)
     except OSError as exc:
         logger.warning("Ativa Rede: falha ao ler a captura: %s", exc)
         return None
@@ -415,6 +426,18 @@ def _int(value: Any) -> int:
         return 0
 
 
+def local_mac_set(system: dict[str, Any]) -> frozenset[str]:
+    """MACs de todas as placas desta maquina (inclusive virtuais)."""
+    macs = system.get("macs")
+    if isinstance(macs, str):
+        macs = [macs]
+    found = {normalize_mac(m) for m in (macs if isinstance(macs, list) else [])}
+    adapter = system.get("adapter")
+    if isinstance(adapter, dict):
+        found.add(normalize_mac(adapter.get("mac", "")))
+    return frozenset(m for m in found if len(m) == 12)
+
+
 def build_report(machine_id: str, hostname: str, guardian_version: str, system: dict[str, Any],
                  lldp: dict[str, str] | None) -> dict[str, Any]:
     adapter = system.get("adapter") if isinstance(system.get("adapter"), dict) else None
@@ -439,7 +462,8 @@ def collect_report(machine_id: str, hostname: str, guardian_version: str, work_d
                    lock_wait_seconds: float = 0) -> dict[str, Any]:
     system = collect_system(logger)
     adapter = system.get("adapter") if isinstance(system.get("adapter"), dict) else None
-    lldp = capture_lldp(work_dir, logger, wait=wait, lock_wait_seconds=lock_wait_seconds) \
+    local_macs = local_mac_set(system)
+    lldp = capture_lldp(work_dir, logger, wait=wait, lock_wait_seconds=lock_wait_seconds, local_macs=local_macs) \
         if link_type(adapter) == "wired" else None
     return build_report(machine_id, hostname, guardian_version, system, lldp)
 
@@ -496,7 +520,7 @@ def signature(payload: dict[str, Any]) -> str:
 
 
 class NetworkReporter(threading.Thread):
-    """Laco proprio (a captura leva ~35 s e nao pode atrasar o heartbeat)."""
+    """Laco proprio (a captura leva ~65 s e nao pode atrasar o heartbeat)."""
 
     def __init__(self, stop_event: threading.Event, logger: logging.Logger, machine_id: str,
                  hostname: Callable[[], str], guardian_version: str, work_dir: Path,
@@ -512,6 +536,10 @@ class NetworkReporter(threading.Thread):
         self.last_signature: str | None = None
         self.last_sent = 0.0
         self.absent_until = 0.0
+        # O GLPI so confirma a troca de porta com dois relatorios seguidos na
+        # porta nova: depois de uma mudanca, o ciclo seguinte reenvia mesmo
+        # igual (senao a confirmacao esperaria o reenvio de 6 h).
+        self.confirm_next = False
 
     def run(self) -> None:
         if self.stop_event.wait(FIRST_DELAY_SECONDS):
@@ -540,7 +568,8 @@ class NetworkReporter(threading.Thread):
         if self.stop_event.is_set():
             return
         current = signature(payload)
-        if current == self.last_signature and now - self.last_sent < RESEND_SECONDS:
+        changed = current != self.last_signature
+        if not changed and not self.confirm_next and now - self.last_sent < RESEND_SECONDS:
             return
         try:
             send_report(url, token, payload, self.guardian_version)
@@ -551,6 +580,9 @@ class NetworkReporter(threading.Thread):
             else:
                 self.logger.warning("Ativa Rede: envio falhou: %s", exc)
             return
+        # Primeiro envio do servico tambem conta como mudanca (o GLPI pode ter
+        # outra posicao guardada de antes do reinicio).
+        self.confirm_next = changed
         self.last_signature = current
         self.last_sent = time.monotonic()
         lldp = payload["network"]["lldp"]

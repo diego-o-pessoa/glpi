@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use GlpiPlugin\Ativarede\ReportService;
 use GlpiPlugin\Ativarede\Seed;
 use GlpiPlugin\Ativarede\Settings;
 use GlpiPlugin\Ativarede\Watchdog;
@@ -17,11 +18,15 @@ function plugin_ativarede_install(): bool
     require_once PLUGIN_ATIVAREDE_DIR . '/src/Settings.php';
     require_once PLUGIN_ATIVAREDE_DIR . '/src/Seed.php';
     require_once PLUGIN_ATIVAREDE_DIR . '/src/Watchdog.php';
+    require_once PLUGIN_ATIVAREDE_DIR . '/src/Events.php';
+    require_once PLUGIN_ATIVAREDE_DIR . '/src/ReportService.php';
 
     plugin_ativarede_install_tables();
     Settings::installDefaults();
     Seed::install();
     PluginAtivaredeProfile::installRights();
+    // 0.1.2: switches falsos (anuncio LLDP do proprio Windows) gravados antes do filtro.
+    ReportService::cleanupOwnAnnouncements();
 
     // Monitor ausente, mesa vazia e maquina sem relatorio: conferidos a cada hora.
     CronTask::register(
