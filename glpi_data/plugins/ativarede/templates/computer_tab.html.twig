@@ -1,0 +1,54 @@
+{% set m = data.machine %}
+<div class="p-3">
+    {% if not m %}
+        <div class="alert alert-info mb-0">
+            <i class="ti ti-info-circle me-1"></i>
+            Este computador ainda não enviou a posição. O envio é feito pelo Ativa Guardian 1.6.0 (ou mais novo) quando o computador
+            está ligado por cabo e o número de série/nome bate com o inventário do GLPI.
+        </div>
+    {% else %}
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <h4 class="mb-2"><i class="ti ti-map-pin me-1"></i>Onde está</h4>
+                <dl class="row mb-0 small">
+                    <dt class="col-5">Situação</dt><dd class="col-7">{{ m.online ? 'Ligado agora' : 'Sem contato (último: ' ~ (m.last_contact ?: m.last_report) ~ ')' }}</dd>
+                    <dt class="col-5">Mesa</dt><dd class="col-7">{% if data.desk %}{{ data.desk.name }} <span class="text-muted">({{ data.desk.plan }})</span>{% else %}não mapeada{% endif %} · <a href="{{ plant_url }}">ver planta</a></dd>
+                    <dt class="col-5">Switch · porta</dt><dd class="col-7">{{ m.port ? m.switch ~ ' · porta ' ~ m.port : '—' }}</dd>
+                    <dt class="col-5">Nesta posição desde</dt><dd class="col-7">{{ m.since ?: '—' }}</dd>
+                    {% if m.pending %}<dt class="col-5">Possível mudança</dt><dd class="col-7 text-warning">{{ m.pending }} (aguardando confirmação)</dd>{% endif %}
+                    <dt class="col-5">Conexão</dt><dd class="col-7">{{ {'wired': 'Cabo', 'wifi': 'Wi-Fi', 'none': 'Sem rede', 'unknown': '—'}[m.link] ?? m.link }} · {{ m.ip }}</dd>
+                </dl>
+            </div>
+            <div class="col-lg-7">
+                <h4 class="mb-2"><i class="ti ti-device-desktop-analytics me-1"></i>Monitores</h4>
+                {% for mon in m.monitors %}
+                    <div class="small {{ mon.missing ? 'text-danger' : '' }}">
+                        {% if mon.glpi_url %}<a href="{{ mon.glpi_url }}">{{ mon.model }}</a>{% else %}{{ mon.model }}{% endif %}
+                        · {{ mon.serial ?: 'sem série' }}{% if mon.connection %} · {{ mon.connection }}{% endif %}
+                        · {{ mon.missing ? 'ausente desde ' ~ mon.missing_since : 'desde ' ~ mon.since }}
+                    </div>
+                {% else %}
+                    <div class="text-muted small">Nenhum monitor externo informado.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <h4 class="mt-4 mb-2"><i class="ti ti-history me-1"></i>Histórico</h4>
+        {% if data.events|length %}
+            <table class="table table-sm">
+                <thead><tr><th style="width:140px">Quando</th><th>O que aconteceu</th><th style="width:150px">Situação</th></tr></thead>
+                <tbody>
+                {% for e in data.events %}
+                    <tr>
+                        <td class="small text-nowrap">{{ e.date }}</td>
+                        <td><div class="fw-semibold small">{{ e.title }}</div><div class="text-muted small">{{ e.detail }}</div></td>
+                        <td class="small">{{ e.status_label }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="text-muted small">Nenhuma mudança registrada.</div>
+        {% endif %}
+    {% endif %}
+</div>

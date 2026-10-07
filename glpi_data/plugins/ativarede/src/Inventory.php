@@ -1,0 +1,696 @@
+<?php
+
+declare(strict_types=1);
+
+namespace GlpiPlugin\Ativarede;
+
+use Computer;
+use Monitor;
+
+/**
+ * Leitura para as telas: estado de cada mesa na planta, listas de
+ * equipamentos, alertas descritos em portugues e a aba do Computador.
+ * Nada aqui grava.
+ */
+final class Inventory
+{
+    /** @var array<int, array>|null */
+    private static ?array $switchCache = null;
+
+    // ------------------------------------------------------------------
+    // Consultas basicas
+    // ------------------------------------------------------------------
+
+    public static function machine(int $id): ?array
+    {
+        global $DB;
+
+        if ($id <= 0) {
+            return null;
+        }
+        return $DB->request(['FROM' => Settings::TABLE_MACHINES, 'WHERE' => ['id' => $id], 'LIMIT' => 1])->current() ?: null;
+    }
+
+    /** Mesa de uma porta (com a Localizacao da planta), ou null. */
+    public static function deskAt(int $switchId, string $port): ?array
+    {
+        global $DB;
+
+        if ($switchId <= 0 || $port === '') {
+            return null;
+        }
+        return $DB->request([
+            'SELECT'    => [Settings::TABLE_DESKS . '.*', Settings::TABLE_PLANS . '.locations_id', Settings::TABLE_PLANS . '.name AS plan_name'],
+            'FROM'      => Settings::TABLE_DESKS,
+            'LEFT JOIN' => [
+                Settings::TABLE_PLANS => ['ON' => [Settings::TABLE_DESKS => 'plans_id', Settings::TABLE_PLANS => 'id']],
+            ],
+            'WHERE'     => [Settings::TABLE_DESKS . '.switches_id' => $switchId, Settings::TABLE_DESKS . '.port' => $port],
+            'LIMIT'     => 1,
+        ])->current() ?: null;
+    }
+
+    /** @return array<int, array> switches por id, com o rotulo curto pronto. */
+    public static function switches(): array
+    {
+        global $DB;
+
+        if (self::$switchCache !== null) {
+            return self::$switchCache;
+        }
+        $list = [];
+        foreach ($DB->request(['FROM' => Settings::TABLE_SWITCHES, 'ORDER' => ['mgmt_ip', 'id']]) as $row) {
+            $row['short'] = self::switchShort($row);
+            $row['display'] = self::switchDisplay($row);
+            $list[(int) $row['id']] = $row;
+        }
+        return self::$switchCache = $list;
+    }
+
+    public static function resetCache(): void
+    {
+        self::$switchCache = null;
+    }
+
+    /** Rotulo curto para caber na mesa: apelido, ".43" (final do IP) ou parte do MAC. */
+    public static function switchShort(array $switch): string
+    {
+        if (trim((string) $switch['label']) !== '') {
+            return mb_substr(trim((string) $switch['label']), 0, 8);
+        }
+        if (preg_match('/\.(\d{1,3})$/', (string) $switch['mgmt_ip'], $m)) {
+            return '.' . $m[1];
+        }
+        return substr(str_replace([':', '-'], '', (string) $switch['chassis_id']), -4);
+    }
+
+    public static function switchDisplay(array $switch): string
+    {
+        $parts = [];
+        if (trim((string) $switch['label']) !== '') {
+            $parts[] = trim((string) $switch['label']);
+        }
+        if ((string) $switch['mgmt_ip'] !== '') {
+            $parts[] = (string) $switch['mgmt_ip'];
+        }
+        if ($parts === []) {
+            $parts[] = (string) ($switch['system_name'] ?: $switch['chassis_id']);
+        }
+        return implode(' · ', $parts);
+    }
+
+    public static function positionLabel(int $switchId, string $port): string
+    {
+        if ($switchId <= 0 || $port === '') {
+            return 'sem posição';
+        }
+        $switch = self::switches()[$switchId] ?? null;
+        $text = 'switch ' . ($switch ? $switch['display'] : '#' . $switchId) . ', porta ' . $port;
+        $desk = self::deskAt($switchId, $port);
+        return $desk ? 'mesa ' . $desk['name'] . ' (' . $text . ')' : $text;
+    }
+
+    // ------------------------------------------------------------------
+    // Planta
+    // ------------------------------------------------------------------
+
+    public static function plans(): array
+    {
+        global $DB;
+
+        $plans = [];
+        foreach ($DB->request(['FROM' => Settings::TABLE_PLANS, 'ORDER' => 'id']) as $row) {
+            $plans[] = $row;
+        }
+        return $plans;
+    }
+
+    /**
+     * Tudo que a planta precisa: mesas com estado, maquina, monitores e
+     * alertas; portas vistas sem mesa; contadores da legenda.
+     */
+    public static function planState(int $planId): array
+    {
+        global $DB;
+
+        $plan = $DB->request(['FROM' => Settings::TABLE_PLANS, 'WHERE' => ['id' => $planId], 'LIMIT' => 1])->current();
+        if (!$plan) {
+            return ['plan' => null];
+        }
+
+        $desks = iterator_to_array($DB->request([
+            'FROM'  => Settings::TABLE_DESKS,
+            'WHERE' => ['plans_id' => $planId],
+            'ORDER' => 'name',
+        ]), false);
+
+        $machines = self::decoratedMachines();
+        $byPort = [];
+        foreach ($machines as $machine) {
+            if ((int) $machine['switches_id'] > 0 && $machine['port'] !== '') {
+                $byPort[$machine['switches_id'] . '|' . $machine['port']][] = $machine;
+            }
+        }
+
+        $openEvents = self::openEventsIndex();
+        $switches = self::switches();
+        $mapped = [];
+        $counts = ['online' => 0, 'offline' => 0, 'alert' => 0, 'empty' => 0, 'unmapped' => 0];
+        $outDesks = [];
+
+        foreach ($desks as $desk) {
+            $key = (int) $desk['switches_id'] . '|' . $desk['port'];
+            $hasPort = (int) $desk['switches_id'] > 0 && $desk['port'] !== '';
+            if ($hasPort) {
+                $mapped[$key] = true;
+            }
+            $here = $hasPort ? ($byPort[$key] ?? []) : [];
+
+            $alerts = [];
+            foreach ($openEvents['desk'][(int) $desk['id']] ?? [] as $event) {
+                $alerts[$event['id']] = $event;
+            }
+            foreach ($here as $machine) {
+                foreach ($openEvents['machine'][(int) $machine['id']] ?? [] as $event) {
+                    $alerts[$event['id']] = $event;
+                }
+            }
+            if ($hasPort) {
+                foreach ($openEvents['port'][$key] ?? [] as $event) {
+                    $alerts[$event['id']] = $event;
+                }
+            }
+
+            if (!$hasPort) {
+                $state = 'unmapped';
+            } elseif ($alerts !== []) {
+                $state = 'alert';
+            } elseif ($here === []) {
+                $state = 'empty';
+            } else {
+                $state = array_filter($here, static fn(array $m): bool => $m['online']) !== [] ? 'online' : 'offline';
+            }
+            $counts[$state]++;
+
+            $outDesks[] = [
+                'id'       => (int) $desk['id'],
+                'name'     => (string) $desk['name'],
+                'x'        => (float) $desk['x'],
+                'y'        => (float) $desk['y'],
+                'w'        => (float) $desk['w'],
+                'h'        => (float) $desk['h'],
+                'chair'    => (string) $desk['chair'],
+                'comment'  => (string) $desk['comment'],
+                'switches_id' => (int) $desk['switches_id'],
+                'port'     => (string) $desk['port'],
+                'switch'   => $hasPort ? ($switches[(int) $desk['switches_id']]['short'] ?? '?') : '',
+                'switch_display' => $hasPort ? ($switches[(int) $desk['switches_id']]['display'] ?? '?') : '',
+                'state'    => $state,
+                'machines' => array_values($here),
+                'alerts'   => array_values(array_map([self::class, 'eventView'], $alerts)),
+            ];
+        }
+
+        // Portas onde ha maquina e nenhuma mesa (em nenhuma planta): o atalho
+        // para a T.I. mapear as mesas.
+        $allMapped = [];
+        foreach ($DB->request(['SELECT' => ['switches_id', 'port'], 'FROM' => Settings::TABLE_DESKS, 'WHERE' => ['switches_id' => ['>', 0]]]) as $row) {
+            $allMapped[(int) $row['switches_id'] . '|' . $row['port']] = true;
+        }
+        $unmapped = [];
+        foreach ($byPort as $key => $list) {
+            if (isset($allMapped[$key])) {
+                continue;
+            }
+            [$switchId, $port] = explode('|', $key, 2);
+            $unmapped[] = [
+                'switches_id' => (int) $switchId,
+                'port'        => $port,
+                'switch'      => $switches[(int) $switchId]['display'] ?? '#' . $switchId,
+                'machines'    => array_map(static fn(array $m): array => [
+                    'hostname' => $m['hostname'], 'computer' => $m['computer'], 'user' => $m['user'], 'group' => $m['group'], 'online' => $m['online'],
+                ], $list),
+            ];
+        }
+        usort($unmapped, static fn(array $a, array $b): int => [$a['switch'], (int) $a['port']] <=> [$b['switch'], (int) $b['port']]);
+
+        $wifi = array_values(array_filter($machines, static fn(array $m): bool => $m['link'] === 'wifi' && (int) $m['switches_id'] === 0));
+
+        return [
+            'plan'     => [
+                'id'     => (int) $plan['id'],
+                'name'   => (string) $plan['name'],
+                'width'  => (int) $plan['width'],
+                'height' => (int) $plan['height'],
+                'background' => (string) $plan['background'],
+                'locations_id' => (int) $plan['locations_id'],
+            ],
+            'desks'    => $outDesks,
+            'counts'   => $counts,
+            'unmapped' => $unmapped,
+            'wifi'     => count($wifi),
+            'switches' => array_values(array_map(static fn(array $s): array => [
+                'id' => (int) $s['id'], 'short' => $s['short'], 'display' => $s['display'],
+            ], $switches)),
+            'updated'  => date('d/m/Y H:i:s'),
+        ];
+    }
+
+    // ------------------------------------------------------------------
+    // Maquinas e monitores (com dados do GLPI e do Guardian)
+    // ------------------------------------------------------------------
+
+    /** Maquinas com computador, usuario, grupo, status online e monitores. */
+    public static function decoratedMachines(?array $where = null): array
+    {
+        global $DB;
+
+        $rows = iterator_to_array($DB->request([
+            'FROM'  => Settings::TABLE_MACHINES,
+            'WHERE' => $where ?? [],
+            'ORDER' => 'hostname',
+        ]), false);
+        if ($rows === []) {
+            return [];
+        }
+
+        $online = self::guardianContacts(array_column($rows, 'machine_id'));
+        $computers = self::computerInfo(array_map('intval', array_column($rows, 'computers_id')));
+        $monitors = self::monitorsByMachine(array_map('intval', array_column($rows, 'id')));
+        $switches = self::switches();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $id = (int) $row['id'];
+            $computer = $computers[(int) $row['computers_id']] ?? null;
+            $contact = $online[$row['machine_id']] ?? null;
+            $out[] = [
+                'id'           => $id,
+                'machine_id'   => (string) $row['machine_id'],
+                'hostname'     => (string) $row['hostname'],
+                'computers_id' => (int) $row['computers_id'],
+                'computer'     => $computer['name'] ?? '',
+                'computer_url' => $computer['url'] ?? '',
+                'user'         => $computer['user'] ?? '',
+                'group'        => $computer['group'] ?? '',
+                'ip'           => (string) $row['ip'],
+                'mac'          => (string) $row['mac'],
+                'link'         => (string) $row['link'],
+                'switches_id'  => (int) $row['switches_id'],
+                'port'         => (string) $row['port'],
+                'switch'       => (int) $row['switches_id'] > 0 ? ($switches[(int) $row['switches_id']]['display'] ?? '#' . $row['switches_id']) : '',
+                'since'        => self::date($row['since']),
+                'pending'      => (int) $row['pending_count'] > 0
+                    ? (($switches[(int) $row['pending_switches_id']]['display'] ?? '#' . $row['pending_switches_id']) . ', porta ' . $row['pending_port'])
+                    : '',
+                'last_report'  => self::date($row['last_report']),
+                'online'       => $contact !== null && $contact['online'],
+                'last_contact' => $contact !== null ? self::date($contact['last_contact']) : '',
+                'monitors'     => $monitors[$id] ?? [],
+            ];
+        }
+        return $out;
+    }
+
+    /** @return array<string, array{online: bool, last_contact: ?string}> por machine_id */
+    private static function guardianContacts(array $machineIds): array
+    {
+        global $DB;
+
+        if ($machineIds === [] || !$DB->tableExists(Settings::TABLE_GUARDIAN_MACHINES)) {
+            return [];
+        }
+        $limit = time() - Settings::guardianOfflineSeconds();
+        $out = [];
+        foreach ($DB->request([
+            'SELECT' => ['machine_id', 'last_contact'],
+            'FROM'   => Settings::TABLE_GUARDIAN_MACHINES,
+            'WHERE'  => ['machine_id' => array_values(array_unique($machineIds))],
+        ]) as $row) {
+            $ts = $row['last_contact'] ? strtotime((string) $row['last_contact']) : false;
+            $out[(string) $row['machine_id']] = ['online' => $ts !== false && $ts >= $limit, 'last_contact' => $row['last_contact']];
+        }
+        return $out;
+    }
+
+    /** @return array<int, array{name: string, url: string, user: string, group: string}> */
+    private static function computerInfo(array $computerIds): array
+    {
+        global $DB;
+
+        $computerIds = array_values(array_unique(array_filter($computerIds)));
+        if ($computerIds === []) {
+            return [];
+        }
+        $out = [];
+        $userIds = [];
+        foreach ($DB->request([
+            'SELECT' => ['id', 'name', 'users_id'],
+            'FROM'   => 'glpi_computers',
+            'WHERE'  => ['id' => $computerIds],
+        ]) as $row) {
+            $out[(int) $row['id']] = [
+                'name'     => (string) $row['name'],
+                'url'      => Computer::getFormURLWithID((int) $row['id']),
+                'users_id' => (int) $row['users_id'],
+                'user'     => '',
+                'group'    => '',
+            ];
+            if ((int) $row['users_id'] > 0) {
+                $userIds[] = (int) $row['users_id'];
+            }
+        }
+
+        $users = [];
+        if ($userIds !== []) {
+            foreach ($DB->request([
+                'SELECT' => ['id', 'name', 'firstname', 'realname'],
+                'FROM'   => 'glpi_users',
+                'WHERE'  => ['id' => array_values(array_unique($userIds))],
+            ]) as $user) {
+                $full = trim($user['firstname'] . ' ' . $user['realname']);
+                $users[(int) $user['id']] = ['name' => $full !== '' ? $full : (string) $user['name'], 'group' => ''];
+            }
+            foreach ($DB->request([
+                'SELECT'     => ['glpi_groups_users.users_id', 'glpi_groups.completename'],
+                'FROM'       => 'glpi_groups_users',
+                'INNER JOIN' => ['glpi_groups' => ['ON' => ['glpi_groups_users' => 'groups_id', 'glpi_groups' => 'id']]],
+                'WHERE'      => ['glpi_groups_users.users_id' => array_keys($users)],
+                'ORDER'      => 'glpi_groups.completename',
+            ]) as $membership) {
+                $uid = (int) $membership['users_id'];
+                if (isset($users[$uid]) && $users[$uid]['group'] === '') {
+                    $users[$uid]['group'] = (string) $membership['completename'];
+                }
+            }
+        }
+        foreach ($out as &$computer) {
+            if (isset($users[$computer['users_id']])) {
+                $computer['user'] = $users[$computer['users_id']]['name'];
+                $computer['group'] = $users[$computer['users_id']]['group'];
+            }
+        }
+        return $out;
+    }
+
+    /** @return array<int, list<array>> monitores agrupados por maquina */
+    private static function monitorsByMachine(array $machineIds): array
+    {
+        global $DB;
+
+        if ($machineIds === []) {
+            return [];
+        }
+        $rows = iterator_to_array($DB->request([
+            'FROM'  => Settings::TABLE_MONITORS,
+            'WHERE' => ['machines_id' => $machineIds],
+            'ORDER' => ['missing_since', 'model'],
+        ]), false);
+        $native = self::nativeMonitors(array_column($rows, 'serial'));
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(int) $row['machines_id']][] = self::monitorView($row, $native);
+        }
+        return $out;
+    }
+
+    /** Monitores do inventario nativo do GLPI com o mesmo numero de serie. */
+    private static function nativeMonitors(array $serials): array
+    {
+        global $DB;
+
+        $serials = array_values(array_unique(array_filter(array_map('strval', $serials))));
+        if ($serials === []) {
+            return [];
+        }
+        $out = [];
+        foreach ($DB->request([
+            'SELECT' => ['id', 'name', 'serial'],
+            'FROM'   => 'glpi_monitors',
+            'WHERE'  => ['serial' => $serials, 'is_deleted' => 0, 'is_template' => 0],
+        ]) as $row) {
+            $out[strtoupper((string) $row['serial'])] ??= ['id' => (int) $row['id'], 'name' => (string) $row['name'], 'url' => Monitor::getFormURLWithID((int) $row['id'])];
+        }
+        return $out;
+    }
+
+    private static function monitorView(array $row, array $native): array
+    {
+        $glpi = $row['serial'] !== '' ? ($native[strtoupper((string) $row['serial'])] ?? null) : null;
+        $model = trim((string) $row['model']) !== '' ? (string) $row['model'] : trim($row['manufacturer'] . ' ' . $row['product_code']);
+        return [
+            'id'         => (int) $row['id'],
+            'model'      => $model,
+            'serial'     => (string) $row['serial'],
+            'has_serial' => (bool) $row['has_serial'],
+            'year'       => (int) $row['year'],
+            'connection' => (string) $row['connection'],
+            'since'      => self::date($row['since']),
+            'missing'    => $row['missing_since'] !== null,
+            'missing_since' => self::date($row['missing_since']),
+            'last_seen'  => self::date($row['last_seen']),
+            'glpi_url'   => $glpi['url'] ?? '',
+            'glpi_name'  => $glpi['name'] ?? '',
+        ];
+    }
+
+    /** Monitores para a tela de equipamentos (com a maquina/mesa atual). */
+    public static function monitors(): array
+    {
+        global $DB;
+
+        $rows = iterator_to_array($DB->request(['FROM' => Settings::TABLE_MONITORS, 'ORDER' => ['model', 'serial']]), false);
+        $native = self::nativeMonitors(array_column($rows, 'serial'));
+        $machines = [];
+        foreach (self::decoratedMachines() as $machine) {
+            $machines[$machine['id']] = $machine;
+        }
+        $out = [];
+        foreach ($rows as $row) {
+            $view = self::monitorView($row, $native);
+            $machine = $machines[(int) $row['machines_id']] ?? null;
+            $desk = $machine ? self::deskAt($machine['switches_id'], $machine['port']) : null;
+            $view['machine'] = $machine ? ($machine['computer'] ?: $machine['hostname']) : '';
+            $view['machine_url'] = $machine['computer_url'] ?? '';
+            $view['desk'] = $desk['name'] ?? '';
+            $out[] = $view;
+        }
+        return $out;
+    }
+
+    // ------------------------------------------------------------------
+    // Alertas
+    // ------------------------------------------------------------------
+
+    /** Indices dos alertas abertos por mesa, por maquina e por porta. */
+    private static function openEventsIndex(): array
+    {
+        global $DB;
+
+        $index = ['desk' => [], 'machine' => [], 'port' => []];
+        foreach ($DB->request(['FROM' => Settings::TABLE_EVENTS, 'WHERE' => ['status' => Events::OPEN], 'ORDER' => 'id DESC', 'LIMIT' => 2000]) as $event) {
+            if ((int) $event['desks_id'] > 0) {
+                $index['desk'][(int) $event['desks_id']][] = $event;
+            }
+            foreach (['machines_id', 'to_machines_id'] as $field) {
+                if ((int) $event[$field] > 0) {
+                    $index['machine'][(int) $event[$field]][] = $event;
+                }
+            }
+            if ($event['type'] === Events::COMPUTER_MOVED && (int) $event['from_switches_id'] > 0) {
+                // A mesa de onde o computador saiu tambem mostra o aviso.
+                $index['port'][(int) $event['from_switches_id'] . '|' . $event['from_port']][] = $event;
+            }
+            if ($event['type'] === Events::SHARED_PORT) {
+                $index['port'][(int) $event['to_switches_id'] . '|' . $event['to_port']][] = $event;
+            }
+        }
+        return $index;
+    }
+
+    public static function events(string $status = Events::OPEN, string $type = '', int $limit = 300): array
+    {
+        global $DB;
+
+        $where = [];
+        if ($status !== '' && $status !== 'all') {
+            $where['status'] = $status;
+        }
+        if ($type !== '' && isset(Events::labels()[$type])) {
+            $where['type'] = $type;
+        }
+        $out = [];
+        foreach ($DB->request(['FROM' => Settings::TABLE_EVENTS, 'WHERE' => $where, 'ORDER' => 'id DESC', 'LIMIT' => $limit]) as $event) {
+            $out[] = self::eventView($event);
+        }
+        return $out;
+    }
+
+    public static function countOpenEvents(): int
+    {
+        return countElementsInTable(Settings::TABLE_EVENTS, ['status' => Events::OPEN]);
+    }
+
+    public static function eventView(array $event): array
+    {
+        global $CFG_GLPI;
+
+        $text = self::describe($event);
+        return [
+            'id'      => (int) $event['id'],
+            'type'    => (string) $event['type'],
+            'label'   => Events::labels()[$event['type']] ?? $event['type'],
+            'status'  => (string) $event['status'],
+            'status_label' => Events::statusLabels()[$event['status']] ?? $event['status'],
+            'title'   => $text['title'],
+            'detail'  => $text['detail'],
+            'date'    => self::date($event['date_creation']),
+            'resolved_at' => self::date($event['resolved_at']),
+            'resolved_by' => (int) $event['users_id'] > 0 ? getUserName((int) $event['users_id']) : '',
+            'ticket_url'  => (int) $event['tickets_id'] > 0 ? $CFG_GLPI['root_doc'] . '/front/ticket.form.php?id=' . (int) $event['tickets_id'] : '',
+            'tickets_id'  => (int) $event['tickets_id'],
+            'computer_url' => $text['computer_url'] ?? '',
+            'can_authorize' => in_array($event['type'], [Events::COMPUTER_MOVED, Events::MONITOR_MOVED, Events::MONITOR_NEW], true),
+        ];
+    }
+
+    /** @return array{title: string, detail: string, computers_id: int, computer_url: string} */
+    public static function describe(array $event): array
+    {
+        $machine = self::machine((int) $event['machines_id']);
+        $name = self::machineName($machine);
+        $computersId = (int) ($machine['computers_id'] ?? 0);
+        $detail = (string) $event['details'];
+
+        switch ($event['type']) {
+            case Events::COMPUTER_MOVED:
+                $title = $name . ' mudou de mesa';
+                $detail = 'De ' . self::positionLabel((int) $event['from_switches_id'], (string) $event['from_port'])
+                    . ' para ' . self::positionLabel((int) $event['to_switches_id'], (string) $event['to_port']) . '.';
+                break;
+            case Events::MONITOR_MOVED:
+                $title = 'Monitor ' . self::monitorName((int) $event['monitors_id']) . ' mudou de mesa';
+                $from = self::machine((int) $event['from_machines_id']);
+                $to = self::machine((int) $event['to_machines_id']);
+                $detail = 'Estava em ' . self::machineWhere($from) . '; agora está em ' . self::machineWhere($to) . '.';
+                $computersId = (int) ($to['computers_id'] ?? $computersId);
+                break;
+            case Events::MONITOR_NEW:
+                $title = 'Monitor novo: ' . self::monitorName((int) $event['monitors_id']);
+                $to = self::machine((int) $event['to_machines_id']);
+                $detail = 'Apareceu em ' . self::machineWhere($to) . '.';
+                break;
+            case Events::MONITOR_MISSING:
+                $title = 'Monitor ' . self::monitorName((int) $event['monitors_id']) . ' ausente';
+                $from = self::machine((int) $event['from_machines_id']);
+                $detail = 'Não aparece mais em ' . self::machineWhere($from) . ($detail !== '' ? ' (' . $detail . ')' : '') . '.';
+                $computersId = (int) ($from['computers_id'] ?? $computersId);
+                break;
+            case Events::SHARED_PORT:
+                $title = 'Porta compartilhada: ' . self::positionLabel((int) $event['to_switches_id'], (string) $event['to_port']);
+                $detail = ($detail !== '' ? $detail : 'Mais de uma máquina') . '. Provável mini switch ou cabo trocado.';
+                break;
+            case Events::DESK_EMPTY:
+                $desk = self::desk((int) $event['desks_id']);
+                $title = 'Mesa ' . ($desk['name'] ?? '#' . $event['desks_id']) . ' vazia';
+                $detail = 'Nenhuma máquina na porta da mesa' . ($detail !== '' ? ' ' . $detail : '') . '.';
+                break;
+            case Events::MACHINE_SILENT:
+                $title = $name . ' sem relatório';
+                $detail = 'Último relatório: ' . self::date($machine['last_report'] ?? null) . '. Desligada, formatada ou retirada?';
+                break;
+            default:
+                $title = (string) $event['type'];
+        }
+
+        return [
+            'title'        => $title,
+            'detail'       => $detail,
+            'computers_id' => $computersId,
+            'computer_url' => $computersId > 0 ? Computer::getFormURLWithID($computersId) : '',
+        ];
+    }
+
+    private static function desk(int $id): ?array
+    {
+        global $DB;
+
+        return $id > 0 ? ($DB->request(['FROM' => Settings::TABLE_DESKS, 'WHERE' => ['id' => $id], 'LIMIT' => 1])->current() ?: null) : null;
+    }
+
+    private static function machineName(?array $machine): string
+    {
+        if (!$machine) {
+            return 'Máquina';
+        }
+        if ((int) $machine['computers_id'] > 0) {
+            $computer = new Computer();
+            if ($computer->getFromDB((int) $machine['computers_id'])) {
+                return (string) $computer->fields['name'];
+            }
+        }
+        return (string) ($machine['hostname'] ?: $machine['machine_id']);
+    }
+
+    private static function machineWhere(?array $machine): string
+    {
+        if (!$machine) {
+            return 'máquina desconhecida';
+        }
+        return self::machineName($machine) . ' — ' . self::positionLabel((int) $machine['switches_id'], (string) $machine['port']);
+    }
+
+    private static function monitorName(int $id): string
+    {
+        global $DB;
+
+        $row = $id > 0 ? $DB->request(['FROM' => Settings::TABLE_MONITORS, 'WHERE' => ['id' => $id], 'LIMIT' => 1])->current() : null;
+        if (!$row) {
+            return '#' . $id;
+        }
+        $model = trim((string) $row['model']) !== '' ? (string) $row['model'] : trim($row['manufacturer'] . ' ' . $row['product_code']);
+        return $model . ($row['serial'] !== '' ? ' (série ' . $row['serial'] . ')' : '');
+    }
+
+    // ------------------------------------------------------------------
+    // Aba do Computador
+    // ------------------------------------------------------------------
+
+    public static function forComputer(int $computerId): array
+    {
+        global $DB;
+
+        $machines = self::decoratedMachines(['computers_id' => $computerId]);
+        $machine = $machines[0] ?? null;
+        $desk = $machine ? self::deskAt($machine['switches_id'], $machine['port']) : null;
+        $events = [];
+        if ($machine) {
+            foreach ($DB->request([
+                'FROM'  => Settings::TABLE_EVENTS,
+                'WHERE' => ['OR' => [
+                    'machines_id'      => $machine['id'],
+                    'from_machines_id' => $machine['id'],
+                    'to_machines_id'   => $machine['id'],
+                ]],
+                'ORDER' => 'id DESC',
+                'LIMIT' => 30,
+            ]) as $event) {
+                $events[] = self::eventView($event);
+            }
+        }
+        return [
+            'machine' => $machine,
+            'desk'    => $desk ? ['name' => $desk['name'], 'plan' => $desk['plan_name'] ?? ''] : null,
+            'events'  => $events,
+        ];
+    }
+
+    public static function date(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '';
+        }
+        $ts = strtotime((string) $value);
+        return $ts === false ? '' : date('d/m/Y H:i', $ts);
+    }
+}

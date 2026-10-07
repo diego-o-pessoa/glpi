@@ -1,0 +1,91 @@
+<link rel="stylesheet" href="{{ css_url }}">
+
+<div class="ar-app">
+    <div class="ar-head">
+        <div>
+            <h2 class="mb-1"><i class="ti ti-bell me-2 text-primary"></i>Alertas</h2>
+            <div class="text-muted small">
+                {{ open_count }} alerta(s) aberto(s). Mudanças de mesa só viram alerta depois de confirmadas em dois relatórios seguidos.
+            </div>
+        </div>
+        <a class="btn btn-sm btn-outline-primary" href="{{ plant_url }}"><i class="ti ti-layout-board me-1"></i>Ver na planta</a>
+    </div>
+
+    <form class="card mb-3" method="get" action="{{ self_url }}">
+        <div class="card-body d-flex flex-wrap gap-2 align-items-end">
+            <div>
+                <label class="form-label small mb-1" for="ar-status">Situação</label>
+                <select class="form-select form-select-sm" id="ar-status" name="status">
+                    {% for key, label in statuses %}
+                        <option value="{{ key }}" {{ status == key ? 'selected' : '' }}>{{ label }}</option>
+                    {% endfor %}
+                    <option value="all" {{ status == 'all' ? 'selected' : '' }}>Todos</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label small mb-1" for="ar-type">Tipo</label>
+                <select class="form-select form-select-sm" id="ar-type" name="type">
+                    <option value="">Todos os tipos</option>
+                    {% for key, label in types %}
+                        <option value="{{ key }}" {{ type == key ? 'selected' : '' }}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary"><i class="ti ti-filter me-1"></i>Filtrar</button>
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-vcenter card-table">
+                <thead>
+                    <tr>
+                        <th style="width:150px">Quando</th>
+                        <th style="width:190px">Tipo</th>
+                        <th>O que aconteceu</th>
+                        <th style="width:150px">Situação</th>
+                        {% if can_manage %}<th style="width:1%" class="text-end">Ações</th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                {% for e in events %}
+                    <tr>
+                        <td class="text-nowrap small">{{ e.date }}</td>
+                        <td><span class="badge bg-{{ e.type in ['computer_moved', 'monitor_moved', 'monitor_missing'] ? 'orange' : 'azure' }}-lt">{{ e.label }}</span></td>
+                        <td>
+                            <div class="fw-semibold">
+                                {% if e.computer_url %}<a href="{{ e.computer_url }}">{{ e.title }}</a>{% else %}{{ e.title }}{% endif %}
+                            </div>
+                            <div class="text-muted small">{{ e.detail }}</div>
+                        </td>
+                        <td class="small">
+                            {{ e.status_label }}
+                            {% if e.resolved_by %}<div class="text-muted">{{ e.resolved_by }} · {{ e.resolved_at }}</div>{% elseif e.resolved_at %}<div class="text-muted">{{ e.resolved_at }}</div>{% endif %}
+                            {% if e.ticket_url %}<div><a href="{{ e.ticket_url }}">Chamado #{{ e.tickets_id }}</a></div>{% endif %}
+                        </td>
+                        {% if can_manage %}
+                            <td class="text-end text-nowrap">
+                                {% if e.status == 'open' %}
+                                    <form method="post" action="{{ self_url }}" class="d-inline-flex gap-1">
+                                        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="id" value="{{ e.id }}">
+                                        <input type="hidden" name="status" value="{{ status }}">
+                                        <input type="hidden" name="type" value="{{ type }}">
+                                        {% if e.can_authorize %}
+                                            <button class="btn btn-sm btn-success" name="resolution" value="authorize" title="A mudança está correta"><i class="ti ti-check"></i></button>
+                                        {% endif %}
+                                        <button class="btn btn-sm btn-outline-primary" name="resolution" value="ticket" title="Abrir chamado para investigar"><i class="ti ti-ticket"></i></button>
+                                        <button class="btn btn-sm btn-outline-secondary" name="resolution" value="ignore" title="Ignorar"><i class="ti ti-eye-off"></i></button>
+                                    </form>
+                                {% endif %}
+                            </td>
+                        {% endif %}
+                    </tr>
+                {% else %}
+                    <tr><td colspan="{{ can_manage ? 5 : 4 }}" class="text-center text-muted py-4">Nenhum alerta com esse filtro.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

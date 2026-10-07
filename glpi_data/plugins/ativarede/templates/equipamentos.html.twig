@@ -1,0 +1,117 @@
+<link rel="stylesheet" href="{{ css_url }}">
+
+<div class="ar-app">
+    <div class="ar-head">
+        <div>
+            <h2 class="mb-1"><i class="ti ti-devices me-2 text-primary"></i>Equipamentos</h2>
+            <div class="text-muted small">Posição informada pelo Ativa Guardian de cada máquina (porta do switch via LLDP e monitores via Windows).</div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header"><h3 class="card-title"><i class="ti ti-device-desktop me-2"></i>Máquinas ({{ machines|length }})</h3></div>
+        <div class="table-responsive">
+            <table class="table table-sm table-vcenter card-table">
+                <thead>
+                    <tr>
+                        <th>Computador</th>
+                        <th>Usuário (GLPI)</th>
+                        <th>Mesa</th>
+                        <th>Switch · porta</th>
+                        <th>Conexão</th>
+                        <th>Monitores</th>
+                        <th>Desde</th>
+                        <th>Último relatório</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for m in machines %}
+                    <tr>
+                        <td>
+                            <span class="badge {{ m.online ? 'bg-green' : 'bg-secondary' }} me-1" title="{{ m.online ? 'Ligada' : 'Sem contato agora' }}">&nbsp;</span>
+                            {% if m.computer_url %}<a href="{{ m.computer_url }}">{{ m.computer }}</a>{% else %}{{ m.hostname }} <span class="text-muted small">(não vinculado)</span>{% endif %}
+                        </td>
+                        <td>{{ m.user }}{% if m.group %}<div class="text-muted small">{{ m.group }}</div>{% endif %}</td>
+                        <td>{{ m.desk ?: '—' }}</td>
+                        <td>
+                            {% if m.port %}<span class="ar-port-tag">{{ m.switch }} · {{ m.port }}</span>{% else %}—{% endif %}
+                            {% if m.pending %}<div class="text-warning small">mudando para {{ m.pending }}?</div>{% endif %}
+                        </td>
+                        <td>{{ {'wired': 'Cabo', 'wifi': 'Wi-Fi', 'none': 'Sem rede', 'unknown': '—'}[m.link] ?? m.link }}</td>
+                        <td>
+                            {% for mon in m.monitors %}
+                                <div class="small {{ mon.missing ? 'text-danger' : '' }}">{{ mon.model }}{% if mon.serial %} · {{ mon.serial }}{% endif %}{% if mon.missing %} · ausente{% endif %}</div>
+                            {% else %}<span class="text-muted small">—</span>{% endfor %}
+                        </td>
+                        <td class="small text-nowrap">{{ m.since ?: '—' }}</td>
+                        <td class="small text-nowrap">{{ m.last_report }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="8" class="text-center text-muted py-4">Nenhuma máquina enviou a posição ainda. É preciso o Ativa Guardian 1.6.0 ou mais novo nas máquinas.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header"><h3 class="card-title"><i class="ti ti-device-desktop-analytics me-2"></i>Monitores ({{ monitors|length }})</h3></div>
+        <div class="table-responsive">
+            <table class="table table-sm table-vcenter card-table">
+                <thead>
+                    <tr><th>Modelo</th><th>Série</th><th>Fabricação</th><th>Conexão</th><th>Computador</th><th>Mesa</th><th>Desde</th><th>Situação</th></tr>
+                </thead>
+                <tbody>
+                {% for mon in monitors %}
+                    <tr>
+                        <td>{% if mon.glpi_url %}<a href="{{ mon.glpi_url }}">{{ mon.model }}</a>{% else %}{{ mon.model }}{% endif %}</td>
+                        <td class="font-monospace small">{{ mon.serial ?: 'não informada' }}</td>
+                        <td class="small">{{ mon.year ?: '—' }}</td>
+                        <td class="small">{{ mon.connection ?: '—' }}</td>
+                        <td>{% if mon.machine_url %}<a href="{{ mon.machine_url }}">{{ mon.machine }}</a>{% else %}{{ mon.machine ?: '—' }}{% endif %}</td>
+                        <td>{{ mon.desk ?: '—' }}</td>
+                        <td class="small text-nowrap">{{ mon.since }}</td>
+                        <td class="small">{% if mon.missing %}<span class="text-danger">Ausente desde {{ mon.missing_since }}</span>{% else %}Conectado{% endif %}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="8" class="text-center text-muted py-4">Nenhum monitor informado ainda.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card" id="switches">
+        <div class="card-header"><h3 class="card-title"><i class="ti ti-network me-2"></i>Switches ({{ switches|length }})</h3></div>
+        <div class="table-responsive">
+            <table class="table table-sm table-vcenter card-table">
+                <thead>
+                    <tr><th>Apelido (aparece nas mesas)</th><th>IP de gerência</th><th>Nome / série</th><th>Modelo</th><th>Máquinas</th><th>Visto por último</th></tr>
+                </thead>
+                <tbody>
+                {% for s in switches %}
+                    <tr>
+                        <td>
+                            {% if can_manage %}
+                                <form method="post" action="{{ self_url }}" class="d-flex gap-1" style="max-width:240px">
+                                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="id" value="{{ s.id }}">
+                                    <input class="form-control form-control-sm" name="label" value="{{ s.label }}" maxlength="64" placeholder="{{ s.short }}">
+                                    <button class="btn btn-sm btn-outline-primary" title="Salvar apelido"><i class="ti ti-device-floppy"></i></button>
+                                </form>
+                            {% else %}{{ s.label ?: s.short }}{% endif %}
+                        </td>
+                        <td class="font-monospace small">{{ s.mgmt_ip ?: '—' }}</td>
+                        <td class="small">{{ s.system_name ?: '—' }}<div class="text-muted font-monospace">{{ s.chassis_id }}</div></td>
+                        <td class="small">{{ s.description ?: '—' }}</td>
+                        <td>{{ s.machines }}</td>
+                        <td class="small text-nowrap">{{ s.last_seen }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">Nenhum switch identificado ainda.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

@@ -17,10 +17,14 @@ antivirus: se o AV remover o componente de novo, isso vira erro reportado.
 Caminhos e nomes de servico dos componentes nao foram inventados: vieram do
 codigo que ja os instala e gerencia (Ativa Updater / instalador unificado).
 
+Desde a 1.6.0 tambem informa ao plugin Ativa Rede a posicao fisica da maquina
+(switch/porta via LLDP e monitores conectados) - ver network_report.py.
+
 Modos:
     --service            executado pelo Windows Service Control Manager
     --run-once           uma verificacao + heartbeat, util para teste
     --check              so imprime o diagnostico, sem enviar nada
+    --network            coleta a posicao (switch/porta/monitores) e imprime, sem enviar
     --configure <json>   grava config.json protegido em ProgramData
     --install-service    registra o servico no Windows
     --uninstall-service  remove o servico
@@ -51,7 +55,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.5.3"
+GUARDIAN_VERSION = "1.6.0"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -64,6 +68,8 @@ PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Guardian"
 CONFIG_PATH = PRODUCT_DIR / "config.json"
 MACHINE_PATH = PRODUCT_DIR / "machine.json"
 LOG_DIR = PRODUCT_DIR / "logs"
+# Captura temporaria do LLDP (Ativa Rede); apagada logo apos a leitura.
+NETWORK_WORK_DIR = PRODUCT_DIR / "net"
 LOG_NAME = "guardian.log"
 INSTALL_DIR = PROGRAM_FILES / "Ativa Locacao" / "Guardian"
 SERVICE_EXE = INSTALL_DIR / "AtivaGuardian.exe"
@@ -1569,6 +1575,18 @@ class GuardianRuntime:
             except Exception as exc:  # noqa: BLE001 - nunca derruba o loop
                 logger.warning("Auto-reparo de %s falhou: %s", name, exc)
 
+    def start_network_reporter(self, logger: logging.Logger, machine_id: str) -> None:
+        """Ativa Rede em thread propria: a escuta do LLDP leva ~35 s."""
+        try:
+            import network_report
+
+            network_report.NetworkReporter(
+                self.stop_event, logger, machine_id, hostname, GUARDIAN_VERSION, NETWORK_WORK_DIR,
+                lambda: validate_config(load_json(CONFIG_PATH)),
+            ).start()
+        except Exception:  # noqa: BLE001 - o restante do Guardian segue normal
+            logger.exception("Nao foi possivel iniciar o relatorio do Ativa Rede.")
+
     def run(self, logger: logging.Logger) -> None:
         logger.info("Guardian started (versao %s)", GUARDIAN_VERSION)
         machine_id = machine_identity(logger)
@@ -1576,6 +1594,7 @@ class GuardianRuntime:
             self.finish_pending_repair(logger, machine_id)
         except Exception:  # noqa: BLE001 - nunca impede o servico de subir
             logger.exception("Falha ao retomar o reparo pendente.")
+        self.start_network_reporter(logger, machine_id)
         next_heartbeat = 0.0
 
         # As verificacoes sao locais e baratas, entao rodam a cada
@@ -1798,6 +1817,7 @@ def main() -> int:
     parser.add_argument("--service", action="store_true", help="Executa pelo Windows Service Control Manager")
     parser.add_argument("--run-once", action="store_true", help="Uma verificacao e um heartbeat")
     parser.add_argument("--check", action="store_true", help="So mostra o diagnostico, sem enviar")
+    parser.add_argument("--network", action="store_true", help="Mostra a posicao (switch/porta/monitores), sem enviar")
     parser.add_argument("--configure", metavar="ARQUIVO", help="Grava config.json a partir de um JSON")
     parser.add_argument("--install-service", action="store_true", help="Registra o servico no Windows")
     parser.add_argument("--uninstall-service", action="store_true", help="Remove o servico do Windows")
@@ -1825,7 +1845,7 @@ def main() -> int:
             maintenance.show_message(str(exc), error=True)
             return 1
 
-    logger = configure_logging(arguments.debug or arguments.check or arguments.run_once)
+    logger = configure_logging(arguments.debug or arguments.check or arguments.run_once or arguments.network)
 
     try:
         if arguments.authorize_install or arguments.enforce_protection or arguments.setup_protection:
@@ -1852,6 +1872,17 @@ def main() -> int:
             payload["operating_system"] = operating_system()
             print(json.dumps(payload, indent=2, ensure_ascii=False))
             return 0
+        if arguments.network:
+            import network_report
+
+            if not is_elevated():
+                print("Aviso: sem privilegio de administrador o pktmon nao captura; a porta do switch vai sair vazia.",
+                      file=sys.stderr)
+            payload = network_report.collect_report(
+                machine_identity(logger), hostname(), GUARDIAN_VERSION, NETWORK_WORK_DIR, logger
+            )
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            return 0
         if arguments.run_once:
             with SingleInstance():
                 GuardianRuntime().run_cycle(logger, machine_identity(logger))
@@ -1861,7 +1892,7 @@ def main() -> int:
         print(f"Erro: {exc}", file=sys.stderr)
         return 1
 
-    parser.error("selecione --service, --run-once, --check, --configure, --install-service ou --uninstall-service")
+    parser.error("selecione --service, --run-once, --check, --network, --configure, --install-service ou --uninstall-service")
     return 2
 
 

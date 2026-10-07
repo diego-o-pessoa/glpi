@@ -1,0 +1,68 @@
+<link rel="stylesheet" href="{{ css_url }}">
+
+<div class="ar-app" id="ar-plan-app"
+     data-url="{{ data_url }}"
+     data-plans-url="{{ plans_url }}"
+     data-self-url="{{ self_url }}"
+     data-alerts-url="{{ alerts_url }}"
+     data-plan="{{ plan_id }}"
+     data-can-manage="{{ can_manage ? '1' : '0' }}">
+
+    <div class="ar-head">
+        <div>
+            <h2 class="mb-1"><i class="ti ti-layout-board me-2 text-primary"></i><span data-ar-plan-name>Planta</span></h2>
+            <div class="text-muted small">
+                Atualizado às <span data-ar-updated>—</span> · a tela se atualiza sozinha a cada minuto.
+            </div>
+        </div>
+        <div class="ar-tools">
+            {% if plans|length > 1 %}
+                <select class="form-select form-select-sm w-auto" data-ar-plan-select aria-label="Planta">
+                    {% for plan in plans %}
+                        <option value="{{ plan.id }}" {{ plan.id == plan_id ? 'selected' : '' }}>{{ plan.name }}</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+            <div class="btn-group btn-group-sm" role="group" aria-label="Zoom">
+                <button type="button" class="btn btn-outline-secondary" data-ar-zoom="-1" title="Diminuir"><i class="ti ti-zoom-out"></i></button>
+                <button type="button" class="btn btn-outline-secondary" data-ar-zoom="0" title="Ajustar à tela"><span data-ar-zoom-label>100%</span></button>
+                <button type="button" class="btn btn-outline-secondary" data-ar-zoom="1" title="Aumentar"><i class="ti ti-zoom-in"></i></button>
+            </div>
+            {% if can_manage %}
+                <button type="button" class="btn btn-sm btn-outline-primary" data-ar-edit>
+                    <i class="ti ti-pencil me-1"></i><span>Editar planta</span>
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="ar-legend" data-ar-legend></div>
+
+    <div class="card ar-stage-card">
+        <div class="ar-edit-bar" data-ar-edit-bar hidden>
+            <i class="ti ti-hand-move me-1"></i>
+            Modo edição: arraste as mesas, clique em uma para mudar o nome e a porta.
+            <button type="button" class="btn btn-sm btn-primary ms-auto" data-ar-add><i class="ti ti-plus me-1"></i>Adicionar mesa</button>
+        </div>
+        <div class="ar-stage" data-ar-stage>
+            <div class="ar-canvas" data-ar-canvas>
+                <img class="ar-bg" data-ar-bg alt="" draggable="false">
+                <div class="ar-desks" data-ar-desks></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-0">
+        <div class="col-lg-7">
+            <div class="card h-100"><div class="card-body" data-ar-panel></div></div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card h-100"><div class="card-body" data-ar-side></div></div>
+        </div>
+    </div>
+
+    <div class="ar-toast" data-ar-toast role="status" aria-live="polite" hidden></div>
+</div>
+
+<script type="application/json" id="ar-initial">{{ initial_json|raw }}</script>
+<script src="{{ js_url }}"></script>
