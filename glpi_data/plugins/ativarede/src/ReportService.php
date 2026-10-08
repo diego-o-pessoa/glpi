@@ -428,11 +428,17 @@ final class ReportService
                     $info['machines_id'] = $machineDbId;
                     $info['since'] = $now;
                     if ($previous > 0) {
+                        // De onde -> para onde, gravado agora (a posicao ja foi
+                        // atualizada acima): continua certo mesmo que as
+                        // maquinas mudem de mesa depois.
+                        Inventory::resetCache();
                         Events::record(Events::MONITOR_MOVED, [
                             'monitors_id'      => $monitorId,
                             'machines_id'      => $machineDbId,
                             'from_machines_id' => $previous,
                             'to_machines_id'   => $machineDbId,
+                            'details'          => 'Estava em ' . Inventory::machineWhere(Inventory::machine($previous))
+                                . '; foi para ' . Inventory::machineWhere(Inventory::machine($machineDbId)) . '.',
                         ]);
                         $events++;
                     }

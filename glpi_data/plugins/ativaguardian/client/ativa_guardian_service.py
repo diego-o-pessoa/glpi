@@ -55,7 +55,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.6.3"
+GUARDIAN_VERSION = "1.6.4"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -816,6 +816,10 @@ ACTION_RESTART = "RESTART_COMPONENT"
 ACTION_REPAIR = "REPAIR_COMPONENT"
 ACTION_FIX = "FIX_COMPONENT"
 ALLOWED_ACTIONS = frozenset({ACTION_CHECK, ACTION_START, ACTION_RESTART, ACTION_REPAIR, ACTION_FIX})
+# Ativa Rede ("Atualizar agora" na planta): so antecipa a coleta da posicao.
+# Tratada pelo GuardianRuntime (precisa do relator), fora de execute_action.
+ACTION_NETWORK = "NETWORK_REPORT"
+NETWORK_COMPONENT = "ativarede"
 
 # O servidor manda apenas um par (componente, acao) de listas fechadas. Este
 # mapa - compilado dentro do executavel - e o unico lugar que traduz isso para
@@ -1496,6 +1500,16 @@ class GuardianRuntime:
                 continue
 
             logger.info("Acao %s recebida: %s em %s", action_id, action, component)
+            if component == NETWORK_COMPONENT and action == ACTION_NETWORK:
+                # Nao bloqueia o laco (a escuta leva ~65 s): acorda o relator e
+                # devolve na hora; a posicao chega ao Ativa Rede logo em seguida.
+                success, message = self.request_network_report()
+                logger.info("Acao %s: %s (%s)", action_id, "success" if success else "failed", message)
+                try:
+                    api.report_action(action_id, machine_id, success, message)
+                except GuardianError as exc:
+                    logger.warning("Nao foi possivel devolver o resultado da acao %s: %s", action_id, exc)
+                continue
             success, message = execute_action(component, action, logger, action_id=action_id)
             logger.info("Acao %s: %s (%s)", action_id, "success" if success else "failed", message)
 
@@ -1576,16 +1590,24 @@ class GuardianRuntime:
                 logger.warning("Auto-reparo de %s falhou: %s", name, exc)
 
     def start_network_reporter(self, logger: logging.Logger, machine_id: str) -> None:
-        """Ativa Rede em thread propria: a escuta do LLDP leva ~35 s."""
+        """Ativa Rede em thread propria: a escuta do LLDP leva ~65 s."""
         try:
             import network_report
 
-            network_report.NetworkReporter(
+            self.network_reporter = network_report.NetworkReporter(
                 self.stop_event, logger, machine_id, hostname, GUARDIAN_VERSION, NETWORK_WORK_DIR,
                 lambda: validate_config(load_json(CONFIG_PATH)),
-            ).start()
+            )
+            self.network_reporter.start()
         except Exception:  # noqa: BLE001 - o restante do Guardian segue normal
             logger.exception("Nao foi possivel iniciar o relatorio do Ativa Rede.")
+
+    def request_network_report(self) -> tuple[bool, str]:
+        reporter = getattr(self, "network_reporter", None)
+        if reporter is None or not reporter.is_alive():
+            return False, "Relatorio do Ativa Rede nao esta ativo nesta maquina."
+        reporter.request_now()
+        return True, "Coleta da posicao iniciada; envio em cerca de 1 a 2 minutos."
 
     def run(self, logger: logging.Logger) -> None:
         logger.info("Guardian started (versao %s)", GUARDIAN_VERSION)

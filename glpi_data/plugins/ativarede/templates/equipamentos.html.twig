@@ -59,7 +59,7 @@
         <div class="table-responsive">
             <table class="table table-sm table-vcenter card-table">
                 <thead>
-                    <tr><th>Modelo</th><th>Série</th><th>Fabricação</th><th>Conexão</th><th>Computador</th><th>Mesa</th><th>Desde</th><th>Situação</th></tr>
+                    <tr><th>Modelo</th><th>Série</th><th>Fabricação</th><th>Conexão</th><th>Computador</th><th>Mesa</th><th>Desde</th><th>Situação</th><th>Por onde passou</th></tr>
                 </thead>
                 <tbody>
                 {% for mon in monitors %}
@@ -72,9 +72,14 @@
                         <td>{{ mon.desk ?: '—' }}</td>
                         <td class="small text-nowrap">{{ mon.since }}</td>
                         <td class="small">{% if mon.missing %}<span class="text-danger">Ausente desde {{ mon.missing_since }}</span>{% else %}Conectado{% endif %}</td>
+                        <td class="small" style="min-width:260px">
+                            {% for h in mon.history %}
+                                <div class="mb-1"><span class="text-muted">{{ h.date }}</span> · <strong>{{ h.label }}</strong><div class="text-muted">{{ h.detail }}</div></div>
+                            {% else %}<span class="text-muted">sem mudanças registradas</span>{% endfor %}
+                        </td>
                     </tr>
                 {% else %}
-                    <tr><td colspan="8" class="text-center text-muted py-4">Nenhum monitor informado ainda.</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted py-4">Nenhum monitor informado ainda.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>

@@ -514,6 +514,33 @@ final class Inventory
         foreach (self::decoratedMachines() as $machine) {
             $machines[$machine['id']] = $machine;
         }
+
+        // Ultimas mudancas de cada monitor (por onde passou).
+        $history = [];
+        $ids = array_map('intval', array_column($rows, 'id'));
+        if ($ids !== []) {
+            foreach ($DB->request([
+                'FROM'  => Settings::TABLE_EVENTS,
+                'WHERE' => [
+                    'monitors_id' => $ids,
+                    'type'        => [Events::MONITOR_MOVED, Events::MONITOR_NEW, Events::MONITOR_MISSING],
+                ],
+                'ORDER' => 'id DESC',
+                'LIMIT' => 2000,
+            ]) as $event) {
+                $monitorId = (int) $event['monitors_id'];
+                if (count($history[$monitorId] ?? []) >= 5) {
+                    continue;
+                }
+                $text = self::describe($event);
+                $history[$monitorId][] = [
+                    'date'   => self::date($event['date_creation']),
+                    'label'  => Events::labels()[$event['type']] ?? $event['type'],
+                    'detail' => $text['detail'],
+                ];
+            }
+        }
+
         $out = [];
         foreach ($rows as $row) {
             $view = self::monitorView($row, $native);
@@ -522,6 +549,7 @@ final class Inventory
             $view['machine'] = $machine ? ($machine['computer'] ?: $machine['hostname']) : '';
             $view['machine_url'] = $machine['computer_url'] ?? '';
             $view['desk'] = $desk['name'] ?? '';
+            $view['history'] = $history[(int) $row['id']] ?? [];
             $out[] = $view;
         }
         return $out;
@@ -541,9 +569,13 @@ final class Inventory
             if ((int) $event['desks_id'] > 0) {
                 $index['desk'][(int) $event['desks_id']][] = $event;
             }
-            foreach (['machines_id', 'to_machines_id'] as $field) {
-                if ((int) $event[$field] > 0) {
-                    $index['machine'][(int) $event[$field]][] = $event;
+            // Origem e destino: no monitor que mudou de mesa, as duas mesas avisam.
+            $seen = [];
+            foreach (['machines_id', 'to_machines_id', 'from_machines_id'] as $field) {
+                $id = (int) $event[$field];
+                if ($id > 0 && !isset($seen[$id])) {
+                    $seen[$id] = true;
+                    $index['machine'][$id][] = $event;
                 }
             }
             if ($event['type'] === Events::COMPUTER_MOVED && (int) $event['from_switches_id'] > 0) {
@@ -624,7 +656,10 @@ final class Inventory
                 $title = 'Monitor ' . self::monitorName((int) $event['monitors_id']) . ' mudou de mesa';
                 $from = self::machine((int) $event['from_machines_id']);
                 $to = self::machine((int) $event['to_machines_id']);
-                $detail = 'Estava em ' . self::machineWhere($from) . '; agora está em ' . self::machineWhere($to) . '.';
+                // Gravado no momento da troca; alertas antigos (sem o texto) montam agora.
+                $detail = $detail !== ''
+                    ? $detail
+                    : 'Estava em ' . self::machineWhere($from) . '; agora está em ' . self::machineWhere($to) . '.';
                 $computersId = (int) ($to['computers_id'] ?? $computersId);
                 break;
             case Events::MONITOR_NEW:
@@ -684,12 +719,18 @@ final class Inventory
         return (string) ($machine['hostname'] ?: $machine['machine_id']);
     }
 
-    private static function machineWhere(?array $machine): string
+    /** "PC-045 — mesa D3 (switch .43, porta 15)" ou "... — mesa B2 (Wi-Fi)". */
+    public static function machineWhere(?array $machine): string
     {
         if (!$machine) {
             return 'máquina desconhecida';
         }
-        return self::machineName($machine) . ' — ' . self::positionLabel((int) $machine['switches_id'], (string) $machine['port']);
+        $where = self::positionLabel((int) $machine['switches_id'], (string) $machine['port']);
+        if ($where === 'sem posição') {
+            $desk = self::deskOf($machine);
+            $where = $desk ? 'mesa ' . $desk['name'] . ' (Wi-Fi)' : 'sem mesa definida';
+        }
+        return self::machineName($machine) . ' — ' . $where;
     }
 
     private static function monitorName(int $id): string

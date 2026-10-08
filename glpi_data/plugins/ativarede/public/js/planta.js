@@ -107,6 +107,51 @@
             .catch(function () { /* tenta de novo no proximo ciclo */ });
     }
 
+    /* "Atualizar agora": recarrega ja e, para quem edita, pede as maquinas
+     * uma coleta imediata. Depois acompanha a cada 10 s por 4 minutos (tempo
+     * da coleta + confirmacao de troca de mesa), com contagem no botao. */
+    var WATCH_MS = 4 * 60 * 1000;
+    var watchUntil = 0;
+    var watchTimer = null;
+    var refreshBtn = q('[data-ar-refresh]');
+
+    function watchTick() {
+        var left = watchUntil - Date.now();
+        var label = refreshBtn ? refreshBtn.querySelector('span') : null;
+        if (left <= 0) {
+            clearInterval(watchTimer);
+            watchTimer = null;
+            if (label) { label.textContent = 'Atualizar agora'; }
+            if (refreshBtn) { refreshBtn.disabled = false; }
+            refresh();
+            return;
+        }
+        var sec = Math.ceil(left / 1000);
+        if (label) { label.textContent = 'Acompanhando… ' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
+        if (Date.now() - lastWatchRefresh >= 10000) {
+            lastWatchRefresh = Date.now();
+            refresh();
+        }
+    }
+    var lastWatchRefresh = 0;
+
+    function startWatch() {
+        watchUntil = Date.now() + WATCH_MS;
+        if (refreshBtn) { refreshBtn.disabled = true; }
+        if (!watchTimer) { watchTimer = setInterval(watchTick, 1000); }
+        watchTick();
+    }
+
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function () {
+            refresh();
+            if (!canManage) { showToast('Planta atualizada.'); return; }
+            post({ action: 'collect' }).then(function (r) {
+                if (r.ok && r.requested > 0) { startWatch(); }
+            });
+        });
+    }
+
     function deskById(id) {
         for (var i = 0; i < state.desks.length; i++) {
             if (state.desks[i].id === id) { return state.desks[i]; }

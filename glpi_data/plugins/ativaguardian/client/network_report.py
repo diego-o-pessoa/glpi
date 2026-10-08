@@ -37,6 +37,9 @@ REDE_API_SUFFIX = "/plugins/ativarede/api/v1"
 
 # Coleta a cada 15 min; o envio so sai quando algo mudou ou a cada 6 h.
 REPORT_INTERVAL_SECONDS = 15 * 60
+# Depois de uma mudanca, a coleta de confirmacao (o GLPI so registra a troca
+# de mesa com dois relatorios seguidos) sai logo, nao em 15 min.
+CONFIRM_DELAY_SECONDS = 2 * 60
 RESEND_SECONDS = 6 * 3600
 FIRST_DELAY_SECONDS = 90
 # Ativa Rede nao instalado no GLPI (404): tenta de novo so depois disto.
@@ -540,20 +543,36 @@ class NetworkReporter(threading.Thread):
         # porta nova: depois de uma mudanca, o ciclo seguinte reenvia mesmo
         # igual (senao a confirmacao esperaria o reenvio de 6 h).
         self.confirm_next = False
+        # "Atualizar agora" na planta: acorda o laco e envia mesmo sem mudanca.
+        self.wake = threading.Event()
+        self.force_send = False
+
+    def request_now(self) -> None:
+        self.force_send = True
+        self.wake.set()
+
+    def _sleep(self, seconds: float) -> None:
+        """Espera o intervalo, acordando antes se pedirem coleta ou o servico parar."""
+        deadline = time.monotonic() + seconds
+        while not self.stop_event.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or self.wake.wait(min(remaining, 5)):
+                break
+        self.wake.clear()
 
     def run(self) -> None:
-        if self.stop_event.wait(FIRST_DELAY_SECONDS):
-            return
+        self._sleep(FIRST_DELAY_SECONDS)
         while not self.stop_event.is_set():
             try:
                 self.cycle()
             except Exception:  # noqa: BLE001 - nunca derruba o servico
                 self.logger.exception("Ativa Rede: falha inesperada no ciclo.")
-            self.stop_event.wait(REPORT_INTERVAL_SECONDS)
+            self._sleep(CONFIRM_DELAY_SECONDS if self.confirm_next else REPORT_INTERVAL_SECONDS)
 
     def cycle(self) -> None:
         now = time.monotonic()
-        if now < self.absent_until:
+        forced, self.force_send = self.force_send, False
+        if now < self.absent_until and not forced:
             return
         try:
             config = self.load_config()
@@ -569,7 +588,7 @@ class NetworkReporter(threading.Thread):
             return
         current = signature(payload)
         changed = current != self.last_signature
-        if not changed and not self.confirm_next and now - self.last_sent < RESEND_SECONDS:
+        if not changed and not self.confirm_next and not forced and now - self.last_sent < RESEND_SECONDS:
             return
         try:
             send_report(url, token, payload, self.guardian_version)

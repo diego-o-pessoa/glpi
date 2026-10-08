@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use GlpiPlugin\Ativarede\Collector;
 use GlpiPlugin\Ativarede\Desks;
 use GlpiPlugin\Ativarede\Events;
 use GlpiPlugin\Ativarede\Inventory;
@@ -47,6 +48,7 @@ try {
         'delete_desk'  => Desks::delete((int) ($_POST['id'] ?? 0)),
         'resolve'      => Events::resolve((int) ($_POST['id'] ?? 0), (string) ($_POST['resolution'] ?? '')),
         'switch_label' => Desks::saveSwitchLabel((int) ($_POST['id'] ?? 0), (string) ($_POST['label'] ?? '')),
+        'collect'      => Collector::requestAll(),
         default        => ['ok' => false, 'message' => 'Ação inválida.'],
     };
 } catch (Throwable $exception) {

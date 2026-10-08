@@ -30,8 +30,13 @@ final class ActionQueue
      * faltarem. Evita reinstalação à toa e decisões sobre status velho.
      */
     public const FIX = 'FIX_COMPONENT';
+    /**
+     * Ativa Rede: coletar e enviar agora a posicao (switch/porta/monitores),
+     * sem esperar o ciclo de 15 min. So leitura na maquina.
+     */
+    public const NETWORK = 'NETWORK_REPORT';
 
-    public const ACTIONS = [self::CHECK, self::START, self::RESTART, self::REPAIR, self::FIX];
+    public const ACTIONS = [self::CHECK, self::START, self::RESTART, self::REPAIR, self::FIX, self::NETWORK];
 
     public const PENDING = 'pending';
     public const RUNNING = 'running';
@@ -54,6 +59,8 @@ final class ActionQueue
         'glpi_agent' => [self::CHECK, self::START, self::RESTART, self::REPAIR, self::FIX],
         'wallpaper'  => [self::CHECK, self::REPAIR, self::FIX],
         'workspace'  => [self::CHECK, self::START, self::RESTART, self::REPAIR, self::FIX],
+        // Pedido pelo botao "Atualizar agora" da planta do Ativa Rede.
+        'ativarede'  => [self::NETWORK],
     ];
 
     /** Reparo baixa e instala pacote: leva bem mais que as demais ações. */

@@ -21,6 +21,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import network_report as nr  # noqa: E402
+from time import monotonic as time_monotonic  # noqa: E402
 
 
 def quiet_logger():
@@ -263,6 +264,29 @@ class ReporterTests(unittest.TestCase):
             reporter.cycle()  # igual de novo: so no reenvio de 6 h
         self.assertEqual(send.call_count, 2)
         self.assertEqual(send.call_args[0][0], "https://h/plugins/ativarede/api/v1/report")
+
+    def test_request_now_forces_send_even_unchanged(self):
+        reporter = self.make()
+        report = nr.build_report("abc", "PC", "1.6.0", ReportTests.SYSTEM, None)
+        with mock.patch.object(nr, "collect_report", return_value=report), \
+                mock.patch.object(nr, "send_report") as send:
+            reporter.cycle()
+            reporter.cycle()  # confirmacao
+            reporter.cycle()  # nada mudou: nao envia
+            reporter.request_now()
+            self.assertTrue(reporter.wake.is_set())
+            reporter.cycle()  # pedido pela planta: envia
+        self.assertEqual(send.call_count, 3)
+
+    def test_sleep_wakes_on_request(self):
+        import threading
+
+        reporter = self.make()
+        threading.Timer(0.2, reporter.request_now).start()
+        started = time_monotonic()
+        reporter._sleep(30)
+        self.assertLess(time_monotonic() - started, 6)
+        self.assertFalse(reporter.wake.is_set())
 
     def test_absent_plugin_backs_off(self):
         reporter = self.make()

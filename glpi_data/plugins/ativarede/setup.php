@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Glpi\Http\SessionManager;
 use Glpi\Plugin\Hooks;
 
-define('PLUGIN_ATIVAREDE_VERSION', '0.1.4');
+define('PLUGIN_ATIVAREDE_VERSION', '0.1.6');
 define('PLUGIN_ATIVAREDE_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVAREDE_MAX_GLPI', '12.0.0');
 define('PLUGIN_ATIVAREDE_DIR', __DIR__);

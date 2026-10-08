@@ -28,6 +28,10 @@
                 <button type="button" class="btn btn-outline-secondary" data-ar-zoom="0" title="Ajustar à tela"><span data-ar-zoom-label>100%</span></button>
                 <button type="button" class="btn btn-outline-secondary" data-ar-zoom="1" title="Aumentar"><i class="ti ti-zoom-in"></i></button>
             </div>
+            <button type="button" class="btn btn-sm btn-primary" data-ar-refresh
+                    title="{{ can_manage ? 'Pede às máquinas ligadas que informem a posição agora e acompanha as mudanças por alguns minutos' : 'Recarrega a planta agora' }}">
+                <i class="ti ti-refresh me-1"></i><span>Atualizar agora</span>
+            </button>
             {% if can_manage %}
                 <button type="button" class="btn btn-sm btn-outline-primary" data-ar-edit>
                     <i class="ti ti-pencil me-1"></i><span>Editar planta</span>
