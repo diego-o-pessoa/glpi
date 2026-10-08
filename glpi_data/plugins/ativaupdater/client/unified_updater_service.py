@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.15"
+UPDATER_VERSION = "1.7.16"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -210,6 +210,24 @@ def atomic_json(path: Path, value: dict[str, Any]) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, indent=2, ensure_ascii=False), encoding="utf-8")
     os.replace(temporary, path)
+
+
+def atomic_json_retry(path: Path, value: dict[str, Any], attempts: int = 20, delay: float = 0.5,
+                      sleep=time.sleep) -> None:
+    """atomic_json tolerante a arquivo momentaneamente em uso.
+
+    Instalacao por cima: o servico antigo (ou o antivirus) pode estar com o
+    arquivo aberto e o Windows nega a troca (WinError 5/32) por instantes.
+    Antes isso abortava a atualizacao inteira em "Configurando o servico".
+    """
+    for attempt in range(attempts):
+        try:
+            atomic_json(path, value)
+            return
+        except PermissionError:
+            if attempt + 1 >= attempts:
+                raise
+            sleep(delay)
 
 
 def version_tuple(value: str) -> tuple[int, int, int]:
@@ -1915,7 +1933,13 @@ def configure_service(config_source: Path, installed_version: str) -> int:
             )
         except OSError:
             pass
-    atomic_json(CONFIG_PATH, config)
+    # Reinstalacao por cima com a mesma configuracao: nada a gravar.
+    try:
+        unchanged = load_json(CONFIG_PATH) == config
+    except Exception:  # noqa: BLE001 - arquivo ausente ou corrompido: grava
+        unchanged = False
+    if not unchanged:
+        atomic_json_retry(CONFIG_PATH, config)
     previous = get_state()
     previous.update({
         "installed_version": installed_version,
@@ -1925,7 +1949,7 @@ def configure_service(config_source: Path, installed_version: str) -> int:
     })
     clear_pending_install(previous)
     clear_install_failures(previous)
-    atomic_json(STATE_PATH, previous)
+    atomic_json_retry(STATE_PATH, previous)
     return 0
 
 

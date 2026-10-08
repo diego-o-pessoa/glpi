@@ -46,7 +46,7 @@ import ativa_workspace_uninstall as uninstall
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.8.15"
+WORKSPACE_AGENT_VERSION = "1.8.16"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -1262,11 +1262,21 @@ def write_configuration(source: Path, logger: logging.Logger) -> None:
     if not str(data.get("api_url", "")).startswith("https://"):
         raise ValueError("api_url invalida no config.")
     PRODUCT_DIR.mkdir(parents=True, exist_ok=True)
-    lib.CONFIG_PATH.write_text(json.dumps({
+    content = json.dumps({
         "api_url": str(data["api_url"]).rstrip("/"),
         "api_token": str(data.get("api_token", "")),
         "verify_tls": True,
-    }), encoding="utf-8")
+    })
+    # Reinstalacao por cima: o config ja esta igual, nao regrava. Um antivirus
+    # que negasse a gravacao abortaria a instalacao sem necessidade.
+    try:
+        unchanged = lib.CONFIG_PATH.read_text("utf-8") == content
+    except OSError:
+        unchanged = False
+    if unchanged:
+        logger.info("Config do Workspace ja atualizada; nada a gravar.")
+    else:
+        lib.CONFIG_PATH.write_text(content, encoding="utf-8")
     harden_product_dir(logger)
     logger.info("Config do Workspace gravada em %s.", lib.CONFIG_PATH)
 

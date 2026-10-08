@@ -157,6 +157,39 @@ begin
     AgentRestartRequired := True;
 end;
 
+function UpdaterServiceRunning(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := Exec(ExpandConstant('{cmd}'),
+    '/C ""' + ExpandConstant('{sys}\sc.exe') + '" query AtivaUnifiedUpdater | "' + ExpandConstant('{sys}\find.exe') + '" "RUNNING""',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+{ Instalacao por cima: o que importa e o servico terminar EM EXECUCAO. Antes,
+  "sc start" exigia codigo 0 e abortava a atualizacao inteira com 1056 (o
+  servico antigo ainda nao tinha parado, mas estava rodando). }
+procedure StartUpdaterService();
+var
+  Attempt: Integer;
+  ResultCode: Integer;
+begin
+  WizardForm.StatusLabel.Caption := 'Iniciando o servico de atualizacao...';
+  if not Exec(ExpandConstant('{sys}\sc.exe'), 'start AtivaUnifiedUpdater', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    ResultCode := -1;
+  Log('sc start AtivaUnifiedUpdater: codigo ' + IntToStr(ResultCode));
+  for Attempt := 1 to 45 do begin
+    if UpdaterServiceRunning() then begin
+      if ResultCode = 1056 then
+        Log('Aviso: o servico ja estava em execucao (nao parou a tempo); o vigia/Guardian o reinicia na versao nova.');
+      Log('Servico AtivaUnifiedUpdater em execucao.');
+      exit;
+    end;
+    Sleep(1000);
+  end;
+  RaiseException('O servico de atualizacao nao ficou em execucao (sc start: codigo ' + IntToStr(ResultCode) + ').');
+end;
+
 procedure StopUpdaterService();
 var
   Attempt: Integer;
@@ -511,11 +544,7 @@ begin
   );
   { No modo acompanhado o servico antigo ainda esta rodando: pare-o para iniciar o novo executavel. }
   StopUpdaterService();
-  RunRequired(
-    'Iniciando o servico de atualizacao...',
-    ExpandConstant('{sys}\sc.exe'),
-    'start AtivaUnifiedUpdater'
-  );
+  StartUpdaterService();
   StartForInteractiveUser(UpdaterPath);
 
   { Por ultimo: o Guardian monitora os outros componentes, entao o primeiro

@@ -55,7 +55,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.6.6"
+GUARDIAN_VERSION = "1.6.7"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -1906,8 +1906,17 @@ def main() -> int:
             if arguments.authorize_install:
                 maintenance.authorize(installation=True)
             elif arguments.setup_protection:
-                maintenance.install_recovery_task()
-                maintenance.enforce(close=True)
+                # A protecao e reforco, nao funcionamento: se o antivirus negar
+                # a tarefa agendada ou as ACLs, a instalacao segue (antes abortava
+                # em "Protegendo os componentes Ativa..." e desfazia tudo).
+                for step, call in (
+                    ("tarefa de recuperacao", maintenance.install_recovery_task),
+                    ("protecao dos servicos e arquivos", lambda: maintenance.enforce(close=True)),
+                ):
+                    try:
+                        call()
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Protecao: %s nao aplicada (%s); a instalacao continua.", step, exc)
             else:
                 maintenance.enforce()
             logger.info("Operacao de protecao/manutencao concluida.")
