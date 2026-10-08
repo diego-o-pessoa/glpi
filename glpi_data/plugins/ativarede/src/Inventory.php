@@ -302,7 +302,8 @@ final class Inventory
     /** Resumo da maquina para a lista "Quem senta nesta mesa?". */
     public static function pickView(array $m): array
     {
-        return ['hostname' => $m['hostname'], 'computer' => $m['computer'], 'user' => $m['user'], 'group' => $m['group'], 'online' => $m['online']];
+        return ['hostname' => $m['hostname'], 'computer' => $m['computer'], 'label' => $m['label'], 'windows_user' => $m['windows_user'],
+                'user' => $m['user'], 'group' => $m['group'], 'online' => $m['online']];
     }
 
     // ------------------------------------------------------------------
@@ -333,10 +334,16 @@ final class Inventory
             $id = (int) $row['id'];
             $computer = $computers[(int) $row['computers_id']] ?? null;
             $contact = $online[$row['machine_id']] ?? null;
+            $name = (string) (($computer['name'] ?? '') ?: $row['hostname']);
+            // Quem esta usando: a conta logada no Windows (Guardian); sem
+            // sessao aberta, o usuario atribuido ao computador no GLPI.
+            $who = (string) (($contact['username'] ?? '') ?: ($computer['user'] ?? ''));
             $out[] = [
                 'id'           => $id,
                 'machine_id'   => (string) $row['machine_id'],
                 'hostname'     => (string) $row['hostname'],
+                'label'        => $name . ($who !== '' ? ' (' . $who . ')' : ''),
+                'windows_user' => (string) ($contact['username'] ?? ''),
                 'computers_id' => (int) $row['computers_id'],
                 'computer'     => $computer['name'] ?? '',
                 'computer_url' => $computer['url'] ?? '',
@@ -361,7 +368,7 @@ final class Inventory
         return $out;
     }
 
-    /** @return array<string, array{online: bool, last_contact: ?string}> por machine_id */
+    /** @return array<string, array{online: bool, last_contact: ?string, username: string}> por machine_id */
     private static function guardianContacts(array $machineIds): array
     {
         global $DB;
@@ -370,14 +377,75 @@ final class Inventory
             return [];
         }
         $limit = time() - Settings::guardianOfflineSeconds();
+        $hasUser = $DB->fieldExists(Settings::TABLE_GUARDIAN_MACHINES, 'username');
         $out = [];
         foreach ($DB->request([
-            'SELECT' => ['machine_id', 'last_contact'],
+            'SELECT' => array_merge(['machine_id', 'last_contact'], $hasUser ? ['username'] : []),
             'FROM'   => Settings::TABLE_GUARDIAN_MACHINES,
             'WHERE'  => ['machine_id' => array_values(array_unique($machineIds))],
         ]) as $row) {
             $ts = $row['last_contact'] ? strtotime((string) $row['last_contact']) : false;
-            $out[(string) $row['machine_id']] = ['online' => $ts !== false && $ts >= $limit, 'last_contact' => $row['last_contact']];
+            $out[(string) $row['machine_id']] = [
+                'online'       => $ts !== false && $ts >= $limit,
+                'last_contact' => $row['last_contact'],
+                'username'     => self::accountName((string) ($row['username'] ?? '')),
+            ];
+        }
+        return $out;
+    }
+
+    /** "DOMINIO\diego.pessoa" -> "diego.pessoa". */
+    private static function accountName(string $user): string
+    {
+        $user = trim($user);
+        $pos = strrpos($user, '\\');
+        return mb_substr($pos === false ? $user : substr($user, $pos + 1), 0, 64);
+    }
+
+    /**
+     * Maquinas com o Ativa Guardian que ainda nao mandaram a posicao ao Ativa
+     * Rede, com o motivo provavel (versao antiga, desligada, aguardando).
+     */
+    public static function guardianWithoutReport(): array
+    {
+        global $DB;
+
+        if (!$DB->tableExists(Settings::TABLE_GUARDIAN_MACHINES)) {
+            return [];
+        }
+        $known = [];
+        foreach ($DB->request(['SELECT' => ['machine_id'], 'FROM' => Settings::TABLE_MACHINES]) as $row) {
+            $known[(string) $row['machine_id']] = true;
+        }
+        $hasUser = $DB->fieldExists(Settings::TABLE_GUARDIAN_MACHINES, 'username');
+        $hasHidden = $DB->fieldExists(Settings::TABLE_GUARDIAN_MACHINES, 'hidden_at');
+        $limit = time() - Settings::guardianOfflineSeconds();
+        $out = [];
+        foreach ($DB->request([
+            'SELECT' => array_merge(['machine_id', 'hostname', 'guardian_version', 'last_contact'], $hasUser ? ['username'] : []),
+            'FROM'   => Settings::TABLE_GUARDIAN_MACHINES,
+            'WHERE'  => $hasHidden ? ['hidden_at' => null] : [],
+            'ORDER'  => 'hostname',
+        ]) as $row) {
+            if (isset($known[(string) $row['machine_id']])) {
+                continue;
+            }
+            $version = (string) $row['guardian_version'];
+            $ts = $row['last_contact'] ? strtotime((string) $row['last_contact']) : false;
+            if ($version === '' || version_compare($version, '1.6.0', '<')) {
+                $reason = 'Guardian ' . ($version ?: 'sem versão') . ': precisa do 1.6.0 ou mais novo (atualizar o pacote unificado).';
+            } elseif ($ts === false || $ts < $limit) {
+                $reason = 'Desligada ou sem contato desde ' . self::date($row['last_contact']) . '.';
+            } else {
+                $reason = 'Ligada, mas ainda não enviou a posição. O primeiro envio sai ~2 min após o serviço iniciar; se continuar, veja files/_log/ativarede.log.';
+            }
+            $user = self::accountName((string) ($row['username'] ?? ''));
+            $out[] = [
+                'label'        => (string) $row['hostname'] . ($user !== '' ? ' (' . $user . ')' : ''),
+                'version'      => $version,
+                'last_contact' => self::date($row['last_contact']),
+                'reason'       => $reason,
+            ];
         }
         return $out;
     }
@@ -546,7 +614,7 @@ final class Inventory
             $view = self::monitorView($row, $native);
             $machine = $machines[(int) $row['machines_id']] ?? null;
             $desk = $machine ? self::deskOf($machine) : null;
-            $view['machine'] = $machine ? ($machine['computer'] ?: $machine['hostname']) : '';
+            $view['machine'] = $machine ? $machine['label'] : '';
             $view['machine_url'] = $machine['computer_url'] ?? '';
             $view['desk'] = $desk['name'] ?? '';
             $view['history'] = $history[(int) $row['id']] ?? [];

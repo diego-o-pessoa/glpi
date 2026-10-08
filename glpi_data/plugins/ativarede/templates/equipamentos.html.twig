@@ -29,7 +29,7 @@
                     <tr>
                         <td>
                             <span class="badge {{ m.online ? 'bg-green' : 'bg-secondary' }} me-1" title="{{ m.online ? 'Ligada' : 'Sem contato agora' }}">&nbsp;</span>
-                            {% if m.computer_url %}<a href="{{ m.computer_url }}">{{ m.computer }}</a>{% else %}{{ m.hostname }} <span class="text-muted small">(não vinculado)</span>{% endif %}
+                            {% if m.computer_url %}<a href="{{ m.computer_url }}">{{ m.label }}</a>{% else %}{{ m.label }} <span class="text-muted small">· não vinculado ao GLPI</span>{% endif %}
                         </td>
                         <td>{{ m.user }}{% if m.group %}<div class="text-muted small">{{ m.group }}</div>{% endif %}</td>
                         <td>{{ m.desk ?: '—' }}</td>
@@ -53,6 +53,27 @@
             </table>
         </div>
     </div>
+
+    {% if missing|length %}
+        <div class="card mb-3 border-warning">
+            <div class="card-header"><h3 class="card-title"><i class="ti ti-alert-triangle me-2 text-warning"></i>Com Ativa Guardian, mas sem posição ({{ missing|length }})</h3></div>
+            <div class="table-responsive">
+                <table class="table table-sm table-vcenter card-table">
+                    <thead><tr><th>Computador</th><th>Guardian</th><th>Último contato</th><th>Motivo provável</th></tr></thead>
+                    <tbody>
+                    {% for g in missing %}
+                        <tr>
+                            <td>{{ g.label }}</td>
+                            <td class="font-monospace small">{{ g.version ?: '—' }}</td>
+                            <td class="small text-nowrap">{{ g.last_contact ?: '—' }}</td>
+                            <td class="small">{{ g.reason }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
 
     <div class="card mb-3">
         <div class="card-header"><h3 class="card-title"><i class="ti ti-device-desktop-analytics me-2"></i>Monitores ({{ monitors|length }})</h3></div>

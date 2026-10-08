@@ -29,6 +29,8 @@ function plugin_ativarede_install(): bool
     ReportService::cleanupOwnAnnouncements();
     // 0.1.3: monitores com serie generica ("SerialNumber") gravados antes do filtro.
     ReportService::cleanupGenericSerials();
+    // 0.1.7: tela virtual do Windows (MS_0001) nao e monitor fisico.
+    ReportService::cleanupVirtualMonitors();
 
     // Monitor ausente, mesa vazia e maquina sem relatorio: conferidos a cada hora.
     CronTask::register(

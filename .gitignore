@@ -23,6 +23,12 @@
 /glpi_data/plugins/ativaworkspace/client/dist/
 
 
+# Plugins da loja do GLPI (Marketplace): o proprio GLPI baixa e atualiza estes
+# arquivos no servidor. Versionados, um git checkout/stash/reset devolvia a
+# versao antiga (ex.: GLPI Inventory 1.6.10 com o banco ja em 1.6.12) e o
+# plugin voltava a pedir atualizacao. Ficam so no disco, como files/.
+/glpi_data/marketplace/
+
 # graphify knowledge-graph outputs and extraction caches. Generated artifacts,
 # regenerable with /graphify. The pattern is unanchored so it matches the
 # directory at any depth, not just the repo root.

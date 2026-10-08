@@ -213,7 +213,7 @@
         if (desk.port) { parts.push('Switch ' + desk.switch_display + ' · porta ' + desk.port); }
         else if (desk.machines_id) { parts.push('Sem porta (máquina no Wi-Fi vinculada à mesa)'); }
         desk.machines.forEach(function (m) {
-            parts.push((m.computer || m.hostname) + (m.user ? ' — ' + m.user : '') + (m.online ? ' (ligada)' : ' (desligada)'));
+            parts.push((m.label || m.computer || m.hostname) + (m.group ? ' · ' + m.group : '') + (m.online ? ' — ligada' : ' — desligada'));
         });
         if (desk.alerts.length) { parts.push(desk.alerts.length + ' alerta(s)'); }
         return parts.join('\n');
@@ -359,7 +359,7 @@
             var head = el('div', 'd-flex align-items-center gap-2 mb-2');
             head.appendChild(icon('device-desktop'));
             var name = el('strong');
-            name.appendChild(link(m.computer_url, m.computer || m.hostname));
+            name.appendChild(link(m.computer_url, m.label || m.computer || m.hostname));
             head.appendChild(name);
             var online = el('span', 'badge ' + (m.online ? 'bg-green-lt' : 'bg-secondary-lt'), m.online ? 'Ligada' : 'Desligada');
             head.appendChild(online);
@@ -409,7 +409,8 @@
      * pessoa. Um clique define a porta da mesa. */
     function unmappedLabel(u) {
         return u.machines.map(function (m) {
-            return (m.user || 'Sem usuário no GLPI') + (m.group ? ' · ' + m.group : '');
+            // Usuario do GLPI; sem ele, a conta logada no Windows agora.
+            return (m.user || m.windows_user || 'Sem usuário identificado') + (m.group ? ' · ' + m.group : '');
         }).join(' / ');
     }
 

@@ -54,6 +54,13 @@ final class ApiController extends AbstractController
         try {
             $report = ReportService::validate($payload);
         } catch (InvalidArgumentException $exception) {
+            // Registrado para descobrir por que uma maquina nao aparece.
+            Toolbox::logInFile('ativarede', sprintf(
+                "Relatorio recusado de %s (%s): %s\n",
+                is_scalar($payload['hostname'] ?? null) ? (string) $payload['hostname'] : '?',
+                is_scalar($payload['machine_id'] ?? null) ? (string) $payload['machine_id'] : '?',
+                $exception->getMessage()
+            ));
             return $this->error('VALIDATION_FAILED', $exception->getMessage(), 422);
         }
 

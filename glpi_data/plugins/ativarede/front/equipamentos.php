@@ -45,6 +45,7 @@ Html::header('Ativa Rede - Equipamentos', '', 'ativarede', 'equipamentos');
 TemplateRenderer::getInstance()->display('@ativarede/equipamentos.html.twig', [
     'machines'   => $machines,
     'monitors'   => Inventory::monitors(),
+    'missing'    => Inventory::guardianWithoutReport(),
     'switches'   => $switches,
     'self_url'   => $selfUrl,
     'can_manage' => PluginAtivaredeProfile::canManage(),

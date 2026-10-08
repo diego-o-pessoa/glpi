@@ -90,6 +90,9 @@ final class ReportService
             if (!is_array($monitor)) {
                 throw new InvalidArgumentException('monitor invalido.');
             }
+            if (self::isVirtualMonitor((string) ($monitor['manufacturer'] ?? ''))) {
+                continue;
+            }
             $cleanMonitors[] = [
                 'manufacturer' => self::text($monitor['manufacturer'] ?? '', 32),
                 'product_code' => self::text($monitor['product_code'] ?? '', 32),
@@ -212,6 +215,36 @@ final class ReportService
                 ['status' => Events::OPEN, 'OR' => ['from_switches_id' => $id, 'to_switches_id' => $id]]
             );
             $DB->delete(Settings::TABLE_SWITCHES, ['id' => $id]);
+            $removed++;
+        }
+        return $removed;
+    }
+
+    /**
+     * Tela virtual do Windows ("MS_0001": acesso remoto, projecao, adaptador
+     * basico de video): nao e um monitor fisico e nao muda de mesa.
+     */
+    public static function isVirtualMonitor(string $manufacturer): bool
+    {
+        return strtoupper(trim($manufacturer)) === 'MS_';
+    }
+
+    /** Remove telas virtuais gravadas antes do filtro, fechando os alertas delas. */
+    public static function cleanupVirtualMonitors(): int
+    {
+        global $DB;
+
+        $removed = 0;
+        foreach ($DB->request(['SELECT' => ['id', 'manufacturer'], 'FROM' => Settings::TABLE_MONITORS]) as $row) {
+            if (!self::isVirtualMonitor((string) $row['manufacturer'])) {
+                continue;
+            }
+            $DB->update(
+                Settings::TABLE_EVENTS,
+                ['status' => Events::CLEARED, 'resolved_at' => date('Y-m-d H:i:s')],
+                ['status' => Events::OPEN, 'monitors_id' => (int) $row['id']]
+            );
+            $DB->delete(Settings::TABLE_MONITORS, ['id' => (int) $row['id']]);
             $removed++;
         }
         return $removed;
