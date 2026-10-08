@@ -55,7 +55,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.6.4"
+GUARDIAN_VERSION = "1.6.5"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -1906,6 +1906,10 @@ def main() -> int:
                 machine_identity(logger), hostname(), GUARDIAN_VERSION, NETWORK_WORK_DIR, logger,
                 lock_wait_seconds=150,
             )
+            if payload is None:
+                print("Erro: nao foi possivel ler adaptador/monitores pelo PowerShell (detalhe no log acima).",
+                      file=sys.stderr)
+                return 1
             print(json.dumps(payload, indent=2, ensure_ascii=False))
             return 0
         if arguments.run_once:

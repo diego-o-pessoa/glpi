@@ -297,14 +297,53 @@ class ReporterTests(unittest.TestCase):
             reporter.cycle()
         self.assertEqual(collect.call_count, 1, "com o plugin ausente nem coleta de novo ate o backoff")
 
-    def test_failure_retries_next_cycle(self):
+    def test_network_timeout_retries_in_same_cycle(self):
+        # Visto em campo: WinError 10060 numa maquina, heartbeat chegando.
         reporter = self.make()
         report = nr.build_report("abc", "PC", "1.6.0", ReportTests.SYSTEM, None)
-        with mock.patch.object(nr, "collect_report", return_value=report), \
-                mock.patch.object(nr, "send_report", side_effect=[nr.ReportRejected(500, "x"), None]) as send:
-            reporter.cycle()
+        with mock.patch.object(nr, "SEND_RETRY_DELAYS_SECONDS", (0, 0, 0)), \
+                mock.patch.object(nr, "collect_report", return_value=report), \
+                mock.patch.object(nr, "send_report", side_effect=[nr.ReportRejected(0, "10060"), None]) as send:
             reporter.cycle()
         self.assertEqual(send.call_count, 2)
+        self.assertFalse(reporter.retry_soon)
+
+    def test_all_attempts_fail_retry_in_two_minutes(self):
+        reporter = self.make()
+        report = nr.build_report("abc", "PC", "1.6.0", ReportTests.SYSTEM, None)
+        with mock.patch.object(nr, "SEND_RETRY_DELAYS_SECONDS", (0, 0, 0)), \
+                mock.patch.object(nr, "collect_report", return_value=report), \
+                mock.patch.object(nr, "send_report", side_effect=nr.ReportRejected(0, "10060")) as send:
+            reporter.cycle()
+        self.assertEqual(send.call_count, 4)
+        self.assertTrue(reporter.retry_soon)
+
+    def test_validation_error_is_not_retried(self):
+        reporter = self.make()
+        report = nr.build_report("abc", "PC", "1.6.0", ReportTests.SYSTEM, None)
+        with mock.patch.object(nr, "SEND_RETRY_DELAYS_SECONDS", (0, 0, 0)), \
+                mock.patch.object(nr, "collect_report", return_value=report), \
+                mock.patch.object(nr, "send_report", side_effect=nr.ReportRejected(422, "x")) as send:
+            reporter.cycle()
+        self.assertEqual(send.call_count, 1)
+
+    def test_powershell_failure_sends_nothing(self):
+        # Um relatorio sem monitores marcaria os monitores da mesa como ausentes.
+        reporter = self.make()
+        with mock.patch.object(nr, "collect_report", return_value=None), \
+                mock.patch.object(nr, "send_report") as send:
+            reporter.cycle()
+        send.assert_not_called()
+        self.assertTrue(reporter.retry_soon)
+
+    def test_collect_system_timeout_returns_none(self):
+        def slow(args, **_kwargs):
+            raise subprocess.TimeoutExpired(args, 180)
+        self.assertIsNone(nr.collect_system(quiet_logger(), runner=slow))
+        failed = lambda args, **_k: subprocess.CompletedProcess(args, 1, b"", b"Acesso negado")  # noqa: E731
+        self.assertIsNone(nr.collect_system(quiet_logger(), runner=failed))
+        ok = lambda args, **_k: subprocess.CompletedProcess(args, 0, b'{"bios":"X","monitors":[]}', b"")  # noqa: E731
+        self.assertEqual(nr.collect_system(quiet_logger(), runner=ok)["bios"], "X")
 
 
 if __name__ == "__main__":

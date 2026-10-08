@@ -51,6 +51,10 @@ LLDP_WAIT_SECONDS = 65
 # juntos (um derrubaria a captura do outro no meio).
 CAPTURE_MUTEX = "Global\\AtivaRedeLldpCapture"
 API_TIMEOUT_SECONDS = 30
+# Como o heartbeat: rede instavel (WinError 10060) tenta de novo no mesmo ciclo.
+SEND_RETRY_DELAYS_SECONDS = (5, 15, 45)
+# Get-NetIPConfiguration/CIM podem demorar em maquina carregada.
+POWERSHELL_TIMEOUT_SECONDS = 180
 MAX_MONITORS = 8
 
 LLDP_ETHERTYPE = 0x88CC
@@ -367,20 +371,34 @@ def _unlink(path: Path) -> None:
 # Adaptador, BIOS e monitores
 # ---------------------------------------------------------------------------
 
-def collect_system(logger: logging.Logger, runner: Runner = subprocess.run) -> dict[str, Any]:
-    completed = _run(runner, [
-        str(POWERSHELL), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ADAPTER_AND_MONITORS_PS,
-    ], timeout=90)
-    if completed is None or completed.returncode != 0:
-        logger.warning("Ativa Rede: nao foi possivel ler adaptador/monitores via PowerShell.")
-        return {}
+def collect_system(logger: logging.Logger, runner: Runner = subprocess.run) -> dict[str, Any] | None:
+    """Adaptador, BIOS e monitores. None = leitura falhou: o ciclo e adiado.
+
+    Nunca devolve um resultado vazio "de mentira": um relatorio sem monitores
+    faria o GLPI marcar os monitores da mesa como ausentes.
+    """
+    args = [str(POWERSHELL), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ADAPTER_AND_MONITORS_PS]
+    try:
+        completed = runner(args, capture_output=True, timeout=POWERSHELL_TIMEOUT_SECONDS, creationflags=NO_WINDOW)
+    except subprocess.TimeoutExpired:
+        logger.warning("Ativa Rede: PowerShell nao respondeu em %d s (maquina ocupada?); coleta adiada.", POWERSHELL_TIMEOUT_SECONDS)
+        return None
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.warning("Ativa Rede: PowerShell nao executou (%s); coleta adiada.", exc)
+        return None
+    if completed.returncode != 0:
+        logger.warning("Ativa Rede: PowerShell falhou ao ler adaptador/monitores (%s); coleta adiada.", _output(completed))
+        return None
     raw = completed.stdout.decode("utf-8", errors="replace") if isinstance(completed.stdout, bytes) else str(completed.stdout)
     try:
         data = json.loads(raw.strip() or "{}")
     except ValueError:
-        logger.warning("Ativa Rede: resposta inesperada do PowerShell.")
-        return {}
-    return data if isinstance(data, dict) else {}
+        logger.warning("Ativa Rede: resposta inesperada do PowerShell; coleta adiada.")
+        return None
+    if not isinstance(data, dict):
+        logger.warning("Ativa Rede: resposta inesperada do PowerShell; coleta adiada.")
+        return None
+    return data
 
 
 def link_type(adapter: dict[str, Any] | None) -> str:
@@ -462,8 +480,11 @@ def build_report(machine_id: str, hostname: str, guardian_version: str, system: 
 
 def collect_report(machine_id: str, hostname: str, guardian_version: str, work_dir: Path,
                    logger: logging.Logger, wait: Callable[[float], Any] = time.sleep,
-                   lock_wait_seconds: float = 0) -> dict[str, Any]:
+                   lock_wait_seconds: float = 0) -> dict[str, Any] | None:
+    """Relatorio completo, ou None se a leitura do Windows falhou (adiar)."""
     system = collect_system(logger)
+    if system is None:
+        return None
     adapter = system.get("adapter") if isinstance(system.get("adapter"), dict) else None
     local_macs = local_mac_set(system)
     lldp = capture_lldp(work_dir, logger, wait=wait, lock_wait_seconds=lock_wait_seconds, local_macs=local_macs) \
@@ -546,6 +567,8 @@ class NetworkReporter(threading.Thread):
         # "Atualizar agora" na planta: acorda o laco e envia mesmo sem mudanca.
         self.wake = threading.Event()
         self.force_send = False
+        # Coleta ou envio falhou: tenta de novo em 2 min, nao em 15.
+        self.retry_soon = False
 
     def request_now(self) -> None:
         self.force_send = True
@@ -560,6 +583,20 @@ class NetworkReporter(threading.Thread):
                 break
         self.wake.clear()
 
+    def _send_with_retry(self, url: str, token: str, payload: dict[str, Any]) -> None:
+        """Falha de rede/servidor tenta de novo no mesmo ciclo (5, 15, 45 s)."""
+        for attempt, delay in enumerate((*SEND_RETRY_DELAYS_SECONDS, None)):
+            try:
+                send_report(url, token, payload, self.guardian_version)
+                return
+            except ReportRejected as exc:
+                transient = exc.status == 0 or exc.status in (408, 429) or exc.status >= 500
+                if not transient or delay is None or self.stop_event.is_set():
+                    raise
+                self.logger.info("Ativa Rede: tentativa %d falhou (%s); repetindo em %d s.", attempt + 1, exc, delay)
+                if self.stop_event.wait(delay):
+                    raise
+
     def run(self) -> None:
         self._sleep(FIRST_DELAY_SECONDS)
         while not self.stop_event.is_set():
@@ -567,11 +604,13 @@ class NetworkReporter(threading.Thread):
                 self.cycle()
             except Exception:  # noqa: BLE001 - nunca derruba o servico
                 self.logger.exception("Ativa Rede: falha inesperada no ciclo.")
-            self._sleep(CONFIRM_DELAY_SECONDS if self.confirm_next else REPORT_INTERVAL_SECONDS)
+            soon = self.confirm_next or self.retry_soon
+            self._sleep(CONFIRM_DELAY_SECONDS if soon else REPORT_INTERVAL_SECONDS)
 
     def cycle(self) -> None:
         now = time.monotonic()
         forced, self.force_send = self.force_send, False
+        self.retry_soon = False
         if now < self.absent_until and not forced:
             return
         try:
@@ -586,18 +625,26 @@ class NetworkReporter(threading.Thread):
                                  self.logger, wait=self.stop_event.wait)
         if self.stop_event.is_set():
             return
+        if payload is None:
+            # Leitura do Windows falhou: nada e enviado (um relatorio sem
+            # monitores marcaria os monitores como ausentes).
+            self.retry_soon = True
+            self.force_send = self.force_send or forced
+            return
         current = signature(payload)
         changed = current != self.last_signature
         if not changed and not self.confirm_next and not forced and now - self.last_sent < RESEND_SECONDS:
             return
         try:
-            send_report(url, token, payload, self.guardian_version)
+            self._send_with_retry(url, token, payload)
         except ReportRejected as exc:
             if exc.status == 404:
                 self.absent_until = time.monotonic() + ABSENT_BACKOFF_SECONDS
                 self.logger.info("Ativa Rede nao esta instalado no GLPI; nova tentativa em 6 h.")
             else:
-                self.logger.warning("Ativa Rede: envio falhou: %s", exc)
+                self.retry_soon = True
+                self.force_send = self.force_send or forced
+                self.logger.warning("Ativa Rede: envio falhou: %s (nova tentativa em 2 min)", exc)
             return
         # Primeiro envio do servico tambem conta como mudanca (o GLPI pode ter
         # outra posicao guardada de antes do reinicio).
