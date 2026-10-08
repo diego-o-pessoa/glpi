@@ -778,5 +778,35 @@ class ReusableRegistrationTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
 
+class RegistryWriteTests(unittest.TestCase):
+    """Visto em campo: reinstalando por cima, o antivirus negou gravar a chave
+    Run (WinError 5) e a instalacao abortava com codigo 3."""
+
+    def _fake_winreg(self, current=None, deny=False):
+        fake = mock.MagicMock()
+        fake.REG_SZ = 1
+        if current is None:
+            fake.OpenKey.side_effect = OSError("not found")
+        else:
+            fake.OpenKey.return_value.__enter__.return_value = object()
+            fake.QueryValueEx.return_value = (current, 1)
+        if deny:
+            fake.CreateKeyEx.side_effect = PermissionError(5, "Acesso negado")
+        return fake
+
+    def test_same_value_is_not_rewritten(self):
+        fake = self._fake_winreg(current='"C:\\x.exe"')
+        with mock.patch.object(wc, "winreg", fake):
+            self.assertTrue(wc._set_hklm_value("K", "V", '"C:\\x.exe"', mock.Mock()))
+        fake.SetValueEx.assert_not_called()
+
+    def test_access_denied_is_warning_not_crash(self):
+        fake = self._fake_winreg(deny=True)
+        logger = mock.Mock()
+        with mock.patch.object(wc, "winreg", fake):
+            self.assertFalse(wc._set_hklm_value("K", "V", "x", logger))
+        logger.warning.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

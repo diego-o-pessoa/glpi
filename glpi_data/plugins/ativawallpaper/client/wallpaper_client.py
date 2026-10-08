@@ -35,7 +35,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.6.5"
+CLIENT_VERSION = "1.6.6"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -1240,14 +1240,41 @@ def install_client(args: argparse.Namespace) -> None:
         "allow_windows_server": bool(values.get("allow_windows_server", False)),
     })
     atomic_write_json(root / "version.json", {"client_version": CLIENT_VERSION, "installed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")})
-    assert winreg is not None
-    with winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, RUN_KEY, 0, winreg.KEY_SET_VALUE | winreg.KEY_WOW64_64KEY) as key:
-        winreg.SetValueEx(key, RUN_VALUE, 0, winreg.REG_SZ, f'"{destination}"')
-    with winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, PRODUCT_KEY, 0, winreg.KEY_SET_VALUE | winreg.KEY_WOW64_64KEY) as key:
-        winreg.SetValueEx(key, "ClientVersion", 0, winreg.REG_SZ, CLIENT_VERSION)
-        winreg.SetValueEx(key, "InstallPath", 0, winreg.REG_SZ, str(root))
-    install_logon_task(destination)
+    # Inicializacao automatica: chave Run + tarefa de logon (redundantes). Visto
+    # em campo: reinstalando por cima, o antivirus negou gravar a chave Run
+    # (WinError 5) e a instalacao inteira abortava com o valor ja correto.
+    # So falha se as DUAS formas de iniciar o cliente falharem.
+    run_ok = _set_hklm_value(RUN_KEY, RUN_VALUE, f'"{destination}"', logger)
+    _set_hklm_value(PRODUCT_KEY, "ClientVersion", CLIENT_VERSION, logger)
+    _set_hklm_value(PRODUCT_KEY, "InstallPath", str(root), logger)
+    try:
+        install_logon_task(destination)
+    except ClientError:
+        if not run_ok:
+            raise
+        logger.warning("Tarefa de logon nao registrada; o cliente inicia pela chave Run.")
     logger.info("Installation completed")
+
+
+def _set_hklm_value(subkey: str, name: str, value: str, logger: logging.Logger) -> bool:
+    """Grava REG_SZ em HKLM (64 bits). Nao regrava valor ja igual; acesso
+    negado vira aviso no log (False) em vez de abortar a instalacao."""
+    assert winreg is not None
+    view = winreg.KEY_WOW64_64KEY
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, subkey, 0, winreg.KEY_QUERY_VALUE | view) as key:
+            current, kind = winreg.QueryValueEx(key, name)
+            if kind == winreg.REG_SZ and current == value:
+                return True
+    except OSError:
+        pass  # chave ou valor ainda nao existem
+    try:
+        with winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, subkey, 0, winreg.KEY_SET_VALUE | view) as key:
+            winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
+        return True
+    except PermissionError as exc:
+        logger.warning("Sem permissao para gravar HKLM\\%s\\%s (%s); seguindo.", subkey, name, exc)
+        return False
 
 
 def _signal_stop() -> None:

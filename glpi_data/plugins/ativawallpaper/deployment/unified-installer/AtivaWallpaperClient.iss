@@ -95,8 +95,13 @@ Source: "{#WorkspaceConfigPath}"; DestDir: "{tmp}"; DestName: "ativaworkspace-se
 Source: "{#WorkspacePath}"; DestDir: "{commonappdata}\AtivaLocacao\Workspace"; DestName: "AtivaWorkspace.exe"; Flags: ignoreversion
 #endif
 
-[Icons]
-Name: "{commonprograms}\Ativa\Manutencao Ativa"; Filename: "{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe"; Parameters: "--maintenance"; Comment: "Autorizar manutencao com a senha Ativa"
+; O atalho "Manutencao Ativa" e criado em [Code] (CreateMaintenanceShortcut):
+; em [Icons], uma falha ao gravar o .lnk (ex.: "IPersistFile::Save failed;
+; code 0x80070005", sobra de instalacao anterior ou antivirus) abortava a
+; instalacao inteira. O atalho e so um atalho - nunca pode impedir a instalacao.
+[UninstallDelete]
+Type: files; Name: "{commonprograms}\Ativa\Manutencao Ativa.lnk"
+Type: dirifempty; Name: "{commonprograms}\Ativa"
 
 [Code]
 var
@@ -407,6 +412,30 @@ begin
   Log('Servico Ativa Workspace instalado.');
 end;
 
+{ Atalho do Menu Iniciar para o Ativa Manutencao. Apaga o atalho anterior
+  (que pode ter ficado de uma tentativa interrompida) e, se mesmo assim nao
+  conseguir gravar, so registra no log e segue: a manutencao continua
+  acessivel por AtivaGuardian.exe --maintenance. }
+procedure CreateMaintenanceShortcut();
+var
+  Folder: String;
+  Link: String;
+begin
+  Folder := ExpandConstant('{commonprograms}\Ativa');
+  Link := Folder + '\Manutencao Ativa.lnk';
+  try
+    if FileExists(Link) and not DeleteFile(Link) then
+      Log('Aviso: nao foi possivel apagar o atalho anterior ' + Link + '.');
+    ForceDirectories(Folder);
+    CreateShellLink(Link, 'Autorizar manutencao com a senha Ativa',
+      ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe'), '--maintenance',
+      ExpandConstant('{commonpf}\Ativa Locacao\Guardian'), '', 0, SW_SHOWNORMAL);
+    Log('Atalho Manutencao Ativa criado.');
+  except
+    Log('Aviso: atalho Manutencao Ativa nao criado (' + GetExceptionMessage + '). A instalacao continua.');
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   UpdaterPath: String;
@@ -497,6 +526,9 @@ begin
 
   { Servico proprio do Workspace por ultimo. }
   InstallWorkspace();
+
+  { Atalho no fim: se falhar, todos os servicos ja estao instalados. }
+  CreateMaintenanceShortcut();
 end;
 
 function NeedRestart(): Boolean;

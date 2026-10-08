@@ -87,6 +87,26 @@ function Find-SignTool {
 }
 
 $script:SignTool = $null
+
+# Sem certificado informado: usa o salvo no Windows (variavel de usuario, que
+# terminais ja abertos nao enxergam) ou, na falta, o certificado de assinatura
+# de codigo da Ativa instalado neste usuario. Assim o duplo clique em
+# Criar-Instalador-Para-Todos.cmd ja sai assinado.
+if (-not $SignCertThumbprint -and -not $SignCertFile) {
+    $SignCertThumbprint = [Environment]::GetEnvironmentVariable("ATIVA_SIGN_THUMBPRINT", "User")
+}
+if (-not $SignCertThumbprint -and -not $SignCertFile) {
+    $AtivaCert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert -ErrorAction SilentlyContinue |
+        Where-Object { $_.HasPrivateKey -and $_.NotAfter -gt (Get-Date) -and $_.Subject -like "CN=Ativa Locacao - TI*" } |
+        Sort-Object NotAfter -Descending |
+        Select-Object -First 1
+    if ($AtivaCert) {
+        $SignCertThumbprint = $AtivaCert.Thumbprint
+    }
+}
+if ($SignCertThumbprint) {
+    Write-Host "Assinatura digital: certificado $SignCertThumbprint"
+}
 $script:SigningEnabled = [bool]($SignCertThumbprint -or $SignCertFile)
 
 function Invoke-CodeSign([string]$Path) {
@@ -113,13 +133,32 @@ function Invoke-CodeSign([string]$Path) {
     }
     Write-Host "Assinando $(Split-Path -Leaf $Path)..."
     # Saida do signtool nao e exibida: em erro, nao vaza argumentos (senha).
-    $null = & $script:SignTool @Arguments $Path 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Falha ao assinar $(Split-Path -Leaf $Path) (signtool codigo $LASTEXITCODE). Confira o certificado e o servidor de carimbo de tempo."
+    # Com ErrorActionPreference=Stop, o PowerShell 5.1 transforma qualquer
+    # linha no stderr de um .exe em erro fatal; o resultado vem do exit code.
+    $PreviousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $null = & $script:SignTool @Arguments $Path 2>&1
+        $SignExit = $LASTEXITCODE
     }
-    $null = & $script:SignTool verify /pa $Path 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "A assinatura de $(Split-Path -Leaf $Path) nao foi validada (signtool verify /pa)."
+    finally {
+        $ErrorActionPreference = $PreviousPreference
+    }
+    if ($SignExit -ne 0) {
+        throw "Falha ao assinar $(Split-Path -Leaf $Path) (signtool codigo $SignExit). Confira o certificado e o servidor de carimbo de tempo."
+    }
+
+    # Conferencia: o arquivo tem que estar assinado e integro. Com o
+    # certificado interno da Ativa (autoassinado) o Windows nao reconhece a
+    # cadeia - status "UnknownError"/"NotTrusted" - entao vale a impressao
+    # digital do assinante. HashMismatch/NotSigned sempre reprovam.
+    $Signature = Get-AuthenticodeSignature -LiteralPath $Path
+    if ($Signature.Status -ne "Valid") {
+        $Actual = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Thumbprint.ToUpperInvariant() } else { "" }
+        $Expected = if ($SignCertThumbprint) { ($SignCertThumbprint -replace '\s', '').ToUpperInvariant() } else { "" }
+        if ($Signature.Status -in @("HashMismatch", "NotSigned") -or -not $Expected -or $Actual -ne $Expected) {
+            throw "A assinatura de $(Split-Path -Leaf $Path) nao foi validada (status $($Signature.Status))."
+        }
     }
 }
 
