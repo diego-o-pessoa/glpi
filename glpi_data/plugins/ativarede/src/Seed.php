@@ -44,6 +44,44 @@ final class Seed
         }
     }
 
+    /** Setor de cada bloco da sala principal (pela letra da mesa). */
+    public const ANEXO_SECTORS = [
+        'A' => 'T.I.',
+        'B' => 'Estratégia',
+        'C' => 'Estratégia',
+        'D' => 'Suporte',
+        'E' => 'Suporte',
+        'F' => 'Comercial',
+        'G' => 'Comercial',
+        'H' => 'Comercial',
+        'I' => 'Backoffice',
+        'J' => 'Licitação',
+    ];
+
+    /**
+     * Preenche o setor das mesas da sala principal pela letra do nome
+     * ("F3" -> Comercial). So mesas ainda sem setor: o que a T.I. definir na
+     * tela nunca e sobrescrito. Mesas renomeadas fora do padrao ficam como estao.
+     */
+    public static function applyAnexoSectors(): void
+    {
+        global $DB;
+
+        $plan = $DB->request(['SELECT' => ['id'], 'FROM' => Settings::TABLE_PLANS, 'WHERE' => ['name' => self::PLAN_NAME], 'LIMIT' => 1])->current();
+        if (!$plan) {
+            return;
+        }
+        foreach ($DB->request([
+            'SELECT' => ['id', 'name'],
+            'FROM'   => Settings::TABLE_DESKS,
+            'WHERE'  => ['plans_id' => (int) $plan['id'], 'sector' => ''],
+        ]) as $desk) {
+            if (preg_match('/^([A-Z])\d+$/', strtoupper(trim((string) $desk['name'])), $m) && isset(self::ANEXO_SECTORS[$m[1]])) {
+                $DB->update(Settings::TABLE_DESKS, ['sector' => self::ANEXO_SECTORS[$m[1]]], ['id' => (int) $desk['id']]);
+            }
+        }
+    }
+
     /** As 54 mesas do layout, da porta (esquerda) ate os armarios (direita). */
     public static function desks(): array
     {

@@ -31,6 +31,8 @@ function plugin_ativarede_install(): bool
     ReportService::cleanupGenericSerials();
     // 0.1.7: tela virtual do Windows (MS_0001) nao e monitor fisico.
     ReportService::cleanupVirtualMonitors();
+    // 0.1.8: setores da sala principal (so preenche mesas ainda sem setor).
+    Seed::applyAnexoSectors();
 
     // Monitor ausente, mesa vazia e maquina sem relatorio: conferidos a cada hora.
     CronTask::register(
@@ -94,6 +96,7 @@ function plugin_ativarede_install_tables(): void
             `switches_id` int {$sign} NOT NULL DEFAULT '0',
             `port` varchar(64) NOT NULL DEFAULT '',
             `machines_id` int {$sign} NOT NULL DEFAULT '0',
+            `sector` varchar(64) NOT NULL DEFAULT '',
             `comment` varchar(255) NOT NULL DEFAULT '',
             `date_mod` timestamp NULL DEFAULT NULL,
             PRIMARY KEY (`id`),
@@ -190,6 +193,11 @@ function plugin_ativarede_install_tables(): void
                 ADD `machines_id` int {$sign} NOT NULL DEFAULT '0' AFTER `port`,
                 ADD KEY `machines_id` (`machines_id`)"
         );
+    }
+
+    // 0.1.8: setor de cada mesa (areas com nome na planta).
+    if (!$DB->fieldExists('glpi_plugin_ativarede_desks', 'sector')) {
+        $DB->doQuery("ALTER TABLE `glpi_plugin_ativarede_desks` ADD `sector` varchar(64) NOT NULL DEFAULT '' AFTER `machines_id`");
     }
 }
 

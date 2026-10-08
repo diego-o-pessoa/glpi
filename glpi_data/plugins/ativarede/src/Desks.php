@@ -75,6 +75,7 @@ final class Desks
             'switches_id' => $switchId,
             'port'        => $port,
             'machines_id' => $machineId,
+            'sector'      => mb_substr(trim((string) ($input['sector'] ?? $desk['sector'] ?? '')), 0, 64),
             'chair'       => $chair,
             'w'           => $w,
             'h'           => $h,

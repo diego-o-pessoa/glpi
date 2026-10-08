@@ -219,9 +219,57 @@
         return parts.join('\n');
     }
 
+    /* Areas dos setores: um retangulo colorido com o nome por tras das mesas
+     * de cada setor, calculado das proprias mesas (acompanha se elas mudarem). */
+    var ZONE_COLORS = ['29, 79, 145', '63, 155, 58', '217, 119, 6', '124, 58, 237', '13, 148, 136', '219, 39, 119', '71, 85, 105'];
+    var zonesLayer = q('[data-ar-zones]');
+
+    function sectorColor(name) {
+        var list = (state.sectors || []).slice().sort();
+        var i = list.indexOf(name);
+        return ZONE_COLORS[(i < 0 ? 0 : i) % ZONE_COLORS.length];
+    }
+
+    function renderZones() {
+        if (!zonesLayer) { return; }
+        var W = state.plan.width;
+        var H = state.plan.height;
+        // Margem que cobre as cadeiras; menor nas laterais para setores vizinhos
+        // (ex.: Estrategia e Suporte) nao se sobreporem.
+        var PAD_X = 20, PAD_Y = 26;
+        var boxes = {};
+        state.desks.forEach(function (d) {
+            if (!d.sector) { return; }
+            var b = boxes[d.sector] || (boxes[d.sector] = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity, n: 0 });
+            b.x1 = Math.min(b.x1, d.x - d.w / 2);
+            b.y1 = Math.min(b.y1, d.y - d.h / 2);
+            b.x2 = Math.max(b.x2, d.x + d.w / 2);
+            b.y2 = Math.max(b.y2, d.y + d.h / 2);
+            b.n++;
+        });
+        zonesLayer.innerHTML = '';
+        Object.keys(boxes).forEach(function (name) {
+            var b = boxes[name];
+            var x1 = Math.max(0, b.x1 - PAD_X), y1 = Math.max(0, b.y1 - PAD_Y);
+            var x2 = Math.min(W, b.x2 + PAD_X), y2 = Math.min(H, b.y2 + PAD_Y);
+            var color = sectorColor(name);
+            var zone = el('div', 'ar-zone');
+            zone.style.left = pct(x1, W);
+            zone.style.top = pct(y1, H);
+            zone.style.width = pct(x2 - x1, W);
+            zone.style.height = pct(y2 - y1, H);
+            zone.style.setProperty('--zone', color);
+            var label = el('span', 'ar-zone-label', name);
+            label.title = name + ': ' + b.n + ' mesa(s)';
+            zone.appendChild(label);
+            zonesLayer.appendChild(zone);
+        });
+    }
+
     function renderDesks() {
         var W = state.plan.width;
         var H = state.plan.height;
+        renderZones();
         desksLayer.innerHTML = '';
         state.desks.forEach(function (desk) {
             var node = el('button', 'ar-desk s-' + desk.state);
@@ -330,6 +378,7 @@
         panel.appendChild(title);
 
         var info = el('dl', 'ar-kv');
+        if (desk.sector) { kv(info, 'Setor', desk.sector); }
         if (desk.port) {
             kv(info, 'Porta do switch', 'Switch ' + desk.switch_display + ' · porta ' + desk.port);
         } else if (desk.machines_id) {
@@ -599,6 +648,17 @@
         });
         field('Cadeira', chair);
 
+        // Setor: livre, com sugestao dos setores ja usados na planta.
+        var sector = el('input', 'form-control form-control-sm');
+        sector.value = desk.sector || ''; sector.maxLength = 64; sector.placeholder = 'ex.: Comercial';
+        var listId = 'ar-sectors-' + desk.id;
+        sector.setAttribute('list', listId);
+        var datalist = el('datalist');
+        datalist.id = listId;
+        (state.sectors || []).forEach(function (s) { var o = el('option'); o.value = s; datalist.appendChild(o); });
+        field('Setor', sector);
+        row.lastChild.appendChild(datalist);
+
         var sw = el('select', 'form-select form-select-sm');
         var none = el('option', '', '— sem porta —'); none.value = '0'; sw.appendChild(none);
         state.switches.forEach(function (s) {
@@ -646,7 +706,7 @@
             ev.preventDefault();
             saveDesk(desk, {
                 name: name.value, chair: chair.value, switches_id: sw.value, port: port.value.trim(),
-                w: w.value, h: h.value, comment: comment.value
+                w: w.value, h: h.value, comment: comment.value, sector: sector.value.trim()
             });
         });
         panel.appendChild(form);
@@ -659,7 +719,7 @@
         var fields = {
             action: 'save_desk', id: desk.id, name: desk.name, chair: desk.chair,
             switches_id: desk.switches_id, port: desk.port, machines_id: desk.machines_id || 0,
-            w: desk.w, h: desk.h, comment: desk.comment
+            w: desk.w, h: desk.h, comment: desk.comment, sector: desk.sector || ''
         };
         Object.keys(changes).forEach(function (k) { fields[k] = changes[k]; });
         post(fields).then(function (r) { if (r.ok) { render(); } });

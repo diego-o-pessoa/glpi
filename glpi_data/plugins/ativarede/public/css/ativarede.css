@@ -126,10 +126,37 @@
     pointer-events: none;
 }
 
-.ar-desks {
+.ar-desks,
+.ar-zones {
     position: absolute;
     inset: 0;
 }
+
+.ar-zones { pointer-events: none; }
+
+/* Area de um setor (por tras das mesas). --zone = cor "r, g, b". */
+.ar-zone {
+    position: absolute;
+    border: 1.5px dashed rgba(var(--zone), .45);
+    border-radius: 10px;
+    background: rgba(var(--zone), .06);
+}
+
+.ar-zone-label {
+    position: absolute;
+    left: 8px;
+    bottom: calc(100% + 2px);
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: rgba(var(--zone), .14);
+    color: rgb(var(--zone));
+    font-size: max(10px, .62cqw);
+    font-weight: 700;
+    letter-spacing: .02em;
+    white-space: nowrap;
+}
+
+[data-bs-theme="dark"] .ar-zone-label { color: #e2e8f0; background: rgba(var(--zone), .45); }
 
 /* Mesa */
 .ar-desk {
