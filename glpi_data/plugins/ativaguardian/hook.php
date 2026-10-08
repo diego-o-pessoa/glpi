@@ -54,6 +54,9 @@ function plugin_ativaguardian_getAddSearchOptionsNew($itemtype): array
         [
             'id'            => '7802',
             'table'         => 'glpi_plugin_ativaguardian_machines',
+            // O GLPI 11 precisa de um itemtype para a tabela da coluna; sem
+            // ele a lista de Computadores quebrava ("Ocorreu um erro inesperado").
+            'itemtype'      => \GlpiPlugin\Ativaguardian\Machine::class,
             'field'         => 'username',
             'name'          => 'Usuário do Windows (Guardian)',
             'datatype'      => 'string',
