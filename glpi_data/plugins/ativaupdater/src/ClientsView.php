@@ -367,23 +367,16 @@ final class ClientsView
             'text-primary'
         );
 
-        if ($problem) {
+        // A mensagem do problema ja aparece na linha da maquina (coluna de
+        // status) e os botoes ficam na coluna de acoes. A linha extra so
+        // existe quando ha algo a mais: log da instalacao, logs enviados ou
+        // aviso de recuperacao - em formato compacto.
+        if ($problem && $details !== '') {
             $logPath = 'C:\\ProgramData\\AtivaLocacao\\UnifiedUpdater\\logs';
-            $html .= "<tr class='aw-details-row'><td colspan='6'><div class='aw-problem'>"
-                . "<div><strong><i class='fas fa-exclamation-circle'></i> Detalhes do problema</strong><p>"
-                . htmlescape($displayMessage) . "</p><code>" . htmlescape($logPath) . "</code>{$details}</div>"
-                . "<div><strong><i class='fas fa-wrench'></i> Ações recomendadas</strong><ol>"
-                // "Reiniciar" and "Logs" travel on the same polling loop the service
-                // itself runs, so a service that stopped answering cannot receive them.
-                // Saying otherwise sends people clicking a button that cannot work.
-                . ($statusKey === 'service_down'
-                    ? '<li>Aguarde até 15 minutos: o vigia tenta religar o serviço sozinho.</li>'
-                        . '<li>Se não voltar, reinicie o serviço <strong>na própria máquina</strong> — os botões abaixo dependem do serviço responder e não chegam até ele neste estado.</li>'
-                        . '<li>Na máquina, consulte os logs no caminho acima para identificar o que travou.</li>'
-                    : '<li>Verifique se o serviço está em execução.</li><li>Tente reiniciar o serviço.</li><li>Consulte os logs para identificar o erro.</li>')
-                . '</ol>'
-                . ($canManage ? self::restartButton($id, $hostname, $serviceVersion) : '')
-                . '</div></div></td></tr>';
+            $html .= "<tr class='aw-details-row'><td colspan='6'><div class='aw-problem-compact small'>"
+                . "<span class='text-muted'>Logs na máquina: <code>" . htmlescape($logPath) . "</code></span>"
+                . $details
+                . '</div></td></tr>';
         }
         return $html;
     }
