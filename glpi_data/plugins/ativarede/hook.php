@@ -33,6 +33,8 @@ function plugin_ativarede_install(): bool
     ReportService::cleanupVirtualMonitors();
     // 0.1.8: setores da sala principal (so preenche mesas ainda sem setor).
     Seed::applyAnexoSectors();
+    // 0.1.9: F1-F3 passam do Comercial para o Suporte (uma vez).
+    Seed::applyAnexoFixups();
 
     // Monitor ausente, mesa vazia e maquina sem relatorio: conferidos a cada hora.
     CronTask::register(

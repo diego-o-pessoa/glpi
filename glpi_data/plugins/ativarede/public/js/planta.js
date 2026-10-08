@@ -234,33 +234,58 @@
         if (!zonesLayer) { return; }
         var W = state.plan.width;
         var H = state.plan.height;
-        // Margem que cobre as cadeiras; menor nas laterais para setores vizinhos
-        // (ex.: Estrategia e Suporte) nao se sobreporem.
+        // Margem que cobre as cadeiras ao redor das mesas.
         var PAD_X = 20, PAD_Y = 26;
-        var boxes = {};
+        var raw = {};
         state.desks.forEach(function (d) {
             if (!d.sector) { return; }
-            var b = boxes[d.sector] || (boxes[d.sector] = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity, n: 0 });
+            var b = raw[d.sector] || (raw[d.sector] = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity, n: 0 });
             b.x1 = Math.min(b.x1, d.x - d.w / 2);
             b.y1 = Math.min(b.y1, d.y - d.h / 2);
             b.x2 = Math.max(b.x2, d.x + d.w / 2);
             b.y2 = Math.max(b.y2, d.y + d.h / 2);
             b.n++;
         });
+        var boxes = Object.keys(raw).map(function (name) {
+            var b = raw[name];
+            return {
+                name: name, n: b.n,
+                x1: Math.max(0, b.x1 - PAD_X), y1: Math.max(0, b.y1 - PAD_Y),
+                x2: Math.min(W, b.x2 + PAD_X), y2: Math.min(H, b.y2 + PAD_Y)
+            };
+        });
+
+        // Setores vizinhos que dividem a mesma ilha (ex.: Suporte em F1-F3 e
+        // Comercial em F4-F6) teriam areas sobrepostas: cada par que se cruza
+        // se divide no meio da sobreposicao, pelo lado mais estreito.
+        for (var i = 0; i < boxes.length; i++) {
+            for (var j = i + 1; j < boxes.length; j++) {
+                var a = boxes[i], c = boxes[j];
+                var ox = Math.min(a.x2, c.x2) - Math.max(a.x1, c.x1);
+                var oy = Math.min(a.y2, c.y2) - Math.max(a.y1, c.y1);
+                if (ox <= 0 || oy <= 0) { continue; }
+                if (ox <= oy) {
+                    var mx = (Math.max(a.x1, c.x1) + Math.min(a.x2, c.x2)) / 2;
+                    if (a.x1 < c.x1) { a.x2 = Math.min(a.x2, mx); c.x1 = Math.max(c.x1, mx); }
+                    else { c.x2 = Math.min(c.x2, mx); a.x1 = Math.max(a.x1, mx); }
+                } else {
+                    var my = (Math.max(a.y1, c.y1) + Math.min(a.y2, c.y2)) / 2;
+                    if (a.y1 < c.y1) { a.y2 = Math.min(a.y2, my); c.y1 = Math.max(c.y1, my); }
+                    else { c.y2 = Math.min(c.y2, my); a.y1 = Math.max(a.y1, my); }
+                }
+            }
+        }
+
         zonesLayer.innerHTML = '';
-        Object.keys(boxes).forEach(function (name) {
-            var b = boxes[name];
-            var x1 = Math.max(0, b.x1 - PAD_X), y1 = Math.max(0, b.y1 - PAD_Y);
-            var x2 = Math.min(W, b.x2 + PAD_X), y2 = Math.min(H, b.y2 + PAD_Y);
-            var color = sectorColor(name);
+        boxes.forEach(function (b) {
             var zone = el('div', 'ar-zone');
-            zone.style.left = pct(x1, W);
-            zone.style.top = pct(y1, H);
-            zone.style.width = pct(x2 - x1, W);
-            zone.style.height = pct(y2 - y1, H);
-            zone.style.setProperty('--zone', color);
-            var label = el('span', 'ar-zone-label', name);
-            label.title = name + ': ' + b.n + ' mesa(s)';
+            zone.style.left = pct(b.x1, W);
+            zone.style.top = pct(b.y1, H);
+            zone.style.width = pct(b.x2 - b.x1, W);
+            zone.style.height = pct(b.y2 - b.y1, H);
+            zone.style.setProperty('--zone', sectorColor(b.name));
+            var label = el('span', 'ar-zone-label', b.name);
+            label.title = b.name + ': ' + b.n + ' mesa(s)';
             zone.appendChild(label);
             zonesLayer.appendChild(zone);
         });

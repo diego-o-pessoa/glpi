@@ -58,6 +58,37 @@ final class Seed
         'J' => 'Licitação',
     ];
 
+    /** Excecoes por mesa (vencem a regra da letra). */
+    public const ANEXO_DESK_SECTORS = [
+        'F1' => 'Suporte',
+        'F2' => 'Suporte',
+        'F3' => 'Suporte',
+    ];
+
+    /**
+     * 0.1.9: a coluna F1-F3 passou do Comercial para o Suporte. Roda uma vez
+     * (marca em glpi_configs) e so muda mesas que ainda estao como Comercial,
+     * para nao desfazer um ajuste posterior feito na tela.
+     */
+    public static function applyAnexoFixups(): void
+    {
+        global $DB;
+
+        $done = \Config::getConfigurationValues(Settings::CONTEXT, ['fixup_f1f3_suporte']);
+        if (!empty($done['fixup_f1f3_suporte'])) {
+            return;
+        }
+        $plan = $DB->request(['SELECT' => ['id'], 'FROM' => Settings::TABLE_PLANS, 'WHERE' => ['name' => self::PLAN_NAME], 'LIMIT' => 1])->current();
+        if ($plan) {
+            $DB->update(
+                Settings::TABLE_DESKS,
+                ['sector' => 'Suporte'],
+                ['plans_id' => (int) $plan['id'], 'name' => array_keys(self::ANEXO_DESK_SECTORS), 'sector' => 'Comercial']
+            );
+        }
+        \Config::setConfigurationValues(Settings::CONTEXT, ['fixup_f1f3_suporte' => '1']);
+    }
+
     /**
      * Preenche o setor das mesas da sala principal pela letra do nome
      * ("F3" -> Comercial). So mesas ainda sem setor: o que a T.I. definir na
@@ -76,8 +107,13 @@ final class Seed
             'FROM'   => Settings::TABLE_DESKS,
             'WHERE'  => ['plans_id' => (int) $plan['id'], 'sector' => ''],
         ]) as $desk) {
-            if (preg_match('/^([A-Z])\d+$/', strtoupper(trim((string) $desk['name'])), $m) && isset(self::ANEXO_SECTORS[$m[1]])) {
-                $DB->update(Settings::TABLE_DESKS, ['sector' => self::ANEXO_SECTORS[$m[1]]], ['id' => (int) $desk['id']]);
+            $name = strtoupper(trim((string) $desk['name']));
+            $sector = self::ANEXO_DESK_SECTORS[$name] ?? null;
+            if ($sector === null && preg_match('/^([A-Z])\d+$/', $name, $m)) {
+                $sector = self::ANEXO_SECTORS[$m[1]] ?? null;
+            }
+            if ($sector !== null) {
+                $DB->update(Settings::TABLE_DESKS, ['sector' => $sector], ['id' => (int) $desk['id']]);
             }
         }
     }
