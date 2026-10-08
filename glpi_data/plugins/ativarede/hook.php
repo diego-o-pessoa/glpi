@@ -27,6 +27,8 @@ function plugin_ativarede_install(): bool
     PluginAtivaredeProfile::installRights();
     // 0.1.2: switches falsos (anuncio LLDP do proprio Windows) gravados antes do filtro.
     ReportService::cleanupOwnAnnouncements();
+    // 0.1.3: monitores com serie generica ("SerialNumber") gravados antes do filtro.
+    ReportService::cleanupGenericSerials();
 
     // Monitor ausente, mesa vazia e maquina sem relatorio: conferidos a cada hora.
     CronTask::register(
@@ -89,11 +91,13 @@ function plugin_ativarede_install_tables(): void
             `chair` varchar(8) NOT NULL DEFAULT 'down',
             `switches_id` int {$sign} NOT NULL DEFAULT '0',
             `port` varchar(64) NOT NULL DEFAULT '',
+            `machines_id` int {$sign} NOT NULL DEFAULT '0',
             `comment` varchar(255) NOT NULL DEFAULT '',
             `date_mod` timestamp NULL DEFAULT NULL,
             PRIMARY KEY (`id`),
             KEY `plans_id` (`plans_id`),
-            KEY `switch_port` (`switches_id`,`port`)",
+            KEY `switch_port` (`switches_id`,`port`),
+            KEY `machines_id` (`machines_id`)",
 
         // Posicao de cada maquina (uma linha por Guardian). switches_id/port =
         // posicao confirmada; pending_* = posicao nova aguardando confirmacao.
@@ -175,6 +179,15 @@ function plugin_ativarede_install_tables(): void
         if (!$DB->tableExists($table)) {
             $DB->doQuery("CREATE TABLE `{$table}` ({$columns}) {$tail}");
         }
+    }
+
+    // 0.1.3: mesa com maquina sem porta (notebook no Wi-Fi), vinculo direto.
+    if (!$DB->fieldExists('glpi_plugin_ativarede_desks', 'machines_id')) {
+        $DB->doQuery(
+            "ALTER TABLE `glpi_plugin_ativarede_desks`
+                ADD `machines_id` int {$sign} NOT NULL DEFAULT '0' AFTER `port`,
+                ADD KEY `machines_id` (`machines_id`)"
+        );
     }
 }
 

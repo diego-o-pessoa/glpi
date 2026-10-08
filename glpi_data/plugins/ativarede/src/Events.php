@@ -181,7 +181,7 @@ final class Events
         if (!$machine || (int) $machine['computers_id'] <= 0) {
             return ' A máquina ainda não está vinculada a um computador do GLPI; localização não alterada.';
         }
-        $desk = Inventory::deskAt((int) $machine['switches_id'], (string) $machine['port']);
+        $desk = Inventory::deskOf($machine);
         $locationId = $desk ? (int) ($desk['locations_id'] ?? 0) : 0;
         if ($locationId <= 0) {
             return ' A planta não tem Localização definida; localização do computador não alterada.';

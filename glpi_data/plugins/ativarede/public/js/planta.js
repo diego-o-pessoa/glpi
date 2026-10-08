@@ -166,6 +166,7 @@
     function deskTitle(desk) {
         var parts = ['Mesa ' + desk.name];
         if (desk.port) { parts.push('Switch ' + desk.switch_display + ' · porta ' + desk.port); }
+        else if (desk.machines_id) { parts.push('Sem porta (máquina no Wi-Fi vinculada à mesa)'); }
         desk.machines.forEach(function (m) {
             parts.push((m.computer || m.hostname) + (m.user ? ' — ' + m.user : '') + (m.online ? ' (ligada)' : ' (desligada)'));
         });
@@ -193,7 +194,8 @@
             var chair = CHAIRS[desk.chair] ? desk.chair : 'down';
             node.classList.add('ch-' + chair);
             node.appendChild(el('span', 'ar-chair c-' + chair));
-            var portLine = el('span', 'ar-desk-port', desk.port || (editing ? '+' : '–'));
+            var portLine = el('span', 'ar-desk-port' + (desk.machines_id ? ' is-wifi' : ''),
+                desk.port || (desk.machines_id ? 'Wi-Fi' : (editing ? '+' : '–')));
             if (desk.switch) { portLine.appendChild(el('span', 'ar-desk-sw', desk.switch)); }
             node.appendChild(portLine);
             node.appendChild(el('span', 'ar-desk-name', desk.name));
@@ -225,7 +227,9 @@
                     try {
                         var target = JSON.parse(raw);
                         selectedId = desk.id;
-                        saveDesk(desk, { switches_id: target.switches_id, port: target.port });
+                        saveDesk(desk, {
+                            switches_id: target.switches_id || 0, port: target.port || '', machines_id: target.machines_id || 0
+                        });
                     } catch (e) { /* ignora arraste de outra origem */ }
                 });
             } else {
@@ -281,7 +285,20 @@
         panel.appendChild(title);
 
         var info = el('dl', 'ar-kv');
-        kv(info, 'Porta do switch', desk.port ? 'Switch ' + desk.switch_display + ' · porta ' + desk.port : 'Ainda não definida');
+        if (desk.port) {
+            kv(info, 'Porta do switch', 'Switch ' + desk.switch_display + ' · porta ' + desk.port);
+        } else if (desk.machines_id) {
+            var fixed = el('span', '', 'Sem porta: máquina vinculada direto à mesa (Wi-Fi). Quando ela for ligada no cabo, a porta do switch entra aqui sozinha. ');
+            if (canManage) {
+                var unlink = el('button', 'btn btn-sm btn-link p-0 align-baseline', 'Desvincular');
+                unlink.type = 'button';
+                unlink.addEventListener('click', function () { saveDesk(desk, { machines_id: 0 }); });
+                fixed.appendChild(unlink);
+            }
+            kv(info, 'Porta do switch', fixed);
+        } else {
+            kv(info, 'Porta do switch', 'Ainda não definida');
+        }
         if (desk.comment) { kv(info, 'Observação', desk.comment); }
         panel.appendChild(info);
 
@@ -351,16 +368,27 @@
         }).join(' / ');
     }
 
+    /* Porta do switch (cabo) ou vinculo direto (Wi-Fi / sem porta). */
+    function unmappedTag(u) {
+        if (u.kind === 'machine') { return u.link === 'wifi' ? 'Wi-Fi · sem porta' : 'sem porta'; }
+        return u.switch + ' · porta ' + u.port;
+    }
+    function unmappedChanges(u) {
+        return u.kind === 'machine'
+            ? { machines_id: u.machines_id, switches_id: 0, port: '' }
+            : { switches_id: u.switches_id, port: u.port, machines_id: 0 };
+    }
+
     function personPicker(desk) {
         var box = el('div', 'ar-picker');
         box.appendChild(el('div', 'fw-semibold mb-1', 'Quem senta nesta mesa?'));
         if (!state.unmapped.length) {
             box.appendChild(el('p', 'ar-empty-hint small mb-0',
-                'Nenhuma máquina sem mesa no momento. As máquinas aparecem aqui depois do primeiro envio do Ativa Guardian (até 15 min após ligar).'));
+                'Todas as máquinas conhecidas já estão em alguma mesa. Máquinas novas aparecem aqui depois do primeiro envio do Ativa Guardian (até 15 min após ligar).'));
             return box;
         }
         box.appendChild(el('div', 'text-muted small mb-2',
-            state.unmapped.length + ' máquina(s) ligada(s) por cabo ainda sem mesa. A porta do switch vem junto, automaticamente.'));
+            state.unmapped.length + ' máquina(s) sem mesa. Com cabo, a porta do switch vem junto; no Wi-Fi, a máquina fica vinculada direto à mesa.'));
         var search = el('input', 'form-control form-control-sm mb-2');
         search.type = 'search';
         search.placeholder = 'Buscar por pessoa, setor ou computador...';
@@ -377,11 +405,11 @@
             var what = el('span', 'ar-picker-what', u.machines.map(function (m) { return m.computer || m.hostname; }).join(', '));
             b.appendChild(who);
             b.appendChild(what);
-            b.appendChild(el('span', 'ar-port-tag', u.switch + ' · porta ' + u.port));
-            b.setAttribute('data-search', (unmappedLabel(u) + ' ' + what.textContent + ' ' + u.port).toLowerCase());
+            b.appendChild(el('span', 'ar-port-tag' + (u.kind === 'machine' ? ' is-wifi' : ''), unmappedTag(u)));
+            b.setAttribute('data-search', (unmappedLabel(u) + ' ' + what.textContent + ' ' + unmappedTag(u)).toLowerCase());
             b.addEventListener('click', function () {
                 b.disabled = true;
-                saveDesk(desk, { switches_id: u.switches_id, port: u.port });
+                saveDesk(desk, unmappedChanges(u));
             });
             li.appendChild(b);
             list.appendChild(li);
@@ -443,7 +471,7 @@
                 li.draggable = true;
                 li.title = 'Arraste até a mesa';
                 li.addEventListener('dragstart', function (ev) {
-                    ev.dataTransfer.setData('application/x-ativarede-port', JSON.stringify({ switches_id: u.switches_id, port: u.port }));
+                    ev.dataTransfer.setData('application/x-ativarede-port', JSON.stringify(unmappedChanges(u)));
                     ev.dataTransfer.effectAllowed = 'link';
                 });
                 li.appendChild(icon('grip-vertical'));
@@ -451,7 +479,7 @@
                 who.appendChild(el('strong', '', unmappedLabel(u)));
                 who.appendChild(el('div', 'text-muted', u.machines.map(function (m) { return m.computer || m.hostname; }).join(', ')));
                 li.appendChild(who);
-                li.appendChild(el('span', 'ar-port-tag', u.switch + ' · ' + u.port));
+                li.appendChild(el('span', 'ar-port-tag' + (u.kind === 'machine' ? ' is-wifi' : ''), unmappedTag(u)));
                 var use = el('button', 'btn btn-sm btn-outline-primary', 'Usar na mesa');
                 use.type = 'button';
                 use.disabled = !selectedId;
@@ -459,7 +487,7 @@
                 use.addEventListener('click', function () {
                     var desk = deskById(selectedId);
                     if (!desk) { return; }
-                    saveDesk(desk, { switches_id: u.switches_id, port: u.port });
+                    saveDesk(desk, unmappedChanges(u));
                 });
                 li.appendChild(use);
                 ul.appendChild(li);
@@ -584,7 +612,8 @@
     function saveDesk(desk, changes) {
         var fields = {
             action: 'save_desk', id: desk.id, name: desk.name, chair: desk.chair,
-            switches_id: desk.switches_id, port: desk.port, w: desk.w, h: desk.h, comment: desk.comment
+            switches_id: desk.switches_id, port: desk.port, machines_id: desk.machines_id || 0,
+            w: desk.w, h: desk.h, comment: desk.comment
         };
         Object.keys(changes).forEach(function (k) { fields[k] = changes[k]; });
         post(fields).then(function (r) { if (r.ok) { render(); } });

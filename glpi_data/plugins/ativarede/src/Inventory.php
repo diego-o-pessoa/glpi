@@ -50,6 +50,29 @@ final class Inventory
         ])->current() ?: null;
     }
 
+    /**
+     * Mesa de uma maquina: pela porta do switch; sem porta (Wi-Fi), pelo
+     * vinculo direto feito na planta.
+     */
+    public static function deskOf(array $machine): ?array
+    {
+        global $DB;
+
+        $desk = self::deskAt((int) $machine['switches_id'], (string) $machine['port']);
+        if ($desk || (int) ($machine['id'] ?? 0) <= 0) {
+            return $desk;
+        }
+        return $DB->request([
+            'SELECT'    => [Settings::TABLE_DESKS . '.*', Settings::TABLE_PLANS . '.locations_id', Settings::TABLE_PLANS . '.name AS plan_name'],
+            'FROM'      => Settings::TABLE_DESKS,
+            'LEFT JOIN' => [
+                Settings::TABLE_PLANS => ['ON' => [Settings::TABLE_DESKS => 'plans_id', Settings::TABLE_PLANS => 'id']],
+            ],
+            'WHERE'     => [Settings::TABLE_DESKS . '.machines_id' => (int) $machine['id']],
+            'LIMIT'     => 1,
+        ])->current() ?: null;
+    }
+
     /** @return array<int, array> switches por id, com o rotulo curto pronto. */
     public static function switches(): array
     {
@@ -146,7 +169,9 @@ final class Inventory
 
         $machines = self::decoratedMachines();
         $byPort = [];
+        $byId = [];
         foreach ($machines as $machine) {
+            $byId[$machine['id']] = $machine;
             if ((int) $machine['switches_id'] > 0 && $machine['port'] !== '') {
                 $byPort[$machine['switches_id'] . '|' . $machine['port']][] = $machine;
             }
@@ -164,7 +189,9 @@ final class Inventory
             if ($hasPort) {
                 $mapped[$key] = true;
             }
-            $here = $hasPort ? ($byPort[$key] ?? []) : [];
+            // Sem porta (notebook no Wi-Fi): a maquina e vinculada direto a mesa.
+            $fixedId = $hasPort ? 0 : (int) ($desk['machines_id'] ?? 0);
+            $here = $hasPort ? ($byPort[$key] ?? []) : (isset($byId[$fixedId]) ? [$byId[$fixedId]] : []);
 
             $alerts = [];
             foreach ($openEvents['desk'][(int) $desk['id']] ?? [] as $event) {
@@ -181,7 +208,7 @@ final class Inventory
                 }
             }
 
-            if (!$hasPort) {
+            if (!$hasPort && $fixedId <= 0) {
                 $state = 'unmapped';
             } elseif ($alerts !== []) {
                 $state = 'alert';
@@ -203,6 +230,7 @@ final class Inventory
                 'comment'  => (string) $desk['comment'],
                 'switches_id' => (int) $desk['switches_id'],
                 'port'     => (string) $desk['port'],
+                'machines_id' => $fixedId,
                 'switch'   => $hasPort ? ($switches[(int) $desk['switches_id']]['short'] ?? '?') : '',
                 'switch_display' => $hasPort ? ($switches[(int) $desk['switches_id']]['display'] ?? '?') : '',
                 'state'    => $state,
@@ -224,17 +252,32 @@ final class Inventory
             }
             [$switchId, $port] = explode('|', $key, 2);
             $unmapped[] = [
+                'kind'        => 'port',
                 'switches_id' => (int) $switchId,
                 'port'        => $port,
                 'switch'      => $switches[(int) $switchId]['display'] ?? '#' . $switchId,
-                'machines'    => array_map(static fn(array $m): array => [
-                    'hostname' => $m['hostname'], 'computer' => $m['computer'], 'user' => $m['user'], 'group' => $m['group'], 'online' => $m['online'],
-                ], $list),
+                'machines'    => array_map([self::class, 'pickView'], $list),
             ];
         }
         usort($unmapped, static fn(array $a, array $b): int => [$a['switch'], (int) $a['port']] <=> [$b['switch'], (int) $b['port']]);
 
-        $wifi = array_values(array_filter($machines, static fn(array $m): bool => $m['link'] === 'wifi' && (int) $m['switches_id'] === 0));
+        // Maquinas sem porta do switch (Wi-Fi ou cabo sem LLDP) e sem mesa:
+        // tambem podem ser colocadas na mesa, vinculadas diretamente.
+        $assigned = [];
+        foreach ($DB->request(['SELECT' => ['machines_id'], 'FROM' => Settings::TABLE_DESKS, 'WHERE' => ['machines_id' => ['>', 0]]]) as $row) {
+            $assigned[(int) $row['machines_id']] = true;
+        }
+        $noPort = array_values(array_filter($machines, static fn(array $m): bool => ((int) $m['switches_id'] === 0 || $m['port'] === '') && !isset($assigned[$m['id']])));
+        foreach ($noPort as $machine) {
+            $unmapped[] = [
+                'kind'        => 'machine',
+                'machines_id' => $machine['id'],
+                'link'        => $machine['link'],
+                'machines'    => [self::pickView($machine)],
+            ];
+        }
+
+        $wifi = array_values(array_filter($noPort, static fn(array $m): bool => $m['link'] === 'wifi'));
 
         return [
             'plan'     => [
@@ -254,6 +297,12 @@ final class Inventory
             ], $switches)),
             'updated'  => date('d/m/Y H:i:s'),
         ];
+    }
+
+    /** Resumo da maquina para a lista "Quem senta nesta mesa?". */
+    public static function pickView(array $m): array
+    {
+        return ['hostname' => $m['hostname'], 'computer' => $m['computer'], 'user' => $m['user'], 'group' => $m['group'], 'online' => $m['online']];
     }
 
     // ------------------------------------------------------------------
@@ -469,7 +518,7 @@ final class Inventory
         foreach ($rows as $row) {
             $view = self::monitorView($row, $native);
             $machine = $machines[(int) $row['machines_id']] ?? null;
-            $desk = $machine ? self::deskAt($machine['switches_id'], $machine['port']) : null;
+            $desk = $machine ? self::deskOf($machine) : null;
             $view['machine'] = $machine ? ($machine['computer'] ?: $machine['hostname']) : '';
             $view['machine_url'] = $machine['computer_url'] ?? '';
             $view['desk'] = $desk['name'] ?? '';
@@ -565,8 +614,11 @@ final class Inventory
         switch ($event['type']) {
             case Events::COMPUTER_MOVED:
                 $title = $name . ' mudou de mesa';
-                $detail = 'De ' . self::positionLabel((int) $event['from_switches_id'], (string) $event['from_port'])
-                    . ' para ' . self::positionLabel((int) $event['to_switches_id'], (string) $event['to_port']) . '.';
+                // Sem porta de origem: a maquina estava vinculada a mesa pelo Wi-Fi.
+                $origin = (int) $event['from_switches_id'] > 0
+                    ? self::positionLabel((int) $event['from_switches_id'], (string) $event['from_port'])
+                    : ($detail !== '' ? $detail : 'sem posição');
+                $detail = 'De ' . $origin . ' para ' . self::positionLabel((int) $event['to_switches_id'], (string) $event['to_port']) . '.';
                 break;
             case Events::MONITOR_MOVED:
                 $title = 'Monitor ' . self::monitorName((int) $event['monitors_id']) . ' mudou de mesa';
@@ -662,7 +714,7 @@ final class Inventory
 
         $machines = self::decoratedMachines(['computers_id' => $computerId]);
         $machine = $machines[0] ?? null;
-        $desk = $machine ? self::deskAt($machine['switches_id'], $machine['port']) : null;
+        $desk = $machine ? self::deskOf($machine) : null;
         $events = [];
         if ($machine) {
             foreach ($DB->request([

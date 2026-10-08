@@ -390,6 +390,9 @@
 .ar-picker-what { grid-column: 1; color: var(--ar-muted); font-size: .8125rem; }
 .ar-picker-item .ar-port-tag { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 
+.ar-port-tag.is-wifi { background: rgba(100, 116, 139, .12); color: var(--ar-muted); }
+.ar-desk-port.is-wifi { font-size: max(8px, .5cqw); font-weight: 600; color: var(--ar-muted); }
+
 .ar-draggable { cursor: grab; }
 .ar-draggable:active { cursor: grabbing; }
 .ar-draggable > .ti-grip-vertical { color: var(--ar-muted); }

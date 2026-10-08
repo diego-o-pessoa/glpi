@@ -29,6 +29,8 @@ final class ReportService
     private const GENERIC_SERIALS = [
         'to be filled by o.e.m.', 'default string', 'system serial number', 'none', 'n/a', 'na',
         'not specified', 'not applicable', 'chassis serial number', '0123456789', '1234567890',
+        // Monitores que gravam o nome do campo no lugar do numero (visto em campo).
+        'serialnumber', 'serial number', 'serial', 'sn', 's/n',
     ];
 
     /**
@@ -215,6 +217,31 @@ final class ReportService
         return $removed;
     }
 
+    /**
+     * Monitores gravados com serie generica antes do filtro (ex.: "SerialNumber"):
+     * apagados, com os alertas deles fechados. O proximo relatorio da maquina
+     * os registra de novo, sem serie (reconhecidos so dentro da maquina).
+     */
+    public static function cleanupGenericSerials(): int
+    {
+        global $DB;
+
+        $removed = 0;
+        foreach ($DB->request(['SELECT' => ['id', 'serial'], 'FROM' => Settings::TABLE_MONITORS, 'WHERE' => ['has_serial' => 1]]) as $row) {
+            if (self::realSerial((string) $row['serial']) !== '') {
+                continue;
+            }
+            $DB->update(
+                Settings::TABLE_EVENTS,
+                ['status' => Events::CLEARED, 'resolved_at' => date('Y-m-d H:i:s')],
+                ['status' => Events::OPEN, 'monitors_id' => (int) $row['id']]
+            );
+            $DB->delete(Settings::TABLE_MONITORS, ['id' => (int) $row['id']]);
+            $removed++;
+        }
+        return $removed;
+    }
+
     /** Porta = descricao (o numero que aparece no switch); senao o Port ID. */
     public static function portOf(array $lldp): string
     {
@@ -237,6 +264,7 @@ final class ReportService
                 'switches_id' => $switchId, 'port' => $port, 'port_id' => $portId, 'since' => $now,
                 'pending_switches_id' => 0, 'pending_port' => '', 'pending_count' => 0,
             ], ['id' => $machineDbId]);
+            $events += self::promoteFixedDesk($machineDbId, $switchId, $port);
         } elseif ($currentSwitch === $switchId && $currentPort === $port) {
             if ((int) $machine['pending_count'] > 0) {
                 $DB->update(Settings::TABLE_MACHINES, [
@@ -263,6 +291,7 @@ final class ReportService
                     'pending_switches_id' => 0, 'pending_port' => '', 'pending_count' => 0,
                 ], ['id' => $machineDbId]);
                 self::refreshSharedPort($currentSwitch, $currentPort);
+                $events += self::promoteFixedDesk($machineDbId, $switchId, $port);
             } else {
                 $DB->update(Settings::TABLE_MACHINES, [
                     'pending_switches_id' => $switchId, 'pending_port' => $port, 'pending_count' => $count,
@@ -278,6 +307,50 @@ final class ReportService
         }
         $events += self::refreshSharedPort($switchId, $port);
         return $events;
+    }
+
+    /**
+     * Maquina que estava vinculada direto a uma mesa (Wi-Fi) apareceu no cabo:
+     * - porta sem mesa: a porta passa a ser da mesa dela (automatico);
+     * - porta de outra mesa: levou a maquina para la -> "Computador mudou de
+     *   mesa" e o vinculo antigo e desfeito (a porta passa a identificar).
+     *
+     * @return int alertas criados
+     */
+    private static function promoteFixedDesk(int $machineDbId, int $switchId, string $port): int
+    {
+        global $DB;
+
+        $fixed = $DB->request([
+            'FROM'  => Settings::TABLE_DESKS,
+            'WHERE' => ['machines_id' => $machineDbId],
+            'LIMIT' => 1,
+        ])->current();
+        if (!$fixed) {
+            return 0;
+        }
+
+        $owner = Inventory::deskAt($switchId, $port);
+        $now = date('Y-m-d H:i:s');
+        if (!$owner) {
+            $DB->update(Settings::TABLE_DESKS, [
+                'switches_id' => $switchId, 'port' => $port, 'machines_id' => 0, 'date_mod' => $now,
+            ], ['id' => (int) $fixed['id']]);
+            Inventory::resetCache();
+            return 0;
+        }
+        $DB->update(Settings::TABLE_DESKS, ['machines_id' => 0, 'date_mod' => $now], ['id' => (int) $fixed['id']]);
+        if ((int) $owner['id'] === (int) $fixed['id']) {
+            return 0;
+        }
+        Events::record(Events::COMPUTER_MOVED, [
+            'machines_id'    => $machineDbId,
+            'desks_id'       => (int) $owner['id'],
+            'to_switches_id' => $switchId,
+            'to_port'        => $port,
+            'details'        => 'mesa ' . $fixed['name'] . ' (Wi-Fi, sem porta)',
+        ]);
+        return 1;
     }
 
     /** Mais de uma maquina ativa na mesma porta = mini switch (ou cabo trocado). */

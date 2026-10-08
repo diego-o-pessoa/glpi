@@ -29,7 +29,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
 $machines = Inventory::decoratedMachines();
 foreach ($machines as &$machine) {
-    $desk = Inventory::deskAt($machine['switches_id'], $machine['port']);
+    $desk = Inventory::deskOf($machine);
     $machine['desk'] = $desk['name'] ?? '';
 }
 unset($machine);

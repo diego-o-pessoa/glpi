@@ -21,7 +21,7 @@ final class Desks
             return ['ok' => false, 'message' => 'Mesa não encontrada.'];
         }
 
-        $name =mb_substr(trim((string) ($input['name'] ?? '')), 0, 100);
+        $name = mb_substr(trim((string) ($input['name'] ?? '')), 0, 100);
         if ($name === '') {
             return ['ok' => false, 'message' => 'Informe o nome da mesa.'];
         }
@@ -44,6 +44,25 @@ final class Desks
                 return ['ok' => false, 'message' => 'Esta porta já é da mesa ' . $other['name'] . '.'];
             }
         }
+
+        // Maquina sem porta (Wi-Fi) vinculada direto. Porta definida tem
+        // prioridade: com porta, o vinculo direto e desfeito.
+        $machineId = $switchId > 0 ? 0 : (int) ($input['machines_id'] ?? $desk['machines_id'] ?? 0);
+        if ($machineId > 0) {
+            if (!Inventory::machine($machineId)) {
+                return ['ok' => false, 'message' => 'Máquina não encontrada.'];
+            }
+            $other = $DB->request([
+                'SELECT' => ['name'],
+                'FROM'   => Settings::TABLE_DESKS,
+                'WHERE'  => ['machines_id' => $machineId, 'NOT' => ['id' => (int) $desk['id']]],
+                'LIMIT'  => 1,
+            ])->current();
+            if ($other) {
+                return ['ok' => false, 'message' => 'Esta máquina já está na mesa ' . $other['name'] . '.'];
+            }
+        }
+
         $chair = (string) ($input['chair'] ?? $desk['chair']);
         if (!in_array($chair, self::CHAIRS, true)) {
             $chair = (string) $desk['chair'];
@@ -55,6 +74,7 @@ final class Desks
             'name'        => $name,
             'switches_id' => $switchId,
             'port'        => $port,
+            'machines_id' => $machineId,
             'chair'       => $chair,
             'w'           => $w,
             'h'           => $h,
@@ -63,7 +83,7 @@ final class Desks
         ], ['id' => (int) $desk['id']]);
 
         // Porta nova com maquina: a mesa deixa de estar "vazia".
-        if ($switchId > 0) {
+        if ($switchId > 0 || $machineId > 0) {
             Events::clear(Events::DESK_EMPTY, ['desks_id' => (int) $desk['id']]);
         }
         return ['ok' => true, 'message' => 'Mesa ' . $name . ' salva.', 'desk_id' => (int) $desk['id']];
