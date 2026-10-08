@@ -58,7 +58,7 @@ function plugin_ativaguardian_getAddSearchOptionsNew($itemtype): array
             // ele a lista de Computadores quebrava ("Ocorreu um erro inesperado").
             'itemtype'      => \GlpiPlugin\Ativaguardian\Machine::class,
             'field'         => 'username',
-            'name'          => 'Usuário do Windows (Guardian)',
+            'name'          => 'Usuário Windows',
             'datatype'      => 'string',
             'forcegroupby'  => true,
             'massiveaction' => false,
