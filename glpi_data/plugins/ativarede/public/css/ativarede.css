@@ -142,15 +142,21 @@
     background: rgba(var(--zone), .06);
 }
 
+/* Dentro da area, no canto de cima (margem livre acima das mesas): acima da
+   area o nome podia cair sobre a parede da sala. */
 .ar-zone-label {
     position: absolute;
-    left: 8px;
-    bottom: calc(100% + 2px);
-    padding: 1px 8px;
+    left: 6px;
+    top: 3px;
+    max-width: calc(100% - 12px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 7px;
+    line-height: 1.5;
     border-radius: 999px;
     background: rgba(var(--zone), .14);
     color: rgb(var(--zone));
-    font-size: max(10px, .62cqw);
+    font-size: max(9px, .55cqw);
     font-weight: 700;
     letter-spacing: .02em;
     white-space: nowrap;
