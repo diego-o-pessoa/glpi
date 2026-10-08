@@ -45,8 +45,17 @@ final class MachineRepository
             'date_mod'         => $now,
         ];
 
-        if (count($existing) === 1) {
-            $current = $existing->current();
+        $current = count($existing) === 1 ? $existing->current() : null;
+        // Computador do GLPI desta maquina (coluna "Usuario do Windows" na
+        // lista de Computadores). Resolvido uma vez; so leitura do inventario.
+        if ((int) ($current['computers_id'] ?? 0) <= 0) {
+            $computerId = self::resolveComputer((string) $data['machine_id'], (string) $data['hostname']);
+            if ($computerId > 0) {
+                $row['computers_id'] = $computerId;
+            }
+        }
+
+        if ($current !== null) {
             $machinesId = (int) $current['id'];
             // Oculta do painel: volta sozinha quando a maquina e reinstalada
             // (o Guardian passa a reportar outra versao).
@@ -71,6 +80,38 @@ final class MachineRepository
 
         self::replaceComponents($machinesId, $components, $now);
         return $machinesId;
+    }
+
+    /**
+     * Computador do GLPI desta maquina: o vinculo que o Ativa Rede ja fez pela
+     * serie da BIOS (mais confiavel); senao, o unico computador com o mesmo
+     * nome. 0 quando nao ha exatamente um candidato.
+     */
+    private static function resolveComputer(string $machineId, string $hostname): int
+    {
+        global $DB;
+
+        if ($DB->tableExists('glpi_plugin_ativarede_machines')) {
+            $rede = $DB->request([
+                'SELECT' => ['computers_id'],
+                'FROM'   => 'glpi_plugin_ativarede_machines',
+                'WHERE'  => ['machine_id' => $machineId, 'computers_id' => ['>', 0]],
+                'LIMIT'  => 1,
+            ])->current();
+            if ($rede) {
+                return (int) $rede['computers_id'];
+            }
+        }
+        if ($hostname === '') {
+            return 0;
+        }
+        $rows = iterator_to_array($DB->request([
+            'SELECT' => ['id'],
+            'FROM'   => 'glpi_computers',
+            'WHERE'  => ['name' => $hostname, 'is_deleted' => 0, 'is_template' => 0],
+            'LIMIT'  => 2,
+        ]), false);
+        return count($rows) === 1 ? (int) $rows[0]['id'] : 0;
     }
 
     /**

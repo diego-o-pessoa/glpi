@@ -47,5 +47,22 @@ function plugin_ativaguardian_getAddSearchOptionsNew($itemtype): array
                 ],
             ],
         ],
+        // Conta logada no Windows agora (heartbeat do Guardian, a cada 30 s).
+        // Identifica de quem e a maquina mesmo sem usuario no GLPI. Vazio se
+        // ninguem estiver logado ou a maquina ainda nao foi vinculada ao
+        // computador (serie da BIOS pelo Ativa Rede ou nome igual). So leitura.
+        [
+            'id'            => '7802',
+            'table'         => 'glpi_plugin_ativaguardian_machines',
+            'field'         => 'username',
+            'name'          => 'Usuário do Windows (Guardian)',
+            'datatype'      => 'string',
+            'forcegroupby'  => true,
+            'massiveaction' => false,
+            'joinparams'    => [
+                'jointype'  => 'child',
+                'linkfield' => 'computers_id',
+            ],
+        ],
     ];
 }
