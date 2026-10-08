@@ -438,6 +438,10 @@ final class Inventory
                 $reason = 'Guardian ' . ($version ?: 'sem versão') . ': precisa do 1.6.0 ou mais novo (atualizar o pacote unificado).';
             } elseif ($ts === false || $ts < $limit) {
                 $reason = 'Desligada ou sem contato desde ' . self::date($row['last_contact']) . '.';
+            } elseif ($ts < time() - 10 * MINUTE_TIMESTAMP) {
+                // O heartbeat sai a cada 30 s: 10 min calado = servico parado ou travado.
+                $reason = 'O serviço do Guardian parou de responder às ' . self::date($row['last_contact'])
+                    . ' (parado ou travado). Veja o serviço AtivaGuardian e o guardian.log na máquina.';
             } else {
                 $reason = 'Ligada, mas ainda não enviou a posição. O primeiro envio sai ~2 min após o serviço iniciar; se continuar, veja files/_log/ativarede.log.';
             }
