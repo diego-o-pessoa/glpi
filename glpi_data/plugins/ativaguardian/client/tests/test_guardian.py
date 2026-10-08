@@ -993,6 +993,30 @@ class AutoRepairTests(unittest.TestCase):
         with mock.patch.object(guardian, "fix_component", side_effect=OSError("boom")):
             rt.auto_repair(quiet_logger(), {"updater": {"status": "error", "version": ""}})  # nao levanta
 
+    def test_waits_after_service_start(self):
+        # Visto em campo: logo apos instalar, o RustDesk ainda nao existia; o
+        # reparo disparava um segundo instalador e o Guardian ficava parado.
+        rt = guardian.GuardianRuntime()
+        rt._started = guardian.time.monotonic()
+        with mock.patch.object(guardian, "fix_component") as fix:
+            rt.auto_repair(quiet_logger(), {"remote": {"status": "file_missing", "version": ""}})
+        fix.assert_not_called()
+
+    def test_skipped_while_installer_runs(self):
+        rt = guardian.GuardianRuntime()
+        with mock.patch.object(guardian, "installer_running", return_value=True), \
+                mock.patch.object(guardian, "fix_component") as fix:
+            rt.auto_repair(quiet_logger(), {"remote": {"status": "file_missing", "version": ""}})
+        fix.assert_not_called()
+
+    def test_runs_after_grace(self):
+        rt = guardian.GuardianRuntime()
+        rt._started = guardian.time.monotonic() - rt.AUTOFIX_STARTUP_GRACE - 1
+        with mock.patch.object(guardian, "installer_running", return_value=False), \
+                mock.patch.object(guardian, "fix_component", return_value=(True, "ok")) as fix:
+            rt.auto_repair(quiet_logger(), {"remote": {"status": "file_missing", "version": ""}})
+        fix.assert_called_once()
+
 
 class UsernameFormatTests(unittest.TestCase):
     def test_username_has_no_domain_prefix(self):

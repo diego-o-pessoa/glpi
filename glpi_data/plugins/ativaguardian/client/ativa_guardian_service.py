@@ -55,7 +55,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.6.5"
+GUARDIAN_VERSION = "1.6.6"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -521,10 +521,26 @@ class PROCESSENTRY32W(ctypes.Structure):
     ]
 
 
-def is_process_running(image_name: str) -> bool:
+INSTALLER_IMAGE_PREFIX = "ativa-unified-agent-setup"
+
+
+def installer_running() -> bool:
+    """O instalador unificado esta rodando (o .exe ou o .tmp do Inno Setup)?
+
+    Enquanto ele roda, componentes "faltando" sao esperados (ainda serao
+    instalados) e o servico do Guardian pode ter sido parado de proposito.
+    """
+    try:
+        return is_process_running(INSTALLER_IMAGE_PREFIX, prefix=True)
+    except OSError:
+        return False
+
+
+def is_process_running(image_name: str, prefix: bool = False) -> bool:
     """Ha algum processo com esse nome de imagem? Snapshot via kernel32.
 
     Evita `tasklist`, que alem de ser outro processo tem saida localizada.
+    prefix=True aceita nomes que comecam com image_name (ex.: setup versionado).
     """
     if os.name != "nt":
         return False
@@ -543,7 +559,8 @@ def is_process_running(image_name: str) -> bool:
         if not kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
             return False
         while True:
-            if str(entry.szExeFile).lower() == target:
+            name = str(entry.szExeFile).lower()
+            if name == target or (prefix and name.startswith(target)):
                 return True
             if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
                 return False
@@ -1566,6 +1583,11 @@ class GuardianRuntime:
     # componente. Reparar (reinstalar) e caro; iniciar servico e barato, mas a
     # janela evita marteladas se o problema persistir.
     AUTOFIX_MIN_INTERVAL = 600
+    # Depois que o servico inicia, espera antes do primeiro auto-reparo: na
+    # instalacao, o Guardian sobe antes do RustDesk/Workspace e os via como
+    # "faltando"; o reparo disparava um segundo instalador, que conflitava com
+    # o primeiro (codigo 5) e deixava o proprio Guardian parado.
+    AUTOFIX_STARTUP_GRACE = 900
 
     def auto_repair(self, logger: logging.Logger, components: dict[str, dict[str, str]]) -> None:
         """Corrige sozinho o que estiver quebrado, sem esperar clique no painel.
@@ -1573,8 +1595,16 @@ class GuardianRuntime:
         Mesma escada do botao "Corrigir" (fix_component): so age no que da para
         agir, e nunca reinstala se os arquivos estao no lugar. Rate-limit por
         componente para nao entrar em loop com um antivirus que reapaga o exe.
+        Nada e feito nos primeiros minutos do servico nem com um instalador em
+        andamento (componentes ainda estao sendo instalados).
         """
         now = time.monotonic()
+        started = getattr(self, "_started", None)
+        if started is not None and now - started < self.AUTOFIX_STARTUP_GRACE:
+            return
+        if installer_running():
+            logger.debug("Auto-reparo adiado: instalador unificado em andamento.")
+            return
         for name, data in components.items():
             status = data.get("status")
             if status in (STATUS_HEALTHY, STATUS_UNKNOWN):
@@ -1611,6 +1641,7 @@ class GuardianRuntime:
 
     def run(self, logger: logging.Logger) -> None:
         logger.info("Guardian started (versao %s)", GUARDIAN_VERSION)
+        self._started = time.monotonic()
         machine_id = machine_identity(logger)
         try:
             self.finish_pending_repair(logger, machine_id)

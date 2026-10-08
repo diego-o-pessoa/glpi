@@ -174,14 +174,44 @@ def install_recovery_task() -> None:
             "/TR", f'"{recovery}" --enforce-protection')
 
 
+def guardian_stopped() -> bool:
+    """AtivaGuardian instalado e parado (estado 1 = STOPPED no sc query)."""
+    result = command("sc.exe", "query", "AtivaGuardian", required=False)
+    # Mesmo padrao do ":  4  RUNNING" usado abaixo (o nome do estado nao e traduzido).
+    return result.returncode == 0 and re.search(r":\s*1\s+STOPPED", result.stdout or "") is not None
+
+
+def ensure_guardian_running() -> None:
+    """Religa o Guardian se ele ficou parado sem manutencao autorizada.
+
+    Caso visto em campo: um instalador para o servico, falha (codigo 5) e
+    ninguem o inicia de novo - a maquina ficava 30+ min sem heartbeat. Nunca
+    age com o instalador unificado rodando (ele para o servico de proposito
+    para trocar os binarios).
+    """
+    try:
+        if not guardian_stopped():
+            return
+        from ativa_guardian_service import installer_running
+        if installer_running():
+            return
+        command("sc.exe", "start", "AtivaGuardian", required=False)
+    except Exception:  # noqa: BLE001 - a tarefa de protecao nunca falha por isso
+        pass
+
+
 def enforce(close: bool = False) -> None:
     if not is_admin():
         raise PermissionError("Execute como administrador.")
     config = read_json(CONFIG)
+    state = read_json(STATE)
+    # Fora de manutencao autorizada (que para o servico de proposito), o
+    # Guardian tem que estar rodando. Vale tambem sem senha configurada.
+    if not close and not lease_active(state):
+        ensure_guardian_running()
     verifier = validate_verifier(str(config.get("maintenance_password_hash", "")))
     if not verifier:
         return  # Old installations remain upgradeable until a password is set.
-    state = read_json(STATE)
     if not close and lease_active(state):
         return
     # Nothing changed since the last successful protection pass. The task's

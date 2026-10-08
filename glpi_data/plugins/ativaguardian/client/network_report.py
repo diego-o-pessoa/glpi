@@ -598,6 +598,7 @@ class NetworkReporter(threading.Thread):
                     raise
 
     def run(self) -> None:
+        self.logger.info("Ativa Rede: relatorio automatico iniciado (primeira coleta em %d s).", FIRST_DELAY_SECONDS)
         self._sleep(FIRST_DELAY_SECONDS)
         while not self.stop_event.is_set():
             try:
@@ -618,7 +619,8 @@ class NetworkReporter(threading.Thread):
             url = rede_url(str(config["api_url"]))
             token = str(config["api_token"])
         except Exception as exc:  # noqa: BLE001
-            self.logger.debug("Ativa Rede: sem configuracao valida (%s).", exc)
+            self.logger.warning("Ativa Rede: sem configuracao valida (%s); coleta pulada.", exc)
+            self.retry_soon = True
             return
 
         payload = collect_report(self.machine_id, self.hostname(), self.guardian_version, self.work_dir,

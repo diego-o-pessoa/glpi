@@ -106,6 +106,27 @@ class PasswordTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 m.authorize()
 
+    def _sc(self, state):
+        out = f"SERVICE_NAME: AtivaGuardian\n        STATE              : {state}\n"
+        return mock.Mock(returncode=0, stdout=out)
+
+    def test_stopped_guardian_is_restarted_outside_maintenance(self):
+        # Visto em campo: instalador parou o servico, falhou, e ele ficou 30+ min parado.
+        import ativa_guardian_service as g
+        with mock.patch.object(m, "command", return_value=self._sc("1  STOPPED")) as command, \
+             mock.patch.object(g, "installer_running", return_value=False):
+            m.ensure_guardian_running()
+        command.assert_any_call("sc.exe", "start", "AtivaGuardian", required=False)
+
+    def test_not_restarted_while_installer_runs_or_already_running(self):
+        import ativa_guardian_service as g
+        for state, installing in (("1  STOPPED", True), ("4  RUNNING", False)):
+            with self.subTest(state=state), \
+                 mock.patch.object(m, "command", return_value=self._sc(state)) as command, \
+                 mock.patch.object(g, "installer_running", return_value=installing):
+                m.ensure_guardian_running()
+                self.assertNotIn(mock.call("sc.exe", "start", "AtivaGuardian", required=False), command.call_args_list)
+
     def test_restoration_does_not_touch_unrelated_services(self):
         self.assertEqual(set(m.SERVICES), {"AtivaGuardian", "AtivaUnifiedUpdater", "RustDesk", "glpi-agent", "GLPIAgent"})
 
