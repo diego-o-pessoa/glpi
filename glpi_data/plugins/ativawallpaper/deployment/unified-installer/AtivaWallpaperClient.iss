@@ -111,6 +111,9 @@ Type: dirifempty; Name: "{commonprograms}\Ativa"
 var
   AgentRestartRequired: Boolean;
   ReplacedUpdaterPath: String;
+  { Motivo da falha do GLPI Agent (vazio = instalou). Os demais componentes
+    seguem instalando; o aviso aparece no fim. }
+  AgentFailure: String;
 
 procedure RunRequired(const Description, Filename, Parameters: String);
 var
@@ -137,28 +140,88 @@ begin
     Log('Codigo de saida: ' + IntToStr(ResultCode));
 end;
 
-procedure InstallGlpiAgent(const Parameters: String);
+{ Linha do log do msiexec que explica a falha: o "Error/Erro NNNN" antes do
+  primeiro "Return value 3" (a acao que falhou). Vazio se nao achar. }
+function MsiFailureReason(const LogPath: String): String;
+var
+  Lines: TArrayOfString;
+  I, J, Stop: Integer;
+  Line: String;
+begin
+  Result := '';
+  if not LoadStringsFromFile(LogPath, Lines) then
+    exit;
+  for I := 0 to GetArrayLength(Lines) - 1 do begin
+    Line := Lowercase(Lines[I]);
+    if (Pos('return value 3', Line) > 0) or (Pos('valor de retorno 3', Line) > 0) then begin
+      Stop := I - 80;
+      if Stop < 0 then
+        Stop := 0;
+      for J := I - 1 downto Stop do begin
+        Line := Lowercase(Lines[J]);
+        if (Pos('error ', Line) > 0) or (Pos('erro ', Line) > 0) then begin
+          Result := Trim(Lines[J]);
+          break;
+        end;
+      end;
+      if Result = '' then
+        Result := Trim(Lines[I]);
+      break;
+    end;
+  end;
+  if Length(Result) > 300 then
+    Result := Copy(Result, 1, 300) + '...';
+end;
+
+function RunAgentMsi(const Parameters: String): Integer;
 var
   Attempt: Integer;
-  ResultCode: Integer;
 begin
-  WizardForm.StatusLabel.Caption := 'Instalando ou atualizando o GLPI Agent...';
+  Result := -1;
   for Attempt := 1 to 10 do begin
     Log('Instalando o GLPI Agent (tentativa ' + IntToStr(Attempt) + '): msiexec.exe ' + Parameters);
-    if not Exec(ExpandConstant('{sys}\msiexec.exe'), Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-      RaiseException('A instalacao do GLPI Agent nao pode ser iniciada. Codigo: ' + IntToStr(ResultCode));
+    if not Exec(ExpandConstant('{sys}\msiexec.exe'), Parameters, '', SW_HIDE, ewWaitUntilTerminated, Result) then begin
+      Log('msiexec nao pode ser iniciado. Codigo: ' + IntToStr(Result));
+      exit;
+    end;
     { 1618: outra instalacao do Windows Installer em andamento (ex.: Windows Update). }
-    if ResultCode <> 1618 then
-      break;
+    if Result <> 1618 then
+      exit;
     Log('Windows Installer ocupado (1618); nova tentativa em 30 segundos.');
     Sleep(30000);
   end;
+end;
 
-  if (ResultCode <> 0) and (ResultCode <> 1641) and (ResultCode <> 3010) then
-    RaiseException('A instalacao do GLPI Agent falhou. Codigo de saida: ' + IntToStr(ResultCode));
+{ GLPI Agent. Uma falha NAO aborta o pacote: Guardian/Updater/demais seguem
+  instalando (sem eles a maquina sumia dos paineis e nada tentava corrigir);
+  o motivo aparece no fim e no log. }
+procedure InstallGlpiAgent(const Parameters: String);
+var
+  ResultCode: Integer;
+  Reason: String;
+begin
+  WizardForm.StatusLabel.Caption := 'Instalando ou atualizando o GLPI Agent...';
+  ResultCode := RunAgentMsi(Parameters);
+  { 1603 (erro fatal) muitas vezes e o servico antigo travado segurando os
+    arquivos: para o servico e tenta mais uma vez. }
+  if ResultCode = 1603 then begin
+    Log('GLPI Agent: 1603; parando o servico antigo e tentando de novo.');
+    WizardForm.StatusLabel.Caption := 'Instalando o GLPI Agent (nova tentativa)...';
+    RunOptional(ExpandConstant('{sys}\sc.exe'), 'stop glpi-agent');
+    Sleep(10000);
+    ResultCode := RunAgentMsi(Parameters);
+  end;
 
   if (ResultCode = 1641) or (ResultCode = 3010) then
     AgentRestartRequired := True;
+  if (ResultCode = 0) or (ResultCode = 1641) or (ResultCode = 3010) then
+    exit;
+
+  Reason := MsiFailureReason(ExpandConstant('{commonappdata}\AtivaLocacao\UnifiedUpdater\logs\glpi-agent-msi.log'));
+  AgentFailure := 'codigo ' + IntToStr(ResultCode);
+  if Reason <> '' then
+    AgentFailure := AgentFailure + ' - ' + Reason;
+  Log('AVISO: o GLPI Agent nao foi instalado (' + AgentFailure + '). Os demais componentes seguem.');
 end;
 
 function UpdaterServiceRunning(): Boolean;
@@ -596,6 +659,16 @@ end;
 function NeedRestart(): Boolean;
 begin
   Result := AgentRestartRequired;
+end;
+
+{ Tela final: avisa se o GLPI Agent ficou de fora (o resto foi instalado). }
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if (CurPageID = wpFinished) and (AgentFailure <> '') then
+    WizardForm.FinishedLabel.Caption :=
+      'Os componentes Ativa foram instalados, mas o GLPI Agent NAO foi (' + AgentFailure + ').' + #13#10#13#10 +
+      'O Ativa Guardian vai mostrar o GLPI Agent como ausente no painel. Reinicie o computador e rode este ' +
+      'instalador de novo; se continuar, veja o log em C:\ProgramData\AtivaLocacao\UnifiedUpdater\logs\glpi-agent-msi.log.';
 end;
 
 procedure DeinitializeSetup();
