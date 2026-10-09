@@ -48,9 +48,9 @@
   <path d="M40 130V262" stroke="#7fb3e6" stroke-width="8"/>
   <path d="M40 130V262" stroke="#ffffff" stroke-width="1.5"/>
 
-  <!-- Porta (canto inferior esquerdo) -->
-  <path d="M58 360H116" stroke="#fbfaf6" stroke-width="10"/>
-  <path d="M60 360V306" stroke="#334155" stroke-width="3"/>
-  <path d="M60 306A54 54 0 0 1 114 360" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 4"/>
-  <text x="88" y="350" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Entrada</text>
+  <!-- Porta (parede esquerda, perto do canto de baixo; abre para dentro) -->
+  <path d="M40 292V348" stroke="#fbfaf6" stroke-width="10"/>
+  <path d="M40 294H94" stroke="#334155" stroke-width="3"/>
+  <path d="M94 294A54 54 0 0 1 40 348" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <text x="74" y="334" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="11" fill="#64748b" text-anchor="middle">Entrada</text>
 </svg>

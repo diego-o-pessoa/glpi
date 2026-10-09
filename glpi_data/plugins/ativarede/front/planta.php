@@ -31,7 +31,9 @@ TemplateRenderer::getInstance()->display('@ativarede/planta.html.twig', [
     'plan_id'      => $planId,
     'initial_json' => json_encode($state, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE),
     'data_url'     => $base . '/front/planta.data.php',
-    'plans_url'    => $base . '/front/plano.php?v=' . PLUGIN_ATIVAREDE_VERSION . '&plan=',
+    // Data dos desenhos: planta corrigida chega sem esperar o cache de 1 h.
+    'plans_url'    => $base . '/front/plano.php?v=' . PLUGIN_ATIVAREDE_VERSION . '.'
+        . max(array_map('filemtime', glob(PLUGIN_ATIVAREDE_DIR . '/public/plans/*') ?: [__FILE__])) . '&plan=',
     'alerts_url'   => $base . '/front/alertas.php',
     'self_url'     => $base . '/front/planta.php',
     'css_url'      => $base . '/css/ativarede.css?v=' . PLUGIN_ATIVAREDE_VERSION,
