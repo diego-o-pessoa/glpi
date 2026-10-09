@@ -772,6 +772,56 @@
     color: #0067b8;
 }
 
+/* ------------------------------------------------------- computadores */
+
+.ativaworkspace .aw-filter {
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.ativaworkspace .aw-filter:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.ativaworkspace .aw-filter.is-active {
+    box-shadow: 0 0 0 2px currentColor inset;
+}
+
+.ativaworkspace .aw-kpi-blue.is-active   { color: var(--aw-blue); }
+.ativaworkspace .aw-kpi-orange.is-active { color: var(--aw-orange); }
+.ativaworkspace .aw-kpi-red.is-active    { color: var(--aw-red); }
+.ativaworkspace .aw-kpi-green.is-active  { color: var(--aw-green); }
+
+.ativaworkspace .aw-filter.is-active .aw-kpi-value,
+.ativaworkspace .aw-filter.is-active .aw-kpi-hint {
+    color: var(--tblr-body-color, #1d273b);
+}
+
+.ativaworkspace .aw-computer-search {
+    width: 260px;
+    max-width: 100%;
+}
+
+.ativaworkspace .aw-status-dot {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    border-radius: 50%;
+}
+
+.ativaworkspace .aw-status-dot.is-online {
+    background: var(--aw-green);
+    box-shadow: 0 0 0 3px rgba(47, 179, 68, 0.18);
+}
+
+.ativaworkspace .aw-status-dot.is-offline {
+    background: var(--aw-gray);
+    opacity: 0.5;
+}
+
 /* --------------------------------------------------------- outras telas */
 
 .ativaworkspace .aw-truncate {

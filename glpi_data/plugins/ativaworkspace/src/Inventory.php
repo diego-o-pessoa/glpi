@@ -73,30 +73,94 @@ final class Inventory
                 self::TABLE . '.reported_at',
                 self::TABLE . '.data',
                 'glpi_computers.name AS computer_name',
+                'glpi_computers.contact',
+                'glpi_users.firstname',
+                'glpi_users.realname',
             ],
             'FROM'     => self::TABLE,
             'LEFT JOIN' => [
                 'glpi_computers' => [
                     'ON' => [self::TABLE => 'computers_id', 'glpi_computers' => 'id'],
                 ],
+                'glpi_users' => [
+                    'ON' => ['glpi_computers' => 'users_id', 'glpi_users' => 'id'],
+                ],
             ],
-            'ORDER'    => [self::TABLE . '.reported_at DESC'],
         ]);
+        $users = self::windowsUsers();
+        // O servico envia inventario a cada minuto: sem relato ha 3 min, esta offline.
+        $onlineSince = strtotime((string) ($_SESSION['glpi_currenttime'] ?? 'now')) - 180;
         foreach ($iterator as $row) {
             $data = json_decode((string) ($row['data'] ?? ''), true);
             $system = is_array($data) && is_array($data['system'] ?? null) ? $data['system'] : [];
+            $computersId = (int) $row['computers_id'];
+            $hostname = (string) $row['hostname'];
+            $user = $users['id'][$computersId] ?? $users['host'][mb_strtolower($hostname)] ?? '';
             $rows[] = [
-                'computers_id' => (int) $row['computers_id'],
-                'name'         => (string) ($row['computer_name'] ?: $row['hostname'] ?: '—'),
-                'hostname'     => (string) $row['hostname'],
+                'computers_id' => $computersId,
+                'name'         => (string) ($row['computer_name'] ?: $hostname ?: '—'),
+                'hostname'     => $hostname,
+                'username'     => $user !== '' ? $user : self::shortUser((string) ($row['contact'] ?? '')),
+                'glpi_user'    => trim((string) ($row['firstname'] ?? '') . ' ' . (string) ($row['realname'] ?? '')),
                 'agent_version'=> (string) $row['agent_version'],
                 'reported_at'  => (string) $row['reported_at'],
+                'online'       => $row['reported_at'] && strtotime((string) $row['reported_at']) >= $onlineSince,
                 'ram_percent'  => (int) ($system['ram_percent'] ?? 0),
                 'cpu_percent'  => (int) ($system['cpu_percent'] ?? 0),
                 'programs'     => is_array($data['programs'] ?? null) ? count($data['programs']) : 0,
             ];
         }
+        usort($rows, static fn (array $a, array $b): int => strnatcasecmp($a['name'], $b['name']));
         return $rows;
+    }
+
+    /**
+     * Usuario do Windows conectado em cada maquina, do Ativa Guardian (heartbeat
+     * a cada minuto). Por computers_id e, se o Guardian nao o resolveu, por
+     * hostname. Vazio se o Guardian nao estiver instalado.
+     *
+     * @return array{id: array<int, string>, host: array<string, string>}
+     */
+    private static function windowsUsers(): array
+    {
+        global $DB;
+
+        $users = ['id' => [], 'host' => []];
+        $table = 'glpi_plugin_ativaguardian_machines';
+        if (!$DB->tableExists($table) || !$DB->fieldExists($table, 'computers_id')) {
+            return $users;
+        }
+        // Mais antigo primeiro: o heartbeat mais recente sobrescreve.
+        $iterator = $DB->request([
+            'SELECT' => ['computers_id', 'hostname', 'username'],
+            'FROM'   => $table,
+            'WHERE'  => ['NOT' => ['username' => '']],
+            'ORDER'  => ['last_contact ASC'],
+        ]);
+        foreach ($iterator as $row) {
+            $user = self::shortUser((string) $row['username']);
+            if ($user === '') {
+                continue;
+            }
+            if ((int) $row['computers_id'] > 0) {
+                $users['id'][(int) $row['computers_id']] = $user;
+            }
+            $users['host'][mb_strtolower((string) $row['hostname'])] = $user;
+        }
+        return $users;
+    }
+
+    /** "DOMINIO\usuario" ou "usuario@dominio" -> "usuario". */
+    private static function shortUser(string $user): string
+    {
+        $user = trim($user);
+        if (str_contains($user, '\\')) {
+            $user = substr($user, strrpos($user, '\\') + 1);
+        }
+        if (str_contains($user, '@')) {
+            $user = substr($user, 0, strpos($user, '@'));
+        }
+        return $user;
     }
 
     /**

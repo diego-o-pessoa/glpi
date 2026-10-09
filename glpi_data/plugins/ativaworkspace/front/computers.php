@@ -60,7 +60,24 @@ if ($computerId > 0) {
     return;
 }
 
+$machines = Inventory::all();
+// Versao mais nova em campo: as demais aparecem como desatualizadas.
+$latest = '';
+foreach ($machines as $m) {
+    if ($m['agent_version'] !== '' && ($latest === '' || version_compare($m['agent_version'], $latest, '>'))) {
+        $latest = $m['agent_version'];
+    }
+}
+$counts = ['all' => count($machines), 'online' => 0, 'offline' => 0, 'ram' => 0, 'outdated' => 0];
+foreach ($machines as $m) {
+    $counts[$m['online'] ? 'online' : 'offline']++;
+    $counts['ram'] += $m['ram_percent'] >= 90 ? 1 : 0;
+    $counts['outdated'] += $m['agent_version'] !== '' && $m['agent_version'] !== $latest ? 1 : 0;
+}
+
 Page::render('computers', 'computers.html.twig', [
-    'machines' => Inventory::all(),
-    'base_url' => Page::href('computers'),
+    'machines'       => $machines,
+    'counts'         => $counts,
+    'latest_version' => $latest,
+    'base_url'       => Page::href('computers'),
 ]);
