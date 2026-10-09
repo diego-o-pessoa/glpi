@@ -35,7 +35,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.6.6"
+CLIENT_VERSION = "1.6.7"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -1240,19 +1240,22 @@ def install_client(args: argparse.Namespace) -> None:
         "allow_windows_server": bool(values.get("allow_windows_server", False)),
     })
     atomic_write_json(root / "version.json", {"client_version": CLIENT_VERSION, "installed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")})
-    # Inicializacao automatica: chave Run + tarefa de logon (redundantes). Visto
-    # em campo: reinstalando por cima, o antivirus negou gravar a chave Run
-    # (WinError 5) e a instalacao inteira abortava com o valor ja correto.
-    # So falha se as DUAS formas de iniciar o cliente falharem.
+    # Inicializacao automatica: chave Run + tarefa de logon, e o servico Ativa
+    # Unified Updater (SYSTEM), que religa o cliente em cada sessao de usuario a
+    # cada ~15 s (ensure_wallpaper_running). Visto em campo: o antivirus negou a
+    # chave Run E a tarefa (WinError 5) e a instalacao inteira abortava - mas o
+    # Updater ja garante o cliente no login. Nenhuma das duas falhas aborta.
     run_ok = _set_hklm_value(RUN_KEY, RUN_VALUE, f'"{destination}"', logger)
     _set_hklm_value(PRODUCT_KEY, "ClientVersion", CLIENT_VERSION, logger)
     _set_hklm_value(PRODUCT_KEY, "InstallPath", str(root), logger)
     try:
         install_logon_task(destination)
     except ClientError:
-        if not run_ok:
-            raise
-        logger.warning("Tarefa de logon nao registrada; o cliente inicia pela chave Run.")
+        if run_ok:
+            logger.warning("Tarefa de logon nao registrada; o cliente inicia pela chave Run.")
+        else:
+            logger.warning("Chave Run e tarefa de logon bloqueadas; o cliente sera iniciado pelo "
+                           "servico Ativa Unified Updater a cada login.")
     logger.info("Installation completed")
 
 
