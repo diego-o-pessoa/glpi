@@ -55,7 +55,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
-GUARDIAN_VERSION = "1.6.7"
+GUARDIAN_VERSION = "1.6.8"
 
 SERVICE_NAME = "AtivaGuardian"
 SERVICE_DISPLAY_NAME = "Ativa Guardian"
@@ -1876,6 +1876,10 @@ def main() -> int:
     parser.add_argument("--uninstall-service", action="store_true", help="Remove o servico do Windows")
     parser.add_argument("--maintenance", action="store_true", help="Solicita a senha Ativa para manutencao local")
     parser.add_argument("--authorize-install", action="store_true", help="Autoriza atualizacao do pacote")
+    parser.add_argument("--authorize-uninstall", action="store_true",
+                        help="Pede a senha Ativa e libera os servicos para o desinstalador")
+    parser.add_argument("--verifier-file", metavar="ARQUIVO",
+                        help="Senha (hash) trazida pelo desinstalador, se a maquina nao tiver config")
     parser.add_argument("--enforce-protection", action="store_true", help="Restaura a protecao apos manutencao")
     parser.add_argument("--setup-protection", action="store_true", help="Configura protecao e tarefa de recuperacao")
     parser.add_argument("--debug", action="store_true", help="Tambem escreve o log no console")
@@ -1888,6 +1892,19 @@ def main() -> int:
 
     if arguments.service:
         return run_service_dispatcher()
+
+    # Desinstalador: 0 = autorizado; 5 = senha incorreta/cancelada; 1 = outro erro.
+    if arguments.authorize_uninstall:
+        import maintenance
+        try:
+            maintenance.authorize_uninstall(Path(arguments.verifier_file) if arguments.verifier_file else None)
+            return 0
+        except PermissionError as exc:
+            print(f"Erro: {exc}", file=sys.stderr)
+            return 5
+        except Exception as exc:  # noqa: BLE001
+            print(f"Erro: {exc}", file=sys.stderr)
+            return 1
 
     # The unelevated shortcut cannot open protected logs/config before UAC.
     if arguments.maintenance:

@@ -62,6 +62,7 @@ $WorkspaceExe = Join-Path $WorkspacePluginRoot "client\dist\AtivaWorkspace.exe"
 $ClientVersionFile = Join-Path $PluginRoot "client\dist\client-version.txt"
 $BundleVersionFile = Join-Path $ScriptRoot "unified-version.txt"
 $ClientIssFile = Join-Path $ScriptRoot "AtivaWallpaperClient.iss"
+$UninstallerIssFile = Join-Path $ScriptRoot "AtivaUninstaller.iss"
 $ExpectedWallpaperApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativawallpaper/api/v1"
 $ExpectedUpdaterApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativaupdater/api/v1"
 $ExpectedGuardianApi = "https://chamados.ativalocacao.com.br:8443/plugins/ativaguardian/api/v1"
@@ -505,10 +506,39 @@ try {
         $Utf8WithoutBom
     )
 
+    # Desinstalador: leva so o Guardian (confere a senha) e o verificador da
+    # senha do Ativa Manutencao - nunca os tokens de API.
+    $PreparedVerifier = Join-Path $WorkingDirectory "verifier.json"
+    [IO.File]::WriteAllText(
+        $PreparedVerifier,
+        (@{ maintenance_password_hash = [string]$GuardianBootstrap.maintenance_password_hash } | ConvertTo-Json),
+        $Utf8WithoutBom
+    )
+    $UninstallerOutput = Join-Path $WorkingDirectory "uninstaller"
+    New-Item -ItemType Directory -Path $UninstallerOutput | Out-Null
+    Write-Host "Gerando o desinstalador..."
+    & $Iscc `
+        "/DGuardianPath=$GuardianExe" `
+        "/DVerifierPath=$PreparedVerifier" `
+        "/DBuildOutputDir=$UninstallerOutput" `
+        "/DBundleVersion=$BundleVersion" `
+        $UninstallerIssFile
+    if ($LASTEXITCODE -ne 0) {
+        throw "O compilador do Inno Setup retornou codigo $LASTEXITCODE ao compilar o desinstalador."
+    }
+    $CompiledUninstaller = Join-Path $UninstallerOutput "Ativa-Unified-Agent-Uninstall.exe"
+    if (-not (Test-Path -LiteralPath $CompiledUninstaller)) {
+        throw "O Inno Setup nao gerou o desinstalador esperado: $CompiledUninstaller"
+    }
+    Invoke-CodeSign $CompiledUninstaller
+    # Copia avulsa, para usar em maquinas antigas (sem a entrada em Aplicativos).
+    Copy-Item -LiteralPath $CompiledUninstaller -Destination (Join-Path $OutputPath "Ativa-Unified-Agent-Uninstall-$BundleVersion.exe") -Force
+
     Write-Host "Gerando um unico instalador com GLPI Agent, Wallpaper Client, Ativa Updater, Ativa Guardian e Ativa Workspace..."
     $WorkspaceDefines = @("/DWorkspaceConfigPath=$PreparedWorkspaceConfig", "/DWorkspacePath=$WorkspaceExe")
     & $Iscc `
         @WorkspaceDefines `
+        "/DUninstallerPath=$CompiledUninstaller" `
         "/DWallpaperClientPath=$ClientExe" `
         "/DUnifiedUpdaterPath=$UnifiedUpdaterExe" `
         "/DGuardianPath=$GuardianExe" `

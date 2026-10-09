@@ -94,6 +94,10 @@ Source: "{#WorkspaceConfigPath}"; DestDir: "{tmp}"; DestName: "ativaworkspace-se
 ; Servico Ativa Workspace, proprio (independente do Updater). Mora em ProgramData.
 Source: "{#WorkspacePath}"; DestDir: "{commonappdata}\AtivaLocacao\Workspace"; DestName: "AtivaWorkspace.exe"; Flags: ignoreversion
 #endif
+#ifdef UninstallerPath
+; Desinstalador (AtivaUninstaller.iss), registrado em Aplicativos do Windows.
+Source: "{#UninstallerPath}"; DestDir: "{commonpf}\Ativa Locacao\Desinstalar"; DestName: "Desinstalar-Ativa.exe"; Flags: ignoreversion
+#endif
 
 ; O atalho "Manutencao Ativa" e criado em [Code] (CreateMaintenanceShortcut):
 ; em [Icons], uma falha ao gravar o .lnk (ex.: "IPersistFile::Save failed;
@@ -469,6 +473,34 @@ begin
   end;
 end;
 
+{ Entrada "Ativa Unified Agent" em Aplicativos do Windows, apontando para o
+  desinstalador com tudo marcado. Como o atalho: falhar nunca impede a instalacao. }
+procedure RegisterUninstallEntry();
+#ifdef UninstallerPath
+var
+  Key: String;
+  Exe: String;
+begin
+  Key := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\AtivaUnifiedAgent';
+  Exe := ExpandConstant('{commonpf}\Ativa Locacao\Desinstalar\Desinstalar-Ativa.exe');
+  if not (RegWriteStringValue(HKLM64, Key, 'DisplayName', 'Ativa Unified Agent') and
+          RegWriteStringValue(HKLM64, Key, 'DisplayVersion', '{#BundleVersion}') and
+          RegWriteStringValue(HKLM64, Key, 'Publisher', 'Ativa Locacao') and
+          RegWriteStringValue(HKLM64, Key, 'UninstallString', '"' + Exe + '" /TYPE=tudo') and
+          RegWriteStringValue(HKLM64, Key, 'DisplayIcon', ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe')) and
+          RegWriteStringValue(HKLM64, Key, 'InstallLocation', ExpandConstant('{commonpf}\Ativa Locacao')) and
+          RegWriteDWordValue(HKLM64, Key, 'NoModify', 1) and
+          RegWriteDWordValue(HKLM64, Key, 'NoRepair', 1)) then
+    Log('Aviso: entrada em Aplicativos do Windows nao registrada. A instalacao continua.')
+  else
+    Log('Entrada em Aplicativos do Windows registrada.');
+end;
+#else
+begin
+  Log('Build sem desinstalador: entrada em Aplicativos do Windows nao registrada.');
+end;
+#endif
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   UpdaterPath: String;
@@ -558,6 +590,7 @@ begin
 
   { Atalho no fim: se falhar, todos os servicos ja estao instalados. }
   CreateMaintenanceShortcut();
+  RegisterUninstallEntry();
 end;
 
 function NeedRestart(): Boolean;

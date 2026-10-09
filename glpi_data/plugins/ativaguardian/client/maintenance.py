@@ -88,16 +88,14 @@ def show_message(message: str, *, error: bool = False) -> None:
     user32.MessageBoxW(None, message, "Manutencao Ativa", 0x10 if error else 0x40)
 
 
-def prompt_password() -> str | None:
+def prompt_password(message: str = "Digite a senha da Ativa para liberar manutencao por 15 minutos.") -> str | None:
     # Native Windows credential UI: no Tcl/Tk dependency in the frozen service.
     # GENERIC credentials are verified against our hash, not a Windows account.
     class CredentialInfo(ctypes.Structure):
         _fields_ = [("size", wintypes.DWORD), ("parent", wintypes.HWND),
                     ("message", wintypes.LPCWSTR), ("caption", wintypes.LPCWSTR),
                     ("banner", wintypes.HANDLE)]
-    info = CredentialInfo(ctypes.sizeof(CredentialInfo), None,
-                          "Digite a senha da Ativa para liberar manutencao por 15 minutos.",
-                          "Manutencao Ativa", None)
+    info = CredentialInfo(ctypes.sizeof(CredentialInfo), None, message, "Manutencao Ativa", None)
     username = ctypes.create_unicode_buffer("Ativa", 256)
     password = ctypes.create_unicode_buffer(256)
     save = wintypes.BOOL(False)
@@ -244,6 +242,53 @@ def open_lease() -> None:
             command("sc.exe", "sdset", name, OPEN_SERVICE_DACL)
 
 
+def require_password(verifier: str, message: str | None = None) -> None:
+    """Pede a senha Ativa e confere. Bloqueia 5 min apos 5 erros.
+
+    No password argument, log, environment variable or file with clear text.
+    """
+    GUARDIAN.mkdir(parents=True, exist_ok=True)
+    attempts_file = GUARDIAN / "password-attempts.json"
+    attempts = read_json(attempts_file)
+    if float(attempts.get("locked_until", 0)) > time.time():
+        raise PermissionError("Muitas tentativas. Aguarde cinco minutos.")
+    password = prompt_password(message) if message else prompt_password()
+    if password is None or not verify_password(password, verifier):
+        failures = int(attempts.get("failures", 0)) + 1
+        attempts_file.write_text(json.dumps({
+            "failures": 0 if failures >= 5 else failures,
+            "locked_until": time.time() + 300 if failures >= 5 else 0,
+        }), encoding="utf-8")
+        raise PermissionError("Manutencao nao autorizada: senha incorreta ou cancelamento.")
+    del password
+    attempts_file.write_text("{}", encoding="utf-8")
+
+
+def authorize_uninstall(bundled_verifier: Path | None = None) -> None:
+    """Desinstalador: SEMPRE exige a senha Ativa, depois libera os servicos
+    protegidos (parar/remover) por 15 minutos.
+
+    A senha vem da configuracao desta maquina; numa instalacao incompleta (sem
+    config do Guardian), da copia que o desinstalador traz do build. Sem
+    nenhuma das duas, nada e removido.
+    """
+    if not is_admin():
+        raise PermissionError("Execute o desinstalador como administrador.")
+    try:
+        verifier = validate_verifier(str(read_json(CONFIG).get("maintenance_password_hash", "")))
+    except ValueError:
+        verifier = ""
+    if not verifier and bundled_verifier is not None and bundled_verifier.is_file():
+        verifier = validate_verifier(str(read_json(bundled_verifier).get("maintenance_password_hash", "")))
+    if not verifier:
+        raise RuntimeError("Senha Ativa nao encontrada nesta maquina nem no desinstalador; nada foi removido.")
+    require_password(verifier, "Digite a senha da Ativa para desinstalar o Ativa Unified Agent.")
+    try:
+        open_lease()
+    except Exception:  # noqa: BLE001 - senha valida; cada remocao reporta o proprio erro
+        pass
+
+
 def authorize(installation: bool = False) -> None:
     if not is_admin():
         raise PermissionError("Abra Manutencao Ativa como administrador (UAC).")
@@ -255,20 +300,7 @@ def authorize(installation: bool = False) -> None:
     if installation and is_system():
         open_lease()
         return
-    # No password argument, log, environment variable or file with clear text.
-    attempts = read_json(GUARDIAN / "password-attempts.json")
-    if float(attempts.get("locked_until", 0)) > time.time():
-        raise PermissionError("Muitas tentativas. Aguarde cinco minutos.")
-    password = prompt_password()
-    if password is None or not verify_password(password, verifier):
-        failures = int(attempts.get("failures", 0)) + 1
-        (GUARDIAN / "password-attempts.json").write_text(json.dumps({
-            "failures": 0 if failures >= 5 else failures,
-            "locked_until": time.time() + 300 if failures >= 5 else 0,
-        }), encoding="utf-8")
-        raise PermissionError("Manutencao nao autorizada: senha incorreta ou cancelamento.")
-    del password
-    (GUARDIAN / "password-attempts.json").write_text("{}", encoding="utf-8")
+    require_password(verifier)
     install_recovery_task()
     open_lease()
     if not installation:

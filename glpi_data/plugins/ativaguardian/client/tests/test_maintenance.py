@@ -106,6 +106,32 @@ class PasswordTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 m.authorize()
 
+    def test_uninstall_without_any_password_removes_nothing(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(m, "GUARDIAN", Path(directory)), \
+             mock.patch.object(m, "CONFIG", Path(directory) / "config.json"), \
+             mock.patch.object(m, "is_admin", return_value=True), \
+             mock.patch.object(m, "prompt_password") as prompt, mock.patch.object(m, "open_lease") as lease:
+            with self.assertRaises(RuntimeError):
+                m.authorize_uninstall(None)
+            prompt.assert_not_called()
+            lease.assert_not_called()
+
+    def test_uninstall_uses_bundled_password_when_machine_has_none(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(m, "GUARDIAN", Path(directory)), \
+             mock.patch.object(m, "CONFIG", Path(directory) / "config.json"), \
+             mock.patch.object(m, "is_admin", return_value=True):
+            bundled = Path(directory) / "verifier.json"
+            bundled.write_text('{"maintenance_password_hash": "%s"}' % verifier(), encoding="utf-8")
+            with mock.patch.object(m, "prompt_password", return_value="incorrect"), \
+                 mock.patch.object(m, "open_lease") as lease:
+                with self.assertRaises(PermissionError):
+                    m.authorize_uninstall(bundled)
+                lease.assert_not_called()
+            with mock.patch.object(m, "prompt_password", return_value="a password for Ativa"), \
+                 mock.patch.object(m, "open_lease") as lease:
+                m.authorize_uninstall(bundled)
+                lease.assert_called_once()
+
     def _sc(self, state):
         out = f"SERVICE_NAME: AtivaGuardian\n        STATE              : {state}\n"
         return mock.Mock(returncode=0, stdout=out)
