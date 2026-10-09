@@ -132,6 +132,22 @@ class PasswordTests(unittest.TestCase):
                 m.authorize_uninstall(bundled)
                 lease.assert_called_once()
 
+    def test_recovery_task_uses_running_guardian_when_installed_one_is_missing(self):
+        # Visto em campo: o antivirus apagou o AtivaGuardian.exe instalado; o
+        # instalador entao libera a manutencao com o Guardian do pacote.
+        with tempfile.TemporaryDirectory() as directory:
+            running = Path(directory) / "AtivaGuardianAuth.exe"
+            running.write_bytes(b"guardian do pacote")
+            with mock.patch.object(m, "GUARDIAN", Path(directory) / "Guardian"), \
+                 mock.patch.object(m, "EXE", Path(directory) / "nao-existe" / "AtivaGuardian.exe"), \
+                 mock.patch.object(m.sys, "executable", str(running)), \
+                 mock.patch.object(m, "command") as command:
+                m.install_recovery_task()
+            copies = list((Path(directory) / "Guardian" / "protection").glob("AtivaGuardian-*.exe"))
+            self.assertEqual(len(copies), 1)
+            self.assertEqual(copies[0].read_bytes(), b"guardian do pacote")
+            command.assert_called_once()
+
     def _sc(self, state):
         out = f"SERVICE_NAME: AtivaGuardian\n        STATE              : {state}\n"
         return mock.Mock(returncode=0, stdout=out)

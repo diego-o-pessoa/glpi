@@ -84,6 +84,8 @@ Source: "{#UpdaterConfigPath}"; DestDir: "{tmp}"; DestName: "ativaupdater-servic
 ; O Guardian mora em Program Files (nao em ProgramData, onde ficam so os dados dele).
 ; O servico e parado em ssInstall para o arquivo nao estar em uso nesta copia.
 Source: "{#GuardianPath}"; DestDir: "{commonpf}\Ativa Locacao\Guardian"; DestName: "AtivaGuardian.exe"; Flags: ignoreversion
+; Copia para liberar a manutencao quando o Guardian instalado sumiu (so sob demanda).
+Source: "{#GuardianPath}"; DestName: "AtivaGuardianAuth.exe"; Flags: dontcopy
 Source: "{#GuardianConfigPath}"; DestDir: "{tmp}"; DestName: "ativaguardian-service-config.json"; Flags: deleteafterinstall ignoreversion
 #ifdef WorkspaceConfigPath
 ; Config do Ativa Workspace (etapa ENTRA_LOGIN). Opcional: so entra quando o
@@ -114,6 +116,7 @@ var
   { Motivo da falha do GLPI Agent (vazio = instalou). Os demais componentes
     seguem instalando; o aviso aparece no fim. }
   AgentFailure: String;
+  WallpaperFailure: String;
 
 procedure RunRequired(const Description, Filename, Parameters: String);
 var
@@ -190,6 +193,88 @@ begin
     Log('Windows Installer ocupado (1618); nova tentativa em 30 segundos.');
     Sleep(30000);
   end;
+end;
+
+{ Motivo da falha do cliente de Wallpaper, do log dele (o codigo de saida
+  so diz 2 = erro conhecido, 3 = inesperado). Para erro inesperado, a ultima
+  linha do traceback (ex.: "PermissionError: [WinError 5] Acesso negado: ..."). }
+function WallpaperFailureReason(): String;
+var
+  Dir: String;
+  Rec: TFindRec;
+  Newest: String;
+  NewestHigh, NewestLow: Cardinal;
+  Lines: TArrayOfString;
+  I: Integer;
+  Line, LastError, TraceTail: String;
+begin
+  Result := '';
+  Dir := ExpandConstant('{commonappdata}\AtivaLocacao\Wallpaper\logs\');
+  Newest := '';
+  NewestHigh := 0;
+  NewestLow := 0;
+  if FindFirst(Dir + 'client-*.log', Rec) then begin
+    try
+      repeat
+        if (Newest = '') or (Rec.LastWriteTime.dwHighDateTime > NewestHigh) or
+           ((Rec.LastWriteTime.dwHighDateTime = NewestHigh) and (Rec.LastWriteTime.dwLowDateTime > NewestLow)) then begin
+          Newest := Rec.Name;
+          NewestHigh := Rec.LastWriteTime.dwHighDateTime;
+          NewestLow := Rec.LastWriteTime.dwLowDateTime;
+        end;
+      until not FindNext(Rec);
+    finally
+      FindClose(Rec);
+    end;
+  end;
+  if (Newest = '') or not LoadStringsFromFile(Dir + Newest, Lines) then begin
+    Result := 'sem log do cliente (a pasta C:\ProgramData\AtivaLocacao\Wallpaper esta bloqueada?)';
+    exit;
+  end;
+  LastError := '';
+  TraceTail := '';
+  for I := 0 to GetArrayLength(Lines) - 1 do begin
+    Line := Lines[I];
+    if Pos(' ERROR ', Line) > 0 then begin
+      LastError := Trim(Copy(Line, Pos(' ERROR ', Line) + 7, 300));
+      TraceTail := '';
+    { Linha do traceback: sem data na frente (linhas do log comecam com o ano)
+      e sem recuo ("  File ..."), ex.: "PermissionError: [WinError 5] ...". }
+    end else if (LastError <> '') and (Line <> '') and (Copy(Line, 1, 1) <> ' ') and
+                ((Copy(Line, 1, 1) < '0') or (Copy(Line, 1, 1) > '9')) and
+                (Pos('Traceback', Line) <> 1) and (Pos(':', Line) > 0) then
+      TraceTail := Trim(Line);
+  end;
+  if (Pos('INTERNAL_ERROR', LastError) = 1) and (TraceTail <> '') then
+    Result := TraceTail
+  else
+    Result := LastError;
+  if Length(Result) > 300 then
+    Result := Copy(Result, 1, 300) + '...';
+end;
+
+{ Cliente de Wallpaper. Como o GLPI Agent, uma falha NAO aborta o pacote: o
+  Updater/Guardian ficam instalados e o auto-reparo tenta de novo depois;
+  o motivo aparece no fim. }
+procedure InstallWallpaper();
+var
+  ResultCode: Integer;
+  Reason: String;
+begin
+  WizardForm.StatusLabel.Caption := 'Instalando e registrando o cliente de wallpaper...';
+  Log('Instalando o cliente de wallpaper.');
+  if not Exec(ExpandConstant('{tmp}\AtivaWallpaperClient.exe'),
+      '--install --bootstrap-config "' + ExpandConstant('{tmp}\bootstrap-config.json') + '"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    ResultCode := -1;
+  Log('Cliente de wallpaper: codigo ' + IntToStr(ResultCode));
+  if ResultCode = 0 then
+    exit;
+  Reason := WallpaperFailureReason();
+  WallpaperFailure := 'codigo ' + IntToStr(ResultCode);
+  if Reason <> '' then
+    WallpaperFailure := WallpaperFailure + ' - ' + Reason;
+  Log('AVISO: o cliente de wallpaper nao foi instalado (' + WallpaperFailure + '). Os demais componentes seguem.');
 end;
 
 { GLPI Agent. Uma falha NAO aborta o pacote: Guardian/Updater/demais seguem
@@ -571,6 +656,7 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
+  GuardianAuth: String;
   UpdaterPath: String;
   UpdaterLogDir: String;
   AgentMsi: String;
@@ -580,10 +666,19 @@ begin
   if CurStep = ssInstall then begin
     { Ask the installed Guardian BEFORE changing any file/service. Automatic
       deployments run as SYSTEM; local administrators use the Ativa password. }
-    if FileExists(ExpandConstant('{commonappdata}\AtivaLocacao\Guardian\maintenance.json')) and
-       FileExists(ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe')) then
-      RunRequired('Autorizando manutencao Ativa...',
-        ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe'), '--authorize-install');
+    if FileExists(ExpandConstant('{commonappdata}\AtivaLocacao\Guardian\maintenance.json')) then begin
+      GuardianAuth := ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe');
+      { Protecao ativa, mas o Guardian instalado sumiu (visto em campo: o
+        antivirus o apagou numa tentativa anterior). Sem esta liberacao os
+        servicos seguiam trancados e rodando, e toda copia de arquivo dava
+        "acesso negado". Usa o Guardian do proprio pacote para pedir a senha. }
+      if not FileExists(GuardianAuth) then begin
+        Log('Guardian instalado nao encontrado; usando o do pacote para liberar a manutencao.');
+        ExtractTemporaryFile('AtivaGuardianAuth.exe');
+        GuardianAuth := ExpandConstant('{tmp}\AtivaGuardianAuth.exe');
+      end;
+      RunRequired('Autorizando manutencao Ativa...', GuardianAuth, '--authorize-install');
+    end;
     { Antes de PrepareUpdaterExecutable, que ja grava o executavel em disco. }
     ExcludeFromDefender();
     PrepareUpdaterExecutable();
@@ -609,12 +704,8 @@ begin
     'SCAN_PROFILES=1 TAG="Ativa-Locacao"';
   InstallGlpiAgent(AgentParameters);
 
-  RunRequired(
-    'Instalando e registrando o cliente de wallpaper...',
-    ExpandConstant('{tmp}\AtivaWallpaperClient.exe'),
-    '--install --bootstrap-config "' + ExpandConstant('{tmp}\bootstrap-config.json') + '"'
-  );
-  
+  InstallWallpaper();
+
   UpdaterPath := ExpandConstant('{commonappdata}\AtivaLocacao\UnifiedUpdater\AtivaUnifiedUpdater.exe');
   RunRequired(
     'Configurando o servico de atualizacao...',
@@ -666,14 +757,22 @@ begin
   Result := AgentRestartRequired;
 end;
 
-{ Tela final: avisa se o GLPI Agent ficou de fora (o resto foi instalado). }
+{ Tela final: avisa o que ficou de fora (o resto foi instalado). }
 procedure CurPageChanged(CurPageID: Integer);
+var
+  Text: String;
 begin
-  if (CurPageID = wpFinished) and (AgentFailure <> '') then
-    WizardForm.FinishedLabel.Caption :=
-      'Os componentes Ativa foram instalados, mas o GLPI Agent NAO foi (' + AgentFailure + ').' + #13#10#13#10 +
-      'O Ativa Guardian vai mostrar o GLPI Agent como ausente no painel. Reinicie o computador e rode este ' +
-      'instalador de novo; se continuar, veja o log em C:\ProgramData\AtivaLocacao\UnifiedUpdater\logs\glpi-agent-msi.log.';
+  if (CurPageID <> wpFinished) or ((AgentFailure = '') and (WallpaperFailure = '')) then
+    exit;
+  Text := 'Os demais componentes Ativa foram instalados, mas:' + #13#10;
+  if AgentFailure <> '' then
+    Text := Text + #13#10 + '- GLPI Agent NAO foi instalado (' + AgentFailure + '). Log: ' +
+      'C:\ProgramData\AtivaLocacao\UnifiedUpdater\logs\glpi-agent-msi.log';
+  if WallpaperFailure <> '' then
+    Text := Text + #13#10 + '- Wallpaper NAO foi instalado (' + WallpaperFailure + '). Log: ' +
+      'C:\ProgramData\AtivaLocacao\Wallpaper\logs';
+  WizardForm.FinishedLabel.Caption := Text + #13#10#13#10 +
+    'O Ativa Guardian mostra o que falta no painel. Reinicie o computador e rode este instalador de novo.';
 end;
 
 procedure DeinitializeSetup();

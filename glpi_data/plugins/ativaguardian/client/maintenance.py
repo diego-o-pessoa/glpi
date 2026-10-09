@@ -161,12 +161,15 @@ def install_recovery_task() -> None:
     # Guardian itself. The task runs again after reboot, when the lease expires.
     # The recovery task must not lock the service EXE during the next upgrade.
     # Keep a versioned copy; an old running recovery exits before the next run.
-    digest = hashlib.sha256(EXE.read_bytes()).hexdigest()[:16]
+    # O instalado pode ter sumido (antivirus o apagou numa instalacao anterior):
+    # o instalador entao roda o Guardian do proprio pacote, que serve de copia.
+    source = EXE if EXE.is_file() else Path(sys.executable)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()[:16]
     recovery_dir = GUARDIAN / "protection"
     recovery_dir.mkdir(parents=True, exist_ok=True)
     recovery = recovery_dir / f"AtivaGuardian-{digest}.exe"
     if not recovery.exists():
-        shutil.copy2(EXE, recovery)
+        shutil.copy2(source, recovery)
     command("schtasks.exe", "/Create", "/F", "/TN", TASK, "/RU", "SYSTEM",
             "/RL", "HIGHEST", "/SC", "MINUTE", "/MO", "1",
             "/TR", f'"{recovery}" --enforce-protection')
