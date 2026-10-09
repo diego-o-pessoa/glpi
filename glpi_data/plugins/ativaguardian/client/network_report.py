@@ -77,24 +77,22 @@ VIDEO_OUTPUTS = {
 # LVDS, DisplayPort embutido, UDI embutido e "interno": tela do proprio notebook.
 INTERNAL_OUTPUTS = {6, 11, 13, 0x80000000, -0x80000000}
 
-ADAPTER_AND_MONITORS_PS = r"""
+# So BIOS e monitores (WMI). A rede vem da API do Windows (native_network):
+# Get-NetIPConfiguration travava o PowerShell inteiro em algumas maquinas
+# (visto em campo: "PowerShell nao respondeu em 180 s").
+# "#etapa ..." antes de cada passo: se travar, o aviso diz em qual.
+SYSTEM_PS = r"""
 $ErrorActionPreference = 'SilentlyContinue'
+function Etapa($n) { [Console]::Out.WriteLine('#etapa ' + $n); [Console]::Out.Flush() }
+Etapa 'inicio'
 function Dec($a) { if (-not $a) { return '' }; return (-join ($a | Where-Object { $_ -ne 0 } | ForEach-Object { [char]$_ })).Trim() }
-$r = [ordered]@{ adapter = $null; bios = ''; monitors = @() }
-$cfg = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } | Select-Object -First 1
-if ($cfg) {
-  $r.adapter = [ordered]@{
-    name = [string]$cfg.InterfaceAlias
-    description = [string]$cfg.NetAdapter.InterfaceDescription
-    media = [string]$cfg.NetAdapter.PhysicalMediaType
-    mac = [string]$cfg.NetAdapter.MacAddress
-    ip = [string](($cfg.IPv4Address | Select-Object -First 1).IPAddress)
-  }
-}
-$r.bios = [string](Get-CimInstance -ClassName Win32_BIOS).SerialNumber
-$r.macs = @(Get-NetAdapter -IncludeHidden | Where-Object { $_.MacAddress } | ForEach-Object { [string]$_.MacAddress })
-$conn = @(Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorConnectionParams)
-$r.monitors = @(Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID | ForEach-Object {
+$r = [ordered]@{ bios = ''; monitors = @() }
+Etapa 'bios'
+$r.bios = [string](Get-CimInstance -ClassName Win32_BIOS -OperationTimeoutSec 60).SerialNumber
+Etapa 'conexao dos monitores'
+$conn = @(Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorConnectionParams -OperationTimeoutSec 60)
+Etapa 'monitores'
+$r.monitors = @(Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID -OperationTimeoutSec 60 | ForEach-Object {
   $id = $_
   $c = $conn | Where-Object { $_.InstanceName -eq $id.InstanceName } | Select-Object -First 1
   [ordered]@{
@@ -438,17 +436,19 @@ def _unlink(path: Path) -> None:
 
 def collect_system(logger: logging.Logger, runner: Runner = subprocess.run,
                    problems: list[str] | None = None) -> dict[str, Any] | None:
-    """Adaptador, BIOS e monitores. None = leitura falhou (motivo em problems).
+    """BIOS e monitores (WMI). None = leitura falhou (motivo em problems).
 
     Nunca devolve um resultado vazio "de mentira": um relatorio sem monitores
     faria o GLPI marcar os monitores da mesa como ausentes.
     """
-    args = [str(POWERSHELL), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ADAPTER_AND_MONITORS_PS]
+    args = [str(POWERSHELL), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", SYSTEM_PS]
     try:
         completed = runner(args, capture_output=True, timeout=POWERSHELL_TIMEOUT_SECONDS, creationflags=NO_WINDOW)
-    except subprocess.TimeoutExpired:
-        logger.warning("Ativa Rede: PowerShell nao respondeu em %d s (maquina ocupada?); coleta adiada.", POWERSHELL_TIMEOUT_SECONDS)
-        _problem(problems, f"PowerShell nao respondeu em {POWERSHELL_TIMEOUT_SECONDS} s (monitores nao lidos)")
+    except subprocess.TimeoutExpired as exc:
+        stage = _last_stage(exc.stdout)
+        where = f"travou na etapa '{stage}'" if stage else "nem comecou o script (antivirus ou Windows ocupado?)"
+        logger.warning("Ativa Rede: PowerShell nao respondeu em %d s (%s); coleta adiada.", POWERSHELL_TIMEOUT_SECONDS, where)
+        _problem(problems, f"PowerShell nao respondeu em {POWERSHELL_TIMEOUT_SECONDS} s: {where} (monitores nao lidos)")
         return None
     except (OSError, subprocess.SubprocessError) as exc:
         logger.warning("Ativa Rede: PowerShell nao executou (%s); coleta adiada.", exc)
@@ -458,7 +458,10 @@ def collect_system(logger: logging.Logger, runner: Runner = subprocess.run,
         logger.warning("Ativa Rede: PowerShell falhou ao ler adaptador/monitores (%s); coleta adiada.", _output(completed))
         _problem(problems, f"PowerShell terminou com codigo {completed.returncode}: {_output(completed)}")
         return None
-    raw = completed.stdout.decode("utf-8", errors="replace") if isinstance(completed.stdout, bytes) else str(completed.stdout)
+    raw = _text(completed.stdout)
+    # Ultima linha que nao e marcacao de etapa = o JSON.
+    lines = [line for line in raw.splitlines() if line.strip() and not line.startswith("#etapa ")]
+    raw = lines[-1] if lines else ""
     try:
         data = json.loads(raw.strip() or "{}")
     except ValueError:
@@ -472,12 +475,24 @@ def collect_system(logger: logging.Logger, runner: Runner = subprocess.run,
     return data
 
 
+def _text(output: Any) -> str:
+    if isinstance(output, bytes):
+        return output.decode("utf-8", errors="replace")
+    return str(output or "")
+
+
+def _last_stage(output: Any) -> str:
+    """Ultima etapa que o script do PowerShell anunciou antes de travar."""
+    stages = [line[len("#etapa "):].strip() for line in _text(output).splitlines() if line.startswith("#etapa ")]
+    return stages[-1] if stages else ""
+
+
 def native_network() -> dict[str, Any] | None:
     """Adaptador principal e MACs pela API do Windows (GetAdaptersAddresses).
 
-    Mesmo formato do PowerShell ({adapter, macs}). Usado quando o PowerShell
-    falha (lento, travado ou bloqueado pelo antivirus): a maquina ainda manda
-    rede e porta do switch. None se a propria API falhar.
+    Fonte da rede em todos os relatorios ({adapter, macs}): nao depende do
+    PowerShell (que trava ou e bloqueado pelo antivirus em algumas maquinas).
+    None se a propria API falhar.
     """
     import ctypes
 
@@ -658,20 +673,22 @@ def collect_report(machine_id: str, hostname: str, guardian_version: str, work_d
     Antes nada era enviado e a maquina nunca aparecia no Ativa Rede.
     """
     problems: list[str] = []
-    system = collect_system(logger, problems=problems)
-    partial = system is None
-    if partial or not isinstance(system.get("adapter"), dict):
-        native = native_network()
-        if native is None and partial:
-            return None
-        if partial:
-            system = {"adapter": native["adapter"], "macs": native["macs"], "bios": "", "monitors": []}
-            logger.info("Ativa Rede: enviando relatorio parcial (rede sem PowerShell, monitores nao lidos).")
-        elif native is not None:
-            # Get-NetIPConfiguration falhou sozinho: o resto do PowerShell vale.
-            system["adapter"] = native["adapter"]
-            known = system.get("macs")
-            system["macs"] = ([known] if isinstance(known, str) else list(known or [])) + native["macs"]
+    # Rede sempre pela API do Windows; o PowerShell so le BIOS e monitores.
+    native = native_network()
+    if native is None:
+        _problem(problems, "Windows nao informou os adaptadores de rede (GetAdaptersAddresses)")
+    found = collect_system(logger, problems=problems)
+    partial = found is None
+    if partial and native is None:
+        return None
+    if partial:
+        logger.info("Ativa Rede: enviando relatorio parcial (monitores nao lidos).")
+    system = {
+        "adapter": (native or {}).get("adapter"),
+        "macs": (native or {}).get("macs", []),
+        "bios": (found or {}).get("bios", ""),
+        "monitors": (found or {}).get("monitors", []),
+    }
     adapter = system.get("adapter") if isinstance(system.get("adapter"), dict) else None
     local_macs = local_mac_set(system)
     lldp = capture_lldp(work_dir, logger, wait=wait, lock_wait_seconds=lock_wait_seconds, local_macs=local_macs,

@@ -401,22 +401,45 @@ class ReporterTests(unittest.TestCase):
         self.assertEqual(report["problems"], ["PowerShell nao executou: acesso negado"])
 
     def test_full_report_has_no_problems_and_known_monitors(self):
-        with mock.patch.object(nr, "collect_system", return_value=dict(ReportTests.SYSTEM)), \
-                mock.patch.object(nr, "capture_lldp", return_value=nr.parse_lldp_frame(lldp_frame())):
+        found = {"bios": "BRJ123ABC", "monitors": ReportTests.SYSTEM["monitors"]}
+        with mock.patch.object(nr, "collect_system", return_value=found), \
+                mock.patch.object(nr, "native_network", return_value=self.NATIVE), \
+                mock.patch.object(nr, "capture_lldp", return_value=nr.parse_lldp_frame(lldp_frame(caps=4))):
             report = nr.collect_report("abc", "PC", "1.6.9", Path(tempfile.gettempdir()), quiet_logger())
         self.assertFalse(report["monitors_unknown"])
         self.assertEqual(report["problems"], [])
         self.assertEqual(len(report["monitors"]), 1)
+        self.assertEqual(report["bios_serial"], "BRJ123ABC")
 
-    def test_powershell_without_adapter_uses_native_network(self):
-        system = dict(ReportTests.SYSTEM, adapter=None, macs="AA-BB-CC-DD-EE-FF")
-        with mock.patch.object(nr, "collect_system", return_value=system), \
+    def test_network_always_comes_from_windows_api(self):
+        # O PowerShell nao le mais a rede (Get-NetIPConfiguration travava).
+        self.assertNotIn("Get-NetIPConfiguration", nr.SYSTEM_PS)
+        self.assertNotIn("Get-NetAdapter", nr.SYSTEM_PS)
+        with mock.patch.object(nr, "collect_system", return_value={"bios": "X", "monitors": []}), \
                 mock.patch.object(nr, "native_network", return_value=self.NATIVE), \
                 mock.patch.object(nr, "capture_lldp", return_value=None) as capture:
             report = nr.collect_report("abc", "PC", "1.6.9", Path(tempfile.gettempdir()), quiet_logger())
         self.assertEqual(report["network"]["ip"], "192.168.80.50")
-        self.assertFalse(report["monitors_unknown"])
-        self.assertEqual(capture.call_args.kwargs["local_macs"], frozenset({"AABBCCDDEEFF", "D0C1B57DF3EB"}))
+        self.assertEqual(report["network"]["link"], "wired")
+        self.assertEqual(capture.call_args.kwargs["local_macs"], frozenset({"D0C1B57DF3EB"}))
+
+    def test_powershell_timeout_tells_where_it_stopped(self):
+        def stuck(args, **_kwargs):
+            raise subprocess.TimeoutExpired(args, 180, output=b"#etapa inicio\r\n#etapa bios\r\n#etapa monitores\r\n")
+        problems = []
+        self.assertIsNone(nr.collect_system(quiet_logger(), runner=stuck, problems=problems))
+        self.assertIn("travou na etapa 'monitores'", problems[0])
+
+        def never_started(args, **_kwargs):
+            raise subprocess.TimeoutExpired(args, 180, output=b"")
+        problems = []
+        nr.collect_system(quiet_logger(), runner=never_started, problems=problems)
+        self.assertIn("nem comecou", problems[0])
+
+    def test_stage_markers_are_ignored_when_parsing(self):
+        out = b'#etapa inicio\r\n#etapa bios\r\n#etapa monitores\r\n{"bios":"X","monitors":[]}\r\n'
+        ok = lambda args, **_k: subprocess.CompletedProcess(args, 0, out, b"")  # noqa: E731
+        self.assertEqual(nr.collect_system(quiet_logger(), runner=ok)["bios"], "X")
 
     def test_partial_report_retries_full_reading_soon(self):
         reporter = self.make()
