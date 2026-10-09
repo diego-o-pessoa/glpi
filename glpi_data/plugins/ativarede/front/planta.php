@@ -36,7 +36,7 @@ TemplateRenderer::getInstance()->display('@ativarede/planta.html.twig', [
         . max(array_map('filemtime', glob(PLUGIN_ATIVAREDE_DIR . '/public/plans/*') ?: [__FILE__])) . '&plan=',
     'alerts_url'   => $base . '/front/alertas.php',
     'self_url'     => $base . '/front/planta.php',
-    'css_url'      => $base . '/css/ativarede.css?v=' . PLUGIN_ATIVAREDE_VERSION,
+    'css_url'      => $base . '/css/ativarede.css?v=' . PLUGIN_ATIVAREDE_VERSION . '.' . (int) @filemtime(PLUGIN_ATIVAREDE_DIR . '/public/css/ativarede.css'),
     // Data do arquivo: o JS novo chega mesmo sem subir a versao do plugin.
     'js_url'       => $base . '/js/planta.js?v=' . PLUGIN_ATIVAREDE_VERSION . '.' . (int) @filemtime(PLUGIN_ATIVAREDE_DIR . '/public/js/planta.js'),
     'can_manage'   => PluginAtivaredeProfile::canManage(),

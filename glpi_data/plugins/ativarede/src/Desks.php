@@ -33,6 +33,23 @@ final class Desks
         if (($switchId > 0) !== ($port !== '')) {
             return ['ok' => false, 'message' => 'Informe o switch e a porta juntos (ou deixe os dois vazios).'];
         }
+        // "Trocar pessoa": quem ja estava em outra mesa sai de la e vem para
+        // esta (corrige uma pessoa colocada na mesa errada).
+        $movedFrom = '';
+        if (!empty($input['move'])) {
+            $requestedMachine = $switchId > 0 ? 0 : (int) ($input['machines_id'] ?? 0);
+            $where = $switchId > 0
+                ? ['switches_id' => $switchId, 'port' => $port]
+                : ($requestedMachine > 0 ? ['machines_id' => $requestedMachine] : null);
+            if ($where !== null) {
+                foreach ($DB->request(['SELECT' => ['id', 'name'], 'FROM' => Settings::TABLE_DESKS,
+                    'WHERE' => $where + ['NOT' => ['id' => (int) $desk['id']]]]) as $old) {
+                    $DB->update(Settings::TABLE_DESKS, ['switches_id' => 0, 'port' => '', 'machines_id' => 0,
+                        'date_mod' => date('Y-m-d H:i:s')], ['id' => (int) $old['id']]);
+                    $movedFrom = (string) $old['name'];
+                }
+            }
+        }
         if ($switchId > 0) {
             $other = $DB->request([
                 'SELECT' => ['name'],
@@ -86,6 +103,9 @@ final class Desks
         // Porta nova com maquina: a mesa deixa de estar "vazia".
         if ($switchId > 0 || $machineId > 0) {
             Events::clear(Events::DESK_EMPTY, ['desks_id' => (int) $desk['id']]);
+        }
+        if ($movedFrom !== '') {
+            return ['ok' => true, 'message' => 'Pessoa movida da mesa ' . $movedFrom . ' para a mesa ' . $name . '.', 'desk_id' => (int) $desk['id']];
         }
         return ['ok' => true, 'message' => 'Mesa ' . $name . ' salva.', 'desk_id' => (int) $desk['id']];
     }

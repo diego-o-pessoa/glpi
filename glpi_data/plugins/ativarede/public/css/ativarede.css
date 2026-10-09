@@ -424,6 +424,8 @@
 .ar-picker-item .ar-port-tag { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 
 .ar-port-tag.is-wifi { background: rgba(100, 116, 139, .12); color: var(--ar-muted); }
+/* Pessoa que ja esta em outra mesa (escolher move para esta). */
+.ar-port-tag.is-other-desk { background: rgba(217, 119, 6, .12); color: #b45309; }
 .ar-desk-port.is-wifi { font-size: max(8px, .5cqw); font-weight: 600; color: var(--ar-muted); }
 
 .ar-draggable { cursor: grab; }

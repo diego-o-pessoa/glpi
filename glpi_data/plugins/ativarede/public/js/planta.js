@@ -428,6 +428,36 @@
             if (canManage) { panel.appendChild(personPicker(desk)); }
         }
 
+        // Corrigir pessoa colocada na mesa errada.
+        if (canManage && (desk.port || desk.machines_id)) {
+            var fix = el('div', 'd-flex flex-wrap gap-2 mb-3');
+            var swap = el('button', 'btn btn-sm btn-outline-primary');
+            swap.type = 'button';
+            swap.appendChild(icon('arrows-exchange'));
+            swap.appendChild(document.createTextNode(' Trocar pessoa'));
+            var clear = el('button', 'btn btn-sm btn-outline-secondary');
+            clear.type = 'button';
+            clear.appendChild(icon('user-minus'));
+            clear.appendChild(document.createTextNode(' Tirar desta mesa'));
+            fix.appendChild(swap);
+            fix.appendChild(clear);
+            panel.appendChild(fix);
+            var swapBox = null;
+            swap.addEventListener('click', function () {
+                if (swapBox) { swapBox.remove(); swapBox = null; return; }
+                swapBox = personPicker(desk);
+                swapBox.classList.add('mb-3');
+                fix.insertAdjacentElement('afterend', swapBox);
+                var input = swapBox.querySelector('input');
+                if (input) { input.focus(); }
+            });
+            clear.addEventListener('click', function () {
+                var who = deskPeople(desk);
+                if (!window.confirm('Deixar a mesa ' + desk.name + ' vazia?' + (who ? '\n' + who + ' fica sem mesa (aparece em "Quem senta nesta mesa?" das outras mesas).' : ''))) { return; }
+                saveDesk(desk, { switches_id: 0, port: '', machines_id: 0 });
+            });
+        }
+
         desk.machines.forEach(function (m) {
             var box = el('div', 'ar-machine');
             var head = el('div', 'd-flex align-items-center gap-2 mb-2');
@@ -501,37 +531,75 @@
             : { switches_id: u.switches_id, port: u.port, machines_id: 0 };
     }
 
+    /* Vinculo atual da mesa (porta do switch ou maquina direta). */
+    function deskBinding(d) {
+        return d.port
+            ? { switches_id: d.switches_id, port: d.port, machines_id: 0 }
+            : { machines_id: d.machines_id, switches_id: 0, port: '' };
+    }
+    function deskPeople(d) {
+        return d.machines.map(function (m) {
+            return (m.user_label || m.user || m.windows_user || m.computer || m.hostname) + (m.group ? ' · ' + m.group : '');
+        }).join(' / ');
+    }
+
+    /* "Quem senta nesta mesa?": quem esta sem mesa e, para corrigir um
+     * engano, quem ja esta em outra mesa (escolher move a pessoa para ca). */
     function personPicker(desk) {
         var box = el('div', 'ar-picker');
         box.appendChild(el('div', 'fw-semibold mb-1', 'Quem senta nesta mesa?'));
-        if (!state.unmapped.length) {
+        var entries = state.unmapped.map(function (u) {
+            return {
+                who: unmappedLabel(u),
+                what: u.machines.map(function (m) { return m.computer || m.hostname; }).join(', '),
+                tag: unmappedTag(u), tagClass: u.kind === 'machine' ? ' is-wifi' : '',
+                changes: unmappedChanges(u), from: null
+            };
+        });
+        state.desks.forEach(function (d) {
+            if (d.id === desk.id || !d.machines.length || (!d.port && !d.machines_id)) { return; }
+            entries.push({
+                who: deskPeople(d),
+                what: d.machines.map(function (m) { return m.computer || m.hostname; }).join(', '),
+                tag: 'mesa ' + d.name, tagClass: ' is-other-desk',
+                changes: deskBinding(d), from: d
+            });
+        });
+        if (!entries.length) {
             box.appendChild(el('p', 'ar-empty-hint small mb-0',
-                'Todas as máquinas conhecidas já estão em alguma mesa. Máquinas novas aparecem aqui depois do primeiro envio do Ativa Guardian (até 15 min após ligar).'));
+                'Nenhuma máquina conhecida ainda. Máquinas novas aparecem aqui depois do primeiro envio do Ativa Guardian (até 15 min após ligar).'));
             return box;
         }
         box.appendChild(el('div', 'text-muted small mb-2',
-            state.unmapped.length + ' máquina(s) sem mesa. Com cabo, a porta do switch vem junto; no Wi-Fi, a máquina fica vinculada direto à mesa.'));
+            state.unmapped.length + ' máquina(s) sem mesa. Quem já está em outra mesa aparece com o nome dela: escolher move a pessoa para esta mesa.'));
         var search = el('input', 'form-control form-control-sm mb-2');
         search.type = 'search';
-        search.placeholder = 'Buscar por pessoa, setor ou computador...';
+        search.placeholder = 'Buscar por pessoa, setor, computador ou mesa...';
         box.appendChild(search);
         var list = el('ul', 'ar-picker-list');
-        var items = state.unmapped.slice().sort(function (a, b) {
-            return unmappedLabel(a).localeCompare(unmappedLabel(b), 'pt-BR');
+        // Sem mesa primeiro; depois quem ja esta em outra mesa.
+        entries.sort(function (a, b) {
+            return (a.from ? 1 : 0) - (b.from ? 1 : 0) || a.who.localeCompare(b.who, 'pt-BR');
         });
-        items.forEach(function (u) {
+        var occupied = desk.machines.length > 0 && (desk.port || desk.machines_id);
+        entries.forEach(function (u) {
             var li = el('li');
             var b = el('button', 'ar-picker-item');
             b.type = 'button';
-            var who = el('span', 'ar-picker-who', unmappedLabel(u));
-            var what = el('span', 'ar-picker-what', u.machines.map(function (m) { return m.computer || m.hostname; }).join(', '));
+            var who = el('span', 'ar-picker-who', u.who);
+            var what = el('span', 'ar-picker-what', u.what);
             b.appendChild(who);
             b.appendChild(what);
-            b.appendChild(el('span', 'ar-port-tag' + (u.kind === 'machine' ? ' is-wifi' : ''), unmappedTag(u)));
-            b.setAttribute('data-search', (unmappedLabel(u) + ' ' + what.textContent + ' ' + unmappedTag(u)).toLowerCase());
+            b.appendChild(el('span', 'ar-port-tag' + u.tagClass, u.tag));
+            b.setAttribute('data-search', (u.who + ' ' + u.what + ' ' + u.tag).toLowerCase());
             b.addEventListener('click', function () {
+                var notes = [];
+                if (u.from) { notes.push(u.who + ' sai da mesa ' + u.from.name + ' e vem para a mesa ' + desk.name + '.'); }
+                if (occupied) { notes.push(deskPeople(desk) + ' fica sem mesa.'); }
+                if (notes.length && !window.confirm(notes.join('\n') + '\n\nConfirmar?')) { return; }
                 b.disabled = true;
-                saveDesk(desk, unmappedChanges(u));
+                var changes = Object.assign({ move: 1 }, u.changes);
+                saveDesk(desk, changes);
             });
             li.appendChild(b);
             list.appendChild(li);
