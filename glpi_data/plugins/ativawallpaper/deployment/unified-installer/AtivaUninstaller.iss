@@ -182,6 +182,21 @@ begin
   end;
 end;
 
+{ Desfaz exclusoes do Windows Defender que o instalador criou (nao deixa
+  exclusao de antivirus sobrando para pasta que nao existe mais). Nao fatal. }
+procedure RemoveDefenderExclusions(const Paths, Processes: String);
+var
+  Command: String;
+begin
+  Command := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "try { ';
+  if Paths <> '' then
+    Command := Command + 'Remove-MpPreference -ExclusionPath ' + Paths + ' -ErrorAction SilentlyContinue; ';
+  if Processes <> '' then
+    Command := Command + 'Remove-MpPreference -ExclusionProcess ' + Processes + ' -ErrorAction SilentlyContinue; ';
+  Command := Command + 'exit 0 } catch { exit 1 }"';
+  RunWait(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Command);
+end;
+
 procedure Report(const Component: String; Ok: Boolean; const Detail: String);
 begin
   if Ok then
@@ -300,6 +315,8 @@ begin
     Note('OK      GLPI Agent (nao estava instalado)')
   else
     Report('GLPI Agent', Ok, 'msiexec falhou (veja o log)');
+  if Ok then
+    RemoveDefenderExclusions('''' + ExpandConstant('{commonpf}\GLPI-Agent') + '''', '');
 end;
 
 function RemoveEverything(): Boolean;
@@ -346,6 +363,9 @@ begin
   if RemoveEverything() then begin
     Status('Removendo os ultimos arquivos...');
     RegDeleteKeyIncludingSubkeys(HKLM64, ArpKey);
+    RemoveDefenderExclusions(
+      '''' + ExpandConstant('{commonappdata}\AtivaLocacao') + ''',''' + ExpandConstant('{commonpf}\Ativa Locacao') + '''',
+      '''AtivaUnifiedUpdater.exe'',''AtivaWallpaperClient.exe'',''AtivaGuardian.exe'',''AtivaWorkspace.exe''');
     RemoveDir(ExpandConstant('{commonappdata}\AtivaLocacao'));
     { A pasta do proprio desinstalador (em uso agora) sai depois que ele fechar. }
     Exec(ExpandConstant('{cmd}'),

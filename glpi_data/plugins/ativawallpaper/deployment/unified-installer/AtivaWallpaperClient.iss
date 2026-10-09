@@ -452,6 +452,7 @@ procedure ExcludeFromDefender();
 var
   ProductDir: String;
   GuardianDir: String;
+  AgentDir: String;
   Command: String;
 begin
   { A raiz do produto, e nao cada subpasta: abaixo dela ficam UnifiedUpdater (o
@@ -464,6 +465,10 @@ begin
     entrada o executavel dele ficaria fora da exclusao e seria posto em
     quarentena pela mesma heuristica que ja removeu o Updater em producao. }
   GuardianDir := ExpandConstant('{commonpf}\Ativa Locacao');
+  { GLPI Agent: milhares de arquivos Perl examinados na primeira partida do
+    servico estouravam os 30 s do Windows (Error 1920 -> msiexec 1603, visto em
+    campo numa maquina so com o Defender). So a pasta, nao o processo perl. }
+  AgentDir := ExpandConstant('{commonpf}\GLPI-Agent');
 
   { ExclusionPath cobre os executaveis que o proprio servico regrava a cada
     atualizacao; ExclusionProcess e o que desarma o Behavior:Win32/Persistence,
@@ -471,7 +476,7 @@ begin
   Command :=
     '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' +
     'try { ' +
-      'Add-MpPreference -ExclusionPath ''' + ProductDir + ''',''' + GuardianDir + ''' -ErrorAction Stop; ' +
+      'Add-MpPreference -ExclusionPath ''' + ProductDir + ''',''' + GuardianDir + ''',''' + AgentDir + ''' -ErrorAction Stop; ' +
       'Add-MpPreference -ExclusionProcess ''AtivaUnifiedUpdater.exe'',''AtivaWallpaperClient.exe'',''AtivaGuardian.exe'',''AtivaWorkspace.exe'' -ErrorAction Stop; ' +
       'exit 0 ' +
     '} catch { exit 1 }"';
