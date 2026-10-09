@@ -324,6 +324,7 @@ final class Inventory
     public static function pickView(array $m): array
     {
         return ['hostname' => $m['hostname'], 'computer' => $m['computer'], 'label' => $m['label'], 'windows_user' => $m['windows_user'],
+                'person' => $m['person'], 'user_label' => $m['user_label'],
                 'user' => $m['user'], 'group' => $m['group'], 'online' => $m['online']];
     }
 
@@ -356,14 +357,20 @@ final class Inventory
             $computer = $computers[(int) $row['computers_id']] ?? null;
             $contact = $online[$row['machine_id']] ?? null;
             $name = (string) (($computer['name'] ?? '') ?: $row['hostname']);
-            // Quem esta usando: a conta logada no Windows (Guardian); sem
-            // sessao aberta, o usuario atribuido ao computador no GLPI.
-            $who = (string) (($contact['username'] ?? '') ?: ($computer['user'] ?? ''));
+            // Quem esta usando: o nome corrigido em Equipamentos; senao a conta
+            // logada no Windows (Guardian); sem sessao aberta, o usuario
+            // atribuido ao computador no GLPI.
+            $auto = (string) (($contact['username'] ?? '') ?: ($computer['user'] ?? ''));
+            $userLabel = trim((string) ($row['user_label'] ?? ''));
+            $who = $userLabel !== '' ? $userLabel : $auto;
             $out[] = [
                 'id'           => $id,
                 'machine_id'   => (string) $row['machine_id'],
                 'hostname'     => (string) $row['hostname'],
                 'label'        => $name . ($who !== '' ? ' (' . $who . ')' : ''),
+                'person'       => $who,
+                'user_label'   => $userLabel,
+                'user_auto'    => $auto,
                 'windows_user' => (string) ($contact['username'] ?? ''),
                 'computers_id' => (int) $row['computers_id'],
                 'computer'     => $computer['name'] ?? '',

@@ -38,6 +38,12 @@ final class Schema
             $DB->doQuery("ALTER TABLE `{$machines}` ADD `monitors_seen` tinyint NOT NULL DEFAULT '1' AFTER `diagnostic`");
         }
 
+        // Nome de quem usa a maquina, corrigido a mao em Equipamentos. Vence a
+        // conta do Windows e o usuario do GLPI (so no Ativa Rede).
+        if (!$DB->fieldExists($machines, 'user_label')) {
+            $DB->doQuery("ALTER TABLE `{$machines}` ADD `user_label` varchar(64) NOT NULL DEFAULT '' AFTER `hostname`");
+        }
+
         // "Nao e switch": PC ou switchzinho de mesa visto pelo LLDP. Fica
         // gravado para os relatorios seguintes tambem o ignorarem.
         $switches = Settings::TABLE_SWITCHES;

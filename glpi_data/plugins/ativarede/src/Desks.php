@@ -158,6 +158,25 @@ final class Desks
     }
 
     /**
+     * Nome de quem usa a maquina, corrigido a mao (a conta do Windows ou o
+     * usuario do GLPI as vezes esta errado). Vazio volta ao automatico. So
+     * vale no Ativa Rede: o computador no GLPI nao e alterado.
+     */
+    public static function saveMachineUser(int $id, string $name): array
+    {
+        global $DB;
+
+        if ($id <= 0 || countElementsInTable(Settings::TABLE_MACHINES, ['id' => $id]) === 0) {
+            return ['ok' => false, 'message' => 'Máquina não encontrada.'];
+        }
+        $name = mb_substr(trim(preg_replace('/\s+/u', ' ', $name) ?? ''), 0, 64);
+        $DB->update(Settings::TABLE_MACHINES, ['user_label' => $name], ['id' => $id]);
+        return ['ok' => true, 'message' => $name === ''
+            ? 'Nome do usuário voltou ao automático.'
+            : 'Nome do usuário salvo: ' . $name . '.'];
+    }
+
+    /**
      * "Nao e switch" (PC ou switchzinho de mesa visto pelo LLDP): some da
      * lista, os relatorios seguintes o ignoram e as maquinas deixam de apontar
      * para ele (mantem a posicao anterior, como no Wi-Fi).

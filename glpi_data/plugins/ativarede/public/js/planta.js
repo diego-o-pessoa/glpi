@@ -442,6 +442,7 @@
             var list = el('dl', 'ar-kv mb-1');
             if (m.computer && m.hostname && m.computer !== m.hostname) { kv(list, 'Nome na rede', m.hostname); }
             if (!m.computer) { kv(list, 'Computador GLPI', 'não vinculado (série/nome não encontrados no inventário)'); }
+            if (m.user_label) { kv(list, 'Usuário', m.user_label); }
             kv(list, 'Usuário (GLPI)', m.user ? m.user + (m.group ? ' · ' + m.group : '') : '');
             kv(list, 'IP', m.ip + (m.link === 'wifi' ? ' (Wi-Fi agora)' : ''));
             kv(list, 'Nesta mesa desde', m.since);
@@ -483,8 +484,9 @@
      * pessoa. Um clique define a porta da mesa. */
     function unmappedLabel(u) {
         return u.machines.map(function (m) {
-            // Usuario do GLPI; sem ele, a conta logada no Windows agora.
-            return (m.user || m.windows_user || 'Sem usuário identificado') + (m.group ? ' · ' + m.group : '');
+            // Nome corrigido em Equipamentos; senao usuario do GLPI; senao a
+            // conta logada no Windows agora.
+            return (m.user_label || m.user || m.windows_user || 'Sem usuário identificado') + (m.group ? ' · ' + m.group : '');
         }).join(' / ');
     }
 

@@ -15,7 +15,7 @@
                 <thead>
                     <tr>
                         <th>Computador</th>
-                        <th>Usuário (GLPI)</th>
+                        <th>Usuário</th>
                         <th>Mesa</th>
                         <th>Switch · porta</th>
                         <th>Conexão</th>
@@ -26,7 +26,7 @@
                 </thead>
                 <tbody>
                 {% for m in machines %}
-                    <tr>
+                    <tr id="machine-{{ m.id }}">
                         <td>
                             <span class="badge {{ m.online ? 'bg-green' : 'bg-secondary' }} me-1" title="{{ m.online ? 'Ligada' : 'Sem contato agora' }}">&nbsp;</span>
                             {% if m.computer_url %}<a href="{{ m.computer_url }}">{{ m.label }}</a>{% else %}{{ m.label }} <span class="text-muted small">· não vinculado ao GLPI</span>{% endif %}
@@ -34,7 +34,29 @@
                                 <div class="text-warning small" title="{{ m.diagnostic }}"><i class="ti ti-alert-circle me-1"></i>Coleta incompleta: {{ m.diagnostic }}</div>
                             {% endif %}
                         </td>
-                        <td>{{ m.user }}{% if m.group %}<div class="text-muted small">{{ m.group }}</div>{% endif %}</td>
+                        <td>
+                            {% if can_manage %}
+                                {# Nome corrigido a mao; vazio = automatico (Windows / GLPI). #}
+                                <form method="post" action="{{ self_url }}" class="d-flex gap-1" style="max-width:240px">
+                                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="action" value="machine_user">
+                                    <input type="hidden" name="id" value="{{ m.id }}">
+                                    <input class="form-control form-control-sm" name="user_label" value="{{ m.user_label }}" maxlength="64"
+                                           placeholder="{{ m.user_auto ?: 'Nome do usuário' }}"
+                                           title="Deixe vazio para usar o nome automático{{ m.user_auto ? ' (' ~ m.user_auto ~ ')' : '' }}">
+                                    <button class="btn btn-sm btn-outline-primary" title="Salvar nome do usuário"><i class="ti ti-device-floppy"></i></button>
+                                </form>
+                            {% else %}
+                                {{ m.person ?: '—' }}
+                            {% endif %}
+                            <div class="text-muted small">
+                                {%- set details = [] -%}
+                                {%- if m.user_label and m.user_auto %}{% set details = details|merge(['automático: ' ~ m.user_auto]) %}{% endif -%}
+                                {%- if m.user and m.user != m.user_auto %}{% set details = details|merge(['GLPI: ' ~ m.user]) %}{% endif -%}
+                                {%- if m.group %}{% set details = details|merge([m.group]) %}{% endif -%}
+                                {{ details|join(' · ') }}
+                            </div>
+                        </td>
                         <td>{{ m.desk ?: '—' }}</td>
                         <td>
                             {% if m.port %}<span class="ar-port-tag">{{ m.switch }} · {{ m.port }}</span>{% else %}—{% endif %}

@@ -30,6 +30,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);
         Html::redirect($selfUrl . '#missing');
     }
+    // Nome do usuario da maquina, corrigido a mao.
+    if (($_POST['action'] ?? '') === 'machine_user') {
+        Schema::upgrade();
+        $result = Desks::saveMachineUser((int) ($_POST['id'] ?? 0), (string) ($_POST['user_label'] ?? ''));
+        Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);
+        Html::redirect($selfUrl . '#machine-' . (int) ($_POST['id'] ?? 0));
+    }
     // "Nao e switch" / desfazer.
     if (in_array($_POST['action'] ?? '', ['ignore_switch', 'restore_switch'], true)) {
         Schema::upgrade();
