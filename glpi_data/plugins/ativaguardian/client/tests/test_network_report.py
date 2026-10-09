@@ -38,7 +38,7 @@ def tlv(kind: int, value: bytes) -> bytes:
     return struct.pack(">H", (kind << 9) | len(value)) + value
 
 
-def lldp_frame(port_description: bytes = b"15", vlan: bool = False) -> bytes:
+def lldp_frame(port_description: bytes = b"15", vlan: bool = False, caps: int | None = None) -> bytes:
     chassis = bytes.fromhex("14ABEC22C9EC")
     port_mac = bytes.fromhex("14ABEC22C9FB")
     payload = (
@@ -48,6 +48,7 @@ def lldp_frame(port_description: bytes = b"15", vlan: bool = False) -> bytes:
         + tlv(4, port_description)
         + tlv(5, b"TW46LNT1GH")
         + tlv(6, b"HPE Networking Instant On Switch 24p Gigabit 4p SFP+ 1930 JL682A")
+        + (tlv(7, struct.pack(">HH", caps | 0x0004, caps)) if caps is not None else b"")
         + tlv(8, b"\x05\x01" + bytes([192, 168, 80, 43]) + b"\x02\x00\x00\x00\x01\x00")
         + tlv(0, b"")
     )
@@ -103,10 +104,36 @@ class LldpParsingTests(unittest.TestCase):
         windows = (bytes.fromhex("0180C200000E") + pc + struct.pack(">H", 0x88CC)
                    + tlv(1, b"\x04" + pc) + tlv(2, b"\x03" + pc) + tlv(3, struct.pack(">H", 120)) + tlv(0, b""))
         frames = [windows, lldp_frame()]
-        self.assertEqual(nr.first_lldp(frames)["chassis_id"], "D0:C1:B5:7D:F3:EB", "sem filtro pegaria o proprio PC")
+        # Mesmo sem a lista de MACs locais, o anuncio do Windows (sem nome,
+        # modelo nem IP de gerencia) nao passa por switch.
+        self.assertEqual(nr.first_lldp(frames)["chassis_id"], "14:AB:EC:22:C9:EC")
         found = nr.first_lldp(frames, frozenset({"D0-C1-B5-7D-F3-EB"}))
         self.assertEqual(found["chassis_id"], "14:AB:EC:22:C9:EC")
         self.assertIsNone(nr.first_lldp([windows], frozenset({"D0:C1:B5:7D:F3:EB"})))
+
+    def test_other_pc_announcement_is_not_a_switch(self):
+        # Visto em campo: atras de um switchzinho de mesa, o LLDP do Windows de
+        # OUTRO PC (chassis = nome "DESKTOP-1IRFUQ2") virou um switch falso.
+        other = bytes.fromhex("AABBCCDDEEFF")
+        pc = (bytes.fromhex("0180C200000E") + other + struct.pack(">H", 0x88CC)
+              + tlv(1, b"\x07DESKTOP-1IRFUQ2") + tlv(2, b"\x03" + other) + tlv(3, struct.pack(">H", 120)) + tlv(0, b""))
+        self.assertIsNone(nr.first_lldp([pc]))
+        self.assertEqual(nr.first_lldp([pc, lldp_frame()])["chassis_id"], "14:AB:EC:22:C9:EC")
+
+    def test_capabilities_decide_switch_or_station(self):
+        station = nr.parse_lldp_frame(lldp_frame(caps=0x0080))
+        self.assertEqual(station["capabilities"], 0x0080)
+        self.assertFalse(nr.is_switch_announcement(station))
+        bridge = nr.parse_lldp_frame(lldp_frame(caps=0x0004))
+        self.assertTrue(nr.is_switch_announcement(bridge))
+        # Switch com nome/modelo mas sem a TLV de capacidades continua valendo.
+        self.assertIsNone(nr.is_switch_announcement(nr.parse_lldp_frame(lldp_frame())))
+        self.assertIsNone(nr.first_lldp([lldp_frame(caps=0x0080)]))
+
+    def test_switch_announcement_wins_over_unknown(self):
+        unknown = lldp_frame(port_description=b"7")
+        switch = lldp_frame(port_description=b"15", caps=0x0004)
+        self.assertEqual(nr.first_lldp([unknown, switch])["port_description"], "15")
 
     def test_local_mac_set(self):
         macs = nr.local_mac_set({"adapter": {"mac": "D0-C1-B5-7D-F3-EB"}, "macs": ["00-15-5D-01-02-03", ""]})

@@ -38,6 +38,19 @@ final class Schema
             $DB->doQuery("ALTER TABLE `{$machines}` ADD `monitors_seen` tinyint NOT NULL DEFAULT '1' AFTER `diagnostic`");
         }
 
+        // "Nao e switch": PC ou switchzinho de mesa visto pelo LLDP. Fica
+        // gravado para os relatorios seguintes tambem o ignorarem.
+        $switches = Settings::TABLE_SWITCHES;
+        if ($DB->tableExists($switches) && !$DB->fieldExists($switches, 'ignored')) {
+            $DB->doQuery("ALTER TABLE `{$switches}` ADD `ignored` tinyint NOT NULL DEFAULT '0' AFTER `mgmt_ip`");
+            // Anuncios de PC ja gravados (sem nome, modelo nem IP de gerencia).
+            foreach ($DB->request(['SELECT' => ['id'], 'FROM' => $switches, 'WHERE' => [
+                'system_name' => '', 'description' => '', 'mgmt_ip' => '',
+            ]]) as $row) {
+                Desks::ignoreSwitch((int) $row['id']);
+            }
+        }
+
         // Ultima recusa por maquina: mostra em Equipamentos por que ela nao
         // aparece, sem precisar ir ate ela. Apagada no primeiro envio aceito.
         if (!$DB->tableExists(Settings::TABLE_REJECTIONS)) {

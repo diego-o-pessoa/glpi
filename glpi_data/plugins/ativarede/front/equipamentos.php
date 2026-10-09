@@ -6,6 +6,7 @@ use Glpi\Application\View\TemplateRenderer;
 use GlpiPlugin\Ativarede\Collector;
 use GlpiPlugin\Ativarede\Desks;
 use GlpiPlugin\Ativarede\Inventory;
+use GlpiPlugin\Ativarede\Schema;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 include '../../../inc/includes.php';
@@ -29,11 +30,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);
         Html::redirect($selfUrl . '#missing');
     }
+    // "Nao e switch" / desfazer.
+    if (in_array($_POST['action'] ?? '', ['ignore_switch', 'restore_switch'], true)) {
+        Schema::upgrade();
+        $id = (int) ($_POST['id'] ?? 0);
+        $result = $_POST['action'] === 'ignore_switch' ? Desks::ignoreSwitch($id) : Desks::restoreSwitch($id);
+        Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);
+        Html::redirect($selfUrl . '#switches');
+    }
     $result = Desks::saveSwitchLabel((int) ($_POST['id'] ?? 0), (string) ($_POST['label'] ?? ''));
     Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);
     Html::redirect($selfUrl . '#switches');
 }
 
+// Colunas novas (ignored, diagnostic...) antes de listar.
+Schema::upgrade();
 $machines = Inventory::decoratedMachines();
 foreach ($machines as &$machine) {
     $desk = Inventory::deskOf($machine);
@@ -54,6 +65,7 @@ TemplateRenderer::getInstance()->display('@ativarede/equipamentos.html.twig', [
     'monitors'   => Inventory::monitors(),
     'missing'    => Inventory::guardianWithoutReport(),
     'switches'   => $switches,
+    'ignored_switches' => Inventory::ignoredSwitches(),
     'self_url'   => $selfUrl,
     'can_manage' => PluginAtivaredeProfile::canManage(),
     'css_url'    => $CFG_GLPI['root_doc'] . '/plugins/ativarede/css/ativarede.css?v=' . PLUGIN_ATIVAREDE_VERSION,

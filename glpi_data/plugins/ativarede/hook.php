@@ -203,6 +203,8 @@ function plugin_ativarede_install_tables(): void
     }
 
     // Depois da 0.1.9 (tambem aplicado sob demanda, sem subir a versao).
+    require_once PLUGIN_ATIVAREDE_DIR . '/src/Inventory.php';
+    require_once PLUGIN_ATIVAREDE_DIR . '/src/Desks.php';
     require_once PLUGIN_ATIVAREDE_DIR . '/src/Schema.php';
     \GlpiPlugin\Ativarede\Schema::upgrade();
 }

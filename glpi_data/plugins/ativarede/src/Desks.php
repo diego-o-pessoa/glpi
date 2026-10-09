@@ -157,6 +157,34 @@ final class Desks
         return ['ok' => true, 'message' => 'Switch renomeado.'];
     }
 
+    /**
+     * "Nao e switch" (PC ou switchzinho de mesa visto pelo LLDP): some da
+     * lista, os relatorios seguintes o ignoram e as maquinas deixam de apontar
+     * para ele (mantem a posicao anterior, como no Wi-Fi).
+     */
+    public static function ignoreSwitch(int $id): array
+    {
+        global $DB;
+
+        if ($id <= 0 || countElementsInTable(Settings::TABLE_SWITCHES, ['id' => $id]) === 0) {
+            return ['ok' => false, 'message' => 'Switch não encontrado.'];
+        }
+        $DB->update(Settings::TABLE_SWITCHES, ['ignored' => 1], ['id' => $id]);
+        $DB->update(Settings::TABLE_MACHINES, ['switches_id' => 0, 'port' => '', 'port_id' => ''], ['switches_id' => $id]);
+        $DB->update(Settings::TABLE_MACHINES, ['pending_switches_id' => 0, 'pending_port' => '', 'pending_count' => 0], ['pending_switches_id' => $id]);
+        Inventory::resetCache();
+        return ['ok' => true, 'message' => 'Aparelho marcado como "não é switch". Ele não aparece mais nem define a posição das máquinas.'];
+    }
+
+    public static function restoreSwitch(int $id): array
+    {
+        global $DB;
+
+        $DB->update(Settings::TABLE_SWITCHES, ['ignored' => 0], ['id' => $id]);
+        Inventory::resetCache();
+        return ['ok' => true, 'message' => 'Aparelho voltou para a lista de switches.'];
+    }
+
     private static function find(int $id): ?array
     {
         global $DB;

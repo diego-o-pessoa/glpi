@@ -136,7 +136,7 @@ def _printable(data: bytes) -> str:
     return re.sub(r"[\x00-\x1F\x7F]", " ", text).strip()
 
 
-def parse_lldp_frame(frame: bytes) -> dict[str, str] | None:
+def parse_lldp_frame(frame: bytes) -> dict[str, Any] | None:
     """Quadro Ethernet completo -> campos LLDP, ou None se nao for LLDP."""
     if len(frame) < 16:
         return None
@@ -150,7 +150,7 @@ def parse_lldp_frame(frame: bytes) -> dict[str, str] | None:
     return parse_lldp_payload(frame[offset + 2:])
 
 
-def parse_lldp_payload(payload: bytes) -> dict[str, str] | None:
+def parse_lldp_payload(payload: bytes) -> dict[str, Any] | None:
     result: dict[str, str] = {}
     mgmt_v4 = ""
     pos = 0
@@ -176,6 +176,9 @@ def parse_lldp_payload(payload: bytes) -> dict[str, str] | None:
             result["system_name"] = _printable(value)
         elif tlv_type == 6:
             result["system_description"] = _printable(value)
+        elif tlv_type == 7 and len(value) >= 4:
+            # System Capabilities: suportadas (2 bytes) + habilitadas (2 bytes).
+            result["capabilities"] = str(struct.unpack_from(">H", value, 2)[0])
         elif tlv_type == 8 and len(value) >= 2:
             addr_len = value[0]
             subtype = value[1]
@@ -192,7 +195,31 @@ def parse_lldp_payload(payload: bytes) -> dict[str, str] | None:
         "system_name": result.get("system_name", "")[:255],
         "system_description": result.get("system_description", "")[:255],
         "mgmt_ip": result.get("mgmt_ip", "")[:64],
+        # Bits habilitados (LLDP_CAP_*); -1 = o anuncio nao informou.
+        "capabilities": int(result.get("capabilities", "-1")),
     }
+
+
+# Capacidades LLDP (802.1AB): ponte (switch) e roteador sao infraestrutura;
+# PC anuncia "estacao" (ou nada).
+LLDP_CAP_BRIDGE = 0x0004
+LLDP_CAP_ROUTER = 0x0010
+
+
+def is_switch_announcement(lldp: dict[str, Any]) -> bool | None:
+    """True = switch/roteador; False = PC ou outro host; None = nao da para saber.
+
+    Visto em campo: atras de um switchzinho de mesa, a maquina ouvia o LLDP do
+    Windows de OUTRO PC ("DESKTOP-1IRFUQ2"), que virava um switch falso.
+    """
+    caps = int(lldp.get("capabilities", -1))
+    if caps >= 0:
+        return bool(caps & (LLDP_CAP_BRIDGE | LLDP_CAP_ROUTER))
+    # Sem a TLV de capacidades: switch gerenciavel sempre se descreve (nome,
+    # modelo ou IP de gerencia); o anuncio do Windows nao traz nada disso.
+    if not (lldp.get("system_name") or lldp.get("system_description") or lldp.get("mgmt_ip")):
+        return False
+    return None
 
 
 def read_pcapng_frames(data: bytes) -> list[bytes]:
@@ -229,18 +256,25 @@ def normalize_mac(value: str) -> str:
     return re.sub(r"[^0-9A-F]", "", str(value).upper())
 
 
-def first_lldp(frames: list[bytes], local_macs: set[str] | frozenset[str] = frozenset()) -> dict[str, str] | None:
+def first_lldp(frames: list[bytes], local_macs: set[str] | frozenset[str] = frozenset()) -> dict[str, Any] | None:
     """Primeiro anuncio do SWITCH. O pktmon ve as duas direcoes, e o proprio
     Windows tambem anuncia LLDP pela placa: quadros que saem de um MAC desta
     maquina (ou com chassis = MAC local) sao ignorados."""
     local = {normalize_mac(m) for m in local_macs if normalize_mac(m)}
+    fallback = None
     for frame in frames:
         if len(frame) >= 12 and frame[6:12].hex().upper() in local:
             continue
         parsed = parse_lldp_frame(frame)
-        if parsed and normalize_mac(parsed["chassis_id"]) not in local:
+        if not parsed or normalize_mac(parsed["chassis_id"]) in local:
+            continue
+        kind = is_switch_announcement(parsed)
+        if kind is True:
             return parsed
-    return None
+        # Anuncio de outro PC (repassado por um switch simples) nunca e a porta.
+        if kind is None and fallback is None:
+            fallback = parsed
+    return fallback
 
 
 def _output(completed: subprocess.CompletedProcess | None) -> str:
@@ -312,7 +346,7 @@ class CaptureLock:
 def capture_lldp(work_dir: Path, logger: logging.Logger, wait: Callable[[float], Any] = time.sleep,
                  runner: Runner = subprocess.run, seconds: int = LLDP_WAIT_SECONDS,
                  lock_wait_seconds: float = 0, local_macs: frozenset[str] = frozenset(),
-                 problems: list[str] | None = None) -> dict[str, str] | None:
+                 problems: list[str] | None = None) -> dict[str, Any] | None:
     """Escuta um quadro LLDP com o pktmon. None se nao houver (ou sem suporte).
 
     Uma coleta por vez (CaptureLock): o servico pula o ciclo se ja houver uma
@@ -338,7 +372,7 @@ def capture_lldp(work_dir: Path, logger: logging.Logger, wait: Callable[[float],
 
 def _capture_locked(work_dir: Path, logger: logging.Logger, wait: Callable[[float], Any],
                     runner: Runner, seconds: int, local_macs: frozenset[str],
-                    problems: list[str] | None = None) -> dict[str, str] | None:
+                    problems: list[str] | None = None) -> dict[str, Any] | None:
     work_dir.mkdir(parents=True, exist_ok=True)
     etl = work_dir / "lldp.etl"
     pcap = work_dir / "lldp.pcapng"
@@ -591,7 +625,7 @@ def local_mac_set(system: dict[str, Any]) -> frozenset[str]:
 
 
 def build_report(machine_id: str, hostname: str, guardian_version: str, system: dict[str, Any],
-                 lldp: dict[str, str] | None, problems: list[str] | None = None,
+                 lldp: dict[str, Any] | None, problems: list[str] | None = None,
                  monitors_unknown: bool = False) -> dict[str, Any]:
     adapter = system.get("adapter") if isinstance(system.get("adapter"), dict) else None
     link = link_type(adapter)

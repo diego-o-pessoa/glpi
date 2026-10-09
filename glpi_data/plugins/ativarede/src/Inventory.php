@@ -82,12 +82,31 @@ final class Inventory
             return self::$switchCache;
         }
         $list = [];
-        foreach ($DB->request(['FROM' => Settings::TABLE_SWITCHES, 'ORDER' => ['mgmt_ip', 'id']]) as $row) {
+        // "Nao e switch" (PC/switchzinho de mesa) fica fora de tudo.
+        $where = $DB->fieldExists(Settings::TABLE_SWITCHES, 'ignored') ? ['ignored' => 0] : [];
+        foreach ($DB->request(['FROM' => Settings::TABLE_SWITCHES, 'WHERE' => $where, 'ORDER' => ['mgmt_ip', 'id']]) as $row) {
             $row['short'] = self::switchShort($row);
             $row['display'] = self::switchDisplay($row);
             $list[(int) $row['id']] = $row;
         }
         return self::$switchCache = $list;
+    }
+
+    /** Aparelhos marcados como "nao e switch" (para poder desfazer). */
+    public static function ignoredSwitches(): array
+    {
+        global $DB;
+
+        if (!$DB->fieldExists(Settings::TABLE_SWITCHES, 'ignored')) {
+            return [];
+        }
+        $list = [];
+        foreach ($DB->request(['FROM' => Settings::TABLE_SWITCHES, 'WHERE' => ['ignored' => 1], 'ORDER' => 'id']) as $row) {
+            $row['short'] = self::switchShort($row);
+            $row['last_seen'] = self::date($row['last_seen']);
+            $list[] = $row;
+        }
+        return $list;
     }
 
     public static function resetCache(): void

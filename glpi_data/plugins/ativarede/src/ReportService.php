@@ -77,6 +77,9 @@ final class ReportService
                 'system_name'        => self::text($network['lldp']['system_name'] ?? '', 255),
                 'system_description' => self::text($network['lldp']['system_description'] ?? '', 255),
                 'mgmt_ip'            => self::text($network['lldp']['mgmt_ip'] ?? '', 64),
+                // Bits LLDP habilitados (Guardian 1.6.9+); -1 = nao informado.
+                'capabilities'       => filter_var($network['lldp']['capabilities'] ?? -1, FILTER_VALIDATE_INT,
+                    ['options' => ['min_range' => 0, 'max_range' => 0xFFFF, 'default' => -1]]),
             ];
         }
 
@@ -187,6 +190,11 @@ final class ReportService
         if ($report['lldp'] !== null && self::isOwnAnnouncement($report['lldp']['chassis_id'], $report['mac'])) {
             $report['lldp'] = null;
         }
+        // Anuncio de OUTRO PC, repassado por um switchzinho de mesa (Guardian
+        // anterior ao 1.6.9 nao filtrava): nao e a porta de switch nenhum.
+        if ($report['lldp'] !== null && !self::isSwitchAnnouncement($report['lldp'])) {
+            $report['lldp'] = null;
+        }
 
         if ($report['lldp'] !== null && $report['link'] === 'wired') {
             $switchId = self::upsertSwitch($report['lldp'], $now);
@@ -200,6 +208,21 @@ final class ReportService
             $events += self::handleMonitors($machineDbId, $report['machine_id'], $report['monitors'], $monitorBaseline, $now);
         }
         return ['events' => $events];
+    }
+
+    /**
+     * Switch/roteador pelas capacidades LLDP; sem elas, switch gerenciavel
+     * sempre se descreve (nome, modelo ou IP de gerencia) e o LLDP do Windows
+     * nao traz nada disso (visto em campo: "DESKTOP-1IRFUQ2" virou switch).
+     */
+    public static function isSwitchAnnouncement(array $lldp): bool
+    {
+        $caps = (int) ($lldp['capabilities'] ?? -1);
+        if ($caps >= 0) {
+            return ($caps & (0x0004 | 0x0010)) !== 0; // ponte ou roteador
+        }
+        return ($lldp['system_name'] ?? '') !== '' || ($lldp['system_description'] ?? '') !== ''
+            || ($lldp['mgmt_ip'] ?? '') !== '';
     }
 
     public static function isOwnAnnouncement(string $chassisId, string $machineMac): bool
@@ -524,10 +547,11 @@ final class ReportService
             'mgmt_ip'     => $lldp['mgmt_ip'],
             'last_seen'   => $now,
         ];
-        $row = $DB->request(['SELECT' => ['id'], 'FROM' => Settings::TABLE_SWITCHES, 'WHERE' => ['chassis_id' => $lldp['chassis_id']], 'LIMIT' => 1])->current();
+        $row = $DB->request(['FROM' => Settings::TABLE_SWITCHES, 'WHERE' => ['chassis_id' => $lldp['chassis_id']], 'LIMIT' => 1])->current();
         if ($row) {
             $DB->update(Settings::TABLE_SWITCHES, $fields, ['id' => (int) $row['id']]);
-            return (int) $row['id'];
+            // Marcado como "nao e switch": nao define posicao (fica a anterior).
+            return (int) ($row['ignored'] ?? 0) === 1 ? 0 : (int) $row['id'];
         }
         $DB->insert(Settings::TABLE_SWITCHES, $fields + ['chassis_id' => $lldp['chassis_id'], 'first_seen' => $now]);
         return (int) $DB->insertId();
