@@ -37,6 +37,12 @@ final class Dashboard
 
         [$rows, $byId, $byNumber] = self::extensionIndex($extensions, $scope);
 
+        // --- tempo real: agrupa os canais por ligacao (Linkedid)
+        $live = self::liveCalls($channels, $rows, $byNumber);
+        // Trecho que ja terminou de uma ligacao que continua (transferencia,
+        // fila -> atendente): o registro da TW sai no fim de cada trecho.
+        $liveIds = array_flip(array_filter(array_column($live, 'linkedid')));
+
         // --- ligacoes de hoje
         $totals = self::emptyStats() + ['nao_atendidas_sem_ramal' => 0];
         $recent = [];
@@ -61,7 +67,11 @@ final class Dashboard
             }
 
             if (count($recent) < self::RECENT_LIMIT) {
+                $linkedId = (string) ($call['linkedid'] ?? '');
+                $ongoing = $linkedId !== '' && isset($liveIds[$linkedId]);
                 $recent[] = [
+                    // Este trecho acabou, mas a ligacao continua (ex.: transferida).
+                    'em_andamento' => $ongoing,
                     'hora'     => substr((string) ($call['calldate'] ?? ''), 11, 5),
                     'direcao'  => $direction,
                     'de'       => (string) ($call['src'] ?? ''),
@@ -78,8 +88,6 @@ final class Dashboard
             }
         }
 
-        // --- tempo real: agrupa os canais por ligacao (Linkedid)
-        $live = self::liveCalls($channels, $rows, $byNumber);
         // Nome da fila: cadastro do plugin (tela Ramais) e, se a TW liberar a
         // consulta de filas, o nome da TW.
         $queueRules = ExtensionDirectory::queueRules();
@@ -218,7 +226,8 @@ final class Dashboard
         }
 
         $live = [];
-        foreach ($groups as $list) {
+        foreach ($groups as $linkedId => $list) {
+            $linkedId = (string) $linkedId;
             usort($list, static fn (array $a, array $b): int => $b['seconds'] <=> $a['seconds']);
             $parties = [];
             $queue = '';
@@ -297,6 +306,8 @@ final class Dashboard
             }
             $seconds = (int) $list[0]['seconds'];
             $live[] = [
+                // Identificador da ligacao inteira (todos os trechos).
+                'linkedid'   => $linkedId,
                 'fase'       => $phase,
                 'fase_label' => self::PHASE_LABELS[$phase],
                 'de'         => $from,
@@ -447,7 +458,9 @@ final class Dashboard
      */
     private static function channelExtension(string $channel, string $callerId, array $byNumber): ?string
     {
-        if (preg_match('#^PJSIP/(\d+)-#', $channel, $matches) && isset($byNumber[$matches[1]])) {
+        // "PJSIP/31502-...", "SIP/1503-...", "PJSIP/1503_app-..." (outro aparelho
+        // do mesmo ramal) e "Local/1503@..." (fila, siga-me, transferencia).
+        if (preg_match('#^(?:PJSIP|SIP|IAX2|Local)/(\d+)[-_@;]#', $channel, $matches) && isset($byNumber[$matches[1]])) {
             return $byNumber[$matches[1]];
         }
         return str_starts_with($channel, 'PJSIP/saida') ? null : ($byNumber[$callerId] ?? null);

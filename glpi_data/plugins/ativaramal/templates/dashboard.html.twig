@@ -386,6 +386,12 @@
             var side = el('div', 'rd-item-side');
             side.appendChild(el('div', '', c.hora));
             side.appendChild(el('div', c.status === 'nao_atendida' ? 'text-red' : '', c.status === 'nao_atendida' ? c.status_label : dur(c.falado)));
+            if (c.em_andamento) {
+                // Trecho encerrado de uma ligacao que continua (transferencia, fila).
+                var going = el('div', 'text-green small', 'continua');
+                going.title = 'Este trecho terminou, mas a ligação continua — veja em "Em andamento agora".';
+                side.appendChild(going);
+            }
             item.appendChild(side);
             list.appendChild(item);
         });
