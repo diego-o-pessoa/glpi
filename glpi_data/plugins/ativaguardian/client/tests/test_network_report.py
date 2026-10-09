@@ -345,6 +345,88 @@ class ReporterTests(unittest.TestCase):
         ok = lambda args, **_k: subprocess.CompletedProcess(args, 0, b'{"bios":"X","monitors":[]}', b"")  # noqa: E731
         self.assertEqual(nr.collect_system(quiet_logger(), runner=ok)["bios"], "X")
 
+    def test_collect_system_failure_records_reason(self):
+        problems = []
+        failed = lambda args, **_k: subprocess.CompletedProcess(args, 1, b"", b"Acesso negado")  # noqa: E731
+        self.assertIsNone(nr.collect_system(quiet_logger(), runner=failed, problems=problems))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("PowerShell", problems[0])
+
+    NATIVE = {"adapter": {"name": "Ethernet", "description": "Intel(R) Ethernet", "media": "802.3",
+                          "mac": "D0-C1-B5-7D-F3-EB", "ip": "192.168.80.50"}, "macs": ["D0-C1-B5-7D-F3-EB"]}
+
+    def test_powershell_blocked_still_sends_partial_report(self):
+        # Visto em campo: maquina com o PowerShell bloqueado/travado nunca
+        # aparecia no Ativa Rede. Agora vai a rede (API do Windows) e a porta.
+        def blocked(_logger, runner=None, problems=None):
+            problems.append("PowerShell nao executou: acesso negado")
+            return None
+        lldp = nr.parse_lldp_frame(lldp_frame())
+        with mock.patch.object(nr, "collect_system", side_effect=blocked), \
+                mock.patch.object(nr, "native_network", return_value=self.NATIVE), \
+                mock.patch.object(nr, "capture_lldp", return_value=lldp) as capture:
+            report = nr.collect_report("abc", "PC", "1.6.9", Path(tempfile.gettempdir()), quiet_logger())
+        capture.assert_called_once()
+        self.assertTrue(report["monitors_unknown"])
+        self.assertEqual(report["monitors"], [])
+        self.assertEqual(report["network"]["link"], "wired")
+        self.assertEqual(report["network"]["lldp"]["mgmt_ip"], "192.168.80.43")
+        self.assertEqual(report["problems"], ["PowerShell nao executou: acesso negado"])
+
+    def test_full_report_has_no_problems_and_known_monitors(self):
+        with mock.patch.object(nr, "collect_system", return_value=dict(ReportTests.SYSTEM)), \
+                mock.patch.object(nr, "capture_lldp", return_value=nr.parse_lldp_frame(lldp_frame())):
+            report = nr.collect_report("abc", "PC", "1.6.9", Path(tempfile.gettempdir()), quiet_logger())
+        self.assertFalse(report["monitors_unknown"])
+        self.assertEqual(report["problems"], [])
+        self.assertEqual(len(report["monitors"]), 1)
+
+    def test_powershell_without_adapter_uses_native_network(self):
+        system = dict(ReportTests.SYSTEM, adapter=None, macs="AA-BB-CC-DD-EE-FF")
+        with mock.patch.object(nr, "collect_system", return_value=system), \
+                mock.patch.object(nr, "native_network", return_value=self.NATIVE), \
+                mock.patch.object(nr, "capture_lldp", return_value=None) as capture:
+            report = nr.collect_report("abc", "PC", "1.6.9", Path(tempfile.gettempdir()), quiet_logger())
+        self.assertEqual(report["network"]["ip"], "192.168.80.50")
+        self.assertFalse(report["monitors_unknown"])
+        self.assertEqual(capture.call_args.kwargs["local_macs"], frozenset({"AABBCCDDEEFF", "D0C1B57DF3EB"}))
+
+    def test_partial_report_retries_full_reading_soon(self):
+        reporter = self.make()
+        report = nr.build_report("abc", "PC", "1.6.9", {"adapter": self.NATIVE["adapter"]}, None,
+                                 ["PowerShell nao respondeu"], monitors_unknown=True)
+        with mock.patch.object(nr, "collect_report", return_value=report), \
+                mock.patch.object(nr, "send_report") as send:
+            reporter.cycle()
+        send.assert_called_once()
+        self.assertTrue(reporter.retry_soon)
+
+    def test_quick_retries_are_bounded(self):
+        reporter = self.make()
+        sleeps = []
+        cycles = iter(range(6))
+
+        def fail_cycle():
+            reporter.retry_soon = True
+            if next(cycles, None) is None or len(sleeps) >= 5:
+                reporter.stop_event.set()
+
+        with mock.patch.object(reporter, "cycle", side_effect=fail_cycle), \
+                mock.patch.object(reporter, "_sleep", side_effect=sleeps.append):
+            reporter.run()
+        # Primeira espera e a inicial; depois 3 tentativas rapidas e volta aos 15 min.
+        self.assertEqual(sleeps[1:5], [nr.CONFIRM_DELAY_SECONDS] * 3 + [nr.REPORT_INTERVAL_SECONDS])
+
+    def test_absent_backoff_is_short(self):
+        self.assertLessEqual(nr.ABSENT_BACKOFF_SECONDS, 30 * 60)
+
+    def test_native_network_reads_this_windows(self):
+        if sys.platform != "win32":
+            self.skipTest("so Windows")
+        result = nr.native_network()
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result["macs"], list)
+
 
 if __name__ == "__main__":
     unittest.main()

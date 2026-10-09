@@ -7,6 +7,7 @@ namespace GlpiPlugin\Ativarede\Controller;
 use Config;
 use Glpi\Controller\AbstractController;
 use GlpiPlugin\Ativarede\ReportService;
+use GlpiPlugin\Ativarede\Schema;
 use InvalidArgumentException;
 use Plugin;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -52,6 +53,12 @@ final class ApiController extends AbstractController
         }
 
         try {
+            Schema::upgrade();
+        } catch (Throwable $exception) {
+            Toolbox::logInFile('ativarede', 'Falha ao atualizar as tabelas: ' . $exception->getMessage() . "\n");
+        }
+
+        try {
             $report = ReportService::validate($payload);
         } catch (InvalidArgumentException $exception) {
             // Registrado para descobrir por que uma maquina nao aparece.
@@ -61,6 +68,8 @@ final class ApiController extends AbstractController
                 is_scalar($payload['machine_id'] ?? null) ? (string) $payload['machine_id'] : '?',
                 $exception->getMessage()
             ));
+            Schema::recordRejection($payload['machine_id'] ?? null, $payload['hostname'] ?? null,
+                'Relatório recusado: ' . $exception->getMessage());
             return $this->error('VALIDATION_FAILED', $exception->getMessage(), 422);
         }
 
@@ -68,7 +77,14 @@ final class ApiController extends AbstractController
             $result = ReportService::process($report);
         } catch (Throwable $exception) {
             Toolbox::logInFile('ativarede', 'Falha ao processar relatorio de ' . $report['machine_id'] . ': ' . $exception->getMessage() . "\n");
+            Schema::recordRejection($report['machine_id'], $report['hostname'],
+                'Erro no GLPI ao gravar o relatório: ' . $exception->getMessage());
             return $this->error('DATABASE_ERROR', 'Nao foi possivel registrar o relatorio.', 500);
+        }
+        try {
+            Schema::clearRejection($report['machine_id']);
+        } catch (Throwable) {
+            // So diagnostico.
         }
 
         return new JsonResponse(['ok' => true, 'events' => $result['events']], 202);

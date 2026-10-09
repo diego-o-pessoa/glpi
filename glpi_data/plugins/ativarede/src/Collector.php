@@ -38,16 +38,18 @@ final class Collector
         $requested = 0;
         $outdated = 0;
         $userId = (int) Session::getLoginUserID();
+        // Todas as maquinas ligadas com Guardian, inclusive as que ainda nao
+        // entraram no Ativa Rede: o pedido forcado tambem tira o Guardian da
+        // espera apos um erro do GLPI (antes so ia para as ja conhecidas, e
+        // uma maquina que nunca conseguiu enviar ficava de fora para sempre).
+        $where = [Settings::TABLE_GUARDIAN_MACHINES . '.last_contact' => ['>=', $online]];
+        if ($DB->fieldExists(Settings::TABLE_GUARDIAN_MACHINES, 'hidden_at')) {
+            $where[Settings::TABLE_GUARDIAN_MACHINES . '.hidden_at'] = null;
+        }
         foreach ($DB->request([
-            'SELECT'     => [Settings::TABLE_GUARDIAN_MACHINES . '.id', Settings::TABLE_GUARDIAN_MACHINES . '.guardian_version'],
-            'FROM'       => Settings::TABLE_GUARDIAN_MACHINES,
-            'INNER JOIN' => [
-                Settings::TABLE_MACHINES => ['ON' => [
-                    Settings::TABLE_GUARDIAN_MACHINES => 'machine_id',
-                    Settings::TABLE_MACHINES          => 'machine_id',
-                ]],
-            ],
-            'WHERE'      => [Settings::TABLE_GUARDIAN_MACHINES . '.last_contact' => ['>=', $online]],
+            'SELECT' => [Settings::TABLE_GUARDIAN_MACHINES . '.id', Settings::TABLE_GUARDIAN_MACHINES . '.guardian_version'],
+            'FROM'   => Settings::TABLE_GUARDIAN_MACHINES,
+            'WHERE'  => $where,
         ]) as $row) {
             $version = (string) $row['guardian_version'];
             if ($version === '' || version_compare($version, self::MIN_GUARDIAN, '<')) {

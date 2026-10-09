@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Glpi\Application\View\TemplateRenderer;
+use GlpiPlugin\Ativarede\Collector;
 use GlpiPlugin\Ativarede\Desks;
 use GlpiPlugin\Ativarede\Inventory;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -21,6 +22,12 @@ $selfUrl = $CFG_GLPI['root_doc'] . '/plugins/ativarede/front/equipamentos.php';
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (!PluginAtivaredeProfile::canManage()) {
         throw new AccessDeniedHttpException();
+    }
+    // "Pedir envio agora" nas maquinas sem posicao.
+    if (($_POST['action'] ?? '') === 'collect') {
+        $result = Collector::requestAll();
+        Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);
+        Html::redirect($selfUrl . '#missing');
     }
     $result = Desks::saveSwitchLabel((int) ($_POST['id'] ?? 0), (string) ($_POST['label'] ?? ''));
     Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);

@@ -201,6 +201,10 @@ function plugin_ativarede_install_tables(): void
     if (!$DB->fieldExists('glpi_plugin_ativarede_desks', 'sector')) {
         $DB->doQuery("ALTER TABLE `glpi_plugin_ativarede_desks` ADD `sector` varchar(64) NOT NULL DEFAULT '' AFTER `machines_id`");
     }
+
+    // Depois da 0.1.9 (tambem aplicado sob demanda, sem subir a versao).
+    require_once PLUGIN_ATIVAREDE_DIR . '/src/Schema.php';
+    \GlpiPlugin\Ativarede\Schema::upgrade();
 }
 
 /**
@@ -216,6 +220,7 @@ function plugin_ativarede_uninstall(): bool
 
     CronTask::unregister('ativarede');
     foreach ([
+        'glpi_plugin_ativarede_rejections',
         'glpi_plugin_ativarede_events',
         'glpi_plugin_ativarede_monitors',
         'glpi_plugin_ativarede_machines',

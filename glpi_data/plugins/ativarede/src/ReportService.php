@@ -44,10 +44,9 @@ final class ReportService
         if (!preg_match('/^[A-Za-z0-9._-]{1,128}$/D', $machineId)) {
             throw new InvalidArgumentException('machine_id invalido.');
         }
-        $hostname = (string) ($payload['hostname'] ?? '');
-        if ($hostname !== '' && !preg_match('/^[A-Za-z0-9._-]{1,255}$/D', $hostname)) {
-            throw new InvalidArgumentException('hostname invalido.');
-        }
+        // Nome como o Windows o tem (pode ter acento): recusar aqui deixava a
+        // maquina fora do Ativa Rede para sempre.
+        $hostname = self::text($payload['hostname'] ?? '', 255);
         $version = (string) ($payload['guardian_version'] ?? '');
         if ($version !== '' && !preg_match('/^[A-Za-z0-9.+_-]{1,64}$/D', $version)) {
             throw new InvalidArgumentException('guardian_version invalido.');
@@ -82,13 +81,16 @@ final class ReportService
         }
 
         $monitors = $payload['monitors'] ?? [];
-        if (!is_array($monitors) || !array_is_list($monitors) || count($monitors) > self::MAX_MONITORS) {
+        if (!is_array($monitors) || !array_is_list($monitors)) {
             throw new InvalidArgumentException('monitors invalido (lista de ate ' . self::MAX_MONITORS . ').');
         }
+        // Relatorio parcial: a maquina nao conseguiu ler os monitores. Nao
+        // significa "sem monitores" (nada e marcado como ausente).
+        $monitorsKnown = ($payload['monitors_unknown'] ?? false) !== true;
         $cleanMonitors = [];
-        foreach ($monitors as $monitor) {
+        foreach (array_slice($monitors, 0, self::MAX_MONITORS) as $monitor) {
             if (!is_array($monitor)) {
-                throw new InvalidArgumentException('monitor invalido.');
+                continue;
             }
             if (self::isVirtualMonitor((string) ($monitor['manufacturer'] ?? ''))) {
                 continue;
@@ -114,6 +116,8 @@ final class ReportService
             'mac'              => strtoupper(self::text($network['mac'] ?? '', 32)),
             'lldp'             => $lldp,
             'monitors'         => $cleanMonitors,
+            'monitors_known'   => $monitorsKnown,
+            'diagnostic'       => self::diagnostic($payload['problems'] ?? []),
         ];
     }
 
@@ -146,8 +150,25 @@ final class ReportService
             'guardian_version' => $report['guardian_version'],
             'last_report'      => $now,
         ];
+        $hasSchema = $DB->fieldExists(Settings::TABLE_MACHINES, 'monitors_seen');
+        if ($hasSchema) {
+            $fields['diagnostic'] = $report['diagnostic'];
+        }
+        // Relatorio parcial nao traz a serie da BIOS: mantem a ja conhecida.
+        if (!$report['monitors_known'] && $report['bios_serial'] === '') {
+            unset($fields['bios_serial']);
+        }
+        // Primeira leitura dos monitores desta maquina: so registra (sem "novo").
+        $monitorBaseline = $isFirst || ($hasSchema && (int) ($machine['monitors_seen'] ?? 1) === 0);
+        if ($hasSchema && $report['monitors_known']) {
+            $fields['monitors_seen'] = 1;
+        }
         if ($isFirst) {
-            $DB->insert(Settings::TABLE_MACHINES, $fields + ['machine_id' => $report['machine_id'], 'first_report' => $now]);
+            $extra = ['machine_id' => $report['machine_id'], 'first_report' => $now];
+            if ($hasSchema && !$report['monitors_known']) {
+                $extra['monitors_seen'] = 0;
+            }
+            $DB->insert(Settings::TABLE_MACHINES, $fields + $extra);
             $machineDbId = (int) $DB->insertId();
             $machine = ['id' => $machineDbId, 'switches_id' => 0, 'port' => '', 'pending_switches_id' => 0, 'pending_port' => '', 'pending_count' => 0];
         } else {
@@ -175,7 +196,9 @@ final class ReportService
             }
         }
 
-        $events += self::handleMonitors($machineDbId, $report['machine_id'], $report['monitors'], $isFirst, $now);
+        if ($report['monitors_known']) {
+            $events += self::handleMonitors($machineDbId, $report['machine_id'], $report['monitors'], $monitorBaseline, $now);
+        }
         return ['events' => $events];
     }
 
@@ -549,6 +572,22 @@ final class ReportService
             return '';
         }
         return $serial;
+    }
+
+    /** Problemas da coleta informados pela maquina, numa linha. */
+    private static function diagnostic(mixed $problems): string
+    {
+        if (!is_array($problems)) {
+            return '';
+        }
+        $lines = [];
+        foreach (array_slice($problems, 0, 5) as $problem) {
+            $line = self::text($problem, 200);
+            if ($line !== '') {
+                $lines[] = $line;
+            }
+        }
+        return mb_substr(implode(' | ', $lines), 0, 500);
     }
 
     private static function text(mixed $value, int $max): string

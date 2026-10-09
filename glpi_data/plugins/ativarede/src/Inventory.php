@@ -365,6 +365,8 @@ final class Inventory
                 'online'       => $contact !== null && $contact['online'],
                 'last_contact' => $contact !== null ? self::date($contact['last_contact']) : '',
                 'monitors'     => $monitors[$id] ?? [],
+                // Coleta incompleta na maquina (PowerShell, pktmon...), informada por ela.
+                'diagnostic'   => (string) ($row['diagnostic'] ?? ''),
             ];
         }
         return $out;
@@ -422,6 +424,7 @@ final class Inventory
         $hasUser = $DB->fieldExists(Settings::TABLE_GUARDIAN_MACHINES, 'username');
         $hasHidden = $DB->fieldExists(Settings::TABLE_GUARDIAN_MACHINES, 'hidden_at');
         $limit = time() - Settings::guardianOfflineSeconds();
+        $rejections = Schema::rejections();
         $out = [];
         foreach ($DB->request([
             'SELECT' => array_merge(['machine_id', 'hostname', 'guardian_version', 'last_contact'], $hasUser ? ['username'] : []),
@@ -434,7 +437,12 @@ final class Inventory
             }
             $version = (string) $row['guardian_version'];
             $ts = $row['last_contact'] ? strtotime((string) $row['last_contact']) : false;
-            if ($version === '' || version_compare($version, '1.6.0', '<')) {
+            $rejection = $rejections[(string) $row['machine_id']] ?? null;
+            if ($rejection !== null) {
+                // A maquina tentou e o GLPI recusou: o motivo exato.
+                $reason = $rejection['message'] . ' (' . $rejection['attempts'] . ' tentativa(s), a última em '
+                    . self::date($rejection['last_at']) . ').';
+            } elseif ($version === '' || version_compare($version, '1.6.0', '<')) {
                 $reason = 'Guardian ' . ($version ?: 'sem versão') . ': precisa do 1.6.0 ou mais novo (atualizar o pacote unificado).';
             } elseif ($ts === false || $ts < $limit) {
                 $reason = 'Desligada ou sem contato desde ' . self::date($row['last_contact']) . '.';
@@ -443,7 +451,10 @@ final class Inventory
                 $reason = 'O serviço do Guardian parou de responder às ' . self::date($row['last_contact'])
                     . ' (parado ou travado). Veja o serviço AtivaGuardian e o guardian.log na máquina.';
             } else {
-                $reason = 'Ligada, mas ainda não enviou a posição. O primeiro envio sai ~2 min após o serviço iniciar; se continuar, veja files/_log/ativarede.log.';
+                $reason = version_compare($version, '1.6.9', '<')
+                    ? 'Ligada, mas ainda não enviou a posição. Guardian ' . $version . ' pode ter recebido erro do GLPI e esperar até 6 h; '
+                        . 'use "Atualizar agora" na planta ou atualize o pacote unificado (1.6.9+ mostra o motivo aqui).'
+                    : 'Ligada, mas ainda não enviou a posição. O primeiro envio sai ~2 min após o serviço iniciar.';
             }
             $user = self::accountName((string) ($row['username'] ?? ''));
             $out[] = [

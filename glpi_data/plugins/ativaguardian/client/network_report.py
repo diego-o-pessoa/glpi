@@ -42,8 +42,13 @@ REPORT_INTERVAL_SECONDS = 15 * 60
 CONFIRM_DELAY_SECONDS = 2 * 60
 RESEND_SECONDS = 6 * 3600
 FIRST_DELAY_SECONDS = 90
-# Ativa Rede nao instalado no GLPI (404): tenta de novo so depois disto.
-ABSENT_BACKOFF_SECONDS = 6 * 3600
+# Ativa Rede nao instalado no GLPI (404): tenta de novo so depois disto. Era
+# 6 h: um 404 passageiro (plugin "a atualizar" no GLPI) deixava a maquina
+# instalada naquele momento fora do Ativa Rede por horas.
+ABSENT_BACKOFF_SECONDS = 30 * 60
+# Falhas seguidas (coleta ou envio) com nova tentativa em 2 min; depois disso
+# volta ao intervalo normal para nao rodar PowerShell + captura sem parar.
+MAX_QUICK_RETRIES = 3
 # O switch anuncia a cada ~30 s (padrao LLDP). 65 s cobre dois anuncios: com
 # 35 s, um anuncio atrasado deixava a captura vazia e o etl2pcap falhava.
 LLDP_WAIT_SECONDS = 65
@@ -107,6 +112,15 @@ $r | ConvertTo-Json -Depth 5 -Compress
 """
 
 Runner = Callable[..., subprocess.CompletedProcess]
+
+# GetAdaptersAddresses (iphlpapi): rede sem depender do PowerShell.
+AF_INET = 2
+IF_TYPE_ETHERNET = 6
+IF_TYPE_WIFI = 71
+IF_OPER_UP = 1
+GAA_FLAGS = 0x2 | 0x4 | 0x8 | 0x80  # sem anycast/multicast/DNS; com gateways
+# VPN/maquina virtual tambem se declaram "Ethernet": nunca sao a porta do switch.
+VIRTUAL_ADAPTER_RE = re.compile(r"TAP-Windows|Wintun|WireGuard|OpenVPN|VirtualBox|VMware|Fortinet|Cisco AnyConnect", re.I)
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +256,12 @@ def _output(completed: subprocess.CompletedProcess | None) -> str:
     return f"codigo {completed.returncode}: {text[:400]}"
 
 
+def _problem(problems: list[str] | None, text: str) -> None:
+    """Motivo de coleta incompleta, mostrado em Equipamentos no GLPI."""
+    if problems is not None:
+        problems.append(" ".join(text.split())[:200])
+
+
 def _run(runner: Runner, args: list[str], timeout: int = 60) -> subprocess.CompletedProcess | None:
     try:
         return runner(args, capture_output=True, timeout=timeout, creationflags=NO_WINDOW)
@@ -291,7 +311,8 @@ class CaptureLock:
 
 def capture_lldp(work_dir: Path, logger: logging.Logger, wait: Callable[[float], Any] = time.sleep,
                  runner: Runner = subprocess.run, seconds: int = LLDP_WAIT_SECONDS,
-                 lock_wait_seconds: float = 0, local_macs: frozenset[str] = frozenset()) -> dict[str, str] | None:
+                 lock_wait_seconds: float = 0, local_macs: frozenset[str] = frozenset(),
+                 problems: list[str] | None = None) -> dict[str, str] | None:
     """Escuta um quadro LLDP com o pktmon. None se nao houver (ou sem suporte).
 
     Uma coleta por vez (CaptureLock): o servico pula o ciclo se ja houver uma
@@ -301,6 +322,7 @@ def capture_lldp(work_dir: Path, logger: logging.Logger, wait: Callable[[float],
     """
     if not PKTMON.is_file():
         logger.info("Ativa Rede: pktmon nao existe neste Windows; porta do switch nao sera informada.")
+        _problem(problems, "pktmon nao existe neste Windows (porta do switch indisponivel)")
         return None
     if lock_wait_seconds > 0:
         logger.info("Ativa Rede: aguardando a coleta automatica em andamento (se houver) terminar...")
@@ -308,11 +330,15 @@ def capture_lldp(work_dir: Path, logger: logging.Logger, wait: Callable[[float],
         if not lock.acquired:
             logger.info("Ativa Rede: outra coleta do LLDP ja esta em andamento; esta foi pulada.")
             return None
-        return _capture_locked(work_dir, logger, wait, runner, seconds, local_macs)
+        found = _capture_locked(work_dir, logger, wait, runner, seconds, local_macs, problems)
+    if found is None and problems is not None and not any(p.startswith("pktmon") for p in problems):
+        _problem(problems, f"Cabo ligado, mas nenhum anuncio LLDP do switch em {seconds} s (switch sem LLDP?)")
+    return found
 
 
 def _capture_locked(work_dir: Path, logger: logging.Logger, wait: Callable[[float], Any],
-                    runner: Runner, seconds: int, local_macs: frozenset[str]) -> dict[str, str] | None:
+                    runner: Runner, seconds: int, local_macs: frozenset[str],
+                    problems: list[str] | None = None) -> dict[str, str] | None:
     work_dir.mkdir(parents=True, exist_ok=True)
     etl = work_dir / "lldp.etl"
     pcap = work_dir / "lldp.pcapng"
@@ -326,12 +352,14 @@ def _capture_locked(work_dir: Path, logger: logging.Logger, wait: Callable[[floa
         added = _run(runner, [pktmon, "filter", "add", "AtivaRede-LLDP", "-d", str(LLDP_ETHERTYPE)])
     if added is None or added.returncode != 0:
         logger.warning("Ativa Rede: pktmon recusou o filtro LLDP (%s); coleta da porta pulada.", _output(added))
+        _problem(problems, f"pktmon recusou o filtro LLDP: {_output(added)}")
         return None
 
     started = _run(runner, [pktmon, "start", "--capture", "--comp", "nics", "--pkt-size", "0", "-f", str(etl)])
     if started is None or started.returncode != 0:
         _run(runner, [pktmon, "filter", "remove"])
         logger.info("Ativa Rede: pktmon nao iniciou (%s).", _output(started))
+        _problem(problems, f"pktmon nao iniciou: {_output(started)}")
         return None
     try:
         wait(seconds)
@@ -343,15 +371,18 @@ def _capture_locked(work_dir: Path, logger: logging.Logger, wait: Callable[[floa
     try:
         if not etl.is_file():
             logger.warning("Ativa Rede: o pktmon nao gravou a captura em %s (stop: %s).", etl, _output(stopped))
+            _problem(problems, f"pktmon nao gravou a captura: {_output(stopped)}")
             return None
         converted = _run(runner, [pktmon, "etl2pcap", str(etl), "-o", str(pcap)], timeout=120)
         if converted is None or converted.returncode != 0 or not pcap.is_file():
             logger.warning("Ativa Rede: nao foi possivel converter a captura do pktmon (%s; etl com %d bytes).",
                            _output(converted), etl.stat().st_size)
+            _problem(problems, f"pktmon nao converteu a captura: {_output(converted)}")
             return None
         return first_lldp(read_pcapng_frames(pcap.read_bytes()), local_macs)
     except OSError as exc:
         logger.warning("Ativa Rede: falha ao ler a captura: %s", exc)
+        _problem(problems, f"pktmon: falha ao ler a captura: {exc}")
         return None
     finally:
         for path in (etl, pcap):
@@ -371,8 +402,9 @@ def _unlink(path: Path) -> None:
 # Adaptador, BIOS e monitores
 # ---------------------------------------------------------------------------
 
-def collect_system(logger: logging.Logger, runner: Runner = subprocess.run) -> dict[str, Any] | None:
-    """Adaptador, BIOS e monitores. None = leitura falhou: o ciclo e adiado.
+def collect_system(logger: logging.Logger, runner: Runner = subprocess.run,
+                   problems: list[str] | None = None) -> dict[str, Any] | None:
+    """Adaptador, BIOS e monitores. None = leitura falhou (motivo em problems).
 
     Nunca devolve um resultado vazio "de mentira": um relatorio sem monitores
     faria o GLPI marcar os monitores da mesa como ausentes.
@@ -382,23 +414,122 @@ def collect_system(logger: logging.Logger, runner: Runner = subprocess.run) -> d
         completed = runner(args, capture_output=True, timeout=POWERSHELL_TIMEOUT_SECONDS, creationflags=NO_WINDOW)
     except subprocess.TimeoutExpired:
         logger.warning("Ativa Rede: PowerShell nao respondeu em %d s (maquina ocupada?); coleta adiada.", POWERSHELL_TIMEOUT_SECONDS)
+        _problem(problems, f"PowerShell nao respondeu em {POWERSHELL_TIMEOUT_SECONDS} s (monitores nao lidos)")
         return None
     except (OSError, subprocess.SubprocessError) as exc:
         logger.warning("Ativa Rede: PowerShell nao executou (%s); coleta adiada.", exc)
+        _problem(problems, f"PowerShell nao executou: {exc} (bloqueado pelo antivirus?)")
         return None
     if completed.returncode != 0:
         logger.warning("Ativa Rede: PowerShell falhou ao ler adaptador/monitores (%s); coleta adiada.", _output(completed))
+        _problem(problems, f"PowerShell terminou com codigo {completed.returncode}: {_output(completed)}")
         return None
     raw = completed.stdout.decode("utf-8", errors="replace") if isinstance(completed.stdout, bytes) else str(completed.stdout)
     try:
         data = json.loads(raw.strip() or "{}")
     except ValueError:
         logger.warning("Ativa Rede: resposta inesperada do PowerShell; coleta adiada.")
+        _problem(problems, "PowerShell devolveu uma resposta ilegivel: " + raw.strip()[:120])
         return None
     if not isinstance(data, dict):
         logger.warning("Ativa Rede: resposta inesperada do PowerShell; coleta adiada.")
+        _problem(problems, "PowerShell devolveu uma resposta inesperada")
         return None
     return data
+
+
+def native_network() -> dict[str, Any] | None:
+    """Adaptador principal e MACs pela API do Windows (GetAdaptersAddresses).
+
+    Mesmo formato do PowerShell ({adapter, macs}). Usado quando o PowerShell
+    falha (lento, travado ou bloqueado pelo antivirus): a maquina ainda manda
+    rede e porta do switch. None se a propria API falhar.
+    """
+    import ctypes
+
+    class SocketAddress(ctypes.Structure):
+        _fields_ = [("sockaddr", ctypes.c_void_p), ("length", ctypes.c_int)]
+
+    class Unicast(ctypes.Structure):
+        pass
+
+    Unicast._fields_ = [("length", ctypes.c_ulong), ("flags", ctypes.c_ulong),
+                        ("next", ctypes.POINTER(Unicast)), ("address", SocketAddress)]
+
+    class Gateway(ctypes.Structure):
+        pass
+
+    Gateway._fields_ = [("length", ctypes.c_ulong), ("reserved", ctypes.c_ulong),
+                        ("next", ctypes.POINTER(Gateway)), ("address", SocketAddress)]
+
+    class Adapter(ctypes.Structure):
+        pass
+
+    Adapter._fields_ = [
+        ("length", ctypes.c_ulong), ("if_index", ctypes.c_ulong),
+        ("next", ctypes.POINTER(Adapter)), ("adapter_name", ctypes.c_char_p),
+        ("first_unicast", ctypes.POINTER(Unicast)), ("first_anycast", ctypes.c_void_p),
+        ("first_multicast", ctypes.c_void_p), ("first_dns", ctypes.c_void_p),
+        ("dns_suffix", ctypes.c_wchar_p), ("description", ctypes.c_wchar_p),
+        ("friendly_name", ctypes.c_wchar_p), ("physical_address", ctypes.c_ubyte * 8),
+        ("physical_address_length", ctypes.c_ulong), ("flags", ctypes.c_ulong),
+        ("mtu", ctypes.c_ulong), ("if_type", ctypes.c_ulong), ("oper_status", ctypes.c_int),
+        ("ipv6_if_index", ctypes.c_ulong), ("zone_indices", ctypes.c_ulong * 16),
+        ("first_prefix", ctypes.c_void_p), ("transmit_speed", ctypes.c_uint64),
+        ("receive_speed", ctypes.c_uint64), ("first_wins", ctypes.c_void_p),
+        ("first_gateway", ctypes.POINTER(Gateway)),
+    ]
+
+    def ipv4(address: SocketAddress) -> str:
+        if not address.sockaddr or address.length < 8:
+            return ""
+        raw = ctypes.string_at(address.sockaddr, 8)
+        if struct.unpack_from("<H", raw)[0] != AF_INET:
+            return ""
+        return ".".join(str(b) for b in raw[4:8])
+
+    try:
+        iphlpapi = ctypes.WinDLL("iphlpapi")
+        size = ctypes.c_ulong(16 * 1024)
+        for _ in range(3):
+            buffer = ctypes.create_string_buffer(size.value)
+            result = iphlpapi.GetAdaptersAddresses(AF_INET, GAA_FLAGS, None, buffer, ctypes.byref(size))
+            if result != 111:  # ERROR_BUFFER_OVERFLOW: size ja foi ajustado
+                break
+        if result != 0:
+            return None
+    except (OSError, AttributeError):
+        return None
+
+    macs: list[str] = []
+    candidates: list[tuple[int, dict[str, Any]]] = []
+    node = ctypes.cast(buffer, ctypes.POINTER(Adapter))
+    while node:
+        item = node.contents
+        mac = ""
+        if item.physical_address_length == 6:
+            mac = "-".join(f"{b:02X}" for b in item.physical_address[:6])
+            macs.append(mac)
+        gateway, ip = "", ""
+        if item.first_gateway:
+            gateway = ipv4(item.first_gateway.contents.address)
+        if item.first_unicast:
+            ip = ipv4(item.first_unicast.contents.address)
+        virtual = VIRTUAL_ADAPTER_RE.search(item.description or "") is not None
+        if item.oper_status == IF_OPER_UP and gateway and not virtual \
+                and item.if_type in (IF_TYPE_ETHERNET, IF_TYPE_WIFI):
+            wired = item.if_type == IF_TYPE_ETHERNET
+            candidates.append((0 if wired else 1, {
+                "name": item.friendly_name or "",
+                "description": item.description or "",
+                "media": "802.3" if wired else "Native 802.11",
+                "mac": mac,
+                "ip": ip,
+            }))
+        node = item.next
+    # Cabo antes de Wi-Fi: e o que tem porta de switch.
+    candidates.sort(key=lambda c: c[0])
+    return {"adapter": candidates[0][1] if candidates else None, "macs": macs}
 
 
 def link_type(adapter: dict[str, Any] | None) -> str:
@@ -460,10 +591,15 @@ def local_mac_set(system: dict[str, Any]) -> frozenset[str]:
 
 
 def build_report(machine_id: str, hostname: str, guardian_version: str, system: dict[str, Any],
-                 lldp: dict[str, str] | None) -> dict[str, Any]:
+                 lldp: dict[str, str] | None, problems: list[str] | None = None,
+                 monitors_unknown: bool = False) -> dict[str, Any]:
     adapter = system.get("adapter") if isinstance(system.get("adapter"), dict) else None
     link = link_type(adapter)
     return {
+        # Parcial: o GLPI nao mexe nos monitores (nao e "sem monitores").
+        "monitors_unknown": monitors_unknown,
+        # Sempre enviado (vazio quando esta tudo certo): limpa o aviso no GLPI.
+        "problems": list(problems or [])[:5],
         "machine_id": machine_id,
         "hostname": hostname,
         "guardian_version": guardian_version,
@@ -481,15 +617,32 @@ def build_report(machine_id: str, hostname: str, guardian_version: str, system: 
 def collect_report(machine_id: str, hostname: str, guardian_version: str, work_dir: Path,
                    logger: logging.Logger, wait: Callable[[float], Any] = time.sleep,
                    lock_wait_seconds: float = 0) -> dict[str, Any] | None:
-    """Relatorio completo, ou None se a leitura do Windows falhou (adiar)."""
-    system = collect_system(logger)
-    if system is None:
-        return None
+    """Relatorio da maquina, ou None se nem a rede pode ser lida (adiar).
+
+    Sem PowerShell (lento, travado ou bloqueado), o relatorio sai parcial:
+    rede pela API do Windows e porta pelo pktmon, sem monitores, com o motivo.
+    Antes nada era enviado e a maquina nunca aparecia no Ativa Rede.
+    """
+    problems: list[str] = []
+    system = collect_system(logger, problems=problems)
+    partial = system is None
+    if partial or not isinstance(system.get("adapter"), dict):
+        native = native_network()
+        if native is None and partial:
+            return None
+        if partial:
+            system = {"adapter": native["adapter"], "macs": native["macs"], "bios": "", "monitors": []}
+            logger.info("Ativa Rede: enviando relatorio parcial (rede sem PowerShell, monitores nao lidos).")
+        elif native is not None:
+            # Get-NetIPConfiguration falhou sozinho: o resto do PowerShell vale.
+            system["adapter"] = native["adapter"]
+            known = system.get("macs")
+            system["macs"] = ([known] if isinstance(known, str) else list(known or [])) + native["macs"]
     adapter = system.get("adapter") if isinstance(system.get("adapter"), dict) else None
     local_macs = local_mac_set(system)
-    lldp = capture_lldp(work_dir, logger, wait=wait, lock_wait_seconds=lock_wait_seconds, local_macs=local_macs) \
-        if link_type(adapter) == "wired" else None
-    return build_report(machine_id, hostname, guardian_version, system, lldp)
+    lldp = capture_lldp(work_dir, logger, wait=wait, lock_wait_seconds=lock_wait_seconds, local_macs=local_macs,
+                        problems=problems) if link_type(adapter) == "wired" else None
+    return build_report(machine_id, hostname, guardian_version, system, lldp, problems, monitors_unknown=partial)
 
 
 # ---------------------------------------------------------------------------
@@ -567,8 +720,10 @@ class NetworkReporter(threading.Thread):
         # "Atualizar agora" na planta: acorda o laco e envia mesmo sem mudanca.
         self.wake = threading.Event()
         self.force_send = False
-        # Coleta ou envio falhou: tenta de novo em 2 min, nao em 15.
+        # Coleta ou envio falhou: tenta de novo em 2 min, nao em 15 (ate
+        # MAX_QUICK_RETRIES vezes seguidas; depois, no intervalo normal).
         self.retry_soon = False
+        self.failures = 0
 
     def request_now(self) -> None:
         self.force_send = True
@@ -605,7 +760,9 @@ class NetworkReporter(threading.Thread):
                 self.cycle()
             except Exception:  # noqa: BLE001 - nunca derruba o servico
                 self.logger.exception("Ativa Rede: falha inesperada no ciclo.")
-            soon = self.confirm_next or self.retry_soon
+                self.retry_soon = True
+            self.failures = self.failures + 1 if self.retry_soon else 0
+            soon = self.confirm_next or (self.retry_soon and self.failures <= MAX_QUICK_RETRIES)
             self._sleep(CONFIRM_DELAY_SECONDS if soon else REPORT_INTERVAL_SECONDS)
 
     def cycle(self) -> None:
@@ -642,7 +799,8 @@ class NetworkReporter(threading.Thread):
         except ReportRejected as exc:
             if exc.status == 404:
                 self.absent_until = time.monotonic() + ABSENT_BACKOFF_SECONDS
-                self.logger.info("Ativa Rede nao esta instalado no GLPI; nova tentativa em 6 h.")
+                self.logger.info("Ativa Rede nao respondeu no GLPI (404); nova tentativa em %d min.",
+                                 ABSENT_BACKOFF_SECONDS // 60)
             else:
                 self.retry_soon = True
                 self.force_send = self.force_send or forced
@@ -653,10 +811,14 @@ class NetworkReporter(threading.Thread):
         self.confirm_next = changed
         self.last_signature = current
         self.last_sent = time.monotonic()
+        # Parcial: tenta a leitura completa (monitores) de novo em breve.
+        self.retry_soon = bool(payload.get("monitors_unknown"))
         lldp = payload["network"]["lldp"]
         self.logger.info(
-            "Ativa Rede: posicao enviada (%s%s, %d monitor(es)).",
+            "Ativa Rede: posicao enviada (%s%s, %s).",
             payload["network"]["link"],
             f", switch {lldp.get('mgmt_ip') or lldp.get('chassis_id')} porta {lldp.get('port_description') or lldp.get('port_id')}" if lldp else "",
-            len(payload["monitors"]),
+            "monitores nao lidos" if payload.get("monitors_unknown") else f"{len(payload['monitors'])} monitor(es)",
         )
+        if payload.get("problems"):
+            self.logger.info("Ativa Rede: avisos da coleta: %s", " | ".join(payload["problems"]))

@@ -20,6 +20,7 @@ final class Settings
     public const TABLE_MACHINES = 'glpi_plugin_ativarede_machines';
     public const TABLE_MONITORS = 'glpi_plugin_ativarede_monitors';
     public const TABLE_EVENTS   = 'glpi_plugin_ativarede_events';
+    public const TABLE_REJECTIONS = 'glpi_plugin_ativarede_rejections';
 
     /** Tabela do Ativa Guardian (ultimo heartbeat = maquina ligada agora). */
     public const TABLE_GUARDIAN_MACHINES = 'glpi_plugin_ativaguardian_machines';

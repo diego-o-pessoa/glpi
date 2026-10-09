@@ -30,6 +30,9 @@
                         <td>
                             <span class="badge {{ m.online ? 'bg-green' : 'bg-secondary' }} me-1" title="{{ m.online ? 'Ligada' : 'Sem contato agora' }}">&nbsp;</span>
                             {% if m.computer_url %}<a href="{{ m.computer_url }}">{{ m.label }}</a>{% else %}{{ m.label }} <span class="text-muted small">· não vinculado ao GLPI</span>{% endif %}
+                            {% if m.diagnostic %}
+                                <div class="text-warning small" title="{{ m.diagnostic }}"><i class="ti ti-alert-circle me-1"></i>Coleta incompleta: {{ m.diagnostic }}</div>
+                            {% endif %}
                         </td>
                         <td>{{ m.user }}{% if m.group %}<div class="text-muted small">{{ m.group }}</div>{% endif %}</td>
                         <td>{{ m.desk ?: '—' }}</td>
@@ -55,8 +58,20 @@
     </div>
 
     {% if missing|length %}
-        <div class="card mb-3 border-warning">
-            <div class="card-header"><h3 class="card-title"><i class="ti ti-alert-triangle me-2 text-warning"></i>Com Ativa Guardian, mas sem posição ({{ missing|length }})</h3></div>
+        <div class="card mb-3 border-warning" id="missing">
+            <div class="card-header">
+                <h3 class="card-title"><i class="ti ti-alert-triangle me-2 text-warning"></i>Com Ativa Guardian, mas sem posição ({{ missing|length }})</h3>
+                {% if can_manage %}
+                    <form method="post" action="{{ self_url }}" class="ms-auto">
+                        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="collect">
+                        <button type="submit" class="btn btn-sm btn-outline-primary"
+                                title="Pede às máquinas ligadas que enviem a posição agora (inclusive as que estão esperando após um erro).">
+                            <i class="ti ti-refresh me-1"></i>Pedir envio agora
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
             <div class="table-responsive">
                 <table class="table table-sm table-vcenter card-table">
                     <thead><tr><th>Computador</th><th>Guardian</th><th>Último contato</th><th>Motivo provável</th></tr></thead>
