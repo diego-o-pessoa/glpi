@@ -41,8 +41,11 @@ $state = static function (Ticket $ticket): array {
     $closed = in_array($status, Ticket::getClosedStatusArray(), true);
     $solved = in_array($status, Ticket::getSolvedStatusArray(), true);
 
-    $input = ['itemtype' => Ticket::class, 'items_id' => $id];
-    $canSolve = !$closed && !$solved && (new ITILSolution())->can(-1, CREATE, $input);
+    // canSolve() e a regra do proprio chamado (direito de atualizar ou ser o
+    // tecnico atribuido, e o ciclo de vida do perfil permitir "solucionado").
+    // A checagem generica do ITILSolution nao serve aqui: para um item novo
+    // ela nao enxerga o chamado e sempre devolve "nao pode".
+    $canSolve = !$closed && !$solved && $ticket->canSolve();
     $canClose = !$closed && $ticket->canUpdateItem() && Ticket::isAllowedStatus($status, Ticket::CLOSED);
 
     return ['status' => $status, 'solved' => $solved, 'closed' => $closed, 'can_solve' => (bool) $canSolve, 'can_close' => (bool) $canClose];

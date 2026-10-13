@@ -277,6 +277,7 @@
             credentials: 'same-origin',
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
         }).then(function (response) {
+            if (!response.ok) { throw new Error('HTTP ' + response.status); }
             return response.json();
         }).then(function (state) {
             if (!state || !state.ok || state.closed || (!state.can_solve && !state.can_close)) {
@@ -298,7 +299,10 @@
             } else {
                 (footer.querySelector('.buttons-bar') || footer).appendChild(button);
             }
-        }).catch(function () { /* sem o botao a tela segue como a do GLPI */ });
+        }).catch(function (error) {
+            // Sem o botao a tela segue como a do GLPI; o motivo fica no console.
+            if (window.console) { console.warn('Ativa Central: botao Finalizar indisponivel.', error); }
+        });
     }
 
     function finishDialog(id, state) {

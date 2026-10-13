@@ -118,36 +118,67 @@ body.central .search-card .search-pager {
 
 /* ------------------------------------------- mini painel acima das listas */
 
-/* Os blocos trazem a cor embutida no HTML; a camada branca por cima deixa
-   cada um num tom pastel da propria cor, com o texto escuro. */
-html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card {
+/* Blocos de contagem (Chamados novos, pendentes...) como os indicadores da
+   Visao geral: cartao branco, numero grande, icone num selo e uma faixa na
+   cor do bloco. A cor vem embutida no HTML do GLPI (cor do texto do bloco):
+   "currentColor" a reaproveita na faixa e no selo, sem JavaScript. */
+html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card.big-number {
     overflow: hidden;
-    border: 1px solid rgba(26, 35, 64, 0.08) !important;
+    padding: 12px 14px 10px !important;
+    border: 1px solid #e9ecf4 !important;
+    border-bottom: 3px solid currentColor !important;
     border-radius: 14px !important;
-    background-image: linear-gradient(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.8));
-    box-shadow: none;
-    color: var(--ac-ink) !important;
+    background-color: #fff !important;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 10px 24px -18px rgba(16, 24, 40, 0.2);
     transition: transform 0.3s var(--ac-ease), box-shadow 0.3s;
 }
 
-html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card:hover {
-    box-shadow: 0 14px 24px -18px rgba(26, 35, 64, 0.5);
+html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card.big-number:hover {
+    box-shadow: 0 2px 4px rgba(16, 24, 40, 0.05), 0 20px 30px -20px rgba(16, 24, 40, 0.4);
     transform: translateY(-2px);
 }
 
-html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card .number {
-    color: var(--ac-ink) !important;
-    font-weight: 800;
-    letter-spacing: -0.02em;
+html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card.big-number .content,
+html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card.big-number .formatted-number .number,
+html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card.big-number .formatted-number .suffix {
+    color: #1a2340 !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
 }
 
-html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card .label {
-    color: #55607f !important;
+html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card.big-number .label {
+    margin-top: 4px;
+    color: #7a85a3 !important;
+    font-size: 12.5px;
     font-weight: 600;
 }
 
-html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card .main-icon {
-    color: rgba(26, 35, 64, 0.45) !important;
+body.central .dashboard.mini .card.big-number .main-icon {
+    top: 10px !important;
+    bottom: auto !important;
+    inset-inline-end: 10px !important;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    font-size: 16px !important;
+    opacity: 1;
+}
+
+/* O cartao em volta dos blocos some: eles ficam direto sobre o fundo. */
+body.central .search-container .dashboard.mini,
+body.central .dashboard.mini {
+    background: transparent;
+}
+
+body.central .card:has(> .dashboard.mini),
+body.central .card:has(> .card-body > .dashboard.mini) {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
 }
 
 /* --------------------------------------------------------- ficha do chamado */
@@ -207,6 +238,172 @@ body.central #itil-footer {
 
 body.central #itil-footer .buttons-bar {
     align-items: center;
+}
+
+/* ------------------------------------------- ficha: cabecalho, abas, campos */
+
+/* Titulo do item (ex.: "Nao consigo entrar no onedrive (8)"). */
+body.central .card-header.main-header .card-title {
+    color: var(--tblr-body-color);
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+}
+
+/* Abas laterais das fichas (Chamado, Estatisticas, Aprovacoes...): viram um
+   menu de botoes arredondados, sem as linhas entre os itens. Vale para todas
+   as fichas do GLPI (chamado, computador, usuario...). */
+body.central .card-tabs.vertical > .nav-tabs,
+body.central .card-tabs.vertical > #tabspanel.nav-tabs {
+    gap: 2px;
+    padding: 8px;
+    border: 0 !important;
+    background: transparent;
+}
+
+body.central .card-tabs.vertical > #tabspanel.nav-tabs .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 3px !important;
+    padding: 9px 12px !important;
+    border: 0 !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+    color: var(--ac-muted) !important;
+    font-size: 13.5px;
+    font-weight: 500;
+    transition: background 0.2s, color 0.2s, transform 0.25s var(--ac-ease);
+}
+
+body.central .card-tabs.vertical > #tabspanel.nav-tabs .nav-link:hover {
+    background: rgba(var(--ac-blue-rgb), 0.07) !important;
+    color: var(--ac-blue) !important;
+    transform: translateX(2px);
+}
+
+body.central .card-tabs.vertical > #tabspanel.nav-tabs .nav-link.active {
+    background: linear-gradient(95deg, #4a6cf7 0%, #5d7dfb 100%) !important;
+    box-shadow: 0 8px 16px -10px rgba(var(--ac-blue-rgb), 0.9);
+    color: #fff !important;
+    font-weight: 700;
+}
+
+body.central .card-tabs.vertical > #tabspanel.nav-tabs .nav-link.active .badge {
+    background: rgba(255, 255, 255, 0.22) !important;
+    color: #fff !important;
+}
+
+body.central .card-tabs.vertical > #tabspanel.nav-tabs .nav-link .badge {
+    border-radius: 999px;
+    font-weight: 700;
+}
+
+/* Area de conteudo das fichas: cartao arredondado. */
+body.central .card-tabs.vertical > .tab-content {
+    overflow: hidden;
+    border: 1px solid var(--ac-line) !important;
+    border-radius: 16px !important;
+    background: var(--tblr-bg-surface, #fff);
+    box-shadow: var(--ac-shadow);
+}
+
+/* Linha do tempo com mais respiro. */
+body.central .itil-timeline {
+    padding: 8px 6px 0;
+}
+
+body.central .timeline-item {
+    margin-bottom: 18px !important;
+}
+
+body.central .timeline-item .timeline-content .card-body {
+    padding: 14px 18px !important;
+}
+
+body.central .timeline-item .timeline-content .read-only-content {
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+/* Descricao do chamado: destaque com faixa azul. */
+html:root[data-glpi-theme-dark="0"] body.central .timeline-item.ITILContent .timeline-content {
+    border-left: 4px solid var(--ac-blue);
+}
+
+/* Solucao: destaque com faixa verde. */
+html:root[data-glpi-theme-dark="0"] body.central .timeline-item.ITILSolution .timeline-content {
+    border-left: 4px solid #2fb67c;
+}
+
+/* Painel de campos (direita): secoes com titulo marcado e selo no icone. */
+body.central #itil-data.accordion .accordion-item {
+    border-color: var(--ac-line);
+}
+
+body.central #itil-data.accordion .accordion-button {
+    gap: 10px;
+    padding: 14px 18px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--tblr-body-color);
+    font-size: 13.5px;
+    font-weight: 700;
+}
+
+body.central #itil-data.accordion .accordion-button .item-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    margin: 0;
+    border-radius: 10px;
+    background: rgba(var(--ac-blue-rgb), 0.1);
+    color: var(--ac-blue);
+    font-size: 17px;
+}
+
+body.central #itil-data.accordion .accordion-body .form-label,
+body.central #itil-data.accordion .accordion-body .col-form-label {
+    color: var(--ac-muted);
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+/* Rodape: barra branca com sombra para cima; "Salvar" e acoes alinhados. */
+body.central #itil-footer {
+    box-shadow: 0 -10px 24px -20px rgba(16, 24, 40, 0.35);
+}
+
+body.central #itil-footer .buttons-bar .btn {
+    border-radius: 11px;
+    font-weight: 600;
+}
+
+/* ------------------------------------------------ listas: detalhes das linhas */
+
+/* Titulo do item (primeiro link da linha) em destaque. */
+body.central .search-results > tbody > tr > td a[id^="Ticket"],
+body.central .search-results > tbody > tr > td:nth-child(3) a {
+    color: var(--tblr-body-color);
+    font-weight: 700;
+}
+
+body.central .search-results > tbody > tr:hover > td a[id^="Ticket"],
+body.central .search-results > tbody > tr:hover > td:nth-child(3) a {
+    color: var(--ac-blue);
+}
+
+/* Entidade e outras etiquetas das linhas. */
+body.central .search-results .badge {
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+/* Botao "Acoes" (acoes em massa). */
+body.central .search-card .search-header .btn {
+    border-radius: 10px;
 }
 
 /* -------------------------------------------------- "Finalizar chamado" */
