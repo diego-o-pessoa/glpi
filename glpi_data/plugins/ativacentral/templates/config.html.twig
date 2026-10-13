@@ -1,0 +1,66 @@
+{# Opcoes do Ativa Central. Usa so o visual padrao do GLPI: precisa funcionar
+   igual com o visual novo ligado ou desligado. #}
+<div class="container-fluid" style="max-width: 860px">
+    <form method="post" action="{{ self_url }}" class="card mb-3">
+        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+        <div class="card-header">
+            <h3 class="card-title"><i class="ti ti-layout-dashboard me-2"></i>Ativa Central</h3>
+        </div>
+        <div class="card-body">
+            <label class="form-check form-switch mb-1">
+                <input type="hidden" name="enabled" value="0">
+                <input class="form-check-input" type="checkbox" name="enabled" value="1" {{ s.enabled == '1' ? 'checked' : '' }}>
+                <span class="form-check-label fw-bold">Usar o novo visual (Ativa Central)</span>
+            </label>
+            <div class="text-muted small mb-4">
+                Ligado: todos os usuários da interface de administração veem a barra lateral, a página inicial e as telas de
+                módulo novas. Desligado: o GLPI volta exatamente ao visual original para todos. O autoatendimento não muda.
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="ac-period">Período inicial do painel</label>
+                    <select class="form-select" id="ac-period" name="period_days">
+                        {% for days in periods %}
+                            <option value="{{ days }}" {{ s.period_days == days ? 'selected' : '' }}>Últimos {{ days }} dias</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Cada pessoa pode trocar o período na própria tela.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="ac-fresh">Inventário atualizado (dias)</label>
+                    <input class="form-control" id="ac-fresh" type="number" min="1" max="365" name="inventory_fresh_days" value="{{ s.inventory_fresh_days }}">
+                    <div class="form-text">Computador com inventário mais antigo que isto conta como desatualizado.</div>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy me-1"></i>Salvar</button>
+            {% if s.enabled == '1' %}
+                <a class="btn btn-outline-secondary" href="{{ home_url }}"><i class="ti ti-layout-dashboard me-1"></i>Abrir a Visão geral</a>
+            {% endif %}
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="ti ti-user-cog me-2"></i>Só para mim, nesta sessão</h3>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-3">
+                Para comparar ou conferir uma tela no visual original sem desligar para todos. Vale até você sair do GLPI.
+            </p>
+            {% if classic %}
+                <a class="btn btn-primary" href="{{ new_url }}"><i class="ti ti-sparkles me-1"></i>Voltar ao novo visual</a>
+            {% elseif active %}
+                <a class="btn btn-outline-secondary" href="{{ classic_url }}"><i class="ti ti-arrow-back-up me-1"></i>Usar o visual clássico do GLPI</a>
+            {% else %}
+                <span class="text-muted">O novo visual está desligado para todos.</span>
+            {% endif %}
+            <div class="form-text mt-3">
+                Saída de emergência, se alguma tela do novo visual não abrir:
+                <code>{{ classic_url }}</code>
+            </div>
+        </div>
+    </div>
+</div>

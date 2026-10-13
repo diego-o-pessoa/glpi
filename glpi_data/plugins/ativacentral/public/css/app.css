@@ -1,0 +1,1075 @@
+/*
+ * Ativa Central - conteudo das telas proprias: "Visao geral" e telas de
+ * modulo (cartoes). Desenhado por public/js/app.js.
+ */
+
+.ac-app {
+    --ac-blue: #4a6cf7;
+    --ac-blue-rgb: 74, 108, 247;
+    --ac-green: #2fb67c;
+    --ac-green-rgb: 47, 182, 124;
+    --ac-orange: #f59f32;
+    --ac-orange-rgb: 245, 159, 50;
+    --ac-violet: #8b6cf6;
+    --ac-violet-rgb: 139, 108, 246;
+    --ac-teal: #17a9b8;
+    --ac-teal-rgb: 23, 169, 184;
+    --ac-red: #ef4d5a;
+    --ac-red-rgb: 239, 77, 90;
+    --ac-ink: #1a2340;
+    --ac-muted: #7a85a3;
+    --ac-line: #e9ecf4;
+    --ac-track: #eef1f8;
+    --ac-surface: #fff;
+    --ac-radius: 16px;
+    --ac-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 12px 30px -20px rgba(16, 24, 40, 0.22);
+    --ac-shadow-hover: 0 2px 4px rgba(16, 24, 40, 0.05), 0 22px 40px -22px rgba(var(--ac-blue-rgb), 0.45);
+    --ac-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+    max-width: 1680px;
+    margin: 0 auto;
+    padding: 4px 12px 32px;
+    color: var(--ac-ink);
+    font-feature-settings: "tnum" 1;
+}
+
+html[data-glpi-theme-dark="1"] .ac-app {
+    --ac-ink: var(--tblr-body-color);
+    --ac-muted: var(--tblr-secondary);
+    --ac-line: var(--tblr-border-color);
+    --ac-track: rgba(255, 255, 255, 0.08);
+    --ac-surface: var(--tblr-bg-surface);
+}
+
+.ac-app a {
+    text-decoration: none;
+}
+
+/* ---------------------------------------------------------------- cabecalho */
+
+.ac-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px 24px;
+    margin-bottom: 22px;
+}
+
+.ac-eyebrow {
+    margin-bottom: 8px;
+    color: var(--ac-blue);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.ac-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    color: var(--ac-ink);
+    font-size: 27px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+}
+
+.ac-title .ac-spark {
+    display: inline-block;
+    color: var(--ac-ink);
+    font-size: 20px;
+    animation: ac-twinkle 3.2s ease-in-out infinite;
+}
+
+.ac-subtitle {
+    margin: 8px 0 0;
+    color: var(--ac-muted);
+    font-size: 14px;
+}
+
+.ac-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.ac-btn,
+.ac-select {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 42px;
+    padding: 0 16px;
+    border: 1px solid var(--ac-line);
+    border-radius: 12px;
+    background: var(--ac-surface);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    color: var(--ac-ink);
+    cursor: pointer;
+    font-size: 13.5px;
+    font-weight: 600;
+    line-height: 1;
+    transition: transform 0.25s var(--ac-ease), box-shadow 0.25s, border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+.ac-btn:hover,
+.ac-select:hover {
+    border-color: rgba(var(--ac-blue-rgb), 0.5);
+    box-shadow: 0 10px 22px -14px rgba(var(--ac-blue-rgb), 0.8);
+    color: var(--ac-blue);
+    transform: translateY(-1px);
+}
+
+.ac-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.ac-btn.is-primary {
+    border-color: transparent;
+    background: linear-gradient(95deg, #4a6cf7 0%, #5d7dfb 100%);
+    box-shadow: 0 12px 22px -12px rgba(var(--ac-blue-rgb), 0.95);
+    color: #fff;
+}
+
+.ac-btn.is-primary:hover {
+    color: #fff;
+    filter: brightness(1.06);
+}
+
+.ac-btn.is-small {
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 10px;
+    font-size: 12px;
+}
+
+.ac-btn i {
+    font-size: 16px;
+}
+
+.ac-btn.is-loading i {
+    animation: ac-spin 0.8s linear infinite;
+}
+
+/* O GLPI estiliza todo <select> das telas antigas: aqui vale o nosso. */
+.ac-app select.ac-select {
+    width: auto;
+    min-width: 0;
+    padding: 0 36px 0 16px !important;
+    border: 1px solid var(--ac-line) !important;
+    border-radius: 12px !important;
+    appearance: none;
+    background-color: var(--ac-surface) !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a85a3' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+    background-position: right 14px center !important;
+    background-repeat: no-repeat !important;
+    background-size: 12px 12px !important;
+    color: var(--ac-ink) !important;
+    font-family: inherit;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    line-height: 1 !important;
+}
+
+.ac-app select.ac-select:focus {
+    border-color: rgba(var(--ac-blue-rgb), 0.55) !important;
+    box-shadow: 0 0 0 4px rgba(var(--ac-blue-rgb), 0.12);
+    outline: none;
+}
+
+.ac-filter {
+    position: relative;
+}
+
+.ac-filter i {
+    position: absolute;
+    top: 50%;
+    left: 13px;
+    color: var(--ac-muted);
+    font-size: 16px;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+/* Com !important: o GLPI estiliza todo <input> das telas antigas. */
+.ac-app .ac-filter input {
+    width: 240px;
+    height: 42px;
+    margin: 0;
+    padding: 0 14px 0 40px !important;
+    border: 1px solid var(--ac-line) !important;
+    border-radius: 12px !important;
+    background: var(--ac-surface) !important;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    color: var(--ac-ink) !important;
+    font-family: inherit;
+    font-size: 13.5px !important;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ac-app .ac-filter input:focus {
+    border-color: rgba(var(--ac-blue-rgb), 0.55) !important;
+    box-shadow: 0 0 0 4px rgba(var(--ac-blue-rgb), 0.12);
+}
+
+/* ------------------------------------------------------------------ cartoes */
+
+.ac-panel {
+    position: relative;
+    border: 1px solid var(--ac-line);
+    border-radius: var(--ac-radius);
+    background: var(--ac-surface);
+    box-shadow: var(--ac-shadow);
+}
+
+.ac-panel-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 20px 22px 0;
+}
+
+.ac-panel-title {
+    margin: 0;
+    color: var(--ac-ink);
+    font-size: 15.5px;
+    font-weight: 700;
+}
+
+.ac-panel-sub {
+    margin: 5px 0 0;
+    color: var(--ac-muted);
+    font-size: 12px;
+}
+
+.ac-panel-body {
+    padding: 16px 22px 20px;
+}
+
+/* Entrada em cascata. */
+.ac-rise {
+    animation: ac-rise 0.6s var(--ac-ease) both;
+    animation-delay: calc(var(--ac-i, 0) * 60ms);
+}
+
+.ac-app.is-quiet .ac-rise,
+.ac-app.is-quiet .ac-bar > span,
+.ac-app.is-quiet .ac-chart-line,
+.ac-app.is-quiet .ac-chart-area,
+.ac-app.is-quiet .ac-chart-dot {
+    animation: none !important;
+    transition: none !important;
+}
+
+.ac-grid {
+    display: grid;
+    gap: 18px;
+    margin-bottom: 18px;
+}
+
+.ac-grid.is-kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ac-grid.is-main {
+    grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+}
+
+.ac-grid.is-three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* ---------------------------------------------------------------------- KPI */
+
+.ac-kpi {
+    display: block;
+    padding: 20px 20px 18px;
+    color: inherit;
+    transition: transform 0.35s var(--ac-ease), box-shadow 0.35s, border-color 0.25s;
+}
+
+a.ac-kpi:hover {
+    border-color: rgba(var(--ac-tone-rgb), 0.35);
+    box-shadow: 0 2px 4px rgba(16, 24, 40, 0.05), 0 24px 40px -24px rgba(var(--ac-tone-rgb), 0.6);
+    color: inherit;
+    transform: translateY(-3px);
+}
+
+.ac-kpi-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.ac-kpi-label {
+    padding-top: 4px;
+    color: var(--ac-muted);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.ac-tile {
+    display: grid;
+    place-items: center;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    background: rgba(var(--ac-tone-rgb), 0.13);
+    color: var(--ac-tone);
+    font-size: 19px;
+    transition: transform 0.35s var(--ac-ease);
+}
+
+a.ac-kpi:hover .ac-tile {
+    transform: scale(1.1) rotate(-6deg);
+}
+
+.ac-kpi-value {
+    margin-top: 16px;
+    color: var(--ac-ink);
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+}
+
+.ac-kpi-note {
+    min-height: 18px;
+    margin-top: 12px;
+    color: var(--ac-muted);
+    font-size: 12px;
+}
+
+.ac-kpi-note b {
+    margin-right: 5px;
+    font-weight: 700;
+}
+
+.ac-up { color: var(--ac-green); }
+.ac-down { color: var(--ac-red); }
+.ac-warn { color: var(--ac-orange); }
+.ac-tone-text { color: var(--ac-tone); }
+
+.ac-bar {
+    height: 4px;
+    margin-top: 14px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--ac-track);
+}
+
+.ac-bar > span {
+    display: block;
+    width: var(--ac-w, 0%);
+    height: 100%;
+    border-radius: inherit;
+    background: var(--ac-tone);
+    animation: ac-grow 1.1s var(--ac-ease) both;
+    animation-delay: calc(var(--ac-i, 0) * 60ms + 200ms);
+    transform-origin: left center;
+}
+
+.is-blue { --ac-tone: var(--ac-blue); --ac-tone-rgb: var(--ac-blue-rgb); }
+.is-orange { --ac-tone: var(--ac-orange); --ac-tone-rgb: var(--ac-orange-rgb); }
+.is-green { --ac-tone: var(--ac-green); --ac-tone-rgb: var(--ac-green-rgb); }
+.is-violet { --ac-tone: var(--ac-violet); --ac-tone-rgb: var(--ac-violet-rgb); }
+.is-teal { --ac-tone: var(--ac-teal); --ac-tone-rgb: var(--ac-teal-rgb); }
+.is-red { --ac-tone: var(--ac-red); --ac-tone-rgb: var(--ac-red-rgb); }
+
+/* ------------------------------------------------------------------ grafico */
+
+.ac-legend {
+    display: flex;
+    gap: 16px;
+    padding-top: 2px;
+    color: var(--ac-muted);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.ac-legend span::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: var(--ac-tone);
+}
+
+.ac-chart {
+    position: relative;
+    height: 290px;
+    margin-top: 8px;
+}
+
+.ac-chart svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+.ac-chart-grid {
+    stroke: var(--ac-line);
+    stroke-width: 1;
+}
+
+.ac-chart-axis {
+    fill: var(--ac-muted);
+    font-size: 11px;
+}
+
+.ac-chart-line {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2.6;
+    stroke-dasharray: var(--ac-len, 2000);
+    stroke-dashoffset: var(--ac-len, 2000);
+    animation: ac-draw 1.4s var(--ac-ease) 0.25s forwards;
+}
+
+.ac-chart-area {
+    opacity: 0;
+    animation: ac-fade 0.9s ease 0.7s forwards;
+}
+
+.ac-chart-dot {
+    stroke: var(--ac-surface);
+    stroke-width: 2.5;
+    opacity: 0;
+    animation: ac-fade 0.4s ease forwards;
+    animation-delay: calc(0.5s + var(--ac-i, 0) * 70ms);
+}
+
+.ac-chart-guide {
+    stroke: rgba(var(--ac-blue-rgb), 0.35);
+    stroke-dasharray: 4 4;
+    stroke-width: 1;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.ac-chart.is-hover .ac-chart-guide {
+    opacity: 1;
+}
+
+.ac-tip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 3;
+    min-width: 132px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: #141d3d;
+    box-shadow: 0 16px 30px -14px rgba(13, 19, 48, 0.7);
+    color: #fff;
+    font-size: 12px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -8px);
+    transition: opacity 0.15s, transform 0.2s var(--ac-ease);
+}
+
+.ac-chart.is-hover .ac-tip {
+    opacity: 1;
+    transform: translate(-50%, -16px);
+}
+
+.ac-tip strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #aab4d8;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.ac-tip div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    line-height: 1.7;
+}
+
+.ac-tip div span::before {
+    content: "";
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: var(--ac-tone);
+}
+
+/* --------------------------------------------------------------------- fila */
+
+.ac-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.ac-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 0 -10px;
+    padding: 13px 10px;
+    border-radius: 12px;
+    color: inherit;
+    transition: background 0.2s, transform 0.3s var(--ac-ease);
+}
+
+.ac-row + .ac-row {
+    box-shadow: 0 -1px 0 var(--ac-line);
+}
+
+a.ac-row:hover {
+    background: rgba(var(--ac-blue-rgb), 0.06);
+    box-shadow: none;
+    color: inherit;
+    transform: translateX(3px);
+}
+
+a.ac-row:hover + .ac-row {
+    box-shadow: none;
+}
+
+.ac-row-main {
+    min-width: 0;
+}
+
+.ac-row-title {
+    overflow: hidden;
+    color: var(--ac-ink);
+    font-size: 13.5px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ac-row-meta {
+    margin-top: 5px;
+    overflow: hidden;
+    color: var(--ac-muted);
+    font-size: 11.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ac-row-side {
+    flex: 0 0 auto;
+    text-align: right;
+}
+
+.ac-row-id {
+    margin-top: 7px;
+    color: var(--ac-muted);
+    font-size: 11px;
+}
+
+.ac-pill {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 8px;
+    background: rgba(var(--ac-tone-rgb), 0.14);
+    color: var(--ac-tone);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.ac-pill.is-orange { color: #b9701a; }
+
+.ac-panel-foot {
+    padding: 0 22px 20px;
+}
+
+.ac-panel-foot .ac-btn {
+    justify-content: center;
+    width: 100%;
+}
+
+.ac-empty {
+    padding: 28px 8px;
+    color: var(--ac-muted);
+    font-size: 13px;
+    text-align: center;
+}
+
+.ac-empty i {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--ac-green);
+    font-size: 28px;
+}
+
+/* --------------------------------------------------------------- categorias */
+
+.ac-cat {
+    display: block;
+    padding: 9px 0;
+    color: inherit;
+}
+
+.ac-cat-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12.5px;
+}
+
+.ac-cat-name {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ac-ink);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ac-cat-name::before {
+    content: "";
+    flex: 0 0 8px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ac-tone);
+}
+
+.ac-cat-total {
+    color: var(--ac-ink);
+    font-weight: 800;
+}
+
+.ac-cat .ac-bar {
+    margin: 8px 0 0 17px;
+}
+
+a.ac-cat:hover .ac-cat-name {
+    color: var(--ac-blue);
+}
+
+/* --------------------------------------------------------------- desempenho */
+
+.ac-me {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.ac-ring {
+    position: relative;
+    flex: 0 0 96px;
+    width: 96px;
+    height: 96px;
+}
+
+.ac-ring svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.ac-ring-track {
+    fill: none;
+    stroke: var(--ac-track);
+    stroke-width: 9;
+}
+
+.ac-ring-value {
+    fill: none;
+    stroke: var(--ac-blue);
+    stroke-linecap: round;
+    stroke-width: 9;
+    transition: stroke-dashoffset 1.3s var(--ac-ease) 0.3s;
+}
+
+.ac-ring-label {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--ac-ink);
+    font-size: 20px;
+    font-weight: 800;
+}
+
+.ac-me-text strong {
+    display: block;
+    color: var(--ac-ink);
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.ac-me-text span {
+    display: block;
+    margin-top: 5px;
+    color: var(--ac-muted);
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.ac-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.ac-stat {
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--ac-track);
+    color: inherit;
+    transition: background 0.2s, transform 0.3s var(--ac-ease);
+}
+
+a.ac-stat:hover {
+    background: rgba(var(--ac-blue-rgb), 0.1);
+    color: inherit;
+    transform: translateY(-2px);
+}
+
+.ac-stat b {
+    display: block;
+    color: var(--ac-ink);
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.ac-stat span {
+    display: block;
+    margin-top: 6px;
+    color: var(--ac-muted);
+    font-size: 11.5px;
+}
+
+.ac-avatar {
+    display: grid;
+    place-items: center;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    background: rgba(var(--ac-tone-rgb), 0.14);
+    color: var(--ac-tone);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.ac-person {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.ac-score {
+    color: var(--ac-ink);
+    font-size: 16px;
+    font-weight: 800;
+}
+
+.ac-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+    color: var(--ac-muted);
+    font-size: 12px;
+}
+
+.ac-foot a {
+    color: var(--ac-muted);
+    font-weight: 600;
+}
+
+.ac-foot a:hover {
+    color: var(--ac-blue);
+}
+
+/* ---------------------------------------------------------- telas de modulo */
+
+.ac-group {
+    margin-bottom: 26px;
+}
+
+.ac-group-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 14px;
+    color: var(--ac-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.ac-group-title::after {
+    content: "";
+    flex: 1 1 auto;
+    height: 1px;
+    background: var(--ac-line);
+}
+
+.ac-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+    gap: 18px;
+}
+
+.ac-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 176px;
+    padding: 20px 20px 18px;
+    transition: transform 0.35s var(--ac-ease), box-shadow 0.35s, border-color 0.25s;
+}
+
+.ac-card:hover {
+    border-color: rgba(var(--ac-tone-rgb), 0.4);
+    box-shadow: 0 2px 4px rgba(16, 24, 40, 0.05), 0 26px 44px -26px rgba(var(--ac-tone-rgb), 0.65);
+    transform: translateY(-4px);
+}
+
+/* O cartao inteiro e clicavel. */
+.ac-card-link {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+}
+
+.ac-card-link:focus-visible {
+    outline: 3px solid rgba(var(--ac-blue-rgb), 0.45);
+    outline-offset: 2px;
+}
+
+.ac-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ac-card .ac-tile {
+    flex-basis: 42px;
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    font-size: 22px;
+}
+
+.ac-card:hover .ac-tile {
+    transform: scale(1.1) rotate(-6deg);
+}
+
+.ac-count {
+    text-align: right;
+}
+
+.ac-count b {
+    display: block;
+    color: var(--ac-ink);
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+
+.ac-count span {
+    display: block;
+    margin-top: 5px;
+    color: var(--ac-muted);
+    font-size: 11px;
+}
+
+.ac-card-title {
+    margin: 18px 0 0;
+    color: var(--ac-ink);
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.ac-card-desc {
+    flex: 1 1 auto;
+    margin: 7px 0 0;
+    color: var(--ac-muted);
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+.ac-card-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    /* Mesma altura com ou sem o atalho "Novo": o "Abrir" fica alinhado. */
+    min-height: 28px;
+    margin-top: 14px;
+}
+
+.ac-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ac-blue);
+    font-size: 12.5px;
+    font-weight: 700;
+}
+
+.ac-cta i {
+    font-size: 15px;
+    transition: transform 0.3s var(--ac-ease);
+}
+
+.ac-card:hover .ac-cta i {
+    transform: translateX(5px);
+}
+
+.ac-card-add {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 9px;
+    border-radius: 8px;
+    color: var(--ac-muted);
+    font-size: 11.5px;
+    font-weight: 600;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.2s, transform 0.3s var(--ac-ease), background 0.2s, color 0.2s;
+}
+
+.ac-card:hover .ac-card-add,
+.ac-card-add:focus-visible {
+    opacity: 1;
+    transform: none;
+}
+
+.ac-card-add:hover {
+    background: rgba(var(--ac-blue-rgb), 0.1);
+    color: var(--ac-blue);
+}
+
+.ac-card.is-hidden,
+.ac-group.is-hidden {
+    display: none;
+}
+
+.ac-nomatch {
+    display: none;
+    padding: 40px 0;
+    color: var(--ac-muted);
+    text-align: center;
+}
+
+.ac-nomatch.is-shown {
+    display: block;
+}
+
+/* ---------------------------------------------------------------- animacoes */
+
+@keyframes ac-rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ac-grow {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+}
+
+@keyframes ac-draw {
+    to { stroke-dashoffset: 0; }
+}
+
+@keyframes ac-fade {
+    to { opacity: 1; }
+}
+
+@keyframes ac-spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes ac-twinkle {
+    0%, 100% { opacity: 1; transform: scale(1) rotate(0deg); }
+    50% { opacity: 0.55; transform: scale(0.82) rotate(18deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ac-app *,
+    .ac-app *::before,
+    .ac-app *::after {
+        animation-duration: 0.001s !important;
+        animation-delay: 0s !important;
+        transition-duration: 0.001s !important;
+    }
+}
+
+/* -------------------------------------------------------------- responsivo */
+
+@media (max-width: 1399.98px) {
+    .ac-grid.is-three {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .ac-grid.is-three > :last-child {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 1199.98px) {
+    .ac-grid.is-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .ac-grid.is-main {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 767.98px) {
+    .ac-grid.is-kpis,
+    .ac-grid.is-three {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ac-title {
+        font-size: 23px;
+    }
+
+    .ac-actions,
+    .ac-filter,
+    .ac-filter input {
+        width: 100%;
+    }
+
+    .ac-chart {
+        height: 230px;
+    }
+}

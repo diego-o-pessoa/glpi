@@ -1,0 +1,8 @@
+{# Pagina do Ativa Central: o JS desenha o conteudo a partir de data-ac. #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div id="ac-app" class="ac-app" data-ac-view="{{ view }}" data-ac="{{ data_json }}">
+    <noscript>
+        <div class="alert alert-warning">Esta tela precisa do JavaScript ativado no navegador.</div>
+    </noscript>
+</div>
+<script src="{{ script_url }}"></script>

@@ -117,6 +117,8 @@ var
     seguem instalando; o aviso aparece no fim. }
   AgentFailure: String;
   WallpaperFailure: String;
+  { Algum arquivo instalado estava sem permissao e precisou de conserto. }
+  PermissionsRepaired: Boolean;
 
 procedure RunRequired(const Description, Filename, Parameters: String);
 var
@@ -708,6 +710,95 @@ begin
   RepairFolderAccess(ExpandConstant('{commonpf}\Ativa Locacao\Guardian'), True);
 end;
 
+function CanReadFile(const Path: String): Boolean;
+var
+  Stream: TFileStream;
+begin
+  Result := True;
+  try
+    Stream := TFileStream.Create(Path, fmOpenRead or fmShareDenyNone);
+    Stream.Free;
+  except
+    Result := False;
+  end;
+end;
+
+{ Arquivo que nem administrador consegue abrir. Primeiro tenta o conserto de
+  permissao do proprio arquivo; se continuar negado, quem bloqueia e um driver
+  (antivirus) e nao ha copia que funcione: devolve o caminho para o aviso. }
+function BlockedFile(const Path: String): String;
+begin
+  Result := '';
+  if not FileExists(Path) or CanReadFile(Path) then
+    exit;
+  { Pode ser so um instante em uso por outro processo: espera e tenta de novo. }
+  Sleep(1500);
+  if CanReadFile(Path) then
+    exit;
+  Log('Sem acesso a ' + Path + '; tentando recriar a permissao do arquivo.');
+  PermissionsRepaired := True;
+  { Visto em campo: arquivo SEM permissao nenhuma, com o grupo Administradores
+    como dono. O takeown e negado nesse estado; o que funciona e o icacls
+    /reset (o dono sempre pode regravar as permissoes). Por isso o reset vem
+    primeiro; o takeown fica para quando o dono e outro. }
+  RunOptional(ExpandConstant('{sys}\icacls.exe'), '"' + Path + '" /reset /C /Q');
+  if CanReadFile(Path) then begin
+    Log('Permissao de ' + Path + ' recriada.');
+    exit;
+  end;
+  RunOptional(ExpandConstant('{sys}\takeown.exe'), '/F "' + Path + '" /A');
+  RunOptional(ExpandConstant('{sys}\icacls.exe'), '"' + Path + '" /reset /C /Q');
+  if not CanReadFile(Path) then
+    Result := Path;
+end;
+
+{ Visto em campo: o antivirus marcou o Updater e o Wallpaper como ameaca e
+  passou a negar o acesso a eles e aos arquivos que gravaram - ate o takeown
+  de administrador. O instalador so mostrava "acesso negado" arquivo por
+  arquivo (Repetir/Ignorar) e travava no Wallpaper. Agora para ANTES de mexer
+  em qualquer coisa e diz o que fazer. }
+procedure CheckBlockedFiles();
+var
+  Data, List, One: String;
+  Files: array[0..7] of String;
+  I: Integer;
+begin
+  Data := ExpandConstant('{commonappdata}\AtivaLocacao');
+  Files[0] := Data + '\UnifiedUpdater\AtivaUnifiedUpdater.exe';
+  Files[1] := Data + '\UnifiedUpdater\service-config.json';
+  Files[2] := Data + '\UnifiedUpdater\state.json';
+  Files[3] := Data + '\Wallpaper\AtivaWallpaperClient.exe';
+  Files[4] := Data + '\Wallpaper\client.json';
+  Files[5] := Data + '\Wallpaper\version.json';
+  Files[6] := Data + '\Workspace\AtivaWorkspace.exe';
+  Files[7] := ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe');
+  List := '';
+  PermissionsRepaired := False;
+  for I := 0 to 7 do begin
+    One := BlockedFile(Files[I]);
+    if One <> '' then
+      List := List + #13#10 + '  ' + One;
+  end;
+  { Havia arquivo sem permissao: os vizinhos (logs, configuracao) costumam
+    estar no mesmo estado. O conteudo volta a herdar da pasta de cada
+    componente, que mantem a propria protecao. }
+  if PermissionsRepaired then begin
+    WizardForm.StatusLabel.Caption := 'Corrigindo permissoes dos arquivos Ativa...';
+    RunOptional(ExpandConstant('{sys}\icacls.exe'), '"' + Data + '\UnifiedUpdater\*" /reset /T /C /L /Q');
+    RunOptional(ExpandConstant('{sys}\icacls.exe'), '"' + Data + '\Wallpaper\*" /reset /T /C /L /Q');
+    RunOptional(ExpandConstant('{sys}\icacls.exe'), '"' + Data + '\Workspace\*" /reset /T /C /L /Q');
+  end;
+  if List = '' then
+    exit;
+  Log('Arquivos bloqueados mesmo para administrador:' + List);
+  RaiseException(
+    'O Windows esta negando o acesso a arquivos da Ativa mesmo para administrador:' + #13#10 + List + #13#10#13#10 +
+    'O instalador tentou recriar as permissoes desses arquivos e nao conseguiu. Reinicie o computador e rode o ' +
+    'instalador de novo. Se repetir, algum programa esta bloqueando esses arquivos (antivirus): libere-os na ' +
+    'console do antivirus (quarentena / exclusoes) antes de instalar.' + #13#10#13#10 +
+    'Nada foi instalado nesta tentativa.');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   GuardianAuth: String;
@@ -722,6 +813,8 @@ begin
       deployments run as SYSTEM; local administrators use the Ativa password. }
     { Antes de tudo: sem acesso as pastas, nem o maintenance.json abaixo e visto. }
     RepairAtivaFolders();
+    { Arquivo que nem administrador abre (antivirus): para aqui, com instrucao. }
+    CheckBlockedFiles();
     if FileExists(ExpandConstant('{commonappdata}\AtivaLocacao\Guardian\maintenance.json')) then begin
       GuardianAuth := ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe');
       { Protecao ativa, mas o Guardian instalado sumiu (visto em campo: o

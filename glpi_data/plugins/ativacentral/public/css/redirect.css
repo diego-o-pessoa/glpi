@@ -1,0 +1,13 @@
+/* Carregado so na pagina inicial nativa do GLPI enquanto o navegador segue
+   para a "Visao geral" do Ativa Central: evita piscar a tela antiga.
+
+   Se por algum motivo o navegador nao seguir (redirecionamento bloqueado),
+   a pagina nativa aparece sozinha depois de 4 segundos. */
+body {
+    visibility: hidden;
+    animation: ac-redirect-reveal 0s linear 4s forwards;
+}
+
+@keyframes ac-redirect-reveal {
+    to { visibility: visible; }
+}
