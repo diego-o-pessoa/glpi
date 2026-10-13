@@ -169,12 +169,33 @@ begin
   RunWait(ExpandConstant('{sys}\schtasks.exe'), '/Delete /TN "' + Name + '" /F');
 end;
 
+{ Pasta em que nem administrador entra (o antivirus interrompeu a protecao das
+  pastas no meio e ela ficou sem permissao nenhuma): retoma a posse e concede
+  acesso a SYSTEM/Administradores para poder apagar. }
+procedure ForceAccess(const Path: String);
+var
+  Probe: String;
+begin
+  Probe := Path + '\.ativa-acesso.tmp';
+  if SaveStringToFile(Probe, 'x', False) then begin
+    DeleteFile(Probe);
+    exit;
+  end;
+  Log('Sem acesso a ' + Path + '; retomando a posse.');
+  { /D: S em portugues, Y em ingles; a do outro idioma so da erro de sintaxe. }
+  RunWait(ExpandConstant('{sys}\takeown.exe'), '/F "' + Path + '" /A /R /D S');
+  RunWait(ExpandConstant('{sys}\takeown.exe'), '/F "' + Path + '" /A /R /D Y');
+  RunWait(ExpandConstant('{sys}\icacls.exe'), '"' + Path + '" /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F /C /Q');
+  RunWait(ExpandConstant('{sys}\icacls.exe'), '"' + Path + '\*" /reset /T /C /L /Q');
+end;
+
 { Apaga a pasta; o que nao der (arquivo em uso) e apagado no proximo boot. }
 function RemoveDir(const Path: String): Boolean;
 begin
   Result := True;
   if not DirExists(Path) then
     exit;
+  ForceAccess(Path);
   DelTree(Path, True, True, True);
   if DirExists(Path) then begin
     RunWait(ExpandConstant('{cmd}'), '/C rmdir /s /q "' + Path + '"');

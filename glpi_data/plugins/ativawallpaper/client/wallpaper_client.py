@@ -35,7 +35,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.6.7"
+CLIENT_VERSION = "1.6.8"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -444,19 +444,27 @@ def _safe_unlink(path: Path) -> None:
 
 def set_installation_acls(root: Path) -> None:
     """Protect executable/config while allowing users to update runtime data."""
-    root_acl = subprocess.run(
+    # Grant BEFORE removing inheritance (two calls): if the antivirus interrupts
+    # in between (seen in the field), the folder never ends up with no
+    # permissions at all - a state where not even administrators could enter
+    # and every reinstall failed with "access denied".
+    for arguments in (
         [
-            "icacls", str(root), "/inheritance:r", "/grant:r",
+            "/grant:r",
             "*S-1-5-18:(OI)(CI)F",       # SYSTEM
             "*S-1-5-32-544:(OI)(CI)F",  # Administrators
             "*S-1-5-32-545:(OI)(CI)RX", # Users
         ],
-        check=False,
-        capture_output=True,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
-    if root_acl.returncode != 0:
-        raise ClientError("ACL_FAILED", "Could not protect the installation directory", retriable=False)
+        ["/inheritance:r"],
+    ):
+        root_acl = subprocess.run(
+            ["icacls", str(root), *arguments],
+            check=False,
+            capture_output=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if root_acl.returncode != 0:
+            raise ClientError("ACL_FAILED", "Could not protect the installation directory", retriable=False)
 
     for directory in (root / "data", root / "state", root / "logs"):
         directory.mkdir(parents=True, exist_ok=True)

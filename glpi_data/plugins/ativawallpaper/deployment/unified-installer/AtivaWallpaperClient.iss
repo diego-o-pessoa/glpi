@@ -654,6 +654,60 @@ begin
 end;
 #endif
 
+{ Pasta do produto em que nem administrador entra. Visto em campo: o antivirus
+  interrompeu a protecao das pastas no meio (heranca removida, permissoes ainda
+  nao concedidas) e, dali em diante, TODA copia de arquivo dava "acesso
+  negado" e o Explorer pedia "permissao de administrador" a um administrador.
+  So age quando o proprio instalador nao consegue gravar na pasta: retoma a
+  posse e recria as permissoes (SYSTEM e Administradores; usuarios so leitura
+  onde o componente precisa). Cada componente reaplica as suas ao instalar. }
+procedure RepairFolderAccess(const Dir: String; UsersRead: Boolean);
+var
+  Probe, Grants, Takeown, Icacls: String;
+begin
+  if not DirExists(Dir) then
+    exit;
+  Probe := Dir + '\.ativa-acesso.tmp';
+  if SaveStringToFile(Probe, 'x', False) then begin
+    DeleteFile(Probe);
+    exit;
+  end;
+  Log('Sem acesso de gravacao a ' + Dir + '; recriando as permissoes.');
+  WizardForm.StatusLabel.Caption := 'Corrigindo permissoes das pastas Ativa...';
+  Takeown := ExpandConstant('{sys}\takeown.exe');
+  Icacls := ExpandConstant('{sys}\icacls.exe');
+  { /D e a resposta a "sem permissao de leitura, substituir?": S em portugues,
+    Y em ingles. A do outro idioma so da erro de sintaxe, sem efeito. }
+  RunOptional(Takeown, '/F "' + Dir + '" /A /R /D S');
+  RunOptional(Takeown, '/F "' + Dir + '" /A /R /D Y');
+  Grants := '*S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F';
+  if UsersRead then
+    Grants := Grants + ' *S-1-5-32-545:(OI)(CI)RX';
+  RunOptional(Icacls, '"' + Dir + '" /grant:r ' + Grants + ' /C /Q');
+  { O conteudo volta a herdar da pasta (ja restrita acima). }
+  RunOptional(Icacls, '"' + Dir + '\*" /reset /T /C /L /Q');
+  if SaveStringToFile(Probe, 'x', False) then begin
+    DeleteFile(Probe);
+    Log('Permissoes de ' + Dir + ' corrigidas.');
+  end else
+    Log('AVISO: ainda sem acesso a ' + Dir + ' (antivirus bloqueando a pasta?).');
+end;
+
+procedure RepairAtivaFolders();
+var
+  Root: String;
+begin
+  Root := ExpandConstant('{commonappdata}\AtivaLocacao');
+  RepairFolderAccess(Root, True);
+  RepairFolderAccess(Root + '\Guardian', False);
+  RepairFolderAccess(Root + '\UnifiedUpdater', False);
+  RepairFolderAccess(Root + '\Workspace', False);
+  RepairFolderAccess(Root + '\WorkspaceHelper', True);
+  RepairFolderAccess(Root + '\Wallpaper', True);
+  RepairFolderAccess(ExpandConstant('{commonpf}\Ativa Locacao'), True);
+  RepairFolderAccess(ExpandConstant('{commonpf}\Ativa Locacao\Guardian'), True);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   GuardianAuth: String;
@@ -666,6 +720,8 @@ begin
   if CurStep = ssInstall then begin
     { Ask the installed Guardian BEFORE changing any file/service. Automatic
       deployments run as SYSTEM; local administrators use the Ativa password. }
+    { Antes de tudo: sem acesso as pastas, nem o maintenance.json abaixo e visto. }
+    RepairAtivaFolders();
     if FileExists(ExpandConstant('{commonappdata}\AtivaLocacao\Guardian\maintenance.json')) then begin
       GuardianAuth := ExpandConstant('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe');
       { Protecao ativa, mas o Guardian instalado sumiu (visto em campo: o

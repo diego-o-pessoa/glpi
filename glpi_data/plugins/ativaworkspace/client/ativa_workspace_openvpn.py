@@ -85,12 +85,19 @@ def extract_profile(zip_path: Path, ovpn_name: str) -> Path:
 
 def _restrict_acl(path: Path, user_sid: str) -> bool:
     """Acesso so para SYSTEM, Administradores (total) e o usuario da sessao (leitura)."""
-    completed = subprocess.run(
-        ["icacls", str(path), "/inheritance:r",
-         "/grant:r", "*S-1-5-18:(F)", "*S-1-5-32-544:(F)", f"*{user_sid}:(R)"],
-        capture_output=True, text=True, timeout=30, creationflags=NO_WINDOW,
-    )
-    return completed.returncode == 0
+    # Concede antes de tirar a heranca: interrompido no meio, o arquivo nunca
+    # fica sem permissao nenhuma (nem mais aberto do que estava).
+    for arguments in (
+        ["/grant:r", "*S-1-5-18:(F)", "*S-1-5-32-544:(F)", f"*{user_sid}:(R)"],
+        ["/inheritance:r"],
+    ):
+        completed = subprocess.run(
+            ["icacls", str(path), *arguments],
+            capture_output=True, text=True, timeout=30, creationflags=NO_WINDOW,
+        )
+        if completed.returncode != 0:
+            return False
+    return True
 
 
 def apply_credentials(ovpn: Path, username: str, password: str, user_sid: str) -> tuple[bool, str]:

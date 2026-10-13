@@ -46,7 +46,7 @@ import ativa_workspace_uninstall as uninstall
 SERVICE_NAME = "AtivaWorkspace"
 SERVICE_DISPLAY_NAME = "Ativa Workspace"
 SERVICE_DESCRIPTION = "Provisionamento Ativa: conduz a etapa de ingresso no Microsoft Entra ID."
-WORKSPACE_AGENT_VERSION = "1.8.16"
+WORKSPACE_AGENT_VERSION = "1.8.17"
 
 PROGRAM_DATA = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData"))
 PRODUCT_DIR = PROGRAM_DATA / "AtivaLocacao" / "Workspace"
@@ -311,13 +311,20 @@ def ensure_helper_dir(logger: logging.Logger) -> bool:
     import subprocess
     try:
         HELPER_DIR.mkdir(parents=True, exist_ok=True)
-        completed = subprocess.run(
-            ["icacls", str(HELPER_DIR), "/inheritance:r",
-             "/grant:r", "*S-1-5-18:(OI)(CI)F", "/grant:r", "*S-1-5-32-544:(OI)(CI)F",
+        # Concede antes de tirar a heranca (duas chamadas): interrompido no
+        # meio pelo antivirus, a pasta nunca fica sem permissao nenhuma.
+        for arguments in (
+            ["/grant:r", "*S-1-5-18:(OI)(CI)F", "/grant:r", "*S-1-5-32-544:(OI)(CI)F",
              "/grant:r", "*S-1-5-32-545:(OI)(CI)M"],
-            capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        return completed.returncode == 0
+            ["/inheritance:r"],
+        ):
+            completed = subprocess.run(
+                ["icacls", str(HELPER_DIR), *arguments],
+                capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if completed.returncode != 0:
+                return False
+        return True
     except (OSError, subprocess.SubprocessError):
         logger.exception("Nao foi possivel preparar a pasta do helper.")
         return False
@@ -1285,11 +1292,17 @@ def harden_product_dir(logger: logging.Logger) -> None:
     """So SYSTEM e Administradores acessam a pasta (o token fica ali)."""
     import subprocess
     try:
-        subprocess.run(
-            ["icacls", str(PRODUCT_DIR), "/inheritance:r",
+        # Concede antes de tirar a heranca (ver ensure_helper_dir).
+        granted = subprocess.run(
+            ["icacls", str(PRODUCT_DIR),
              "/grant:r", "*S-1-5-18:(OI)(CI)F", "/grant:r", "*S-1-5-32-544:(OI)(CI)F"],
             capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
+        if granted.returncode == 0:
+            subprocess.run(
+                ["icacls", str(PRODUCT_DIR), "/inheritance:r"],
+                capture_output=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
     except (OSError, subprocess.SubprocessError):
         logger.warning("Nao foi possivel restringir a pasta %s.", PRODUCT_DIR)
 

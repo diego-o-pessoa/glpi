@@ -143,7 +143,11 @@ def protect_files() -> None:
         grants = ["*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F"]
         if public:
             grants.append("*S-1-5-32-545:(OI)(CI)RX")
-        command("icacls.exe", str(directory), "/inheritance:r", "/grant:r", *grants)
+        # Concede ANTES de tirar a heranca: se o antivirus interromper no meio
+        # (visto em campo), a pasta nunca fica sem permissao nenhuma - estado
+        # em que nem administrador entrava e toda reinstalacao dava "acesso negado".
+        command("icacls.exe", str(directory), "/grant:r", *grants)
+        command("icacls.exe", str(directory), "/inheritance:r")
         command("icacls.exe", str(directory), "/remove:g", "*S-1-1-0", "*S-1-5-11")
         if not public:
             command("icacls.exe", str(directory), "/remove:g", "*S-1-5-32-545")
@@ -151,8 +155,9 @@ def protect_files() -> None:
     for name in ("AtivaWallpaperClient.exe", "client.json", "version.json"):
         target = wallpaper / name
         if target.is_file():
-            command("icacls.exe", str(target), "/inheritance:r", "/grant:r",
+            command("icacls.exe", str(target), "/grant:r",
                     "*S-1-5-18:F", "*S-1-5-32-544:F", "*S-1-5-32-545:RX")
+            command("icacls.exe", str(target), "/inheritance:r")
             command("icacls.exe", str(target), "/remove:g", "*S-1-1-0", "*S-1-5-11")
 
 
