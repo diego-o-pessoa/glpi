@@ -1,0 +1,355 @@
+/*
+ * Ativa Central - telas nativas do GLPI no mesmo visual: listas (pesquisa),
+ * mini painel de chamados e a ficha do chamado (linha do tempo).
+ *
+ * So aparencia: a estrutura HTML e a do GLPI. As cores valem para os temas
+ * claros; nos temas escuros do GLPI ficam as cores do proprio tema.
+ */
+
+/* ------------------------------------------------- cores da linha do tempo */
+
+html:root[data-glpi-theme-dark="0"] {
+    /* Descricao do chamado */
+    --glpi-timeline-itil-content-bg: #eef2ff;
+    --glpi-timeline-itil-content-fg: #1a2340;
+    --glpi-timeline-itil-content-border-color: #d3dcfc;
+    /* Acompanhamentos */
+    --glpi-timeline-fup-bg: #fff;
+    --glpi-timeline-fup-fg: #2b3552;
+    --glpi-timeline-fup-border-color: #e3e7f1;
+    /* Tarefas */
+    --glpi-timeline-task-bg: #fff8ea;
+    --glpi-timeline-task-fg: #4a3a12;
+    --glpi-timeline-task-border-color: #f3deb0;
+    /* Solucao */
+    --glpi-timeline-solution-bg: #e9f9f1;
+    --glpi-timeline-solution-fg: #14432f;
+    --glpi-timeline-solution-border-color: #b7e6cf;
+    /* Documentos */
+    --glpi-timeline-document-bg: #f1f5ff;
+    --glpi-timeline-document-fg: #1a2340;
+    --glpi-timeline-document-border-color: #d3dcfc;
+    --glpi-timeline-badge-bg: rgba(74, 108, 247, 0.09);
+    --glpi-timeline-badge-fg: #55607f;
+}
+
+/* ------------------------------------------------------- listas (pesquisa) */
+
+body.central .search-card {
+    overflow: hidden;
+    border-radius: 16px;
+}
+
+body.central .search-card .search-header {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--ac-line);
+    background: transparent;
+}
+
+/* "Filtrado por..." e "Ordenado por...": etiquetas discretas. */
+body.central .search-card .search-header .show-search-filters,
+body.central .search-card .search-header .show-search-sorts {
+    border: 1px solid var(--ac-line);
+    border-radius: 999px;
+    background: var(--tblr-bg-surface, #fff);
+    color: var(--tblr-body-color);
+    font-weight: 600;
+    transition: border-color 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+body.central .search-card .search-header .show-search-filters:hover,
+body.central .search-card .search-header .show-search-sorts:hover,
+body.central .search-card .search-header .show-search-filters.active,
+body.central .search-card .search-header .show-search-sorts.active {
+    border-color: rgba(var(--ac-blue-rgb), 0.45);
+    background: rgba(var(--ac-blue-rgb), 0.07);
+    color: var(--ac-blue);
+}
+
+body.central .search-results {
+    --tblr-table-striped-bg: transparent;
+    --tblr-table-hover-bg: rgba(var(--ac-blue-rgb), 0.05);
+    margin-bottom: 0;
+}
+
+body.central .search-results > thead > tr > th {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--ac-line);
+    background: var(--tblr-bg-surface-secondary, #f8f9fd);
+    color: var(--ac-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+html:root[data-glpi-theme-dark="0"] body.central .search-results > thead > tr > th {
+    background: #f8f9fd;
+}
+
+body.central .search-results > thead > tr > th a {
+    color: inherit;
+}
+
+body.central .search-results > tbody > tr > td {
+    padding-top: 13px;
+    padding-bottom: 13px;
+    border-color: var(--ac-line);
+    vertical-align: middle;
+}
+
+body.central .search-results > tbody > tr {
+    transition: background-color 0.15s;
+}
+
+body.central .search-results > tbody > tr > td a {
+    font-weight: 600;
+    text-decoration: none;
+}
+
+body.central .search-card .card-footer,
+body.central .search-card .search-pager {
+    border-top: 1px solid var(--ac-line);
+    background: transparent;
+}
+
+/* ------------------------------------------- mini painel acima das listas */
+
+/* Os blocos trazem a cor embutida no HTML; a camada branca por cima deixa
+   cada um num tom pastel da propria cor, com o texto escuro. */
+html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card {
+    overflow: hidden;
+    border: 1px solid rgba(26, 35, 64, 0.08) !important;
+    border-radius: 14px !important;
+    background-image: linear-gradient(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.8));
+    box-shadow: none;
+    color: var(--ac-ink) !important;
+    transition: transform 0.3s var(--ac-ease), box-shadow 0.3s;
+}
+
+html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card:hover {
+    box-shadow: 0 14px 24px -18px rgba(26, 35, 64, 0.5);
+    transform: translateY(-2px);
+}
+
+html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card .number {
+    color: var(--ac-ink) !important;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card .label {
+    color: #55607f !important;
+    font-weight: 600;
+}
+
+html:root[data-glpi-theme-dark="0"] body.central .dashboard.mini .card .main-icon {
+    color: rgba(26, 35, 64, 0.45) !important;
+}
+
+/* --------------------------------------------------------- ficha do chamado */
+
+body.central .itil-object .itil-left-side {
+    border-top-color: transparent !important;
+}
+
+/* Linha do tempo: cartoes limpos, sem a textura de fundo antiga. */
+body.central .timeline-item .timeline-content {
+    border-radius: 14px;
+    border-top-left-radius: 0;
+    background-image: none !important;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+body.central .timeline-item .timeline-content.t-right {
+    border-top-left-radius: 14px;
+    border-top-right-radius: 0;
+}
+
+body.central .timeline-item .timeline-content .card-body {
+    padding-top: 14px;
+    padding-bottom: 14px;
+}
+
+body.central .timeline-item .user-part .avatar {
+    border-radius: 12px;
+    box-shadow: 0 0 0 3px var(--tblr-body-bg, #f3f5fa);
+}
+
+body.central .timeline-item .timeline-header {
+    color: var(--ac-muted);
+    font-size: 12px;
+}
+
+body.central .timeline-item .timeline-badges .badge {
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+/* Painel da direita (campos do chamado). */
+body.central .itil-object .itil-right-side {
+    border-left: 1px solid var(--ac-line);
+    background: var(--tblr-bg-surface, #fff);
+}
+
+body.central .itil-object .itil-right-side .accordion-button {
+    font-weight: 700;
+}
+
+/* Rodape com as acoes. */
+body.central #itil-footer {
+    border-top: 1px solid var(--ac-line) !important;
+    background: var(--tblr-bg-surface, #fff);
+}
+
+body.central #itil-footer .buttons-bar {
+    align-items: center;
+}
+
+/* -------------------------------------------------- "Finalizar chamado" */
+
+.btn.ac-finish {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-left: 8px;
+    border: 0;
+    background: linear-gradient(95deg, #23a56f 0%, #34c08a 100%);
+    box-shadow: 0 10px 20px -12px rgba(35, 165, 111, 0.95);
+    color: #fff;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.btn.ac-finish:hover,
+.btn.ac-finish:focus-visible {
+    background: linear-gradient(95deg, #1f9a67 0%, #2fb882 100%);
+    box-shadow: 0 14px 24px -12px rgba(35, 165, 111, 1);
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+.btn.ac-finish:disabled {
+    opacity: 0.65;
+    transform: none;
+}
+
+.btn.ac-finish.is-loading,
+.btn.is-loading {
+    cursor: progress;
+}
+
+.ac-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    background: rgba(13, 19, 48, 0.5);
+    backdrop-filter: blur(3px);
+    animation: ac-modal-fade 0.2s ease both;
+}
+
+.ac-modal-box {
+    width: min(560px, 100%);
+    padding: 24px;
+    border-radius: 18px;
+    background: var(--tblr-bg-surface, #fff);
+    box-shadow: 0 30px 60px -20px rgba(13, 19, 48, 0.55);
+    color: var(--tblr-body-color);
+    animation: ac-modal-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ac-modal-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.ac-modal-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+    background: rgba(47, 182, 124, 0.14);
+    color: #23a56f;
+    font-size: 24px;
+}
+
+.ac-modal-title {
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+}
+
+.ac-modal-sub {
+    margin-top: 5px;
+    color: var(--ac-muted, #7a85a3);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.ac-modal .ac-modal-text {
+    display: block;
+    width: 100%;
+    min-height: 120px;
+    padding: 12px 14px !important;
+    border: 1px solid var(--ac-line, #e6e9f2) !important;
+    border-radius: 12px !important;
+    background: var(--tblr-bg-surface, #fff) !important;
+    color: var(--tblr-body-color) !important;
+    font-family: inherit;
+    font-size: 14px !important;
+    line-height: 1.5;
+    outline: none;
+    resize: vertical;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ac-modal .ac-modal-text:focus {
+    border-color: rgba(47, 182, 124, 0.7) !important;
+    box-shadow: 0 0 0 4px rgba(47, 182, 124, 0.15);
+}
+
+.ac-modal-error {
+    min-height: 20px;
+    margin-top: 8px;
+    color: #d63939;
+    font-size: 13px;
+}
+
+.ac-modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.ac-modal-actions .btn.ac-finish {
+    margin-left: 0;
+}
+
+@keyframes ac-modal-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes ac-modal-rise {
+    from { opacity: 0; transform: translateY(14px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ac-modal,
+    .ac-modal-box {
+        animation: none;
+    }
+}

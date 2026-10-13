@@ -246,11 +246,180 @@
         });
     }
 
+    // ------------------------------------------------------------------
+    // Chamado: botao "Finalizar chamado"
+    //
+    // No GLPI, encerrar um chamado fica escondido em "Responder > Adicionar
+    // uma solucao". O botao abre uma janela simples: o tecnico escreve o que
+    // foi feito e escolhe entre solucionar (o requerente confirma) ou fechar
+    // de vez. Quem grava e o proprio GLPI (front/ticket.finish.php).
+    // ------------------------------------------------------------------
+    function ticketId() {
+        if (!/\/front\/ticket\.form\.php$/i.test(location.pathname)) {
+            return 0;
+        }
+        var id = Number(new URLSearchParams(location.search).get('id'));
+        return id > 0 ? id : 0;
+    }
+
+    function csrfToken() {
+        var tag = document.querySelector('meta[property="glpi:csrf_token"]');
+        return tag ? tag.getAttribute('content') || '' : '';
+    }
+
+    function finishTicket() {
+        var id = ticketId();
+        var footer = document.querySelector('#itil-footer');
+        if (!id || !footer || !data.finish || footer.querySelector('.ac-finish')) {
+            return;
+        }
+        fetch(data.finish + '?id=' + id, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (response) {
+            return response.json();
+        }).then(function (state) {
+            if (!state || !state.ok || state.closed || (!state.can_solve && !state.can_close)) {
+                return;
+            }
+            // Ja solucionado: so falta fechar (se o perfil puder).
+            if (state.solved && !state.can_close) {
+                return;
+            }
+            var button = el('button', 'btn ac-finish');
+            button.type = 'button';
+            button.appendChild(icon('ti-circle-check'));
+            button.appendChild(el('span', '', state.solved ? 'Fechar chamado' : 'Finalizar chamado'));
+            button.addEventListener('click', function () { finishDialog(id, state); });
+
+            var anchorNode = footer.querySelector('.timeline-buttons .main-actions');
+            if (anchorNode && anchorNode.parentNode) {
+                anchorNode.parentNode.insertBefore(button, anchorNode.nextSibling);
+            } else {
+                (footer.querySelector('.buttons-bar') || footer).appendChild(button);
+            }
+        }).catch(function () { /* sem o botao a tela segue como a do GLPI */ });
+    }
+
+    function finishDialog(id, state) {
+        var old = document.querySelector('.ac-modal');
+        if (old) { old.remove(); }
+
+        var overlay = el('div', 'ac-modal');
+        var box = el('div', 'ac-modal-box');
+        box.setAttribute('role', 'dialog');
+        box.setAttribute('aria-modal', 'true');
+        box.setAttribute('aria-label', 'Finalizar chamado');
+
+        var head = el('div', 'ac-modal-head');
+        var badge = el('span', 'ac-modal-icon');
+        badge.appendChild(icon('ti-circle-check'));
+        head.appendChild(badge);
+        var titles = el('div');
+        titles.appendChild(el('div', 'ac-modal-title', state.solved ? 'Fechar o chamado #' + id : 'Finalizar o chamado #' + id));
+        titles.appendChild(el('div', 'ac-modal-sub', state.solved
+            ? 'O chamado já tem solução registrada. Fechar encerra o atendimento de vez.'
+            : 'Descreva o que foi feito. O texto fica no histórico como a solução do chamado.'));
+        head.appendChild(titles);
+        box.appendChild(head);
+
+        var text = null;
+        if (!state.solved) {
+            text = el('textarea', 'ac-modal-text');
+            text.rows = 5;
+            text.maxLength = 20000;
+            text.placeholder = 'Ex.: Reinstalado o OneDrive e refeito o login com a conta do usuário.';
+            text.setAttribute('aria-label', 'Solução do chamado');
+            box.appendChild(text);
+        }
+
+        var error = el('div', 'ac-modal-error');
+        box.appendChild(error);
+
+        var actions = el('div', 'ac-modal-actions');
+        var cancel = el('button', 'btn btn-ghost-secondary', 'Cancelar');
+        cancel.type = 'button';
+        actions.appendChild(cancel);
+        var buttons = [cancel];
+
+        function unlock(button) {
+            buttons.forEach(function (b) { b.disabled = false; });
+            button.classList.remove('is-loading');
+        }
+
+        function send(mode, button) {
+            var content = text ? text.value.trim() : '';
+            if (text && content.length < 3) {
+                error.textContent = 'Descreva o que foi feito para resolver o chamado.';
+                text.focus();
+                return;
+            }
+            error.textContent = '';
+            buttons.forEach(function (b) { b.disabled = true; });
+            button.classList.add('is-loading');
+            var body = new FormData();
+            body.append('id', String(id));
+            body.append('mode', mode);
+            body.append('content', content);
+            fetch(data.finish, {
+                method: 'POST', body: body, credentials: 'same-origin',
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Glpi-Csrf-Token': csrfToken() }
+            }).then(function (response) {
+                return response.json().catch(function () { return { ok: false, message: 'Erro ' + response.status + ' no GLPI.' }; });
+            }).then(function (result) {
+                if (result.ok || result.reload) {
+                    // Recarrega: o GLPI mostra o chamado no estado novo (e as
+                    // mensagens dele, se recusou algum campo).
+                    location.reload();
+                    return;
+                }
+                error.textContent = result.message || 'Não foi possível finalizar o chamado.';
+                unlock(button);
+            }).catch(function () {
+                error.textContent = 'Falha de comunicação com o GLPI.';
+                unlock(button);
+            });
+        }
+
+        if (!state.solved && state.can_solve) {
+            var solve = el('button', 'btn ac-finish', 'Solucionar');
+            solve.type = 'button';
+            solve.title = 'Marca como solucionado. O requerente pode aprovar ou reabrir.';
+            solve.addEventListener('click', function () { send('solve', solve); });
+            actions.appendChild(solve);
+            buttons.push(solve);
+        }
+        if (state.can_close && (state.solved || state.can_solve)) {
+            var close = el('button', state.solved ? 'btn ac-finish' : 'btn btn-outline-secondary', state.solved ? 'Fechar chamado' : 'Solucionar e fechar');
+            close.type = 'button';
+            close.title = 'Encerra o chamado de vez, sem esperar a aprovação do requerente.';
+            close.addEventListener('click', function () { send('close', close); });
+            actions.appendChild(close);
+            buttons.push(close);
+        }
+        box.appendChild(actions);
+        overlay.appendChild(box);
+
+        function onKey(event) {
+            if (event.key === 'Escape') { dismiss(); }
+        }
+        function dismiss() {
+            overlay.remove();
+            document.removeEventListener('keydown', onKey);
+        }
+        cancel.addEventListener('click', dismiss);
+        overlay.addEventListener('mousedown', function (event) { if (event.target === overlay) { dismiss(); } });
+        document.addEventListener('keydown', onKey);
+
+        document.body.appendChild(overlay);
+        (text || cancel).focus();
+    }
+
     function start() {
         if (redirectHome()) {
             return;
         }
-        [sidebar, header, userMenus].forEach(function (step) {
+        [sidebar, header, userMenus, finishTicket].forEach(function (step) {
             try {
                 step();
             } catch (error) {

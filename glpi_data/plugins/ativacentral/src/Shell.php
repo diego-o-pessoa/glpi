@@ -50,7 +50,7 @@ final class Shell
 
         self::forceVerticalLayout();
 
-        $PLUGIN_HOOKS[Hooks::ADD_CSS]['ativacentral'] = [self::asset('css/shell.css')];
+        $PLUGIN_HOOKS[Hooks::ADD_CSS]['ativacentral'] = [self::asset('css/shell.css'), self::asset('css/native.css')];
         $PLUGIN_HOOKS[Hooks::ADD_JAVASCRIPT]['ativacentral'] = [self::asset('js/shell.js')];
         $PLUGIN_HOOKS[Hooks::REDEFINE_MENUS]['ativacentral'] = [self::class, 'redefineMenus'];
 
@@ -151,6 +151,7 @@ final class Shell
             'home'      => self::url('/front/home.php'),
             'helpdesk'  => self::glpiUrl(Nav::hubUrl('helpdesk')),
             'classic'   => self::url('/front/toggle.php?mode=classic'),
+            'finish'    => self::url('/front/ticket.finish.php'),
             'config'    => self::canConfigure() ? self::url('/front/config.php') : '',
             'section'   => Nav::SECTION_ICON,
             'badges'    => ['helpdesk' => $new],
