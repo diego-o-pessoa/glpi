@@ -267,12 +267,48 @@
         return tag ? tag.getAttribute('content') || '' : '';
     }
 
+    /* A ficha do chamado chega depois da pagina (o GLPI carrega o conteudo da
+     * aba numa segunda requisicao) e e refeita a cada troca de aba. Por isso o
+     * botao e colocado quando o rodape aparece, e recolocado se ele for
+     * redesenhado. */
+    var finishState = null;
+    var finishPending = false;
+
     function finishTicket() {
-        var id = ticketId();
-        var footer = document.querySelector('#itil-footer');
-        if (!id || !footer || !data.finish || footer.querySelector('.ac-finish')) {
+        if (!ticketId() || !data.finish) {
             return;
         }
+        placeFinishButton();
+        if (!window.MutationObserver) {
+            return;
+        }
+        var scheduled = false;
+        new MutationObserver(function () {
+            if (scheduled) {
+                return;
+            }
+            scheduled = true;
+            window.setTimeout(function () {
+                scheduled = false;
+                placeFinishButton();
+            }, 150);
+        }).observe(document.body, { childList: true, subtree: true });
+    }
+
+    function placeFinishButton() {
+        var id = ticketId();
+        var footer = document.querySelector('#itil-footer');
+        if (!id || !footer || footer.querySelector('.ac-finish')) {
+            return;
+        }
+        if (finishState) {
+            addFinishButton(id, footer, finishState);
+            return;
+        }
+        if (finishPending) {
+            return;
+        }
+        finishPending = true;
         fetch(data.finish + '?id=' + id, {
             credentials: 'same-origin',
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
@@ -280,29 +316,42 @@
             if (!response.ok) { throw new Error('HTTP ' + response.status); }
             return response.json();
         }).then(function (state) {
-            if (!state || !state.ok || state.closed || (!state.can_solve && !state.can_close)) {
+            if (!state || !state.ok) {
                 return;
             }
-            // Ja solucionado: so falta fechar (se o perfil puder).
-            if (state.solved && !state.can_close) {
-                return;
-            }
-            var button = el('button', 'btn ac-finish');
-            button.type = 'button';
-            button.appendChild(icon('ti-circle-check'));
-            button.appendChild(el('span', '', state.solved ? 'Fechar chamado' : 'Finalizar chamado'));
-            button.addEventListener('click', function () { finishDialog(id, state); });
-
-            var anchorNode = footer.querySelector('.timeline-buttons .main-actions');
-            if (anchorNode && anchorNode.parentNode) {
-                anchorNode.parentNode.insertBefore(button, anchorNode.nextSibling);
-            } else {
-                (footer.querySelector('.buttons-bar') || footer).appendChild(button);
+            finishState = state;
+            // O rodape pode ter sido redesenhado enquanto a resposta vinha.
+            var current = document.querySelector('#itil-footer');
+            if (current) {
+                addFinishButton(id, current, state);
             }
         }).catch(function (error) {
             // Sem o botao a tela segue como a do GLPI; o motivo fica no console.
+            finishPending = false;
             if (window.console) { console.warn('Ativa Central: botao Finalizar indisponivel.', error); }
         });
+    }
+
+    function addFinishButton(id, footer, state) {
+        if (footer.querySelector('.ac-finish') || state.closed || (!state.can_solve && !state.can_close)) {
+            return;
+        }
+        // Ja solucionado: so falta fechar (se o perfil puder).
+        if (state.solved && !state.can_close) {
+            return;
+        }
+        var button = el('button', 'btn ac-finish');
+        button.type = 'button';
+        button.appendChild(icon('ti-circle-check'));
+        button.appendChild(el('span', '', state.solved ? 'Fechar chamado' : 'Finalizar chamado'));
+        button.addEventListener('click', function () { finishDialog(id, state); });
+
+        var anchorNode = footer.querySelector('.timeline-buttons .main-actions');
+        if (anchorNode && anchorNode.parentNode) {
+            anchorNode.parentNode.insertBefore(button, anchorNode.nextSibling);
+        } else {
+            (footer.querySelector('.buttons-bar') || footer).appendChild(button);
+        }
     }
 
     function finishDialog(id, state) {
