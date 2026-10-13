@@ -95,6 +95,16 @@
         requestAnimationFrame(frame);
     }
 
+    /* Titulo como <div role="heading">, nao <h1>-<h3>: no GLPI ha regras de
+     * estilo (tema, CSS personalizado da entidade) que mexem nessas tags e
+     * chegaram a esconder os nomes dos cartoes. */
+    function heading(level, className, text) {
+        var node = el('div', className, text);
+        node.setAttribute('role', 'heading');
+        node.setAttribute('aria-level', String(level));
+        return node;
+    }
+
     function panel(className) {
         return el('div', 'ac-panel' + (className ? ' ' + className : ''));
     }
@@ -102,8 +112,8 @@
     function panelHead(title, subtitle, extra) {
         var head = el('div', 'ac-panel-head');
         var text = el('div');
-        text.appendChild(el('h2', 'ac-panel-title', title));
-        if (subtitle) { text.appendChild(el('p', 'ac-panel-sub', subtitle)); }
+        text.appendChild(heading(2, 'ac-panel-title', title));
+        if (subtitle) { text.appendChild(el('div', 'ac-panel-sub', subtitle)); }
         head.appendChild(text);
         if (extra) { head.appendChild(extra); }
         return head;
@@ -127,7 +137,7 @@
         var text = rise(el('div'), 0);
         text.appendChild(el('div', 'ac-eyebrow', eyebrow));
         text.appendChild(titleNode);
-        if (subtitle) { text.appendChild(el('p', 'ac-subtitle', subtitle)); }
+        if (subtitle) { text.appendChild(el('div', 'ac-subtitle', subtitle)); }
         head.appendChild(text);
         if (actions) { head.appendChild(rise(actions, 1)); }
         return head;
@@ -149,7 +159,7 @@
         var urls = data.urls || {};
         var name = (data.user && data.user.name) || '';
 
-        var title = el('h1', 'ac-title', greeting() + (name ? ', ' + name : ''));
+        var title = heading(1, 'ac-title', greeting() + (name ? ', ' + name : ''));
         title.appendChild(el('span', 'ac-spark', '✦'));
 
         var actions = el('div', 'ac-actions');
@@ -659,7 +669,7 @@
         });
 
         root.innerHTML = '';
-        root.appendChild(pageHead(data.eyebrow || 'Ativa Central · Módulo', el('h1', 'ac-title', data.title || ''),
+        root.appendChild(pageHead(data.eyebrow || 'Ativa Central · Módulo', heading(1, 'ac-title', data.title || ''),
             data.subtitle || '', actions.children.length ? actions : null));
 
         var index = 2;
@@ -668,7 +678,7 @@
         groups.forEach(function (group, groupIndex) {
             var section = el('section', 'ac-group');
             if (group.title) {
-                section.appendChild(rise(el('h2', 'ac-group-title', group.title), index));
+                section.appendChild(rise(heading(2, 'ac-group-title', group.title), index));
             }
             var grid = el('div', 'ac-cards');
             group.cards.forEach(function (card) {
@@ -719,8 +729,8 @@
         }
         node.appendChild(top);
 
-        node.appendChild(el('h3', 'ac-card-title', card.title));
-        node.appendChild(el('p', 'ac-card-desc', card.desc || ''));
+        node.appendChild(heading(3, 'ac-card-title', card.title));
+        node.appendChild(el('div', 'ac-card-desc', card.desc || ''));
 
         var foot = el('div', 'ac-card-foot');
         var cta = el('span', 'ac-cta', card.cta || 'Abrir');

@@ -1073,3 +1073,26 @@ a.ac-stat:hover {
         height: 230px;
     }
 }
+
+/* ------------------------------------------------------------------ blindagem */
+
+/* Textos das telas proprias sempre visiveis, mesmo que o tema ou o CSS
+   personalizado do GLPI tenha regras gerais para titulos e paragrafos. */
+.ac-app .ac-title,
+.ac-app .ac-group-title {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1;
+}
+
+.ac-app .ac-panel-title,
+.ac-app .ac-card-title,
+.ac-app .ac-card-desc,
+.ac-app .ac-subtitle,
+.ac-app .ac-panel-sub {
+    display: block !important;
+    visibility: visible !important;
+    height: auto;
+    overflow: visible;
+    text-indent: 0;
+}
