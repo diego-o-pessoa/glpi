@@ -326,7 +326,10 @@ final class Hubs
             ['Novos', 'Ainda sem atendimento.', 'ti ti-inbox', ['status' => Ticket::INCOMING], [Ticket::INCOMING], false],
             ['Em atendimento', 'Atribuídos ou planejados.', 'ti ti-progress', ['status' => 'process'], [Ticket::ASSIGNED, Ticket::PLANNED], false],
             ['Pendentes', 'Aguardando retorno ou terceiros.', 'ti ti-clock-pause', ['status' => Ticket::WAITING], [Ticket::WAITING], false],
-            ['Solucionados', 'Aguardando aprovação para fechar.', 'ti ti-circle-check', ['status' => Ticket::SOLVED], [Ticket::SOLVED], false],
+            ['Solucionados', 'Com solução, aguardando aprovação para fechar.', 'ti ti-circle-check', ['status' => Ticket::SOLVED], [Ticket::SOLVED], false],
+            // Onde vai parar o chamado finalizado quando a entidade fecha na
+            // hora (ou quando se usa "Solucionar e fechar").
+            ['Fechados', 'Encerrados de vez.', 'ti ti-archive', ['status' => Ticket::CLOSED], [Ticket::CLOSED], false],
             ['Atribuídos a mim', 'Em aberto sob minha responsabilidade.', 'ti ti-user-check', ['status' => 'notold', 'mine' => true],
                 [Ticket::INCOMING, Ticket::ASSIGNED, Ticket::PLANNED, Ticket::WAITING], true],
             ['Todos em aberto', 'Tudo o que ainda não foi solucionado.', 'ti ti-list-check', ['status' => 'notold'],

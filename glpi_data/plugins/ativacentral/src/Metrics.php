@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace GlpiPlugin\Ativacentral;
 
 use CommonITILActor;
+use CommonITILValidation;
 use Computer;
 use Glpi\DBAL\QuerySubQuery;
 use Session;
@@ -382,7 +383,12 @@ final class Metrics
     }
 
     /**
-     * Resolvidos no periodo e em aberto, por tecnico atribuido.
+     * Resolvidos no periodo e em aberto, por tecnico.
+     *
+     * "Resolvido por" = quem escreveu a solucao do chamado ou quem estava
+     * atribuido como tecnico (o mesmo chamado nao conta duas vezes para a
+     * mesma pessoa). So pelo tecnico atribuido, um chamado solucionado sem
+     * ninguem atribuido nao aparecia no desempenho de quem o resolveu.
      *
      * @return array{me: array<string, mixed>, team: list<array<string, mixed>>}
      */
@@ -392,8 +398,9 @@ final class Metrics
 
         $me = (int) Session::getLoginUserID();
         $stats = [];
+        $solvedBy = [];
         $iterator = $DB->request([
-            'SELECT'     => ['glpi_tickets_users.users_id', 'glpi_tickets.status', 'glpi_tickets.solvedate'],
+            'SELECT'     => ['glpi_tickets_users.users_id', 'glpi_tickets.id AS ticket', 'glpi_tickets.status', 'glpi_tickets.solvedate'],
             'FROM'       => 'glpi_tickets_users',
             'INNER JOIN' => ['glpi_tickets' => ['ON' => ['glpi_tickets_users' => 'tickets_id', 'glpi_tickets' => 'id']]],
             'WHERE'      => [
@@ -415,8 +422,32 @@ final class Metrics
             if (in_array($status, self::OPEN, true)) {
                 $stats[$user]['open']++;
             } elseif (in_array($status, self::DONE, true) && !empty($row['solvedate']) && strtotime((string) $row['solvedate']) >= $start) {
-                $stats[$user]['solved']++;
+                $solvedBy[$user][(int) $row['ticket']] = true;
             }
+        }
+
+        // Autor da solucao (solucoes recusadas pelo requerente nao contam).
+        $iterator = $DB->request([
+            'SELECT'     => ['glpi_itilsolutions.users_id', 'glpi_itilsolutions.items_id'],
+            'FROM'       => 'glpi_itilsolutions',
+            'INNER JOIN' => ['glpi_tickets' => ['ON' => ['glpi_itilsolutions' => 'items_id', 'glpi_tickets' => 'id']]],
+            'WHERE'      => [
+                self::scope(),
+                ['glpi_itilsolutions.itemtype' => 'Ticket'],
+                ['NOT' => ['glpi_itilsolutions.status' => CommonITILValidation::REFUSED]],
+                ['glpi_tickets.status' => self::DONE],
+                ['glpi_tickets.solvedate' => ['>=', date('Y-m-d H:i:s', $start)]],
+            ],
+        ]);
+        foreach ($iterator as $row) {
+            $user = (int) $row['users_id'];
+            if ($user > 0) {
+                $solvedBy[$user][(int) $row['items_id']] = true;
+            }
+        }
+        foreach ($solvedBy as $user => $tickets) {
+            $stats[$user] ??= ['solved' => 0, 'open' => 0];
+            $stats[$user]['solved'] = count($tickets);
         }
 
         uasort($stats, static fn (array $a, array $b): int => [$b['solved'], $a['open']] <=> [$a['solved'], $b['open']]);
@@ -441,7 +472,7 @@ final class Metrics
             'me'   => [
                 'solved' => $mine['solved'],
                 'open'   => $mine['open'],
-                // Do que estava comigo no periodo, quanto ja foi resolvido.
+                // Do que passou por mim no periodo, quanto ja foi resolvido.
                 'pct'    => $done > 0 ? (int) round(100 * $mine['solved'] / $done) : null,
                 'rank'   => $rank === false ? null : $rank + 1,
             ],
