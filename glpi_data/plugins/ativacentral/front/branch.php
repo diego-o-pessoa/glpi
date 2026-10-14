@@ -28,7 +28,7 @@ foreach ($ids as $id) {
     if (!$ticket->getFromDB($id) || !$ticket->canViewItem()) {
         continue;
     }
-    $branches[(string) $id] = Branch::of((int) $ticket->fields['entities_id'], (int) $ticket->fields['locations_id']);
+    $branches[(string) $id] = Branch::of((int) $ticket->fields['entities_id'], (int) $ticket->fields['locations_id'], $id);
 }
 
 echo json_encode(['ok' => true, 'branches' => (object) $branches], JSON_UNESCAPED_UNICODE);

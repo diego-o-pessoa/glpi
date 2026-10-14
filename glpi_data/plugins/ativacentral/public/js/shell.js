@@ -585,7 +585,7 @@
     function fillBranch(cell, name) {
         cell.innerHTML = '';
         var chip = el('span', 'ac-branch' + (name ? '' : ' is-empty'), name || '—');
-        chip.title = name ? 'Filial: ' + name : 'Sem filial na entidade nem na localização';
+        chip.title = name ? 'Filial: ' + name : 'Sem filial na entidade, no chamado nem no solicitante';
         cell.appendChild(chip);
     }
 
