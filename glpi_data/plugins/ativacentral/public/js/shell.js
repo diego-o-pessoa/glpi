@@ -589,11 +589,76 @@
         cell.appendChild(chip);
     }
 
+    // ------------------------------------------------------------------
+    // Ficha de chamado/problema/mudanca cabendo na tela
+    //
+    // O GLPI fixa a altura da ficha em "100vh - 187px", conta feita para o
+    // topo original. Com o topo do visual novo ela passa da tela e o rodape
+    // (Salvar, Responder...) so aparece rolando a pagina. Aqui a altura e a
+    // que sobra de verdade: a pagina para de rolar e a linha do tempo e o
+    // painel da direita rolam por dentro.
+    // ------------------------------------------------------------------
+    var FIT_MIN_WIDTH = 992;   // abaixo disso o GLPI empilha os paineis
+    var FIT_MIN_HEIGHT = 320;  // tela muito baixa: deixa a pagina rolar
+
+    function fitItilForm() {
+        if (!/\.form\.php$/i.test(location.pathname)) {
+            return;
+        }
+        var scheduled = false;
+        function schedule() {
+            if (scheduled) {
+                return;
+            }
+            scheduled = true;
+            window.setTimeout(function () {
+                scheduled = false;
+                applyItilFit();
+            }, 120);
+        }
+        applyItilFit();
+        window.addEventListener('resize', schedule);
+        if (window.MutationObserver) {
+            new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
+        }
+    }
+
+    function applyItilFit() {
+        var form = document.querySelector('.itil-object');
+        if (!form) {
+            return;
+        }
+        if (window.innerWidth < FIT_MIN_WIDTH || !form.offsetParent) {
+            form.style.removeProperty('height');
+            return;
+        }
+        var root = document.documentElement;
+        var top = form.getBoundingClientRect().top + window.scrollY;
+        var footer = document.querySelector('#itil-footer');
+        var below = footer && !form.contains(footer) ? footer.offsetHeight : 0;
+        var height = Math.floor(window.innerHeight - top - below - 16);
+        form.style.setProperty('height', Math.max(height, FIT_MIN_HEIGHT) + 'px', 'important');
+
+        // O que ainda sobrar (margens e bordas dos cartoes em volta) sai da ficha.
+        var overflow = root.scrollHeight - window.innerHeight;
+        if (overflow > 0 && height - overflow >= FIT_MIN_HEIGHT) {
+            var before = root.scrollHeight;
+            form.style.setProperty('height', (height - overflow) + 'px', 'important');
+            // A rolagem vinha de outra coisa (ex.: lista de abas longa): nao encolhe a toa.
+            if (root.scrollHeight >= before) {
+                form.style.setProperty('height', height + 'px', 'important');
+            }
+        }
+        if (window.scrollY > 0 && root.scrollHeight <= window.innerHeight + 1) {
+            window.scrollTo(0, 0);
+        }
+    }
+
     function start() {
         if (redirectHome()) {
             return;
         }
-        [sidebar, header, userMenus, finishTicket, branchColumn].forEach(function (step) {
+        [sidebar, header, userMenus, finishTicket, branchColumn, fitItilForm].forEach(function (step) {
             try {
                 step();
             } catch (error) {
