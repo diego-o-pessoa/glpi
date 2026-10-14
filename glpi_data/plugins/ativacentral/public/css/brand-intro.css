@@ -1,0 +1,31 @@
+/*
+ * Entrada da marca na barra lateral. Carregado so na primeira pagina de cada
+ * sessao (Shell::boot), para a animacao nao se repetir a cada clique.
+ */
+.sidebar .navbar-brand::before {
+    animation: ac-brand-pop 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+}
+
+.sidebar .navbar-brand .glpi-logo {
+    animation:
+        ac-brand-reveal 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.4s both,
+        ac-brand-shine 1.1s ease 1.2s both;
+}
+
+@keyframes ac-brand-pop {
+    0% { opacity: 0; transform: scale(0.4) rotate(-25deg); }
+    60% { opacity: 1; transform: scale(1.08) rotate(4deg); }
+    100% { opacity: 1; transform: none; }
+}
+
+@keyframes ac-brand-reveal {
+    from { opacity: 0; clip-path: inset(0 100% 0 0); transform: translateX(-10px); }
+    to { opacity: 1; clip-path: inset(0 0 0 0); transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sidebar .navbar-brand::before,
+    .sidebar .navbar-brand .glpi-logo {
+        animation: none;
+    }
+}

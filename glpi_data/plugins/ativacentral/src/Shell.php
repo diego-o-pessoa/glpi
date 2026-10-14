@@ -24,6 +24,9 @@ final class Shell
     /** Sessao em que a pessoa pediu o visual classico do GLPI. */
     public const SESSION_CLASSIC = 'ativacentral_classic';
 
+    /** A animacao de entrada da marca ja foi mostrada nesta sessao. */
+    private const SESSION_BRAND = 'ativacentral_brand_intro';
+
     /** Layout que a pessoa usava antes (o visual novo exige o menu lateral). */
     private const SESSION_LAYOUT = 'ativacentral_previous_layout';
 
@@ -58,6 +61,11 @@ final class Shell
             return;
         }
         $tags = [self::meta(self::clientData())];
+        if (!self::isNativeHome() && empty($_SESSION[self::SESSION_BRAND])) {
+            // Animacao de entrada da marca: so na primeira pagina da sessao.
+            $_SESSION[self::SESSION_BRAND] = 1;
+            $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::assetUrl('css/brand-intro.css')]];
+        }
         if (self::isNativeHome()) {
             // A pagina inicial do GLPI vira a "Visao geral". O plugin nao
             // consegue redirecionar no servidor nesta fase, entao a propria

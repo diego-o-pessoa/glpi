@@ -60,63 +60,65 @@ html:root[data-glpi-theme-dark="1"] {
     box-shadow: none !important;
 }
 
-/* Marca: o logo do GLPI vira o selo "A" + ATIVA / CENTRAL DE TI. */
+/* Marca: o logo do GLPI vira a marca oficial da Ativa Locacao. O simbolo
+   fica num selo branco (cores originais da marca) e o nome "Ativa Locacao"
+   em branco, para ler bem sobre o azul-marinho da barra. */
 .sidebar .navbar-brand {
     display: flex;
     align-items: center;
     justify-content: flex-start;
     gap: 12px;
+    align-self: stretch;
+    width: 100%;
     height: auto;
     margin: 0;
-    padding: 20px 20px 16px;
+    padding: 20px 14px 16px;
     text-decoration: none;
 }
 
 .sidebar .navbar-brand::before {
-    content: "A";
-    display: grid;
-    place-items: center;
-    flex: 0 0 38px;
-    width: 38px;
-    height: 38px;
-    border-radius: 12px;
-    background: linear-gradient(140deg, #74b0ff 0%, #3f63f1 100%);
-    box-shadow: 0 8px 18px -6px rgba(63, 99, 241, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.35);
-    color: #fff;
-    font-size: 20px;
-    font-weight: 800;
-    line-height: 1;
-    transition: transform 0.35s var(--ac-ease);
+    content: "";
+    display: block;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    background: #fff url("../img/ativa-symbol.png") center / 68% auto no-repeat;
+    box-shadow: 0 10px 22px -10px rgba(116, 168, 255, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+    transition: transform 0.4s var(--ac-ease), box-shadow 0.4s;
 }
 
 .sidebar .navbar-brand:hover::before {
-    transform: rotate(-6deg) scale(1.05);
+    box-shadow: 0 14px 26px -10px rgba(116, 168, 255, 1), 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+    transform: rotate(-6deg) scale(1.06);
 }
 
+/* Nome "Ativa Locacao": a imagem oficial serve de mascara e o branco e
+   pintado por baixo; assim da para passar um brilho pelas letras. */
 .sidebar .navbar-brand .glpi-logo {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    width: auto;
-    height: auto;
-    background: none !important;
-    line-height: 1;
+    display: block;
+    flex: 0 0 auto;
+    width: 99px;
+    height: 40px;
+    background-color: transparent !important;
+    background-image: linear-gradient(105deg, #fff 0%, #fff 40%, #a9c8ff 50%, #fff 60%, #fff 100%) !important;
+    background-position: 100% 0;
+    background-repeat: no-repeat;
+    background-size: 300% 100%;
+    -webkit-mask: url("../img/ativa-wordmark.png") left center / contain no-repeat;
+    mask: url("../img/ativa-wordmark.png") left center / contain no-repeat;
 }
 
-.sidebar .navbar-brand .glpi-logo::before {
-    content: "ATIVA";
-    color: #fff;
-    font-size: 17px;
-    font-weight: 800;
-    letter-spacing: 0.02em;
+/* Brilho que atravessa o nome ao passar o mouse. */
+.sidebar .navbar-brand:hover .glpi-logo {
+    animation: ac-brand-shine 0.9s ease;
 }
 
-.sidebar .navbar-brand .glpi-logo::after {
-    content: "CENTRAL DE TI";
-    color: #8f9bc4;
-    font-size: 9.5px;
-    font-weight: 600;
-    letter-spacing: 0.22em;
+/* Entrada da marca: so na primeira pagina da sessao (o servidor carrega
+   brand-intro.css nessa pagina). */
+@keyframes ac-brand-shine {
+    from { background-position: 100% 0; }
+    to { background-position: 0 0; }
 }
 
 /* "Encontrar menu" (Ctrl+Alt+G): continua valendo, com cara de busca. */
