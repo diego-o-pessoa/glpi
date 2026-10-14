@@ -160,6 +160,7 @@ final class Shell
             'helpdesk'  => self::glpiUrl(Nav::hubUrl('helpdesk')),
             'classic'   => self::url('/front/toggle.php?mode=classic'),
             'finish'    => self::url('/front/ticket.finish.php'),
+            'branch'    => self::url('/front/branch.php'),
             'config'    => self::canConfigure() ? self::url('/front/config.php') : '',
             'section'   => Nav::SECTION_ICON,
             'badges'    => ['helpdesk' => $new],

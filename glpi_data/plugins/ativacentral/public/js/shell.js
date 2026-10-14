@@ -468,11 +468,132 @@
         (text || cancel).focus();
     }
 
+    // ------------------------------------------------------------------
+    // Lista de chamados: coluna "Entidade" vira "Filial"
+    //
+    // "Grupo Ativa > Ativa Locacao - Matriz" vira "Matriz". Chamado da raiz
+    // usa a localizacao; sem nenhuma das duas, um traco. Quem decide e o
+    // servidor (front/branch.php). A lista e redesenhada pelo GLPI ao ordenar
+    // ou paginar, por isso a troca e refeita quando a tabela muda.
+    // ------------------------------------------------------------------
+    var branchCache = {};
+    var branchLoading = false;
+
+    function branchColumn() {
+        if (!data.branch || !/\/front\/ticket\.php$/i.test(location.pathname)) {
+            return;
+        }
+        applyBranches();
+        if (!window.MutationObserver) {
+            return;
+        }
+        var scheduled = false;
+        new MutationObserver(function () {
+            if (scheduled) {
+                return;
+            }
+            scheduled = true;
+            window.setTimeout(function () {
+                scheduled = false;
+                applyBranches();
+            }, 150);
+        }).observe(document.body, { childList: true, subtree: true });
+    }
+
+    function entityColumn(table) {
+        var cells = table.querySelectorAll('thead tr:last-child > th');
+        for (var i = 0; i < cells.length; i++) {
+            var text = cells[i].textContent.trim().toLowerCase();
+            if (text === 'entidade' || text === 'filial' || text === 'entity') {
+                return { index: i, cell: cells[i] };
+            }
+        }
+        return null;
+    }
+
+    function renameHeader(cell) {
+        if (cell.getAttribute('data-ac-branch') === '1') {
+            return;
+        }
+        var walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+        var node;
+        while ((node = walker.nextNode())) {
+            if (/entidade|entity/i.test(node.nodeValue)) {
+                node.nodeValue = node.nodeValue.replace(/entidade|entity/i, 'Filial');
+            }
+        }
+        cell.setAttribute('data-ac-branch', '1');
+    }
+
+    function rowTicketId(row) {
+        var link = row.querySelector('a[href*="ticket.form.php?id="]');
+        var match = link ? /[?&]id=(\d+)/.exec(link.getAttribute('href')) : null;
+        return match ? match[1] : '';
+    }
+
+    function applyBranches() {
+        var table = document.querySelector('table.search-results');
+        if (!table) {
+            return;
+        }
+        var column = entityColumn(table);
+        if (!column) {
+            return;
+        }
+        renameHeader(column.cell);
+
+        var missing = [];
+        var rows = table.querySelectorAll('tbody > tr');
+        Array.prototype.forEach.call(rows, function (row) {
+            var cell = row.children[column.index];
+            var id = rowTicketId(row);
+            if (!cell || !id || cell.querySelector('.ac-branch')) {
+                return;
+            }
+            if (Object.prototype.hasOwnProperty.call(branchCache, id)) {
+                fillBranch(cell, branchCache[id]);
+            } else {
+                missing.push(id);
+            }
+        });
+        if (!missing.length || branchLoading) {
+            return;
+        }
+        branchLoading = true;
+        fetch(data.branch + '?ids=' + missing.join(','), {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (response) {
+            if (!response.ok) { throw new Error('HTTP ' + response.status); }
+            return response.json();
+        }).then(function (result) {
+            var found = (result && result.branches) || {};
+            missing.forEach(function (id) {
+                // Chamado que nao voltou (sem acesso): fica como o GLPI mostrou.
+                if (Object.prototype.hasOwnProperty.call(found, id)) {
+                    branchCache[id] = found[id];
+                }
+            });
+            branchLoading = false;
+            applyBranches();
+        }).catch(function (error) {
+            branchLoading = false;
+            if (window.console) { console.warn('Ativa Central: coluna Filial indisponivel.', error); }
+        });
+    }
+
+    function fillBranch(cell, name) {
+        cell.innerHTML = '';
+        var chip = el('span', 'ac-branch' + (name ? '' : ' is-empty'), name || '—');
+        chip.title = name ? 'Filial: ' + name : 'Sem filial na entidade nem na localização';
+        cell.appendChild(chip);
+    }
+
     function start() {
         if (redirectHome()) {
             return;
         }
-        [sidebar, header, userMenus, finishTicket].forEach(function (step) {
+        [sidebar, header, userMenus, finishTicket, branchColumn].forEach(function (step) {
             try {
                 step();
             } catch (error) {

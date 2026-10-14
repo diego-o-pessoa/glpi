@@ -550,3 +550,25 @@ body.central .search-card .search-header .btn {
         animation: none;
     }
 }
+
+/* ------------------------------------------------ coluna "Filial" (chamados) */
+
+.ac-branch {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 11px;
+    border-radius: 999px;
+    background: rgba(var(--ac-blue-rgb), 0.09);
+    color: #3c5ce8;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.ac-branch.is-empty {
+    padding-left: 4px;
+    padding-right: 4px;
+    background: transparent;
+    color: var(--ac-muted);
+    font-weight: 500;
+}
