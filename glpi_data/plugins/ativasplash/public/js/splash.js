@@ -13,7 +13,25 @@
         document.documentElement.classList.remove("ativa-splash-pending");
     }
 
-    if (sessionStorage.getItem("ativaSplashViewed") === "true") {
+    // sessionStorage pode estar bloqueado (privacidade do navegador): nesse
+    // caso a animacao roda, so nao fica marcada como vista.
+    function viewed() {
+        try {
+            return sessionStorage.getItem("ativaSplashViewed") === "true";
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function markViewed() {
+        try {
+            markViewed();
+        } catch (e) {
+            // sem armazenamento: nada a fazer
+        }
+    }
+
+    if (viewed()) {
         var seen = document.getElementById("ativa-splash");
         if (seen) seen.remove();
         releaseCover();
@@ -48,27 +66,29 @@
         }
     }, 8000);
 
-    var prefersReducedMotion =
-        window.matchMedia &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // A animacao roda mesmo com "reduzir movimento" do sistema: no Windows com
+    // os efeitos de animacao desligados (comum em PCs de escritorio e acesso
+    // remoto) ela era pulada e o login aparecia direto.
 
-    if (prefersReducedMotion || !video) {
-        // Sem animacao: overlay sai, logo permanente (CSS) aparece.
-        finishImmediately();
+    if (!video) {
+        startLogoAnimation();
         return;
     }
 
     // --- Video ---
+    // Se o navegador nao deixar tocar o video (reproducao automatica
+    // bloqueada) ou nao conseguir abri-lo, segue para a animacao da logo em
+    // vez de pular tudo.
     video.muted = true;
     var playPromise = video.play();
     if (playPromise !== undefined) {
         playPromise.catch(function (error) {
-            console.warn("Ativa Splash: autoplay bloqueado ou falha no video.", error);
-            finishImmediately();
+            console.warn("Ativa Splash: video nao tocou; seguindo para a animacao da logo.", error);
+            startLogoAnimation();
         });
     }
     video.addEventListener("ended", startLogoAnimation);
-    video.addEventListener("error", finishImmediately);
+    video.addEventListener("error", startLogoAnimation);
 
     // --- Etapa 1: revela o palco horizontal e transforma em vertical ---
     function startLogoAnimation() {
@@ -124,7 +144,7 @@
         if (isFinished) return;
         isFinished = true;
         clearTimeout(fallbackTimeout);
-        sessionStorage.setItem("ativaSplashViewed", "true");
+        markViewed();
 
         // O fade do overlay revela o login: a cobertura sai junto.
         releaseCover();
@@ -139,7 +159,7 @@
         if (isFinished) return;
         isFinished = true;
         clearTimeout(fallbackTimeout);
-        sessionStorage.setItem("ativaSplashViewed", "true");
+        markViewed();
         splash.remove();
         releaseCover();
     }

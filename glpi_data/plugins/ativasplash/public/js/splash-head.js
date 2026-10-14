@@ -10,7 +10,6 @@
     // Mesmas condicoes em que o splash.js pula a animacao: nao cobre.
     try {
         if (sessionStorage.getItem("ativaSplashViewed") === "true") return;
-        if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     } catch (e) {
         return;
     }

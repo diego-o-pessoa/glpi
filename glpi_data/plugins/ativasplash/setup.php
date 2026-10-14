@@ -19,8 +19,8 @@ function plugin_init_ativasplash(): void
     // <head> das paginas anonimas: vale desde o primeiro paint (logo Ativa no
     // lugar da GLPI + cobertura branca ate a splash assumir). O display_login
     // so e chamado no meio do formulario, tarde demais para isso.
-    $PLUGIN_HOOKS[\Glpi\Plugin\Hooks::ADD_CSS_ANONYMOUS_PAGE]['ativasplash'] = ['css/splash-head.css'];
-    $PLUGIN_HOOKS[\Glpi\Plugin\Hooks::ADD_JAVASCRIPT_ANONYMOUS_PAGE]['ativasplash'] = ['js/splash-head.js'];
+    $PLUGIN_HOOKS[\Glpi\Plugin\Hooks::ADD_CSS_ANONYMOUS_PAGE]['ativasplash'] = ['css/splash-head.css?m=' . (int) @filemtime(__DIR__ . '/public/css/splash-head.css')];
+    $PLUGIN_HOOKS[\Glpi\Plugin\Hooks::ADD_JAVASCRIPT_ANONYMOUS_PAGE]['ativasplash'] = ['js/splash-head.js?m=' . (int) @filemtime(__DIR__ . '/public/js/splash-head.js')];
 }
 
 /**

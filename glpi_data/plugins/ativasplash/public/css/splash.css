@@ -95,18 +95,8 @@
     transform: translate3d(0, 69px, 0) scale(0.638);
 }
 
-/* ---------- Reduced motion: sem video, sem animacao ---------- */
-@media (prefers-reduced-motion: reduce) {
-    #ativa-intro-video {
-        display: none !important;
-    }
-    #ativa-stage {
-        transition: none !important;
-    }
-    #ativa-stage img {
-        transition: none !important;
-    }
-}
+/* "Reduzir movimento" do sistema nao desliga a splash: no Windows com os
+   efeitos de animacao desligados ela era pulada e o login aparecia direto. */
 
 /* Logo Ativa permanente (no lugar da logo GLPI): em splash-head.css, que
    carrega no <head> para valer desde o primeiro paint. */

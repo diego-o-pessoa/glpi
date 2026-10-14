@@ -47,7 +47,7 @@ function plugin_ativasplash_display_login(): void
         . '</style>';
 
     // CSS completo (transicoes, estados da animacao, logo permanente).
-    echo '<link rel="stylesheet" type="text/css" href="' . $plugin_url . '/css/splash.css?v=' . $version . '">';
+    echo '<link rel="stylesheet" type="text/css" href="' . $plugin_url . '/css/splash.css?v=' . $version . '.' . plugin_ativasplash_mtime('css/splash.css') . '">';
 
     // Inject HTML structure for the splash screen.
     // O palco (#ativa-stage) tem o simbolo e o wordmark como elementos separados,
@@ -69,12 +69,23 @@ function plugin_ativasplash_display_login(): void
         </div>
     </div>
     <script>
-        if (sessionStorage.getItem("ativaSplashViewed") === "true") {
-            var s = document.getElementById("ativa-splash");
-            if (s) s.style.display = "none";
-        }
+        try {
+            if (sessionStorage.getItem("ativaSplashViewed") === "true") {
+                var s = document.getElementById("ativa-splash");
+                if (s) s.style.display = "none";
+            }
+        } catch (e) {}
     </script>';
 
     // Inject JS
-    echo '<script type="text/javascript" src="' . $plugin_url . '/js/splash.js?v=' . $version . '"></script>';
+    echo '<script type="text/javascript" src="' . $plugin_url . '/js/splash.js?v=' . $version . '.' . plugin_ativasplash_mtime('js/splash.js') . '"></script>';
+}
+
+/**
+ * Data do arquivo em public/: o navegador pega o JS/CSS novo assim que o
+ * arquivo muda, sem precisar subir a versao do plugin.
+ */
+function plugin_ativasplash_mtime(string $file): int
+{
+    return (int) @filemtime(__DIR__ . '/public/' . $file);
 }
