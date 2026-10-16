@@ -6,6 +6,8 @@ use GlpiPlugin\Ativarede\Collector;
 use GlpiPlugin\Ativarede\Desks;
 use GlpiPlugin\Ativarede\Events;
 use GlpiPlugin\Ativarede\Inventory;
+use GlpiPlugin\Ativarede\Schema;
+use GlpiPlugin\Ativarede\Walls;
 
 include '../../../inc/includes.php';
 
@@ -24,6 +26,9 @@ if (!PluginAtivaredeProfile::canView()) {
     $respond(['ok' => false, 'message' => 'Sem permissão.'], 403);
     return;
 }
+
+// Tabela das divisorias chega com o git pull, sem atualizar o plugin.
+Schema::upgrade();
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     session_write_close();
@@ -46,6 +51,9 @@ try {
         'move_desk'    => Desks::move((int) ($_POST['id'] ?? 0), (float) ($_POST['x'] ?? 0), (float) ($_POST['y'] ?? 0)),
         'add_desk'     => Desks::add($planId, (float) ($_POST['x'] ?? 0), (float) ($_POST['y'] ?? 0)),
         'delete_desk'  => Desks::delete((int) ($_POST['id'] ?? 0)),
+        'add_wall'     => Walls::add($planId, $_POST),
+        'save_wall'    => Walls::save($_POST),
+        'delete_wall'  => Walls::delete((int) ($_POST['id'] ?? 0)),
         'resolve'      => Events::resolve((int) ($_POST['id'] ?? 0), (string) ($_POST['resolution'] ?? '')),
         'switch_label' => Desks::saveSwitchLabel((int) ($_POST['id'] ?? 0), (string) ($_POST['label'] ?? '')),
         'collect'      => Collector::requestAll(),

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Glpi\Application\View\TemplateRenderer;
 use GlpiPlugin\Ativarede\Inventory;
+use GlpiPlugin\Ativarede\Schema;
+use GlpiPlugin\Ativarede\Seed;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 include '../../../inc/includes.php';
@@ -16,6 +18,10 @@ if (!PluginAtivaredeProfile::canView()) {
 
 global $CFG_GLPI;
 $base = $CFG_GLPI['root_doc'] . '/plugins/ativarede';
+
+// Divisorias e 2º andar chegam com o git pull, sem precisar atualizar o plugin.
+Schema::upgrade();
+Seed::ensureSecondFloor();
 
 $plans = Inventory::plans();
 $planId = (int) ($_GET['plan'] ?? 0);

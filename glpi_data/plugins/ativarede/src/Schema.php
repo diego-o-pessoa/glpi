@@ -57,12 +57,38 @@ final class Schema
             }
         }
 
+        $sign = \DBConnection::getDefaultPrimaryKeySignOption();
+        $charset = \DBConnection::getDefaultCharset();
+        $collation = \DBConnection::getDefaultCollation();
+
+        // Nome curto da planta nas abas de andar ("1º andar · Anexo").
+        $plans = Settings::TABLE_PLANS;
+        if ($DB->tableExists($plans) && !$DB->fieldExists($plans, 'label')) {
+            $DB->doQuery("ALTER TABLE `{$plans}` ADD `label` varchar(64) NOT NULL DEFAULT '' AFTER `name`");
+        }
+
+        // Divisorias e portas desenhadas na tela da planta (coordenadas da
+        // planta, como as mesas). kind: wall, glass ou door; flip = lado para
+        // onde a porta abre.
+        if (!$DB->tableExists(Settings::TABLE_WALLS)) {
+            $DB->doQuery("CREATE TABLE `" . Settings::TABLE_WALLS . "` (
+                `id` int {$sign} NOT NULL AUTO_INCREMENT,
+                `plans_id` int {$sign} NOT NULL DEFAULT '0',
+                `kind` varchar(16) NOT NULL DEFAULT 'wall',
+                `x1` decimal(8,2) NOT NULL DEFAULT '0.00',
+                `y1` decimal(8,2) NOT NULL DEFAULT '0.00',
+                `x2` decimal(8,2) NOT NULL DEFAULT '0.00',
+                `y2` decimal(8,2) NOT NULL DEFAULT '0.00',
+                `flip` tinyint NOT NULL DEFAULT '0',
+                `date_mod` timestamp NULL DEFAULT NULL,
+                PRIMARY KEY (`id`),
+                KEY `plans_id` (`plans_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} ROW_FORMAT=DYNAMIC");
+        }
+
         // Ultima recusa por maquina: mostra em Equipamentos por que ela nao
         // aparece, sem precisar ir ate ela. Apagada no primeiro envio aceito.
         if (!$DB->tableExists(Settings::TABLE_REJECTIONS)) {
-            $sign = \DBConnection::getDefaultPrimaryKeySignOption();
-            $charset = \DBConnection::getDefaultCharset();
-            $collation = \DBConnection::getDefaultCollation();
             $DB->doQuery("CREATE TABLE `" . Settings::TABLE_REJECTIONS . "` (
                 `id` int {$sign} NOT NULL AUTO_INCREMENT,
                 `machine_id` varchar(128) NOT NULL,

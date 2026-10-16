@@ -291,10 +291,330 @@
         });
     }
 
+    // ------------------------------------------------------------------
+    // Divisorias e portas (camada SVG entre as areas e as mesas)
+    // ------------------------------------------------------------------
+    var SVG_NS = 'http://www.w3.org/2000/svg';
+    var WALL_KINDS = { wall: 'Divisória', glass: 'Divisória de vidro', door: 'Porta' };
+    var GRID = 5;          // as pontas andam de 5 em 5 unidades
+    var SNAP_END = 12;     // encosta na ponta de outra divisoria (fecha cantos)
+    var SNAP_LINE = 8;     // encosta em cima de outra divisoria (porta na parede)
+    var wallsLayer = q('[data-ar-walls]');
+    var selectedWallId = 0;
+    var tool = '';         // desenhando: 'wall', 'glass' ou 'door'
+    var draft = null;      // divisoria sendo desenhada
+
+    function svgEl(tag, attrs, cls) {
+        var n = document.createElementNS(SVG_NS, tag);
+        Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, String(attrs[k])); });
+        if (cls) { n.setAttribute('class', cls); }
+        return n;
+    }
+
+    function wallById(id) {
+        var list = state.walls || [];
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].id === id) { return list[i]; }
+        }
+        return null;
+    }
+
+    function segment(w) { return { x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 }; }
+
+    /* Porta: (x1, y1) e a dobradica. A folha fica aberta a 90 graus, para o
+     * lado escolhido por flip, e o arco vai da folha ate o outro batente. */
+    function doorGeometry(w) {
+        var dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+        var r = Math.sqrt(dx * dx + dy * dy) || 1;
+        var s = w.flip ? -1 : 1;
+        var lx = w.x1 - dy * s, ly = w.y1 + dx * s;
+        return {
+            lx: lx, ly: ly,
+            arc: 'M' + w.x2 + ' ' + w.y2 + 'A' + r + ' ' + r + ' 0 0 ' + (w.flip ? 0 : 1) + ' ' + lx + ' ' + ly
+        };
+    }
+
+    function renderWalls() {
+        if (!wallsLayer || !state.plan) { return; }
+        wallsLayer.setAttribute('viewBox', '0 0 ' + state.plan.width + ' ' + state.plan.height);
+        while (wallsLayer.firstChild) { wallsLayer.removeChild(wallsLayer.firstChild); }
+        // Portas por ultimo: o vao "apaga" a divisoria que passa por baixo.
+        var list = (state.walls || []).slice().sort(function (a, b) {
+            return (a.kind === 'door' ? 1 : 0) - (b.kind === 'door' ? 1 : 0);
+        });
+        list.forEach(function (w) { wallsLayer.appendChild(wallNode(w, false)); });
+        if (draft) { wallsLayer.appendChild(wallNode(draft, true)); }
+    }
+
+    function wallNode(w, isDraft) {
+        var selected = editing && !isDraft && w.id === selectedWallId;
+        var g = svgEl('g', {}, 'ar-wall k-' + w.kind + (selected ? ' is-selected' : '') + (isDraft ? ' is-draft' : ''));
+        var line = segment(w);
+        if (w.kind === 'door') {
+            var d = doorGeometry(w);
+            g.appendChild(svgEl('line', line, 'ar-door-gap'));
+            g.appendChild(svgEl('path', { d: d.arc }, 'ar-door-arc'));
+            g.appendChild(svgEl('line', { x1: w.x1, y1: w.y1, x2: d.lx, y2: d.ly }, 'ar-door-leaf'));
+        } else {
+            g.appendChild(svgEl('line', line, 'ar-wall-line'));
+            if (w.kind === 'glass') { g.appendChild(svgEl('line', line, 'ar-wall-glass')); }
+        }
+        if (editing && !isDraft) {
+            var hit = svgEl('line', line, 'ar-wall-hit');
+            var title = svgEl('title');
+            title.textContent = WALL_KINDS[w.kind] + ' — clique para editar, arraste para mover';
+            hit.appendChild(title);
+            hit.addEventListener('pointerdown', function (ev) { startWallDrag(ev, w, 0); });
+            g.appendChild(hit);
+            if (selected) {
+                [1, 2].forEach(function (end) {
+                    var handle = svgEl('circle', { cx: w['x' + end], cy: w['y' + end], r: 7 }, 'ar-wall-handle' + (w.kind === 'door' && end === 1 ? ' is-hinge' : ''));
+                    var tip = svgEl('title');
+                    tip.textContent = w.kind === 'door' && end === 1 ? 'Dobradiça — arraste para mudar' : 'Arraste para esticar ou girar (Alt solta o alinhamento)';
+                    handle.appendChild(tip);
+                    handle.addEventListener('pointerdown', function (ev) { startWallDrag(ev, w, end); });
+                    g.appendChild(handle);
+                });
+            }
+        }
+        return g;
+    }
+
+    function toPlan(ev) {
+        var rect = canvas.getBoundingClientRect();
+        var W = state.plan.width, H = state.plan.height;
+        return {
+            x: Math.max(0, Math.min(W, (ev.clientX - rect.left) / rect.width * W)),
+            y: Math.max(0, Math.min(H, (ev.clientY - rect.top) / rect.height * H))
+        };
+    }
+
+    function snapGrid(v) { return Math.round(v / GRID) * GRID; }
+
+    /* Ponto final de uma ponta: encosta na ponta de outra divisoria, ou em
+     * cima dela; senao vai para a grade e, a partir da outra ponta, fica reto
+     * (horizontal/vertical) se estiver quase reto. Alt desliga o alinhamento. */
+    function snapPoint(p, from, free, ignoreId) {
+        var best = null, bestDist = SNAP_END;
+        var onLine = null, lineDist = SNAP_LINE;
+        (state.walls || []).forEach(function (o) {
+            if (o.id === ignoreId) { return; }
+            [[o.x1, o.y1], [o.x2, o.y2]].forEach(function (c) {
+                var dist = Math.hypot(c[0] - p.x, c[1] - p.y);
+                if (dist < bestDist) { bestDist = dist; best = { x: c[0], y: c[1] }; }
+            });
+            if (o.kind === 'door') { return; }
+            var vx = o.x2 - o.x1, vy = o.y2 - o.y1, len2 = vx * vx + vy * vy;
+            if (!len2) { return; }
+            var t = Math.max(0, Math.min(1, ((p.x - o.x1) * vx + (p.y - o.y1) * vy) / len2));
+            var px = o.x1 + t * vx, py = o.y1 + t * vy;
+            var d = Math.hypot(px - p.x, py - p.y);
+            if (d < lineDist) {
+                lineDist = d;
+                // Em parede reta, a posicao ao longo dela tambem vai para a grade.
+                onLine = { x: vx === 0 ? o.x1 : snapGrid(px), y: vy === 0 ? o.y1 : snapGrid(py) };
+                if (vx !== 0 && vy !== 0) { onLine = { x: Math.round(px), y: Math.round(py) }; }
+            }
+        });
+        if (best) { return best; }
+        if (onLine) { return onLine; }
+        var pt = { x: snapGrid(p.x), y: snapGrid(p.y) };
+        if (from && !free) {
+            var dx = Math.abs(pt.x - from.x), dy = Math.abs(pt.y - from.y);
+            if (dy <= dx * 0.25) { pt.y = from.y; } else if (dx <= dy * 0.25) { pt.x = from.x; }
+        }
+        return pt;
+    }
+
+    function wallFields(w) {
+        return { action: 'save_wall', id: w.id, kind: w.kind, x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, flip: w.flip ? 1 : 0 };
+    }
+
+    function saveWall(w, changes, restore) {
+        var fields = wallFields(w);
+        Object.keys(changes || {}).forEach(function (k) { fields[k] = changes[k]; });
+        return post(fields).then(function (r) {
+            if (!r.ok && restore) { Object.assign(w, restore); }
+            render();
+            return r;
+        });
+    }
+
+    function deleteWall(w) {
+        post({ action: 'delete_wall', id: w.id }).then(function (r) {
+            if (r.ok) { selectedWallId = 0; }
+            render();
+        });
+    }
+
+    /* end = 0 move a divisoria inteira; 1 ou 2 arrasta aquela ponta. */
+    function startWallDrag(ev, w, end) {
+        if (ev.button !== 0 || tool) { return; }
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (selectedWallId !== w.id || selectedId) { selectWall(w.id); }
+        var start = toPlan(ev);
+        var orig = segment(w);
+        var W = state.plan.width, H = state.plan.height;
+        var moved = false;
+
+        function onMove(e) {
+            var p = toPlan(e);
+            if (!moved && Math.abs(p.x - start.x) + Math.abs(p.y - start.y) < 3) { return; }
+            moved = true;
+            if (end === 0) {
+                var dx = snapGrid(p.x - start.x), dy = snapGrid(p.y - start.y);
+                dx = Math.max(-Math.min(orig.x1, orig.x2), Math.min(W - Math.max(orig.x1, orig.x2), dx));
+                dy = Math.max(-Math.min(orig.y1, orig.y2), Math.min(H - Math.max(orig.y1, orig.y2), dy));
+                w.x1 = orig.x1 + dx; w.x2 = orig.x2 + dx;
+                w.y1 = orig.y1 + dy; w.y2 = orig.y2 + dy;
+            } else {
+                var other = end === 1 ? { x: w.x2, y: w.y2 } : { x: w.x1, y: w.y1 };
+                var pt = snapPoint(p, other, e.altKey, w.id);
+                w['x' + end] = pt.x;
+                w['y' + end] = pt.y;
+            }
+            renderWalls();
+        }
+        function onUp() {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            window.removeEventListener('pointercancel', onUp);
+            if (moved) { saveWall(w, {}, orig); }
+        }
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+        window.addEventListener('pointercancel', onUp);
+    }
+
+    /* Desenho: com uma ferramenta escolhida, clicar e arrastar na planta cria
+     * a divisoria (ou a porta) de uma ponta a outra. */
+    if (wallsLayer) {
+        wallsLayer.addEventListener('pointerdown', function (ev) {
+            if (!tool || !editing || ev.button !== 0) { return; }
+            ev.preventDefault();
+            var from = snapPoint(toPlan(ev), null, ev.altKey, 0);
+            draft = { id: 0, kind: tool, x1: from.x, y1: from.y, x2: from.x, y2: from.y, flip: 0 };
+            renderWalls();
+
+            function onMove(e) {
+                var pt = snapPoint(toPlan(e), from, e.altKey, 0);
+                draft.x2 = pt.x;
+                draft.y2 = pt.y;
+                renderWalls();
+            }
+            function onUp() {
+                window.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onUp);
+                window.removeEventListener('pointercancel', onUp);
+                var w = draft;
+                draft = null;
+                if (!w || Math.hypot(w.x2 - w.x1, w.y2 - w.y1) < 8) {
+                    renderWalls();
+                    showToast(WALL_KINDS[tool] + ': clique e arraste de uma ponta à outra.');
+                    return;
+                }
+                post({ action: 'add_wall', kind: w.kind, x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2, flip: 0 }).then(function (r) {
+                    if (r.ok && r.wall_id) { selectedWallId = r.wall_id; selectedId = 0; }
+                    render();
+                });
+            }
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp);
+            window.addEventListener('pointercancel', onUp);
+        });
+    }
+
+    function selectWall(id) {
+        selectedWallId = id;
+        selectedId = 0;
+        Array.prototype.forEach.call(desksLayer.querySelectorAll('.ar-desk.is-selected'), function (n) { n.classList.remove('is-selected'); });
+        renderWalls();
+        renderPanel();
+        if (editing) { renderSide(); }
+    }
+
+    function renderWallForm(w) {
+        var box = el('div');
+        box.appendChild(el('h3', 'mb-1', WALL_KINDS[w.kind]));
+        box.appendChild(el('p', 'text-muted small', w.kind === 'door'
+            ? 'Arraste a porta para mover ou as bolinhas para mudar a largura. A bolinha cheia é a dobradiça.'
+            : 'Arraste para mover; as bolinhas das pontas esticam ou giram (segure Alt para sair do alinhamento reto).'));
+
+        var row = el('div', 'row g-2 align-items-end');
+        var wrap = el('div', 'col-md-6');
+        wrap.appendChild(el('label', 'form-label small mb-1', 'Tipo'));
+        var kind = el('select', 'form-select form-select-sm');
+        Object.keys(WALL_KINDS).forEach(function (k) {
+            var o = el('option', '', WALL_KINDS[k]); o.value = k; o.selected = w.kind === k; kind.appendChild(o);
+        });
+        kind.addEventListener('change', function () { saveWall(w, { kind: kind.value }); });
+        wrap.appendChild(kind);
+        row.appendChild(wrap);
+        box.appendChild(row);
+
+        var actions = el('div', 'd-flex flex-wrap gap-2 mt-3');
+        if (w.kind === 'door') {
+            var flip = el('button', 'btn btn-sm btn-outline-primary');
+            flip.type = 'button';
+            flip.appendChild(icon('switch-vertical'));
+            flip.appendChild(document.createTextNode(' Abrir para o outro lado'));
+            flip.addEventListener('click', function () { saveWall(w, { flip: w.flip ? 0 : 1 }); });
+            actions.appendChild(flip);
+            var hinge = el('button', 'btn btn-sm btn-outline-primary');
+            hinge.type = 'button';
+            hinge.appendChild(icon('switch-horizontal'));
+            hinge.appendChild(document.createTextNode(' Dobradiça do outro lado'));
+            hinge.addEventListener('click', function () {
+                // Trocar as pontas mantem o vao; o flip invertido mantem o lado de abertura.
+                saveWall(w, { x1: w.x2, y1: w.y2, x2: w.x1, y2: w.y1, flip: w.flip ? 0 : 1 });
+            });
+            actions.appendChild(hinge);
+        }
+        var del = el('button', 'btn btn-sm btn-outline-danger ms-auto');
+        del.type = 'button';
+        del.appendChild(icon('trash'));
+        del.appendChild(document.createTextNode(' Remover'));
+        del.title = 'Também pelo teclado: Delete';
+        del.addEventListener('click', function () { deleteWall(w); });
+        actions.appendChild(del);
+        box.appendChild(actions);
+        panel.appendChild(box);
+    }
+
+    var EDIT_HINTS = {
+        '': 'Modo edição: arraste as mesas e as divisórias; clique em uma para editar.',
+        wall: 'Divisória: clique e arraste na planta, de uma ponta à outra. Esc ou o botão de novo para terminar.',
+        glass: 'Divisória de vidro: clique e arraste na planta, de uma ponta à outra. Esc para terminar.',
+        door: 'Porta: arraste de um batente ao outro, começando pela dobradiça. Em cima de uma divisória ela abre o vão sozinha.'
+    };
+    var editHint = q('[data-ar-edit-hint]');
+    var toolButtons = app.querySelectorAll('[data-ar-tool]');
+
+    function setTool(next) {
+        tool = next;
+        app.classList.toggle('is-drawing', !!tool);
+        Array.prototype.forEach.call(toolButtons, function (b) {
+            var on = b.getAttribute('data-ar-tool') === tool;
+            b.classList.toggle('btn-primary', on);
+            b.classList.toggle('btn-outline-primary', !on);
+            b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        if (editHint) { editHint.textContent = EDIT_HINTS[tool] || EDIT_HINTS['']; }
+    }
+
+    Array.prototype.forEach.call(toolButtons, function (b) {
+        b.addEventListener('click', function () {
+            var next = b.getAttribute('data-ar-tool');
+            setTool(tool === next ? '' : next);
+        });
+    });
+
     function renderDesks() {
         var W = state.plan.width;
         var H = state.plan.height;
         renderZones();
+        renderWalls();
         desksLayer.innerHTML = '';
         state.desks.forEach(function (desk) {
             var node = el('button', 'ar-desk s-' + desk.state);
@@ -359,6 +679,10 @@
 
     function select(id) {
         selectedId = id;
+        if (selectedWallId) {
+            selectedWallId = 0;
+            renderWalls();
+        }
         Array.prototype.forEach.call(desksLayer.querySelectorAll('.ar-desk'), function (n) {
             n.classList.toggle('is-selected', Number(n.getAttribute('data-id')) === id);
         });
@@ -382,12 +706,14 @@
 
     function renderPanel() {
         panel.innerHTML = '';
+        var wall = editing ? wallById(selectedWallId) : null;
+        if (wall) { renderWallForm(wall); return; }
         var desk = deskById(selectedId);
         if (!desk) {
             var hint = el('div', 'ar-empty-hint');
             hint.appendChild(icon('hand-click'));
             hint.appendChild(document.createTextNode(editing
-                ? ' Clique em uma mesa para editar o nome, a porta e o lado da cadeira.'
+                ? ' Clique em uma mesa para editar o nome, a porta e o lado da cadeira, ou em uma divisória para mudar o tipo ou remover.'
                 : ' Clique em uma mesa para ver a porta do switch, o computador, os monitores e os alertas.'));
             panel.appendChild(hint);
             return;
@@ -871,6 +1197,9 @@
 
     function setEditing(on) {
         editing = on;
+        draft = null;
+        selectedWallId = 0;
+        setTool('');
         app.classList.toggle('is-editing', on);
         if (editBar) { editBar.hidden = !on; }
         if (editBtn) {
@@ -912,15 +1241,18 @@
         });
     }
 
-    var planSelect = q('[data-ar-plan-select]');
-    if (planSelect) {
-        planSelect.addEventListener('change', function () {
-            window.location.href = selfUrl + '?plan=' + encodeURIComponent(planSelect.value);
-        });
-    }
-
     document.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Escape' && selectedId) { select(0); }
+        var typing = /^(INPUT|SELECT|TEXTAREA)$/.test((ev.target && ev.target.tagName) || '');
+        if (ev.key === 'Escape') {
+            if (tool) { setTool(''); return; }
+            if (selectedWallId) { selectWall(0); return; }
+            if (selectedId) { select(0); }
+            return;
+        }
+        if (editing && !typing && (ev.key === 'Delete' || ev.key === 'Backspace')) {
+            var wall = wallById(selectedWallId);
+            if (wall) { ev.preventDefault(); deleteWall(wall); }
+        }
     });
 
     applyZoom();

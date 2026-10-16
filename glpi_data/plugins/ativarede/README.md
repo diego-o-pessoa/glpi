@@ -53,6 +53,27 @@ onde" comparar). Wi-Fi ou cabo sem LLDP mantém a última posição conhecida.
 A planta da **Sala principal - Anexo** já vem com as 54 mesas do layout
 (A1–A6, B1–B2, C1–C4 e ilhas D a J, posições 1–3 à esquerda e 4–6 à direita).
 
+O **2º andar da Matriz** (o Anexo é o 1º andar) é criado sozinho na primeira vez
+que alguém abre a Planta depois do `git pull`. Ele vem com 36 mesas, cujas letras
+continuam as do Anexo para nenhum nome se repetir: blocos K e L, ilhas M, N, O e
+P, DP1–DP3 e RH1–RH4. As salas do DP e do RH já vêm com divisórias e portas.
+As abas no topo da Planta trocam de andar.
+
+### Divisórias e portas
+
+Em **Editar planta**:
+
+- **Divisória**, **Vidro** e **Porta** desenham uma linha clicando e arrastando
+  de uma ponta à outra. A linha fica reta sozinha e encosta nas pontas de outras
+  divisórias. Segure **Alt** para desenhar inclinado.
+- A porta é desenhada de um batente ao outro, começando pela dobradiça. Em cima
+  de uma divisória, ela abre o vão sozinha. Os botões da porta escolhem para que
+  lado ela abre e de que lado fica a dobradiça.
+- Clique numa divisória para mudar o tipo ou removê-la (também com **Delete**).
+  Arraste para mover, ou arraste as bolinhas das pontas para esticar.
+- **Mesa** cria uma mesa nova no meio da planta. Para remover uma mesa, abra a
+  mesa e use **Remover mesa**.
+
 ## Mapeando as mesas
 
 A porta de cada máquina chega sozinha (Guardian, a cada 15 min). Só falta dizer

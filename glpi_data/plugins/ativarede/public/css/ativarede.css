@@ -462,3 +462,101 @@
 @media (prefers-reduced-motion: reduce) {
     .ar-desk, .ar-desk.s-alert { animation: none; transition: none; }
 }
+
+/* ------------------------------------------------------- abas de andar */
+.ar-floors {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--tblr-border-color, #e2e8f0);
+    border-radius: 10px;
+    background: var(--tblr-bg-surface, #fff);
+}
+
+.ar-floor {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .3rem .8rem;
+    border-radius: 8px;
+    color: var(--ar-muted);
+    font-size: .8125rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background .15s, color .15s;
+}
+
+.ar-floor:hover { background: rgba(29, 79, 145, .08); color: var(--ar-blue); text-decoration: none; }
+.ar-floor.is-active { background: var(--ar-blue); color: #fff; }
+.ar-floor.is-active:hover { color: #fff; }
+
+[data-bs-theme="dark"] .ar-floor.is-active { background: #3b6fc4; }
+
+/* ------------------------------------------- barra do modo edicao */
+.ar-edit-bar { flex-wrap: wrap; }
+.ar-edit-hint { flex: 1 1 260px; }
+.ar-edit-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
+
+/* ------------------------------------------- divisorias e portas */
+/* A camada das mesas cobre a planta inteira: so as mesas recebem clique,
+   o resto passa para as divisorias por baixo. */
+.ar-desks { pointer-events: none; }
+.ar-desk { pointer-events: auto; }
+
+.ar-walls {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.ar-wall-line { stroke: #334155; stroke-width: 6; stroke-linecap: square; }
+.ar-wall.k-glass .ar-wall-line { stroke: #7fb3e6; stroke-linecap: butt; }
+.ar-wall-glass { stroke: #fff; stroke-width: 1.5; }
+
+/* Vao da porta: cor do piso, apaga a divisoria que passa por baixo. */
+.ar-door-gap { stroke: #fbfaf6; stroke-width: 9; stroke-linecap: butt; }
+.ar-door-leaf { stroke: #334155; stroke-width: 3; stroke-linecap: round; }
+.ar-door-arc { fill: none; stroke: #94a3b8; stroke-width: 1.5; stroke-dasharray: 4 4; }
+
+/* Edicao: faixa invisivel mais larga para facilitar o clique. */
+.ar-wall-hit {
+    stroke: transparent;
+    stroke-width: 18;
+    stroke-linecap: round;
+    pointer-events: stroke;
+    cursor: move;
+}
+
+.ar-wall-hit:hover + .ar-wall-handle,
+.ar-wall:hover .ar-wall-line,
+.ar-wall:hover .ar-door-leaf { stroke: #3b82f6; }
+
+.ar-wall.is-selected .ar-wall-line,
+.ar-wall.is-selected .ar-door-leaf,
+.ar-wall.is-selected .ar-door-arc { stroke: #2563eb; }
+
+.ar-wall.is-selected.k-glass .ar-wall-line { stroke: #60a5fa; }
+
+.ar-wall.is-draft { opacity: .75; }
+.ar-wall.is-draft .ar-wall-line,
+.ar-wall.is-draft .ar-door-leaf { stroke: #2563eb; stroke-dasharray: 10 6; }
+
+.ar-wall-handle {
+    fill: #fff;
+    stroke: #2563eb;
+    stroke-width: 2.5;
+    pointer-events: all;
+    cursor: crosshair;
+}
+
+.ar-wall-handle.is-hinge { fill: #2563eb; }
+
+/* Desenhando: a planta inteira vira area de desenho e as mesas ficam de lado. */
+.ar-app.is-drawing .ar-walls { pointer-events: all; cursor: crosshair; touch-action: none; }
+.ar-app.is-drawing .ar-desk { pointer-events: none; opacity: .55; }
+.ar-app.is-drawing .ar-wall-hit,
+.ar-app.is-drawing .ar-wall-handle { pointer-events: none; }

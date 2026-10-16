@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 450" role="img" aria-labelledby="t">
+  <title id="t">2º andar - Matriz (vista de cima)</title>
+  <!-- So o que nao muda: piso, paredes externas, janelas e a entrada. As
+       divisorias e as portas das salas (DP, RH...) sao desenhadas pela tela
+       da planta, no modo edicao, e ficam no banco. -->
+  <defs>
+    <pattern id="tiles" width="30" height="30" patternUnits="userSpaceOnUse">
+      <rect width="30" height="30" fill="#fbfaf6"/>
+      <path d="M30 0H0V30" fill="none" stroke="#ece8de" stroke-width="1"/>
+    </pattern>
+    <pattern id="plants" width="22" height="14" patternUnits="userSpaceOnUse">
+      <circle cx="6" cy="7" r="5" fill="#86c58f"/>
+      <circle cx="16" cy="6" r="4" fill="#5fae6b"/>
+    </pattern>
+  </defs>
+
+  <!-- Jardineira externa -->
+  <rect x="90" y="418" width="1600" height="16" rx="8" fill="url(#plants)" opacity="0.8"/>
+
+  <!-- Piso -->
+  <path d="M60 75H595V40H1700V400H60Z" fill="url(#tiles)"/>
+
+  <!-- Paredes -->
+  <path d="M60 75H595V40H1700V400H60Z" fill="none" stroke="#334155" stroke-width="8" stroke-linejoin="round"/>
+
+  <!-- Janelas (parede de cima e fachada da direita) -->
+  <g stroke="#7fb3e6" stroke-width="8" stroke-linecap="butt">
+    <path d="M130 75H270M300 75H440M465 75H570"/>
+    <path d="M630 40H770M800 40H940M970 40H1110M1190 40H1370M1430 40H1660"/>
+    <path d="M1700 80V200M1700 225V380"/>
+  </g>
+  <g stroke="#ffffff" stroke-width="1.5">
+    <path d="M130 75H270M300 75H440M465 75H570"/>
+    <path d="M630 40H770M800 40H940M970 40H1110M1190 40H1370M1430 40H1660"/>
+    <path d="M1700 80V200M1700 225V380"/>
+  </g>
+
+  <!-- Entrada (parede esquerda; dobradica embaixo, abre para dentro e para cima) -->
+  <path d="M60 334V396" stroke="#fbfaf6" stroke-width="10"/>
+  <path d="M60 394H116" stroke="#334155" stroke-width="3"/>
+  <path d="M116 394A56 56 0 0 0 60 338" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <text x="124" y="382" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="11" fill="#64748b" text-anchor="start">Entrada</text>
+</svg>

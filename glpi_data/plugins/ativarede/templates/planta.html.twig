@@ -17,11 +17,16 @@
         </div>
         <div class="ar-tools">
             {% if plans|length > 1 %}
-                <select class="form-select form-select-sm w-auto" data-ar-plan-select aria-label="Planta">
+                <nav class="ar-floors" aria-label="Andares">
                     {% for plan in plans %}
-                        <option value="{{ plan.id }}" {{ plan.id == plan_id ? 'selected' : '' }}>{{ plan.name }}</option>
+                        <a class="ar-floor{{ plan.id == plan_id ? ' is-active' : '' }}"
+                           href="{{ self_url }}?plan={{ plan.id }}"
+                           title="{{ plan.name }}"
+                           {{ plan.id == plan_id ? 'aria-current="page"' : '' }}>
+                            <i class="ti ti-stairs"></i>{{ plan.label ?: plan.name }}
+                        </a>
                     {% endfor %}
-                </select>
+                </nav>
             {% endif %}
             <div class="btn-group btn-group-sm" role="group" aria-label="Zoom">
                 <button type="button" class="btn btn-outline-secondary" data-ar-zoom="-1" title="Diminuir"><i class="ti ti-zoom-out"></i></button>
@@ -45,13 +50,19 @@
     <div class="card ar-stage-card">
         <div class="ar-edit-bar" data-ar-edit-bar hidden>
             <i class="ti ti-hand-move me-1"></i>
-            Modo edição: arraste as mesas, clique em uma para mudar o nome e a porta.
-            <button type="button" class="btn btn-sm btn-primary ms-auto" data-ar-add><i class="ti ti-plus me-1"></i>Adicionar mesa</button>
+            <span class="ar-edit-hint" data-ar-edit-hint></span>
+            <div class="ar-edit-actions ms-auto">
+                <button type="button" class="btn btn-sm btn-primary" data-ar-add><i class="ti ti-plus me-1"></i>Mesa</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-ar-tool="wall" title="Clique e arraste na planta, de uma ponta à outra"><i class="ti ti-line me-1"></i>Divisória</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-ar-tool="glass" title="Divisória de vidro: clique e arraste na planta"><i class="ti ti-square-half me-1"></i>Vidro</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-ar-tool="door" title="Arraste de um batente ao outro, começando pelo lado da dobradiça"><i class="ti ti-door me-1"></i>Porta</button>
+            </div>
         </div>
         <div class="ar-stage" data-ar-stage>
             <div class="ar-canvas" data-ar-canvas>
                 <img class="ar-bg" data-ar-bg alt="" draggable="false">
                 <div class="ar-zones" data-ar-zones aria-hidden="true"></div>
+                <svg class="ar-walls" data-ar-walls xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" aria-hidden="true"></svg>
                 <div class="ar-desks" data-ar-desks></div>
             </div>
         </div>

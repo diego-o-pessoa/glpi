@@ -35,6 +35,8 @@ function plugin_ativarede_install(): bool
     Seed::applyAnexoSectors();
     // 0.1.9: F1-F3 passam do Comercial para o Suporte (uma vez).
     Seed::applyAnexoFixups();
+    // 2º andar da Matriz (depois do Anexo, para ele continuar sendo a primeira planta).
+    Seed::ensureSecondFloor();
 
     // Monitor ausente, mesa vazia e maquina sem relatorio: conferidos a cada hora.
     CronTask::register(
@@ -223,6 +225,7 @@ function plugin_ativarede_uninstall(): bool
     CronTask::unregister('ativarede');
     foreach ([
         'glpi_plugin_ativarede_rejections',
+        'glpi_plugin_ativarede_walls',
         'glpi_plugin_ativarede_events',
         'glpi_plugin_ativarede_monitors',
         'glpi_plugin_ativarede_machines',
