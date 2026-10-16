@@ -54,10 +54,11 @@ A planta da **Sala principal - Anexo** já vem com as 54 mesas do layout
 (A1–A6, B1–B2, C1–C4 e ilhas D a J, posições 1–3 à esquerda e 4–6 à direita).
 
 O **2º andar da Matriz** (o Anexo é o 1º andar) é criado sozinho na primeira vez
-que alguém abre a Planta depois do `git pull`. Ele vem com 36 mesas, cujas letras
-continuam as do Anexo para nenhum nome se repetir: blocos K e L, ilhas M, N, O e
-P, DP1–DP3 e RH1–RH4. As salas do DP e do RH já vêm com divisórias e portas.
-As abas no topo da Planta trocam de andar.
+que alguém abre a Planta depois do `git pull`. Ele vem com 33 mesas, cujas letras
+continuam as do Anexo para nenhum nome se repetir: blocos K e L, ilhas M, N e O,
+DP1–DP3 e RH1–RH4. As salas do DP e do RH já vêm com divisórias e portas, logo
+depois das ilhas. Da sala do RH até a parede da direita fica livre para outra
+sala. As abas no topo da Planta trocam de andar.
 
 ### Divisórias e portas
 

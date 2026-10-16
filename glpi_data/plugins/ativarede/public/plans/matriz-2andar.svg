@@ -26,12 +26,12 @@
   <!-- Janelas (parede de cima e fachada da direita) -->
   <g stroke="#7fb3e6" stroke-width="8" stroke-linecap="butt">
     <path d="M130 75H270M300 75H440M465 75H570"/>
-    <path d="M630 40H770M800 40H940M970 40H1110M1190 40H1370M1430 40H1660"/>
+    <path d="M630 40H810M850 40H1056M1096 40H1310M1350 40H1500M1530 40H1670"/>
     <path d="M1700 80V200M1700 225V380"/>
   </g>
   <g stroke="#ffffff" stroke-width="1.5">
     <path d="M130 75H270M300 75H440M465 75H570"/>
-    <path d="M630 40H770M800 40H940M970 40H1110M1190 40H1370M1430 40H1660"/>
+    <path d="M630 40H810M850 40H1056M1096 40H1310M1350 40H1500M1530 40H1670"/>
     <path d="M1700 80V200M1700 225V380"/>
   </g>
 

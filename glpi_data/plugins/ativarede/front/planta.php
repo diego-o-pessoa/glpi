@@ -22,6 +22,7 @@ $base = $CFG_GLPI['root_doc'] . '/plugins/ativarede';
 // Divisorias e 2º andar chegam com o git pull, sem precisar atualizar o plugin.
 Schema::upgrade();
 Seed::ensureSecondFloor();
+Seed::applySecondFloorFixups();
 
 $plans = Inventory::plans();
 $planId = (int) ($_GET['plan'] ?? 0);

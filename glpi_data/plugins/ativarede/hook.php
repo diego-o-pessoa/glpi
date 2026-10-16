@@ -37,6 +37,7 @@ function plugin_ativarede_install(): bool
     Seed::applyAnexoFixups();
     // 2º andar da Matriz (depois do Anexo, para ele continuar sendo a primeira planta).
     Seed::ensureSecondFloor();
+    Seed::applySecondFloorFixups();
 
     // Monitor ausente, mesa vazia e maquina sem relatorio: conferidos a cada hora.
     CronTask::register(

@@ -230,6 +230,60 @@
         return ZONE_COLORS[(i < 0 ? 0 : i) % ZONE_COLORS.length];
     }
 
+    /* Sala de um setor: a partir das mesas, procura a divisoria mais proxima
+     * em cada direcao (porta conta como parede). O lado sem divisoria e a
+     * parede externa da planta, que vem do desenho de fundo: ele e deduzido de
+     * onde as divisorias dos outros lados terminam (a divisoria do DP sobe
+     * ate a parede de cima, por exemplo). So vale se a sala tiver ao menos uma
+     * divisoria em pe e uma deitada e nenhuma mesa de outro setor dentro. */
+    var ROOM_INSET = 4; // meia espessura da divisoria
+
+    function sectorRoom(b, sector) {
+        var walls = (state.walls || []);
+        if (!walls.length) { return null; }
+        var side = { left: null, right: null, top: null, bottom: null };
+
+        function keep(key, pos, a, z, closer) {
+            var cur = side[key];
+            if (!cur || closer(pos, cur.pos)) { side[key] = { pos: pos, a: a, z: z }; return; }
+            // Mesma linha (parede + porta + parede): junta a extensao.
+            if (Math.abs(pos - cur.pos) < 1) { cur.a = Math.min(cur.a, a); cur.z = Math.max(cur.z, z); }
+        }
+        var less = function (p, c) { return p < c - 1; };
+        var more = function (p, c) { return p > c + 1; };
+
+        walls.forEach(function (w) {
+            if (Math.abs(w.x1 - w.x2) < 1) {
+                var ya = Math.min(w.y1, w.y2), yz = Math.max(w.y1, w.y2);
+                if (yz < b.y1 || ya > b.y2) { return; }
+                if (w.x1 <= b.x1) { keep('left', w.x1, ya, yz, more); }
+                if (w.x1 >= b.x2) { keep('right', w.x1, ya, yz, less); }
+            } else if (Math.abs(w.y1 - w.y2) < 1) {
+                var xa = Math.min(w.x1, w.x2), xz = Math.max(w.x1, w.x2);
+                if (xz < b.x1 || xa > b.x2) { return; }
+                if (w.y1 <= b.y1) { keep('top', w.y1, xa, xz, more); }
+                if (w.y1 >= b.y2) { keep('bottom', w.y1, xa, xz, less); }
+            }
+        });
+
+        var vertical = [side.left, side.right].filter(Boolean);
+        var horizontal = [side.top, side.bottom].filter(Boolean);
+        if (!vertical.length || !horizontal.length) { return null; }
+
+        var r = {
+            x1: side.left ? side.left.pos : Math.max.apply(null, horizontal.map(function (s) { return s.a; })),
+            x2: side.right ? side.right.pos : Math.min.apply(null, horizontal.map(function (s) { return s.z; })),
+            y1: side.top ? side.top.pos : Math.max.apply(null, vertical.map(function (s) { return s.a; })),
+            y2: side.bottom ? side.bottom.pos : Math.min.apply(null, vertical.map(function (s) { return s.z; }))
+        };
+        if (r.x1 > b.x1 || r.x2 < b.x2 || r.y1 > b.y1 || r.y2 < b.y2) { return null; }
+        var intruder = state.desks.some(function (d) {
+            return d.sector !== sector && d.x > r.x1 && d.x < r.x2 && d.y > r.y1 && d.y < r.y2;
+        });
+        if (intruder) { return null; }
+        return { x1: r.x1 + ROOM_INSET, y1: r.y1 + ROOM_INSET, x2: r.x2 - ROOM_INSET, y2: r.y2 - ROOM_INSET };
+    }
+
     function renderZones() {
         if (!zonesLayer) { return; }
         var W = state.plan.width;
@@ -248,6 +302,11 @@
         });
         var boxes = Object.keys(raw).map(function (name) {
             var b = raw[name];
+            // Setor fechado por divisorias (ex.: sala do DP): a area e a sala toda.
+            var room = sectorRoom(b, name);
+            if (room) {
+                return { name: name, n: b.n, room: true, x1: room.x1, y1: room.y1, x2: room.x2, y2: room.y2 };
+            }
             return {
                 name: name, n: b.n,
                 x1: Math.max(0, b.x1 - PAD_X), y1: Math.max(0, b.y1 - PAD_Y),
@@ -261,6 +320,7 @@
         for (var i = 0; i < boxes.length; i++) {
             for (var j = i + 1; j < boxes.length; j++) {
                 var a = boxes[i], c = boxes[j];
+                if (a.room || c.room) { continue; }
                 var ox = Math.min(a.x2, c.x2) - Math.max(a.x1, c.x1);
                 var oy = Math.min(a.y2, c.y2) - Math.max(a.y1, c.y1);
                 if (ox <= 0 || oy <= 0) { continue; }

@@ -184,50 +184,51 @@ final class Seed
     }
 
     /**
-     * Mesas do 2º andar (viewBox 1800 x 450 do matriz-2andar.svg). As letras
-     * continuam as do Anexo (que vai ate J) para nenhuma mesa ter o mesmo nome
-     * nos dois andares. Sem porta de switch: a T.I. define pela tela.
+     * Mesas do 2º andar (viewBox 1800 x 450 do matriz-2andar.svg), no mesmo
+     * estilo do Anexo: mesas de 42 x 46 encostadas e os grupos a cada 140
+     * unidades (entre um e outro so as cadeiras). As letras continuam as do
+     * Anexo (que vai ate J) para nenhuma mesa ter o mesmo nome nos dois
+     * andares. Sem porta de switch: a T.I. define pela tela.
      */
     public static function secondFloorDesks(): array
     {
         $desks = [];
         $add = static function (string $name, float $x, float $y, string $chair, string $sector = '') use (&$desks): void {
-            $desks[] = ['name' => $name, 'x' => $x, 'y' => $y, 'w' => 50, 'h' => 50, 'chair' => $chair, 'sector' => $sector];
+            $desks[] = ['name' => $name, 'x' => $x, 'y' => $y, 'w' => 42, 'h' => 46, 'chair' => $chair, 'sector' => $sector];
         };
 
         // Blocos K e L (junto a entrada): 2 x 2, cadeiras nas laterais.
-        foreach (['K' => 162, 'L' => 364] as $letter => $left) {
-            foreach ([181, 260] as $row => $y) {
+        foreach (['K' => 150, 'L' => 290] as $letter => $left) {
+            foreach ([180, 226] as $row => $y) {
                 $add($letter . ($row * 2 + 1), $left, $y, 'left');
-                $add($letter . ($row * 2 + 2), $left + 79, $y, 'right');
+                $add($letter . ($row * 2 + 2), $left + 42, $y, 'right');
             }
         }
-        // Ilhas M, O e P: 2 colunas x 3 fileiras (1-3 a esquerda, 4-6 a direita).
-        // N: uma coluna so, cadeiras a esquerda.
-        $rows = [153, 220, 287];
-        foreach (['M' => 571, 'O' => 853, 'P' => 1025] as $letter => $left) {
-            foreach ($rows as $row => $y) {
+        // Ilhas M, N e O: 2 colunas x 3 fileiras (1-3 a esquerda, 4-6 a direita).
+        foreach (['M' => 430, 'N' => 570, 'O' => 710] as $letter => $left) {
+            foreach ([160, 206, 252] as $row => $y) {
                 $add($letter . ($row + 1), $left, $y, 'left');
-                $add($letter . ($row + 4), $left + 56, $y, 'right');
+                $add($letter . ($row + 4), $left + 42, $y, 'right');
             }
         }
-        foreach ($rows as $row => $y) {
-            $add('N' . ($row + 1), 738, $y, 'left');
-        }
-        // Sala do DP.
-        $add('DP1', 1201, 153, 'right', 'DP');
-        $add('DP2', 1362, 153, 'left', 'DP');
-        $add('DP3', 1362, 223, 'left', 'DP');
-        // Sala do RH.
-        $add('RH1', 1491, 158, 'left', 'RH');
-        $add('RH2', 1547, 158, 'right', 'RH');
-        $add('RH3', 1491, 223, 'left', 'RH');
-        $add('RH4', 1547, 223, 'right', 'RH');
+        // Sala do DP (x 830 a 1076).
+        $add('DP1', 875, 160, 'right', 'DP');
+        $add('DP2', 1031, 160, 'left', 'DP');
+        $add('DP3', 1031, 206, 'left', 'DP');
+        // Sala do RH (x 1076 a 1330).
+        $add('RH1', 1182, 160, 'left', 'RH');
+        $add('RH2', 1224, 160, 'right', 'RH');
+        $add('RH3', 1182, 206, 'left', 'RH');
+        $add('RH4', 1224, 206, 'right', 'RH');
 
         return $desks;
     }
 
-    /** Divisorias das salas do DP e do RH, com as portas abrindo para dentro. */
+    /**
+     * Salas do DP e do RH logo depois das ilhas, com as portas abrindo para
+     * dentro. Da sala do RH ate a parede da direita fica livre para uma
+     * proxima sala.
+     */
     public static function secondFloorWalls(): array
     {
         $wall = static fn(string $kind, float $x1, float $y1, float $x2, float $y2, int $flip = 0): array
@@ -235,17 +236,131 @@ final class Seed
 
         return [
             // DP
-            $wall('wall', 1155, 40, 1155, 325),
-            $wall('wall', 1155, 325, 1185, 325),
-            $wall('door', 1185, 325, 1245, 325, 1),
-            $wall('wall', 1245, 325, 1401, 325),
+            $wall('wall', 830, 40, 830, 325),
+            $wall('wall', 830, 325, 860, 325),
+            $wall('door', 860, 325, 920, 325, 1),
+            $wall('wall', 920, 325, 1076, 325),
             // Entre o DP e o RH
-            $wall('wall', 1401, 40, 1401, 325),
+            $wall('wall', 1076, 40, 1076, 325),
             // RH
-            $wall('door', 1460, 325, 1405, 325),
-            $wall('wall', 1460, 325, 1700, 325),
+            $wall('door', 1135, 325, 1080, 325),
+            $wall('wall', 1135, 325, 1330, 325),
+            $wall('wall', 1330, 40, 1330, 325),
         ];
     }
+
+    /**
+     * O 2º andar ja criado por uma versao anterior (mesas separadas, coluna N
+     * a mais, salas na ponta direita) e refeito no layout atual - mas so se
+     * ninguem mexeu nele: qualquer mesa ou divisoria fora do que foi criado
+     * deixa a planta como esta.
+     */
+    public static function applySecondFloorFixups(): void
+    {
+        global $DB;
+
+        $flag = 'fixup_floor2_v3';
+        $done = \Config::getConfigurationValues(Settings::CONTEXT, [$flag]);
+        if (!empty($done[$flag])) {
+            return;
+        }
+        $plan = $DB->request(['SELECT' => ['id'], 'FROM' => Settings::TABLE_PLANS,
+            'WHERE' => ['background' => self::FLOOR2_BACKGROUND], 'LIMIT' => 1])->current();
+        if (!$plan) {
+            return; // ainda nao criado: quando for, ja nasce no layout atual
+        }
+        $planId = (int) $plan['id'];
+
+        $desks = [];
+        foreach ($DB->request(['FROM' => Settings::TABLE_DESKS, 'WHERE' => ['plans_id' => $planId]]) as $row) {
+            if ((int) $row['switches_id'] > 0 || (string) $row['port'] !== '' || (int) $row['machines_id'] > 0 || (string) $row['comment'] !== '') {
+                $desks = null; // mesa ja mapeada: nao refaz
+                break;
+            }
+            $desks[] = self::key($row['name'], $row['x'], $row['y'], $row['w'], $row['h']);
+        }
+        $walls = [];
+        foreach ($DB->request(['FROM' => Settings::TABLE_WALLS, 'WHERE' => ['plans_id' => $planId]]) as $row) {
+            $walls[] = self::key($row['kind'], $row['x1'], $row['y1'], $row['x2'], $row['y2'], $row['flip']);
+        }
+        sort($walls);
+        $oldWalls = array_map(static fn(array $w): string => self::key(...$w), self::FLOOR2_FIRST_WALLS);
+        sort($oldWalls);
+
+        $untouched = false;
+        if ($desks !== null && $walls === $oldWalls) {
+            sort($desks);
+            foreach ([self::FLOOR2_FIRST_LAYOUT, self::FLOOR2_SECOND_LAYOUT] as $layout) {
+                $old = [];
+                foreach ($layout as $name => $d) {
+                    $old[] = self::key($name, ...$d);
+                }
+                sort($old);
+                if ($desks === $old) {
+                    $untouched = true;
+                    break;
+                }
+            }
+        }
+
+        if ($untouched) {
+            $now = date('Y-m-d H:i:s');
+            $DB->delete(Settings::TABLE_DESKS, ['plans_id' => $planId]);
+            $DB->delete(Settings::TABLE_WALLS, ['plans_id' => $planId]);
+            foreach (self::secondFloorDesks() as $desk) {
+                $DB->insert(Settings::TABLE_DESKS, $desk + ['plans_id' => $planId, 'date_mod' => $now]);
+            }
+            foreach (self::secondFloorWalls() as $wall) {
+                $DB->insert(Settings::TABLE_WALLS, $wall + ['plans_id' => $planId, 'date_mod' => $now]);
+            }
+        }
+        \Config::setConfigurationValues(Settings::CONTEXT, [$flag => '1']);
+    }
+
+    private static function key(mixed ...$parts): string
+    {
+        return implode('|', array_map(static fn($p): string => is_numeric($p) ? (string) round((float) $p, 2) : (string) $p, $parts));
+    }
+
+    /** Versoes anteriores do 2º andar: [x, y, w, h] de cada mesa. */
+    private const FLOOR2_FIRST_LAYOUT = [
+        'K1' => [162, 181, 50, 50], 'K2' => [241, 181, 50, 50], 'K3' => [162, 260, 50, 50], 'K4' => [241, 260, 50, 50],
+        'L1' => [364, 181, 50, 50], 'L2' => [443, 181, 50, 50], 'L3' => [364, 260, 50, 50], 'L4' => [443, 260, 50, 50],
+        'M1' => [571, 153, 50, 50], 'M2' => [571, 220, 50, 50], 'M3' => [571, 287, 50, 50],
+        'M4' => [627, 153, 50, 50], 'M5' => [627, 220, 50, 50], 'M6' => [627, 287, 50, 50],
+        'O1' => [853, 153, 50, 50], 'O2' => [853, 220, 50, 50], 'O3' => [853, 287, 50, 50],
+        'O4' => [909, 153, 50, 50], 'O5' => [909, 220, 50, 50], 'O6' => [909, 287, 50, 50],
+        'P1' => [1025, 153, 50, 50], 'P2' => [1025, 220, 50, 50], 'P3' => [1025, 287, 50, 50],
+        'P4' => [1081, 153, 50, 50], 'P5' => [1081, 220, 50, 50], 'P6' => [1081, 287, 50, 50],
+        'N1' => [738, 153, 50, 50], 'N2' => [738, 220, 50, 50], 'N3' => [738, 287, 50, 50],
+        'DP1' => [1201, 153, 50, 50], 'DP2' => [1362, 153, 50, 50], 'DP3' => [1362, 223, 50, 50],
+        'RH1' => [1491, 158, 50, 50], 'RH2' => [1547, 158, 50, 50], 'RH3' => [1491, 223, 50, 50], 'RH4' => [1547, 223, 50, 50],
+    ];
+
+    private const FLOOR2_SECOND_LAYOUT = [
+        'K1' => [150, 180, 42, 46], 'K2' => [192, 180, 42, 46], 'K3' => [150, 226, 42, 46], 'K4' => [192, 226, 42, 46],
+        'L1' => [345, 180, 42, 46], 'L2' => [387, 180, 42, 46], 'L3' => [345, 226, 42, 46], 'L4' => [387, 226, 42, 46],
+        'M1' => [560, 160, 42, 46], 'M2' => [560, 206, 42, 46], 'M3' => [560, 252, 42, 46],
+        'M4' => [602, 160, 42, 46], 'M5' => [602, 206, 42, 46], 'M6' => [602, 252, 42, 46],
+        'O1' => [850, 160, 42, 46], 'O2' => [850, 206, 42, 46], 'O3' => [850, 252, 42, 46],
+        'O4' => [892, 160, 42, 46], 'O5' => [892, 206, 42, 46], 'O6' => [892, 252, 42, 46],
+        'P1' => [1020, 160, 42, 46], 'P2' => [1020, 206, 42, 46], 'P3' => [1020, 252, 42, 46],
+        'P4' => [1062, 160, 42, 46], 'P5' => [1062, 206, 42, 46], 'P6' => [1062, 252, 42, 46],
+        'N1' => [720, 160, 42, 46], 'N2' => [720, 206, 42, 46], 'N3' => [720, 252, 42, 46],
+        'DP1' => [1200, 160, 42, 46], 'DP2' => [1356, 160, 42, 46], 'DP3' => [1356, 206, 42, 46],
+        'RH1' => [1500, 160, 42, 46], 'RH2' => [1542, 160, 42, 46], 'RH3' => [1500, 206, 42, 46], 'RH4' => [1542, 206, 42, 46],
+    ];
+
+    /** Divisorias das versoes anteriores: [kind, x1, y1, x2, y2, flip]. */
+    private const FLOOR2_FIRST_WALLS = [
+        ['wall', 1155, 40, 1155, 325, 0],
+        ['wall', 1155, 325, 1185, 325, 0],
+        ['door', 1185, 325, 1245, 325, 1],
+        ['wall', 1245, 325, 1401, 325, 0],
+        ['wall', 1401, 40, 1401, 325, 0],
+        ['door', 1460, 325, 1405, 325, 0],
+        ['wall', 1460, 325, 1700, 325, 0],
+    ];
 
     /** As 54 mesas do layout, da porta (esquerda) ate os armarios (direita). */
     public static function desks(): array
