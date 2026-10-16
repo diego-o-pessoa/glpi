@@ -35,7 +35,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.6.8"
+CLIENT_VERSION = "1.6.9"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -53,6 +53,11 @@ SPI_GETDESKWALLPAPER = 0x0073
 SPIF_UPDATEINIFILE = 0x01
 SPIF_SENDCHANGE = 0x02
 ERROR_ALREADY_EXISTS = 183
+# Inicio da sessao: espera a area de trabalho existir e reaplica o wallpaper
+# guardado na hora e de novo depois (o Explorer ainda repinta nos primeiros
+# segundos). Nada disso depende de rede/VPN.
+DESKTOP_WAIT_SECONDS = 90
+SESSION_START_REAPPLY_DELAYS = (0, 20)
 
 
 if os.name == "nt":
@@ -524,6 +529,14 @@ def apply_wallpaper(path: Path, style: str) -> None:
         raise ClientError("WALLPAPER_APPLY_FAILED", f"SystemParametersInfoW failed: {exc}") from exc
 
 
+def desktop_is_ready() -> bool:
+    """Explorer ja criou a area de trabalho (Progman) e a barra de tarefas."""
+    if os.name != "nt":
+        return True
+    user32 = ctypes.windll.user32
+    return bool(user32.FindWindowW("Progman", None)) and bool(user32.FindWindowW("Shell_TrayWnd", None))
+
+
 def wallpaper_is_current(path: Path, style: str) -> bool:
     """Check the wallpaper actually displayed by the interactive Windows user."""
     if os.name != "nt" or winreg is None:
@@ -697,7 +710,15 @@ class WallpaperClient:
             self.logger.warning("Wallpaper policy fallback: %s", state["policy_error"])
         return changed
 
-    def enforce_cached_wallpaper(self, state: dict[str, Any]) -> bool:
+    def enforce_cached_wallpaper(self, state: dict[str, Any], *, force: bool = False) -> bool:
+        """Reapply the last verified image without any network access.
+
+        force=True reapplies even when Windows already reports our file: right
+        after logon Explorer may still paint its own cached copy of the PREVIOUS
+        image while the registry already points to ours, so the check alone
+        said "current" and the old wallpaper stayed until the server (VPN)
+        forced a reapply. Returns True only for a real drift (reported once).
+        """
         if not state.get("distribution_enabled", bool(state.get("wallpaper_path"))):
             return False
         path_value = state.get("wallpaper_path")
@@ -710,11 +731,14 @@ class WallpaperClient:
             # the missing/corrupt cache can be downloaded again.
             state.pop("config_etag", None)
             return False
-        changed = self.apply_and_enforce(
+        style = str(state.get("style", "fill"))
+        changed = not self.current_function(path, style)
+        self.apply_and_enforce(
             path,
-            str(state.get("style", "fill")),
+            style,
             bool(state.get("lock_change")),
             state,
+            force=force or changed,
         )
         if changed:
             state["last_apply"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
@@ -722,6 +746,31 @@ class WallpaperClient:
             self.mark_apply_event(state, "drift_corrected")
             self.logger.warning("Wallpaper drift detected and corrected")
         return changed
+
+    def enforce_at_session_start(self, stop: "StopEvent",
+                                 delays: tuple[int, ...] = SESSION_START_REAPPLY_DELAYS,
+                                 desktop_ready: Callable[[], bool] | None = None) -> None:
+        """Start of the user session: put the cached wallpaper on screen BEFORE
+        any server check (no VPN needed). Waits for the desktop to exist and
+        reapplies again a little later, because Explorer/theme sync can still
+        repaint the previous image during the first seconds of the logon."""
+        ready = desktop_ready or desktop_is_ready
+        deadline = time.monotonic() + DESKTOP_WAIT_SECONDS
+        while not ready() and time.monotonic() < deadline:
+            if stop.wait(1):
+                return
+        for delay in delays:
+            if delay and stop.wait(delay):
+                return
+            state = self.load_state()
+            if not state:
+                return
+            try:
+                self.enforce_cached_wallpaper(state, force=True)
+            except (ClientError, OSError):
+                self.logger.exception("Could not reapply the cached wallpaper at session start")
+            atomic_write_json(self.state_path, state)
+        self.logger.info("Cached wallpaper reapplied at session start (no network needed)")
 
     @staticmethod
     def report_success(api: ApiClient, identity: dict[str, str], state: dict[str, Any]) -> None:
@@ -1407,6 +1456,13 @@ def run_client(once: bool, debug: bool) -> int:
                 protect_session_process()
             except OSError:
                 client.logger.exception("Could not protect wallpaper process from standard-user termination")
+            if not once:
+                # Logo apos ligar (VPN ainda desconectada): o wallpaper guardado
+                # vai para a tela antes de qualquer consulta ao servidor.
+                try:
+                    client.enforce_at_session_start(stop)
+                except Exception:
+                    client.logger.exception("Session start wallpaper reapply failed")
             while True:
                 try:
                     interval, jitter = client.sync_once()

@@ -528,6 +528,62 @@ class OfflineStartupTests(unittest.TestCase):
             self.assertTrue(wc.load_json(client.state_path)["status_pending"])
             api.report.assert_not_called()
 
+    def _cached_client(self, root, calls, current=True):
+        image = root / "wallpaper.jpg"
+        image.write_bytes(b"verified cached image")
+        client = wc.WallpaperClient(root, apply_function=lambda *_: calls.append("apply"),
+                                    policy_function=lambda *_: None, current_function=lambda *_: current)
+        wc.atomic_write_json(client.state_path, {"distribution_enabled": True,
+            "wallpaper_path": str(image), "sha256": wc.sha256_file(image),
+            "wallpaper_version": "v1", "style": "fill", "lock_change": False})
+        return client
+
+    def test_forced_reapply_when_windows_already_reports_our_file(self):
+        # Logo apos o logon o registro ja aponta para o nosso arquivo, mas o
+        # Explorer ainda mostra a imagem antiga: force reaplica sem contar drift.
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            client = self._cached_client(Path(directory), calls, current=True)
+            state = client.load_state()
+            self.assertFalse(client.enforce_cached_wallpaper(state, force=True))
+            self.assertEqual(calls, ["apply"])
+            self.assertNotIn("status_pending", state)
+            calls.clear()
+            self.assertFalse(client.enforce_cached_wallpaper(state))
+            self.assertEqual(calls, [], "sem force, o que ja esta certo nao e reaplicado")
+
+    def test_session_start_reapplies_cached_wallpaper_without_network(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            client = self._cached_client(Path(directory), calls, current=True)
+            client.api_factory = lambda *_: self.fail("o inicio da sessao nao pode usar a rede")
+            stop = mock.Mock()
+            stop.wait.return_value = False
+            readiness = iter([False, False, True])
+            client.enforce_at_session_start(stop, delays=(0, 20), desktop_ready=lambda: next(readiness))
+            self.assertEqual(calls, ["apply", "apply"])
+            waits = [c.args[0] for c in stop.wait.call_args_list]
+            self.assertEqual(waits, [1, 1, 20], "espera a area de trabalho e depois reaplica de novo")
+
+    def test_session_start_stops_when_requested(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            client = self._cached_client(Path(directory), calls)
+            stop = mock.Mock()
+            stop.wait.return_value = True
+            client.enforce_at_session_start(stop, delays=(0, 20), desktop_ready=lambda: False)
+            self.assertEqual(calls, [])
+
+    def test_session_start_without_cache_does_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            apply = mock.Mock()
+            client = wc.WallpaperClient(Path(directory), apply_function=apply, policy_function=lambda *_: None)
+            stop = mock.Mock()
+            stop.wait.return_value = False
+            client.enforce_at_session_start(stop, delays=(0,), desktop_ready=lambda: True)
+            apply.assert_not_called()
+            self.assertFalse(client.state_path.exists())
+
     def test_disabled_or_corrupt_cache_is_not_applied(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
