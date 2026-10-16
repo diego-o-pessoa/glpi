@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Glpi\Application\View\TemplateRenderer;
+use GlpiPlugin\Ativarede\Branches;
 use GlpiPlugin\Ativarede\Collector;
 use GlpiPlugin\Ativarede\Desks;
 use GlpiPlugin\Ativarede\Inventory;
@@ -37,6 +38,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);
         Html::redirect($selfUrl . '#machine-' . (int) ($_POST['id'] ?? 0));
     }
+    // Filiais por rede ("192.168.80 = Matriz").
+    if (($_POST['action'] ?? '') === 'branches') {
+        $result = Branches::save((string) ($_POST['rules'] ?? ''));
+        Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);
+        Html::redirect($selfUrl);
+    }
     // "Nao e switch" / desfazer.
     if (in_array($_POST['action'] ?? '', ['ignore_switch', 'restore_switch'], true)) {
         Schema::upgrade();
@@ -52,29 +59,65 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
 // Colunas novas (ignored, diagnostic...) antes de listar.
 Schema::upgrade();
+$allSwitches = Inventory::switches();
 $machines = Inventory::decoratedMachines();
 foreach ($machines as &$machine) {
     $desk = Inventory::deskOf($machine);
     $machine['desk'] = $desk['name'] ?? '';
+    $machine['branch'] = Branches::ofMachine($machine, $allSwitches);
+    // Nome principal da linha: a pessoa; sem pessoa, a maquina.
+    $machine['title'] = $machine['person'] !== '' ? $machine['person'] : ($machine['computer'] ?: $machine['hostname']);
 }
 unset($machine);
+usort($machines, static fn(array $a, array $b): int => strnatcasecmp($a['title'], $b['title']));
+
+// Uma secao por filial: as com nome em ordem alfabetica, "Sem filial" no fim.
+$groups = [];
+foreach ($machines as $machine) {
+    $groups[$machine['branch']][] = $machine;
+}
+uksort($groups, static fn(string $a, string $b): int => ($a === '') <=> ($b === '') ?: strnatcasecmp($a, $b));
+$branches = [];
+foreach ($groups as $name => $list) {
+    $branches[] = [
+        'name'     => $name,
+        'key'      => $name === '' ? '-' : $name,
+        'machines' => $list,
+        'online'   => count(array_filter($list, static fn(array $m): bool => (bool) $m['online'])),
+    ];
+}
+$counts = [
+    'online'     => count(array_filter($machines, static fn(array $m): bool => (bool) $m['online'])),
+    'offline'    => count(array_filter($machines, static fn(array $m): bool => !$m['online'])),
+    'nodesk'     => count(array_filter($machines, static fn(array $m): bool => $m['desk'] === '')),
+    'diagnostic' => count(array_filter($machines, static fn(array $m): bool => $m['diagnostic'] !== '')),
+];
 
 $switches = [];
-foreach (Inventory::switches() as $switch) {
+foreach ($allSwitches as $switch) {
     $switch['machines'] = countElementsInTable('glpi_plugin_ativarede_machines', ['switches_id' => (int) $switch['id']]);
     $switch['last_seen'] = Inventory::date($switch['last_seen']);
+    $switch['branch'] = Branches::byIp((string) $switch['mgmt_ip']);
     $switches[] = $switch;
 }
+$asset = static fn(string $file): string => $CFG_GLPI['root_doc'] . '/plugins/ativarede/' . $file . '?v='
+    . PLUGIN_ATIVAREDE_VERSION . '.' . (int) @filemtime(PLUGIN_ATIVAREDE_DIR . '/public/' . $file);
 
 Html::header('Ativa Rede - Equipamentos', '', 'ativarede', 'equipamentos');
 TemplateRenderer::getInstance()->display('@ativarede/equipamentos.html.twig', [
     'machines'   => $machines,
+    'branches'   => $branches,
+    'counts'     => $counts,
+    'branch_rules' => Branches::rulesText(),
+    'today'      => date('d/m/Y'),
     'monitors'   => Inventory::monitors(),
     'missing'    => Inventory::guardianWithoutReport(),
     'switches'   => $switches,
     'ignored_switches' => Inventory::ignoredSwitches(),
     'self_url'   => $selfUrl,
     'can_manage' => PluginAtivaredeProfile::canManage(),
-    'css_url'    => $CFG_GLPI['root_doc'] . '/plugins/ativarede/css/ativarede.css?v=' . PLUGIN_ATIVAREDE_VERSION,
+    // Data do arquivo: CSS/JS novos chegam sem subir a versao do plugin.
+    'css_url'    => $asset('css/ativarede.css'),
+    'js_url'     => $asset('js/equipamentos.js'),
 ]);
 Html::footer();

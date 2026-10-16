@@ -52,7 +52,7 @@ final class Settings
 
     public static function removeAll(): void
     {
-        Config::deleteConfigurationValues(self::CONTEXT, array_keys(self::defaults()));
+        Config::deleteConfigurationValues(self::CONTEXT, array_merge(array_keys(self::defaults()), [Branches::SETTING]));
     }
 
     public static function int(string $key): int

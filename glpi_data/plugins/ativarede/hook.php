@@ -222,6 +222,7 @@ function plugin_ativarede_uninstall(): bool
 
     require_once PLUGIN_ATIVAREDE_DIR . '/inc/profile.class.php';
     require_once PLUGIN_ATIVAREDE_DIR . '/src/Settings.php';
+    require_once PLUGIN_ATIVAREDE_DIR . '/src/Branches.php';
 
     CronTask::unregister('ativarede');
     foreach ([

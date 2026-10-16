@@ -377,6 +377,8 @@ final class Inventory
                 'computers_id' => (int) $row['computers_id'],
                 'computer'     => $computer['name'] ?? '',
                 'computer_url' => $computer['url'] ?? '',
+                'computer_entity'   => (int) ($computer['entities_id'] ?? 0),
+                'computer_location' => (int) ($computer['locations_id'] ?? 0),
                 'user'         => $computer['user'] ?? '',
                 'group'        => $computer['group'] ?? '',
                 'ip'           => (string) $row['ip'],
@@ -507,13 +509,15 @@ final class Inventory
         $out = [];
         $userIds = [];
         foreach ($DB->request([
-            'SELECT' => ['id', 'name', 'users_id'],
+            'SELECT' => ['id', 'name', 'users_id', 'entities_id', 'locations_id'],
             'FROM'   => 'glpi_computers',
             'WHERE'  => ['id' => $computerIds],
         ]) as $row) {
             $out[(int) $row['id']] = [
                 'name'     => (string) $row['name'],
                 'url'      => Computer::getFormURLWithID((int) $row['id']),
+                'entities_id'  => (int) $row['entities_id'],
+                'locations_id' => (int) $row['locations_id'],
                 'users_id' => (int) $row['users_id'],
                 'user'     => '',
                 'group'    => '',
