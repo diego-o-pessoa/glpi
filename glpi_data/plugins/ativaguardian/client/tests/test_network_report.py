@@ -259,6 +259,44 @@ class CaptureTests(unittest.TestCase):
             self.assertIsNone(nr.capture_lldp(self.work / "net", quiet_logger(), runner=FakePktmon()))
 
 
+class VpnTests(unittest.TestCase):
+    PROFILE = "SIMP-ATI-VPN-01-UDP4-1195-atv.ana.csouza"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.user = Path(self.tmp.name) / "ana"
+        (self.user / "OpenVPN" / "log").mkdir(parents=True)
+
+    def log(self, name, text):
+        (self.user / "OpenVPN" / "log" / f"{name}.log").write_text(text, encoding="utf-8")
+
+    @staticmethod
+    def tasklist(running):
+        def run(args, **_kwargs):
+            out = b'"openvpn.exe","4242","Services","0","12.000 K"\r\n' if running else b"INFO: No tasks are running.\r\n"
+            return subprocess.CompletedProcess(args, 0, out, b"")
+        return run
+
+    def test_connected_profile_is_found(self):
+        self.log(self.PROFILE, "Sat Oct 17 08:00:00 2026 Initialization Sequence Completed\n")
+        self.assertEqual(nr.connected_vpn_profiles(self.tasklist(True), [self.user]), [self.PROFILE])
+
+    def test_ended_connection_is_ignored(self):
+        self.log(self.PROFILE, "Initialization Sequence Completed\n... SIGTERM[hard,] received, process exiting\n")
+        self.assertEqual(nr.connected_vpn_profiles(self.tasklist(True), [self.user]), [])
+
+    def test_stale_log_without_openvpn_process_is_ignored(self):
+        # PC desligado com a VPN conectada: o log fica "conectado" para sempre.
+        self.log(self.PROFILE, "Initialization Sequence Completed\n")
+        self.assertEqual(nr.connected_vpn_profiles(self.tasklist(False), [self.user]), [])
+
+    def test_report_carries_vpn_profiles(self):
+        report = nr.build_report("abc", "PC", "1.6.0", {}, None, vpn_profiles=[self.PROFILE])
+        self.assertEqual(report["vpn"], {"profiles": [self.PROFILE]})
+        self.assertEqual(nr.build_report("abc", "PC", "1.6.0", {}, None)["vpn"], {"profiles": []})
+
+
 class ReportTests(unittest.TestCase):
     SYSTEM = {
         "adapter": {"name": "Ethernet", "description": "Intel(R) Ethernet", "media": "802.3",

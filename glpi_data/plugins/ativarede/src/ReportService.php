@@ -121,7 +121,24 @@ final class ReportService
             'monitors'         => $cleanMonitors,
             'monitors_known'   => $monitorsKnown,
             'diagnostic'       => self::diagnostic($payload['problems'] ?? []),
+            'vpn_profiles'     => self::vpnProfiles($payload['vpn']['profiles'] ?? []),
         ];
+    }
+
+    /** @return list<string> Perfis da VPN conectada (Guardian 1.6.14+). */
+    private static function vpnProfiles(mixed $profiles): array
+    {
+        if (!is_array($profiles)) {
+            return [];
+        }
+        $out = [];
+        foreach (array_slice(array_values($profiles), 0, 5) as $profile) {
+            $profile = is_string($profile) ? self::text($profile, 160) : '';
+            if ($profile !== '' && !in_array($profile, $out, true)) {
+                $out[] = $profile;
+            }
+        }
+        return $out;
     }
 
     /** @return array{events: int} */
@@ -156,6 +173,19 @@ final class ReportService
         $hasSchema = $DB->fieldExists(Settings::TABLE_MACHINES, 'monitors_seen');
         if ($hasSchema) {
             $fields['diagnostic'] = $report['diagnostic'];
+        }
+        // VPN conectada com o nome de uma pessoa: guarda o perfil e o primeiro
+        // nome. Sem VPN neste relatorio, mantem o ultimo (o nome continua).
+        if ($DB->fieldExists(Settings::TABLE_MACHINES, 'vpn_user')) {
+            foreach ($report['vpn_profiles'] ?? [] as $profile) {
+                $first = PersonName::fromVpnProfile($profile);
+                if ($first !== '') {
+                    $fields['vpn_profile'] = $profile;
+                    $fields['vpn_user'] = $first;
+                    $fields['vpn_seen_at'] = $now;
+                    break;
+                }
+            }
         }
         // Relatorio parcial nao traz a serie da BIOS: mantem a ja conhecida.
         if (!$report['monitors_known'] && $report['bios_serial'] === '') {

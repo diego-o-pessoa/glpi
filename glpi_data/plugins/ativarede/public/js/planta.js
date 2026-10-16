@@ -858,7 +858,7 @@
             var list = el('dl', 'ar-kv mb-1');
             if (m.computer && m.hostname && m.computer !== m.hostname) { kv(list, 'Nome na rede', m.hostname); }
             if (!m.computer) { kv(list, 'Computador GLPI', 'não vinculado (série/nome não encontrados no inventário)'); }
-            if (m.user_label) { kv(list, 'Usuário', m.user_label); }
+            if (m.person) { kv(list, 'Usuário', m.person + (m.person_source === 'vpn' ? ' (pela VPN: ' + m.vpn_profile + ')' : '')); }
             kv(list, 'Usuário (GLPI)', m.user ? m.user + (m.group ? ' · ' + m.group : '') : '');
             kv(list, 'IP', m.ip + (m.link === 'wifi' ? ' (Wi-Fi agora)' : ''));
             kv(list, 'Nesta mesa desde', m.since);
@@ -900,9 +900,9 @@
      * pessoa. Um clique define a porta da mesa. */
     function unmappedLabel(u) {
         return u.machines.map(function (m) {
-            // Nome corrigido em Equipamentos; senao usuario do GLPI; senao a
-            // conta logada no Windows agora.
-            return (m.user_label || m.user || m.windows_user || 'Sem usuário identificado') + (m.group ? ' · ' + m.group : '');
+            // Nome resolvido no GLPI (PersonName): o corrigido em Equipamentos,
+            // a conta de uma pessoa ou o primeiro nome da VPN conectada.
+            return (m.person || m.user || m.windows_user || 'Sem usuário identificado') + (m.group ? ' · ' + m.group : '');
         }).join(' / ');
     }
 
@@ -925,7 +925,7 @@
     }
     function deskPeople(d) {
         return d.machines.map(function (m) {
-            return (m.user_label || m.user || m.windows_user || m.computer || m.hostname) + (m.group ? ' · ' + m.group : '');
+            return (m.person || m.user || m.windows_user || m.computer || m.hostname) + (m.group ? ' · ' + m.group : '');
         }).join(' / ');
     }
 

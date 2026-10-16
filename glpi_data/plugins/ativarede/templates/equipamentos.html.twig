@@ -123,7 +123,7 @@
                                     data-online="{{ m.online ? '1' : '0' }}"
                                     data-nodesk="{{ m.desk ? '0' : '1' }}"
                                     data-diag="{{ m.diagnostic ? '1' : '0' }}"
-                                    data-search="{{ [m.title, m.person, m.user_auto, m.user, m.group, m.computer, m.hostname, m.desk, m.ip, m.switch, m.port, monitors_text]|join(' ')|lower }}">
+                                    data-search="{{ [m.title, m.person, m.user_auto, m.user_vpn, m.vpn_profile, m.user, m.group, m.computer, m.hostname, m.desk, m.ip, m.switch, m.port, monitors_text]|join(' ')|lower }}">
                                     <td class="ar-eq-who">
                                         <div class="ar-eq-person">
                                             <span class="ar-dot {{ m.online ? 'is-on' : 'is-off' }}" title="{{ m.online ? 'Ligada agora' : 'Sem contato agora' ~ (m.last_contact ? ' (último: ' ~ m.last_contact ~ ')' : '') }}"></span>
@@ -140,7 +140,8 @@
                                                     {% if m.computer and m.hostname and m.computer != m.hostname %}<span class="text-muted">· {{ m.hostname }}</span>{% endif %}
                                                 </div>
                                                 {%- set details = [] -%}
-                                                {%- if m.user_label and m.user_auto %}{% set details = details|merge(['automático: ' ~ m.user_auto]) %}{% endif -%}
+                                                {%- if m.person_source == 'vpn' %}{% set details = details|merge(['pela VPN: ' ~ m.vpn_profile]) %}{% endif -%}
+                                                {%- if m.person_source != 'auto' and m.user_auto %}{% set details = details|merge(['Windows: ' ~ m.user_auto]) %}{% endif -%}
                                                 {%- if m.user and m.user != m.person and m.user != m.user_auto %}{% set details = details|merge(['GLPI: ' ~ m.user]) %}{% endif -%}
                                                 {%- if m.group %}{% set details = details|merge([m.group]) %}{% endif -%}
                                                 {% if details|length %}<div class="ar-eq-sub">{{ details|join(' · ') }}</div>{% endif %}
@@ -156,8 +157,8 @@
                                                 <input type="hidden" name="action" value="machine_user">
                                                 <input type="hidden" name="id" value="{{ m.id }}">
                                                 <input class="form-control form-control-sm" name="user_label" value="{{ m.user_label }}" maxlength="64"
-                                                       placeholder="{{ m.user_auto ?: 'Nome do usuário' }}"
-                                                       title="Deixe vazio para voltar ao nome automático{{ m.user_auto ? ' (' ~ m.user_auto ~ ')' : '' }}">
+                                                       placeholder="{{ m.person_auto ?: 'Nome do usuário' }}"
+                                                       title="Deixe vazio para voltar ao nome automático{{ m.person_auto ? ' (' ~ m.person_auto ~ ')' : '' }}">
                                                 <button class="btn btn-sm btn-primary" title="Salvar"><i class="ti ti-check"></i></button>
                                                 <button type="button" class="btn btn-sm btn-ghost-secondary" data-ar-edit="{{ m.id }}" title="Cancelar"><i class="ti ti-x"></i></button>
                                             </form>

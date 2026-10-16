@@ -359,12 +359,14 @@ final class Inventory
             $computer = $computers[(int) $row['computers_id']] ?? null;
             $contact = $online[$row['machine_id']] ?? null;
             $name = (string) (($computer['name'] ?? '') ?: $row['hostname']);
-            // Quem esta usando: o nome corrigido em Equipamentos; senao a conta
-            // logada no Windows (Guardian); sem sessao aberta, o usuario
-            // atribuido ao computador no GLPI.
+            // Quem esta usando (PersonName): o nome corrigido em Equipamentos;
+            // senao a conta logada no Windows (Guardian) ou, sem sessao aberta,
+            // o usuario do computador no GLPI - se for de uma pessoa; senao o
+            // primeiro nome da VPN conectada ("...-atv.ana.csouza" -> Ana).
             $auto = (string) (($contact['username'] ?? '') ?: ($computer['user'] ?? ''));
             $userLabel = trim((string) ($row['user_label'] ?? ''));
-            $who = $userLabel !== '' ? $userLabel : $auto;
+            $vpnUser = trim((string) ($row['vpn_user'] ?? ''));
+            $who = PersonName::resolve($userLabel, $auto, $vpnUser);
             $out[] = [
                 'id'           => $id,
                 'machine_id'   => (string) $row['machine_id'],
@@ -373,6 +375,12 @@ final class Inventory
                 'person'       => $who,
                 'user_label'   => $userLabel,
                 'user_auto'    => $auto,
+                'user_vpn'     => $vpnUser,
+                // Nome que fica se o corrigido a mao for apagado.
+                'person_auto'  => PersonName::resolve('', $auto, $vpnUser),
+                'vpn_profile'  => (string) ($row['vpn_profile'] ?? ''),
+                // De onde veio o nome mostrado: manual, auto (Windows/GLPI) ou vpn.
+                'person_source' => $who === '' ? '' : ($who === $userLabel ? 'manual' : ($who === $vpnUser && $vpnUser !== $auto ? 'vpn' : 'auto')),
                 'windows_user' => (string) ($contact['username'] ?? ''),
                 'computers_id' => (int) $row['computers_id'],
                 'computer'     => $computer['name'] ?? '',

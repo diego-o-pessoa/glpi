@@ -75,6 +75,20 @@ Em **Editar planta**:
 - **Mesa** cria uma mesa nova no meio da planta. Para remover uma mesa, abra a
   mesa e use **Remover mesa**.
 
+## Nome de quem usa a máquina
+
+O nome mostrado em Equipamentos, na Planta e no Ativa Workspace segue esta ordem:
+
+1. o nome corrigido à mão em **Equipamentos** (lápis ao lado do nome);
+2. a conta do Windows ou o usuário do computador no GLPI, se for de uma pessoa.
+   Contas genéricas ("Ativa", "Ativa Locação", "Ativa - Comercial", "User",
+   "Usuário", "Admin", "Suporte"...) são puladas;
+3. o **primeiro nome da VPN conectada**. O Guardian (1.6.14+) informa o perfil
+   do OpenVPN GUI conectado, por exemplo `SIMP-ATI-VPN-01-UDP4-1195-atv.ana.csouza`,
+   que vira **Ana**. Fica guardado, então o nome continua com a VPN desconectada.
+
+O computador no GLPI não é alterado: o nome só vale no Ativa Rede e no Ativa Workspace.
+
 ## Mapeando as mesas
 
 A porta de cada máquina chega sozinha (Guardian, a cada 15 min). Só falta dizer

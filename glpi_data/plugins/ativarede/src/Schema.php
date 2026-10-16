@@ -44,6 +44,15 @@ final class Schema
             $DB->doQuery("ALTER TABLE `{$machines}` ADD `user_label` varchar(64) NOT NULL DEFAULT '' AFTER `hostname`");
         }
 
+        // Perfil da VPN conectada e o primeiro nome tirado dele (PersonName).
+        // Fica guardado: a maquina continua com o nome com a VPN desconectada.
+        if (!$DB->fieldExists($machines, 'vpn_user')) {
+            $DB->doQuery("ALTER TABLE `{$machines}`
+                ADD `vpn_profile` varchar(160) NOT NULL DEFAULT '' AFTER `user_label`,
+                ADD `vpn_user` varchar(64) NOT NULL DEFAULT '' AFTER `vpn_profile`,
+                ADD `vpn_seen_at` timestamp NULL DEFAULT NULL AFTER `vpn_user`");
+        }
+
         // "Nao e switch": PC ou switchzinho de mesa visto pelo LLDP. Fica
         // gravado para os relatorios seguintes tambem o ignorarem.
         $switches = Settings::TABLE_SWITCHES;

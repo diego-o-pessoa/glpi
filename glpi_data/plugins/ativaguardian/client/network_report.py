@@ -691,9 +691,94 @@ def local_mac_set(system: dict[str, Any]) -> frozenset[str]:
     return frozenset(m for m in found if len(m) == 12)
 
 
+# ---------------------------------------------------------------------------
+# VPN conectada (nome do perfil do OpenVPN, ex.: SIMP-ATI-VPN-01-UDP4-1195-atv.ana.csouza)
+# ---------------------------------------------------------------------------
+
+# O OpenVPN GUI grava um log por perfil em %USERPROFILE%\OpenVPN\log\<perfil>.log.
+_VPN_UP = "Initialization Sequence Completed"
+_VPN_ENDED = ("process exiting", "SIGTERM", "Closing TUN/TAP", "SIGHUP", "SIGUSR1")
+MAX_VPN_PROFILES = 5
+
+
+def _user_profile_dirs() -> list[Path]:
+    """Pastas de perfil dos usuarios (ProfileList; senao C:\\Users\\*)."""
+    dirs: list[Path] = []
+    if os.name == "nt":
+        try:
+            import winreg
+
+            base = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList"
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as key:
+                index = 0
+                while True:
+                    try:
+                        sid = winreg.EnumKey(key, index)
+                    except OSError:
+                        break
+                    index += 1
+                    # So contas de pessoas (locais e do Entra ID), nao SYSTEM/servicos.
+                    if not re.match(r"^S-1-(5-21|12-1)-", sid):
+                        continue
+                    try:
+                        with winreg.OpenKey(key, sid) as sub:
+                            dirs.append(Path(os.path.expandvars(str(winreg.QueryValueEx(sub, "ProfileImagePath")[0]))))
+                    except OSError:
+                        continue
+        except OSError:
+            pass
+    if not dirs:
+        root = Path(os.environ.get("SystemDrive", "C:") + "\\") / "Users"
+        try:
+            dirs = [p for p in root.iterdir() if p.is_dir()]
+        except OSError:
+            dirs = []
+    return dirs
+
+
+def _openvpn_running(runner: Runner) -> bool | None:
+    """Algum openvpn.exe rodando (None = nao deu para saber)."""
+    completed = _run(runner, [str(SYSTEM32 / "tasklist.exe"), "/FI", "IMAGENAME eq openvpn.exe", "/FO", "CSV", "/NH"], timeout=20)
+    if completed is None or completed.returncode != 0:
+        return None
+    return "openvpn.exe" in _decode(completed.stdout or b"").lower()
+
+
+def connected_vpn_profiles(runner: Runner = subprocess.run, profile_dirs: list[Path] | None = None) -> list[str]:
+    """Perfis do OpenVPN GUI conectados agora: o log do perfil mostra que a
+    conexao subiu e nao terminou depois, e o openvpn.exe esta rodando (um
+    desligamento no meio deixaria o log "conectado" para sempre)."""
+    if _openvpn_running(runner) is False:
+        return []
+    found: list[tuple[float, str]] = []
+    for profile in (profile_dirs if profile_dirs is not None else _user_profile_dirs()):
+        try:
+            logs = list((profile / "OpenVPN" / "log").glob("*.log"))
+        except OSError:
+            continue
+        for log in logs:
+            try:
+                mtime = log.stat().st_mtime
+                with open(log, "rb") as handle:
+                    handle.seek(0, os.SEEK_END)
+                    handle.seek(max(0, handle.tell() - 65536))
+                    text = handle.read().decode("utf-8", errors="replace")
+            except OSError:
+                continue
+            up = text.rfind(_VPN_UP)
+            if up >= 0 and not any(marker in text[up:] for marker in _VPN_ENDED):
+                found.append((mtime, log.stem[:160]))
+    # Mais recente primeiro, sem repetir.
+    names: list[str] = []
+    for _mtime, name in sorted(found, reverse=True):
+        if name not in names:
+            names.append(name)
+    return names[:MAX_VPN_PROFILES]
+
+
 def build_report(machine_id: str, hostname: str, guardian_version: str, system: dict[str, Any],
                  lldp: dict[str, Any] | None, problems: list[str] | None = None,
-                 monitors_unknown: bool = False) -> dict[str, Any]:
+                 monitors_unknown: bool = False, vpn_profiles: list[str] | None = None) -> dict[str, Any]:
     adapter = system.get("adapter") if isinstance(system.get("adapter"), dict) else None
     link = link_type(adapter)
     return {
@@ -712,6 +797,9 @@ def build_report(machine_id: str, hostname: str, guardian_version: str, system: 
             "lldp": lldp if link == "wired" else None,
         },
         "monitors": normalize_monitors(system.get("monitors")),
+        # Nome do perfil da VPN conectada: o GLPI tira dele o primeiro nome da
+        # pessoa para maquinas sem nome definido (ou com conta generica "Ativa").
+        "vpn": {"profiles": list(vpn_profiles or [])[:MAX_VPN_PROFILES]},
     }
 
 
@@ -745,7 +833,13 @@ def collect_report(machine_id: str, hostname: str, guardian_version: str, work_d
     local_macs = local_mac_set(system)
     lldp = capture_lldp(work_dir, logger, wait=wait, lock_wait_seconds=lock_wait_seconds, local_macs=local_macs,
                         problems=problems) if link_type(adapter) == "wired" else None
-    return build_report(machine_id, hostname, guardian_version, system, lldp, problems, monitors_unknown=partial)
+    try:
+        vpn_profiles = connected_vpn_profiles()
+    except Exception:  # nunca impede o relatorio
+        logger.debug("Ativa Rede: nao foi possivel ler a VPN conectada.", exc_info=True)
+        vpn_profiles = []
+    return build_report(machine_id, hostname, guardian_version, system, lldp, problems,
+                        monitors_unknown=partial, vpn_profiles=vpn_profiles)
 
 
 # ---------------------------------------------------------------------------
