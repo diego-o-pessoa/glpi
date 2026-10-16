@@ -211,15 +211,15 @@ final class Seed
                 $add($letter . ($row + 4), $left + 42, $y, 'right');
             }
         }
-        // Sala do DP (x 830 a 1076).
-        $add('DP1', 875, 160, 'right', 'DP');
-        $add('DP2', 1031, 160, 'left', 'DP');
-        $add('DP3', 1031, 206, 'left', 'DP');
-        // Sala do RH (x 1076 a 1330).
-        $add('RH1', 1182, 160, 'left', 'RH');
-        $add('RH2', 1224, 160, 'right', 'RH');
-        $add('RH3', 1182, 206, 'left', 'RH');
-        $add('RH4', 1224, 206, 'right', 'RH');
+        // Salas do DP (x 830 a 1076) e do RH (x 1076 a 1330): duas mesas em
+        // cima, duas no meio e uma centralizada embaixo, com um respiro entre elas.
+        foreach (['DP' => 953, 'RH' => 1203] as $sector => $center) {
+            $add($sector . '1', $center - 35, 140, 'left', $sector);
+            $add($sector . '2', $center + 35, 140, 'right', $sector);
+            $add($sector . '3', $center - 35, 200, 'left', $sector);
+            $add($sector . '4', $center + 35, 200, 'right', $sector);
+            $add($sector . '5', $center, 260, 'down', $sector);
+        }
 
         return $desks;
     }
@@ -242,9 +242,10 @@ final class Seed
             $wall('wall', 920, 325, 1076, 325),
             // Entre o DP e o RH
             $wall('wall', 1076, 40, 1076, 325),
-            // RH
-            $wall('door', 1135, 325, 1080, 325),
-            $wall('wall', 1135, 325, 1330, 325),
+            // RH (porta igual a do DP: dobradica a esquerda, abre para dentro)
+            $wall('wall', 1076, 325, 1106, 325),
+            $wall('door', 1106, 325, 1166, 325, 1),
+            $wall('wall', 1166, 325, 1330, 325),
             $wall('wall', 1330, 40, 1330, 325),
         ];
     }
@@ -259,7 +260,7 @@ final class Seed
     {
         global $DB;
 
-        $flag = 'fixup_floor2_v3';
+        $flag = 'fixup_floor2_v4';
         $done = \Config::getConfigurationValues(Settings::CONTEXT, [$flag]);
         if (!empty($done[$flag])) {
             return;
@@ -284,19 +285,25 @@ final class Seed
             $walls[] = self::key($row['kind'], $row['x1'], $row['y1'], $row['x2'], $row['y2'], $row['flip']);
         }
         sort($walls);
-        $oldWalls = array_map(static fn(array $w): string => self::key(...$w), self::FLOOR2_FIRST_WALLS);
-        sort($oldWalls);
 
+        // Cada versao anterior: [mesas, divisorias] como foram criadas.
+        $versions = [
+            [self::FLOOR2_FIRST_LAYOUT, self::FLOOR2_FIRST_WALLS],
+            [self::FLOOR2_SECOND_LAYOUT, self::FLOOR2_FIRST_WALLS],
+            [self::FLOOR2_THIRD_LAYOUT, self::FLOOR2_THIRD_WALLS],
+        ];
         $untouched = false;
-        if ($desks !== null && $walls === $oldWalls) {
+        if ($desks !== null) {
             sort($desks);
-            foreach ([self::FLOOR2_FIRST_LAYOUT, self::FLOOR2_SECOND_LAYOUT] as $layout) {
+            foreach ($versions as [$layout, $oldWallList]) {
                 $old = [];
                 foreach ($layout as $name => $d) {
                     $old[] = self::key($name, ...$d);
                 }
                 sort($old);
-                if ($desks === $old) {
+                $oldWalls = array_map(static fn(array $w): string => self::key(...$w), $oldWallList);
+                sort($oldWalls);
+                if ($desks === $old && $walls === $oldWalls) {
                     $untouched = true;
                     break;
                 }
@@ -351,7 +358,31 @@ final class Seed
         'RH1' => [1500, 160, 42, 46], 'RH2' => [1542, 160, 42, 46], 'RH3' => [1500, 206, 42, 46], 'RH4' => [1542, 206, 42, 46],
     ];
 
+    private const FLOOR2_THIRD_LAYOUT = [
+        'K1' => [150, 180, 42, 46], 'K2' => [192, 180, 42, 46], 'K3' => [150, 226, 42, 46], 'K4' => [192, 226, 42, 46],
+        'L1' => [290, 180, 42, 46], 'L2' => [332, 180, 42, 46], 'L3' => [290, 226, 42, 46], 'L4' => [332, 226, 42, 46],
+        'M1' => [430, 160, 42, 46], 'M2' => [430, 206, 42, 46], 'M3' => [430, 252, 42, 46],
+        'M4' => [472, 160, 42, 46], 'M5' => [472, 206, 42, 46], 'M6' => [472, 252, 42, 46],
+        'N1' => [570, 160, 42, 46], 'N2' => [570, 206, 42, 46], 'N3' => [570, 252, 42, 46],
+        'N4' => [612, 160, 42, 46], 'N5' => [612, 206, 42, 46], 'N6' => [612, 252, 42, 46],
+        'O1' => [710, 160, 42, 46], 'O2' => [710, 206, 42, 46], 'O3' => [710, 252, 42, 46],
+        'O4' => [752, 160, 42, 46], 'O5' => [752, 206, 42, 46], 'O6' => [752, 252, 42, 46],
+        'DP1' => [875, 160, 42, 46], 'DP2' => [1031, 160, 42, 46], 'DP3' => [1031, 206, 42, 46],
+        'RH1' => [1182, 160, 42, 46], 'RH2' => [1224, 160, 42, 46], 'RH3' => [1182, 206, 42, 46], 'RH4' => [1224, 206, 42, 46],
+    ];
+
     /** Divisorias das versoes anteriores: [kind, x1, y1, x2, y2, flip]. */
+    private const FLOOR2_THIRD_WALLS = [
+        ['wall', 830, 40, 830, 325, 0],
+        ['wall', 830, 325, 860, 325, 0],
+        ['door', 860, 325, 920, 325, 1],
+        ['wall', 920, 325, 1076, 325, 0],
+        ['wall', 1076, 40, 1076, 325, 0],
+        ['door', 1135, 325, 1080, 325, 0],
+        ['wall', 1135, 325, 1330, 325, 0],
+        ['wall', 1330, 40, 1330, 325, 0],
+    ];
+
     private const FLOOR2_FIRST_WALLS = [
         ['wall', 1155, 40, 1155, 325, 0],
         ['wall', 1155, 325, 1185, 325, 0],
