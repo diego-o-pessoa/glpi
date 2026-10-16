@@ -791,3 +791,31 @@ tr:hover .ar-eq-edit-btn,
 .ar-eq-table > thead th:nth-child(5) { width: 12%; }
 .ar-eq-who { min-width: 0; }
 .ar-eq-mon { overflow: hidden; text-overflow: ellipsis; }
+
+/* Abas: o "card-header-tabs" do Tabler tem margem negativa embaixo, que
+   puxava o conteudo da aba para cima dos nomes (cortando o texto). */
+.ar-equip .ar-eq-tabs-head {
+    display: block;
+    height: auto;
+    min-height: 0;
+    padding: .6rem 1.25rem 0;
+    overflow: visible;
+}
+
+.ar-equip .ar-eq-tabs-head .nav-tabs {
+    flex-wrap: wrap;
+    gap: .25rem;
+    margin: 0 0 -1px;
+}
+
+.ar-equip .ar-eq-tabs-head .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    height: auto;
+    padding: .55rem 1rem;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+
+.ar-equip .ar-eq-pane { position: relative; clear: both; }
