@@ -62,6 +62,9 @@ SEND_RETRY_DELAYS_SECONDS = (5, 15, 45)
 POWERSHELL_TIMEOUT_SECONDS = 180
 MAX_MONITORS = 8
 
+# "pktmon start" com uma captura ja aberta (ERROR_INVALID_STATE).
+PKTMON_ALREADY_RUNNING = 5023
+
 LLDP_ETHERTYPE = 0x88CC
 VLAN_ETHERTYPES = (0x8100, 0x88A8)
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -275,17 +278,46 @@ def first_lldp(frames: list[bytes], local_macs: set[str] | frozenset[str] = froz
     return fallback
 
 
+def _decode(raw: bytes | str) -> str:
+    """Texto do pktmon. Conforme a versao do Windows ele escreve em UTF-8 ou na
+    pagina de codigo do console: lido como ANSI, o UTF-8 virava "jÃ¡"."""
+    if not isinstance(raw, bytes):
+        return str(raw)
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    for codec in (("oem", "mbcs") if os.name == "nt" else ()):
+        try:
+            return raw.decode(codec)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return raw.decode("latin-1", errors="replace")
+
+
 def _output(completed: subprocess.CompletedProcess | None) -> str:
-    """Saida do pktmon (console do Windows, nao UTF-8) resumida para o log."""
+    """Saida do pktmon resumida para o log."""
     if completed is None:
         return "nao executou"
-    raw = (completed.stdout or b"") + (completed.stderr or b"")
-    if isinstance(raw, bytes):
-        text = raw.decode("mbcs" if os.name == "nt" else "utf-8", errors="replace")
-    else:
-        text = str(raw)
+    text = _decode((completed.stdout or b"") + (completed.stderr or b""))
     text = re.sub(r"\s+", " ", text).strip()
     return f"codigo {completed.returncode}: {text[:400]}"
+
+
+def _same_folder(file_path: str, folder: Path) -> bool:
+    """O arquivo esta direto na pasta (caminho do Windows, sem diferenciar maiusculas)."""
+    parent = file_path.replace("/", "\\").rstrip("\\").rpartition("\\")[0]
+    return parent.lower() == str(folder).replace("/", "\\").rstrip("\\").lower()
+
+
+def _session_log_file(runner: Runner, pktmon: str) -> str | None:
+    """Arquivo .etl da captura do pktmon em andamento (pelo "pktmon status")."""
+    status = _run(runner, [pktmon, "status"])
+    if status is None:
+        return None
+    text = _decode((status.stdout or b"") + (status.stderr or b""))
+    match = re.search(r"[A-Za-z]:\\[^\r\n]*?\.etl\b", text, re.IGNORECASE)
+    return match.group(0).strip() if match else None
 
 
 def _problem(problems: list[str] | None, text: str) -> None:
@@ -387,7 +419,27 @@ def _capture_locked(work_dir: Path, logger: logging.Logger, wait: Callable[[floa
         _problem(problems, f"pktmon recusou o filtro LLDP: {_output(added)}")
         return None
 
-    started = _run(runner, [pktmon, "start", "--capture", "--comp", "nics", "--pkt-size", "0", "-f", str(etl)])
+    start = [pktmon, "start", "--capture", "--comp", "nics", "--pkt-size", "0", "-f", str(etl)]
+    started = _run(runner, start)
+    if started is not None and started.returncode == PKTMON_ALREADY_RUNNING:
+        # Ja existe uma captura. Se ela grava na pasta do Ativa Rede, sobrou de
+        # uma coleta interrompida no meio (servico parado, desligamento): sem
+        # isto o "start" falhava em todo ciclo, para sempre. Com o mutex na
+        # mao, nenhuma coleta nossa esta em curso, entao ela pode ser encerrada.
+        # Captura de outra ferramenta continua intocada.
+        running = _session_log_file(runner, pktmon)
+        if running and _same_folder(running, etl.parent):
+            logger.info("Ativa Rede: captura antiga do Ativa Rede ainda aberta (%s); encerrando e tentando de novo.", running)
+            _run(runner, [pktmon, "stop"], timeout=120)
+            _unlink(etl)
+            started = _run(runner, start)
+        else:
+            _run(runner, [pktmon, "filter", "remove"])
+            where = f" (gravando em {running})" if running else ""
+            logger.info("Ativa Rede: o pktmon ja esta capturando para outra ferramenta%s; coleta da porta pulada.", where)
+            _problem(problems, f"pktmon em uso por outra captura{where}; porta do switch nao lida. "
+                               "Se ninguem estiver capturando: 'pktmon stop' como administrador")
+            return None
     if started is None or started.returncode != 0:
         _run(runner, [pktmon, "filter", "remove"])
         logger.info("Ativa Rede: pktmon nao iniciou (%s).", _output(started))

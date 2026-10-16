@@ -146,21 +146,32 @@ class LldpParsingTests(unittest.TestCase):
 class FakePktmon:
     """Simula o pktmon: grava o pcapng no lugar do arquivo convertido."""
 
-    def __init__(self, start_rc: int = 0, frames: list[bytes] | None = None) -> None:
+    def __init__(self, start_rc: int = 0, frames: list[bytes] | None = None,
+                 running_log: str | None = None, start_output: bytes = b"") -> None:
         self.start_rc = start_rc
         self.frames = frames if frames is not None else [lldp_frame()]
         self.calls: list[list[str]] = []
+        # Captura ja aberta antes da coleta (outra ferramenta ou sobra de uma coleta interrompida).
+        self.running_log = running_log
+        self.start_output = start_output
 
     def __call__(self, args, **_kwargs):
         self.calls.append(list(args))
         rc = 0
+        out = b""
         if args[1] == "start":
+            if self.running_log:
+                return subprocess.CompletedProcess(args, nr.PKTMON_ALREADY_RUNNING, self.start_output, b"")
             rc = self.start_rc
             if rc == 0:
                 Path(args[args.index("-f") + 1]).write_bytes(b"etl")
+        if args[1] == "status" and self.running_log:
+            out = ("Contadores e status\r\nArquivo de log: " + self.running_log + "\r\n").encode("utf-8")
+        if args[1] == "stop":
+            self.running_log = None
         if args[1] == "etl2pcap":
             Path(args[args.index("-o") + 1]).write_bytes(pcapng(self.frames))
-        return subprocess.CompletedProcess(args, rc, b"", b"")
+        return subprocess.CompletedProcess(args, rc, out, b"")
 
 
 class CaptureTests(unittest.TestCase):
@@ -190,6 +201,34 @@ class CaptureTests(unittest.TestCase):
         fake = FakePktmon(start_rc=1)
         self.assertIsNone(nr.capture_lldp(self.work / "net", quiet_logger(), wait=lambda _s: None, runner=fake))
         self.assertNotIn("stop", [c[1] for c in fake.calls])
+
+    def test_leftover_own_capture_is_stopped_and_retried(self):
+        # Coleta anterior interrompida: a captura ficou aberta gravando na nossa pasta.
+        work = self.work / "net"
+        leftover = str(work / "lldp.etl").replace("/", "\\")
+        fake = FakePktmon(running_log=leftover)
+        problems = []
+        result = nr.capture_lldp(work, quiet_logger(), wait=lambda _s: None, runner=fake, problems=problems)
+        self.assertEqual(result["port_description"], "15")
+        verbs = [c[1] for c in fake.calls]
+        self.assertEqual(verbs.count("start"), 2)
+        self.assertLess(verbs.index("stop"), len(verbs) - 1 - verbs[::-1].index("start"),
+                        "a captura antiga e encerrada antes de tentar de novo")
+        self.assertEqual(problems, [])
+
+    def test_capture_of_other_tool_is_left_running(self):
+        fake = FakePktmon(running_log="C:\\Ferramentas\\captura.etl")
+        problems = []
+        self.assertIsNone(nr.capture_lldp(self.work / "net", quiet_logger(), wait=lambda _s: None, runner=fake,
+                                          problems=problems))
+        self.assertNotIn("stop", [c[1] for c in fake.calls])
+        self.assertEqual(len(problems), 1)
+        self.assertIn("outra captura", problems[0])
+        self.assertIn("C:\\Ferramentas\\captura.etl", problems[0])
+
+    def test_pktmon_utf8_output_is_not_garbled(self):
+        completed = subprocess.CompletedProcess(["pktmon"], 5023, "O Monitor de Pacotes já foi iniciado.".encode("utf-8"), b"")
+        self.assertIn("já foi iniciado", nr._output(completed))
 
     def test_no_lldp_heard(self):
         noise = bytes(12) + struct.pack(">H", 0x0800) + bytes(40)
