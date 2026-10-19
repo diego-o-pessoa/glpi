@@ -297,6 +297,65 @@ html:root[data-glpi-theme-dark="1"] {
     color: #fff !important;
 }
 
+/* Recolher/expandir (shell.js): no topo, ao lado da marca. */
+.sidebar .ac-fold {
+    display: none;
+}
+
+@media (min-width: 992px) {
+    .sidebar .ac-fold {
+        position: absolute;
+        top: 29px;
+        right: 10px;
+        z-index: 2;
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        color: #9aa6cc;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+
+    .sidebar .ac-fold:hover,
+    .sidebar .ac-fold:focus-visible {
+        border-color: rgba(255, 255, 255, 0.28);
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        outline: none;
+    }
+
+    .sidebar .ac-fold .ti {
+        transition: transform 0.3s var(--ac-ease);
+    }
+
+    /* Recolhido: logo abaixo do simbolo, centralizado, seta para a direita. */
+    body.navbar-collapsed .sidebar .ac-fold {
+        position: static;
+        margin: 0 auto 10px;
+    }
+
+    body.navbar-collapsed .sidebar .ac-fold .ti {
+        transform: rotate(180deg);
+    }
+
+    /* Espaco para o botao ao lado do nome "Ativa Locacao". */
+    body:not(.navbar-collapsed) .sidebar .navbar-brand {
+        padding-right: 46px;
+    }
+
+    /* Com o botao do topo, o "Recolher menu" do pe da barra sobra. */
+    .sidebar .reduce-menu,
+    .sidebar .ac-native-fold {
+        display: none !important;
+    }
+}
+
 @media (min-width: 992px) {
     /* O botao "Encontrar menu" ocupa a largura da barra (so no desktop; em
        telas pequenas o GLPI o mostra dentro do menu). */
@@ -325,8 +384,14 @@ html:root[data-glpi-theme-dark="1"] {
         display: none;
     }
 
+    /* A lupa no centro: o botao do GLPI tem "justify-content-start" (com
+       !important) e o icone tem margem a direita (me-1). */
+    body.navbar-collapsed .sidebar .trigger-fuzzy > .ti {
+        margin: 0 !important;
+    }
+
     body.navbar-collapsed .sidebar .trigger-fuzzy {
-        justify-content: center;
+        justify-content: center !important;
         width: 42px;
         margin: 0 14px 4px !important;
         padding: 8px 0;

@@ -95,6 +95,69 @@
 
         badges(links);
         markActive(links);
+        foldButton();
+        findButton();
+    }
+
+    /* "Encontrar menu" (busca nas opcoes do menu, Ctrl+Alt+G): a seta do GLPI
+     * parecia "sair"; com o menu recolhido, uma lupa diz o que ele faz. */
+    function findButton() {
+        var button = document.querySelector('.sidebar .trigger-fuzzy');
+        if (!button) {
+            return;
+        }
+        var icon = button.querySelector('i.ti');
+        if (icon) {
+            icon.className = icon.className.replace(/\bti-arrow-big-right\b/, 'ti-search');
+        }
+        var shortcut = (button.getAttribute('data-bs-original-title') || button.getAttribute('title') || '').trim();
+        var tip = 'Buscar no menu' + (shortcut ? ' (' + shortcut + ')' : '');
+        button.setAttribute('title', tip);
+        button.setAttribute('data-bs-original-title', tip);
+        button.setAttribute('aria-label', tip);
+    }
+
+    /* Recolher/expandir a barra lateral. O botao do GLPI fica no pe da barra
+     * e, com ela recolhida, nao havia como voltar: este fica no topo, ao lado
+     * da marca, sempre visivel. Usa a mesma funcao do GLPI (a preferencia e
+     * salva no perfil, como no botao original). */
+    function foldButton() {
+        var brand = document.querySelector('.sidebar .navbar-brand');
+        if (!brand || document.querySelector('.sidebar .ac-fold')) {
+            return;
+        }
+        var button = el('button', 'ac-fold');
+        button.type = 'button';
+        button.appendChild(el('i', 'ti ti-chevrons-left'));
+        function label() {
+            var collapsed = document.body.classList.contains('navbar-collapsed');
+            button.title = collapsed ? 'Expandir menu' : 'Recolher menu';
+            button.setAttribute('aria-label', button.title);
+            button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        }
+        button.addEventListener('click', function () {
+            if (typeof window.switchFoldMenu === 'function') {
+                window.switchFoldMenu();
+            } else {
+                var native = document.querySelector('.sidebar .reduce-menu');
+                if (native) {
+                    native.click();
+                } else {
+                    document.body.classList.toggle('navbar-collapsed');
+                }
+            }
+        });
+        brand.parentNode.insertBefore(button, brand.nextSibling);
+        // Um botao so (no topo) para recolher e expandir: o do pe da barra sai.
+        var native = document.querySelector('.sidebar .reduce-menu');
+        if (native) {
+            (native.closest('p') || native).classList.add('ac-native-fold');
+        }
+        label();
+        // O GLPI troca a classe do <body> depois da resposta do servidor.
+        if (window.MutationObserver) {
+            new MutationObserver(label).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        }
     }
 
     function badges(links) {
