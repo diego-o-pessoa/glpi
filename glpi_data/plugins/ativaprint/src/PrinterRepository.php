@@ -562,6 +562,7 @@ final class PrinterRepository
                 'SELECT' => [
                     'id', 'name', 'serial', 'last_pages_counter', 'init_pages_counter',
                     'comment', 'locations_id', 'printermodels_id', 'states_id',
+                    'last_inventory_update', 'date_mod',
                 ],
                 'FROM'   => 'glpi_printers',
                 'WHERE'  => [
@@ -743,11 +744,16 @@ final class PrinterRepository
                     if ($suppliesList !== []) {
                         $update['supplies'] = json_encode($suppliesList, JSON_UNESCAPED_UNICODE);
                     }
+                    $lastInventory = !empty($p['last_inventory_update']) ? (string) $p['last_inventory_update'] : (!empty($p['date_mod']) ? (string) $p['date_mod'] : null);
+                    if ($lastInventory !== null && (empty($existing['last_poll']) || $existing['last_poll'] === '0000-00-00 00:00:00')) {
+                        $update['last_poll'] = $lastInventory;
+                    }
                     $DB->update(self::TABLE, $update, ['id' => (int) $existing['id']]);
 
                     $targetPrinterId = (int) $existing['id'];
                     $targetCounter = (int) ($update['page_counter'] ?? ($existing['page_counter'] ?? $counter));
                 } else {
+                    $lastInventory = !empty($p['last_inventory_update']) ? (string) $p['last_inventory_update'] : (!empty($p['date_mod']) ? (string) $p['date_mod'] : null);
                     $insert = [
                         'printers_id'    => $glpiId,
                         'name'           => (string) $p['name'],
@@ -764,6 +770,7 @@ final class PrinterRepository
                         'page_counter'   => $counter,
                         'is_active'      => 1,
                         'last_seen'      => $isValidIp ? $now : null,
+                        'last_poll'      => $lastInventory,
                         'date_creation'  => $now,
                         'date_mod'       => $now,
                     ];
