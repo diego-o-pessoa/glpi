@@ -82,7 +82,12 @@ final class SnmpClient
                 return $result;
             }
         } catch (RuntimeException $e) {
-            // Se falhou o pacote agrupado, tenta consultar OIDs individualmente
+            // Se o host não respondeu por tempo esgotado ou recusou, parar imediatamente.
+            // Repetir OID por OID causaria múltiplos timeouts acumulados e travaria o PHP.
+            if (str_contains($e->getMessage(), 'tempo esgotado') || str_contains($e->getMessage(), 'recusou')) {
+                throw $e;
+            }
+            // Só tenta individualmente se o erro foi de protocolo (ex: pacote muito grande / OID específica rejeitada)
         }
 
         $result = [];

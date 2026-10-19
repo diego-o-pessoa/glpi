@@ -88,6 +88,12 @@ try {
                 ];
                 break;
             }
+
+            // Libera a sessão PHP para evitar qualquer travamento concorrente no GLPI
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+
             $result = Poller::pollAndSave($printer);
             $snmpOk = !empty($result['snmp_ok']);
             $msg = $snmpOk
@@ -103,7 +109,10 @@ try {
             break;
 
         case 'poll_all':
-            $count = Poller::pollMany(5);
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            $count = Poller::pollMany(3);
             $response = [
                 'ok'      => true,
                 'message' => "Verificação concluída para {$count} impressora(s).",

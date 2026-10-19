@@ -149,6 +149,11 @@
     to { transform: rotate(360deg); }
 }
 
+@keyframes apToastIn {
+    from { opacity: 0; transform: translateY(-12px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* ==========================================================================
    Grid dos 4 Cards Superiores (KPIS)
    ========================================================================== */
@@ -880,6 +885,62 @@
         });
     }
 
+    // Sistema de Notificação Toast Flutuante Integrado (rápido e autônomo)
+    function showToast(message, type = 'info') {
+        let container = document.getElementById('ap-toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'ap-toast-container';
+            container.style.cssText = 'position: fixed; top: 24px; right: 24px; z-index: 99999; display: flex; flex-direction: column; gap: 10px; max-width: 440px; pointer-events: none;';
+            document.body.appendChild(container);
+        }
+
+        const borderColor = type === 'success' ? '#10b981' : (type === 'warning' ? '#f59e0b' : '#6366f1');
+        const iconClass = type === 'success' ? 'ti-check' : (type === 'warning' ? 'ti-alert-triangle' : 'ti-info-circle');
+        const iconColor = type === 'success' ? '#10b981' : (type === 'warning' ? '#f59e0b' : '#6366f1');
+        const titleText = type === 'success' ? 'Sucesso' : (type === 'warning' ? 'Aviso de Rede' : 'Atualização');
+
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            pointer-events: auto;
+            background: #ffffff;
+            color: #0f172a;
+            padding: 14px 18px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px -5px rgba(0,0,0,0.18), 0 0 0 1.5px ${borderColor};
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 13.5px;
+            line-height: 1.45;
+            animation: apToastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: opacity 0.3s, transform 0.3s;
+        `;
+        toast.innerHTML = `
+            <i class="ti ${iconClass}" style="color: ${iconColor}; font-size: 20px; margin-top: 1px; flex-shrink: 0;"></i>
+            <div style="flex: 1;">
+                <div style="font-weight: 750; font-size: 13px; margin-bottom: 2px;">${titleText}</div>
+                <div style="color: #334155;">${message}</div>
+            </div>
+            <button type="button" style="background: none; border: none; color: #94a3b8; cursor: pointer; padding: 0 0 0 8px; font-size: 18px; line-height: 1;">&times;</button>
+        `;
+
+        toast.querySelector('button').addEventListener('click', () => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(-10px)';
+            setTimeout(() => toast.remove(), 300);
+        });
+
+        container.appendChild(toast);
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-10px)';
+                setTimeout(() => toast.remove(), 300);
+            }
+        }, 5000);
+    }
+
     // Mudança de Período
     if (periodSelect) {
         periodSelect.addEventListener('change', () => fetchData());
@@ -889,8 +950,10 @@
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
             refreshIcon.classList.add('spin');
+            showToast('Recarregando dados do inventário GLPI...', 'info');
             fetchData().finally(() => {
                 refreshIcon.classList.remove('spin');
+                showToast('Dados sincronizados com o GLPI!', 'success');
             });
         });
     }
@@ -921,11 +984,11 @@
                 if (!data.ok) throw new Error(data.message || 'Falha ao cadastrar');
                 modalAdd.classList.remove('is-open');
                 formAdd.reset();
-                if (window.glpi_toast_info) window.glpi_toast_info(data.message);
+                showToast(data.message, 'success');
                 fetchData();
             })
             .catch(err => {
-                alert(err.message);
+                showToast(err.message, 'warning');
             })
             .finally(() => {
                 submitBtn.disabled = false;
@@ -934,7 +997,7 @@
         });
     }
 
-    // Polling individual de impressora
+    // Polling individual de impressora (consulta status em tempo real)
     document.addEventListener('click', (e) => {
         const btn = e.target.closest('.btn-poll-printer');
         if (!btn) return;
@@ -944,10 +1007,12 @@
 
         postAction('poll_printer', { id })
             .then(data => {
-                if (window.glpi_toast_info) window.glpi_toast_info(data.message);
+                showToast(data.message, data.snmp_ok ? 'success' : 'warning');
                 fetchData();
             })
-            .catch(err => alert(err.message))
+            .catch(err => {
+                showToast(err.message || 'Falha na comunicação', 'warning');
+            })
             .finally(() => {
                 if (icon) icon.classList.remove('spin');
             });

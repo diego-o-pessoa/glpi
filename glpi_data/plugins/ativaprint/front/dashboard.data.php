@@ -19,6 +19,10 @@ if (!Session::haveRight('plugin_ativaprint', READ) && !Session::haveRight('confi
     exit;
 }
 
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
 $days = isset($_GET['days']) ? (int) $_GET['days'] : 7;
 if (!in_array($days, [7, 30, 90], true)) {
     $days = 7;

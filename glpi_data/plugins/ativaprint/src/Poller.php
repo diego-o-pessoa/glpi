@@ -180,8 +180,8 @@ final class Poller
         }
 
         $community = trim((string) ($printer['snmp_community'] ?? '')) ?: PrintConfig::get('snmp_community');
-        $timeoutSec = max(0.2, min(2.0, PrintConfig::int('snmp_timeout') / 1000));
-        $client = new SnmpClient($host, $community, PrintConfig::get('snmp_version'), $timeoutSec, 1);
+        $timeoutSec = max(0.2, min(0.8, PrintConfig::int('snmp_timeout') / 1000));
+        $client = new SnmpClient($host, $community, PrintConfig::get('snmp_version'), $timeoutSec, 0);
 
         try {
             $base = $client->get([
@@ -219,13 +219,16 @@ final class Poller
             'status_message' => $message,
             'sys_descr'      => $sysDescr ?: ($printer['sys_descr'] ?? null),
         ];
-        $counter = $base[self::OID_LIFE_COUNT] ?? null;
-        if (is_int($counter) && $counter > 0) {
-            $fields['page_counter'] = $counter;
-        } else {
-            $vendorCounter = self::queryVendorPageCounter($client, $modelStr, $sysDescr);
-            if ($vendorCounter !== null && $vendorCounter > 0) {
-                $fields['page_counter'] = $vendorCounter;
+
+        if ($base !== []) {
+            $counter = $base[self::OID_LIFE_COUNT] ?? null;
+            if (is_int($counter) && $counter > 0) {
+                $fields['page_counter'] = $counter;
+            } else {
+                $vendorCounter = self::queryVendorPageCounter($client, $modelStr, $sysDescr);
+                if ($vendorCounter !== null && $vendorCounter > 0) {
+                    $fields['page_counter'] = $vendorCounter;
+                }
             }
         }
         $serial = self::clean((string) ($base[self::OID_SERIAL] ?? ''), 255);
@@ -491,18 +494,14 @@ final class Poller
             return false;
         }
         $target = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) ? '[' . $host . ']' : $host;
-        foreach ([9100, 80, 443, 631, 515, 8080] as $port) {
-            $socket = @stream_socket_client('tcp://' . $target . ':' . $port, $errno, $error, 1.0);
+        foreach ([9100, 80] as $port) {
+            $socket = @stream_socket_client('tcp://' . $target . ':' . $port, $errno, $error, 0.3);
             if (is_resource($socket)) {
                 fclose($socket);
                 return true;
             }
         }
-
-        $output = [];
-        $res = -1;
-        @exec('ping -c 1 -W 1 ' . escapeshellarg($host) . ' 2>/dev/null', $output, $res);
-        return ($res === 0);
+        return false;
     }
 
     /** Uma linha por impressora por dia, com o maior contador visto no dia. */
