@@ -135,6 +135,17 @@ final class PrinterRepository
             }
         }
 
+        $isBrotherMono = str_contains($modelLower, 'mfc-8')
+            || str_contains($modelLower, 'dcp-8')
+            || str_contains($modelLower, 'hl-5')
+            || str_contains($modelLower, 'hl-6')
+            || str_contains($modelLower, 'brother');
+
+        $tonerTitle = $toner !== null ? ('Nível de toner: ' . $toner . '%') : 'Nível de toner não informado';
+        if ($toner === 100 && $isBrotherMono) {
+            $tonerTitle = 'Status: OK (Cartucho mecânico Brother sem chip percentual - reporta OK até acusar nível baixo)';
+        }
+
         $drumClass = 'is-good';
         if ($drum !== null) {
             if ($drum <= PrintConfig::int('toner_critical')) {
@@ -163,6 +174,7 @@ final class PrinterRepository
             'status_label' => $label,
             'status_class' => $badgeClass,
             'toner_class'  => $tonerClass,
+            'toner_title'  => $tonerTitle,
             'drum_class'   => $drumClass,
             'drum_label'   => $drumLabel,
             'drum_title'   => $drumTitle,

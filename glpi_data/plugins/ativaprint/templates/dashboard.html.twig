@@ -668,7 +668,7 @@
                                 <span class="fw-semibold font-monospace text-dark">{{ p.counter_fmt }}</span>
                             </td>
                             <td>
-                                <div class="ap-level-cell">
+                                <div class="ap-level-cell" title="{{ p.toner_title|default('') }}">
                                     <div class="ap-level-header">
                                         <span>{{ p.toner_level is not null ? (p.toner_level ~ '%') : '--' }}</span>
                                     </div>
@@ -1077,7 +1077,7 @@
                     <span class="fw-semibold font-monospace text-dark">${p.counter_fmt || '—'}</span>
                 </td>
                 <td>
-                    <div class="ap-level-cell">
+                    <div class="ap-level-cell" title="${p.toner_title || ''}">
                         <div class="ap-level-header">
                             <span>${p.toner_level !== null ? p.toner_level + '%' : '--'}</span>
                         </div>
