@@ -11,6 +11,9 @@ services:
       - MYSQL_DATABASE=glpidb
       - MYSQL_USER=glpiuser
       - MYSQL_PASSWORD=Ativ@Adm2026
+    command:
+      - --binlog-expire-logs-seconds=86400
+      - --max-binlog-size=100M
     volumes:
       # Database files live outside the Git working tree. A git pull can no
       # longer replace or delete InnoDB redo logs.
