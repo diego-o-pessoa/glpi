@@ -154,6 +154,9 @@ final class PrinterRepository
             ? ($CFG_GLPI['root_doc'] . '/front/printer.form.php?id=' . $glpiId)
             : null;
 
+        $counter = (int) ($row['page_counter'] ?? 0);
+        $counterFmt = $counter > 0 ? number_format($counter, 0, ',', '.') . ' págs' : '—';
+
         return $row + [
             'display_ip'   => $displayIp,
             'glpi_url'     => $glpiUrl,
@@ -163,6 +166,7 @@ final class PrinterRepository
             'drum_class'   => $drumClass,
             'drum_label'   => $drumLabel,
             'drum_title'   => $drumTitle,
+            'counter_fmt'  => $counterFmt,
             'supplies_list'=> $suppliesList,
             'last_poll_fmt'=> !empty($row['last_poll']) ? date('d/m/Y H:i', strtotime((string) $row['last_poll'])) : '—',
         ];
@@ -298,9 +302,17 @@ final class PrinterRepository
 
         $onlinePercent = $totalPrinters > 0 ? (int) round(($onlineCount / $totalPrinters) * 100) : 0;
 
-        // 2. Impressões no Período (Volumetria e Variação %)
+        // 2. Impressões (Total acumulado e Volumetria do período)
         $volumeCurrent = self::calculatePeriodVolume($days, 0);
         $volumePrevious = self::calculatePeriodVolume($days, $days);
+
+        $totalPages = 0;
+        foreach ($DB->request(['SELECT' => ['page_counter'], 'FROM' => self::TABLE, 'WHERE' => ['is_active' => 1]]) as $pRow) {
+            $totalPages += (int) ($pRow['page_counter'] ?? 0);
+        }
+
+        // Se há volume calculado no período, exibe o volume; caso contrário, exibe o total acumulado do parque
+        $displayVolume = $volumeCurrent > 0 ? $volumeCurrent : $totalPages;
 
         $delta = null;
         if ($volumePrevious > 0) {
@@ -313,9 +325,9 @@ final class PrinterRepository
             $signal = $delta >= 0 ? '+' : '';
             $deltaFormatted = $signal . str_replace('.', ',', (string) $delta) . '% em relação ' . $periodLabel;
         } elseif ($volumeCurrent > 0) {
-            $deltaFormatted = 'páginas impressas no período';
+            $deltaFormatted = 'páginas no período (' . number_format($totalPages, 0, ',', '.') . ' acumuladas)';
         } else {
-            $deltaFormatted = 'início do monitoramento de páginas';
+            $deltaFormatted = 'páginas acumuladas no parque';
         }
 
         // 3. Insumos em Estoque
@@ -355,8 +367,9 @@ final class PrinterRepository
                 'note'        => $criticalTonerCount > 0 ? 'precisam de substituição' : 'níveis adequados',
             ],
             'volume' => [
-                'current'     => $volumeCurrent,
-                'formatted'   => number_format($volumeCurrent, 0, ',', '.'),
+                'current'     => $displayVolume,
+                'formatted'   => number_format($displayVolume, 0, ',', '.'),
+                'total_pages' => $totalPages,
                 'previous'    => $volumePrevious,
                 'delta'       => $delta,
                 'delta_text'  => $deltaFormatted,
@@ -607,24 +620,87 @@ final class PrinterRepository
                 if ($counter === 0 && !empty($p['init_pages_counter'])) {
                     $counter = (int) $p['init_pages_counter'];
                 }
+                if ($counter === 0 && $DB->tableExists('glpi_printerlogs')) {
+                    $logRow = $DB->request([
+                        'SELECT' => ['total_pages'],
+                        'FROM'   => 'glpi_printerlogs',
+                        'WHERE'  => ['itemtype' => 'Printer', 'items_id' => $glpiId],
+                        'ORDER'  => ['date DESC', 'id DESC'],
+                        'LIMIT'  => 1,
+                    ])->current();
+                    if (is_array($logRow) && !empty($logRow['total_pages'])) {
+                        $counter = (int) $logRow['total_pages'];
+                    }
+                }
 
                 // 5. Níveis de suprimento no inventário nativo do GLPI
                 $tonerLevel = null;
                 $drumLevel = null;
                 $wasteLevel = null;
+                $suppliesList = [];
+
                 if ($DB->tableExists('glpi_printers_cartridgeinfos')) {
-                    foreach ($DB->request(['FROM' => 'glpi_printers_cartridgeinfos', 'WHERE' => ['printers_id' => $glpiId]]) as $cRow) {
+                    $cartRows = $DB->request([
+                        'FROM'  => 'glpi_printers_cartridgeinfos',
+                        'WHERE' => ['printers_id' => $glpiId],
+                    ]);
+
+                    foreach ($cartRows as $cRow) {
                         $prop = strtolower((string) ($cRow['property'] ?? ''));
-                        $valStr = (string) ($cRow['value'] ?? '');
+                        $valStr = trim((string) ($cRow['value'] ?? ''));
+                        if ($valStr === '') {
+                            continue;
+                        }
+
+                        $lvl = null;
                         if (preg_match('/(\d+)/', $valStr, $m)) {
-                            $lvl = min(100, (int) $m[1]);
-                            if (str_contains($prop, 'toner') || str_contains($prop, 'black') || str_contains($prop, 'cartridge') || str_contains($prop, 'cyan') || str_contains($prop, 'magenta') || str_contains($prop, 'yellow')) {
-                                $tonerLevel = ($tonerLevel === null) ? $lvl : min($tonerLevel, $lvl);
-                            } elseif (str_contains($prop, 'drum')) {
-                                $drumLevel = ($drumLevel === null) ? $lvl : min($drumLevel, $lvl);
-                            } elseif (str_contains($prop, 'waste')) {
-                                $wasteLevel = ($wasteLevel === null) ? $lvl : max($wasteLevel, $lvl);
-                            }
+                            $lvl = min(100, max(0, (int) $m[1]));
+                        } elseif (preg_match('/ok|good|normal|ready/i', $valStr)) {
+                            $lvl = 100;
+                        } elseif (preg_match('/low|warning|near/i', $valStr)) {
+                            $lvl = 15;
+                        } elseif (preg_match('/empty|replace|exhausted|depleted/i', $valStr)) {
+                            $lvl = 5;
+                        }
+
+                        if ($lvl === null) {
+                            continue;
+                        }
+
+                        // Determina o tipo do insumo pela propriedade
+                        // IMPORTANTE: checar 'drum' antes de 'black', pois 'drumblack' contém a palavra 'black'
+                        if (str_contains($prop, 'drum')) {
+                            $drumLevel = ($drumLevel === null) ? $lvl : min($drumLevel, $lvl);
+                            $suppliesList[] = [
+                                'type'    => 'drum',
+                                'name'    => 'Cilindro ' . (str_contains($prop, 'black') ? 'Preto' : ''),
+                                'percent' => $lvl,
+                            ];
+                        } elseif (str_contains($prop, 'waste')) {
+                            $wasteLevel = ($wasteLevel === null) ? $lvl : max($wasteLevel, $lvl);
+                            $suppliesList[] = [
+                                'type'    => 'waste',
+                                'name'    => 'Caixa de Resíduos',
+                                'percent' => $lvl,
+                            ];
+                        } elseif (str_contains($prop, 'toner') || str_contains($prop, 'cartridge') || str_contains($prop, 'black') || str_contains($prop, 'cyan') || str_contains($prop, 'magenta') || str_contains($prop, 'yellow')) {
+                            $tonerLevel = ($tonerLevel === null) ? $lvl : min($tonerLevel, $lvl);
+                            $color = 'Preto';
+                            if (str_contains($prop, 'cyan')) $color = 'Ciano';
+                            elseif (str_contains($prop, 'magenta')) $color = 'Magenta';
+                            elseif (str_contains($prop, 'yellow')) $color = 'Amarelo';
+
+                            $suppliesList[] = [
+                                'type'    => 'toner',
+                                'name'    => 'Toner ' . $color,
+                                'percent' => $lvl,
+                            ];
+                        } elseif (str_contains($prop, 'fuser') || str_contains($prop, 'transfer')) {
+                            $suppliesList[] = [
+                                'type'    => 'maintenance',
+                                'name'    => str_contains($prop, 'fuser') ? 'Kit Fusor' : 'Kit Transferência',
+                                'percent' => $lvl,
+                            ];
                         }
                     }
                 }
@@ -635,6 +711,8 @@ final class PrinterRepository
                     'LIMIT' => 1,
                 ])->current();
 
+                $isValidIp = ($ip !== '0.0.0.0' && $ip !== '');
+
                 if (is_array($existing)) {
                     $update = [
                         'name'     => (string) $p['name'],
@@ -644,12 +722,14 @@ final class PrinterRepository
                         'is_active'=> 1,
                         'date_mod' => $now,
                     ];
-                    if ($ip !== '0.0.0.0' && ($existing['ip'] === '0.0.0.0' || empty($existing['ip']))) {
+                    if ($isValidIp) {
                         $update['ip'] = $ip;
                         $update['status'] = 'online';
+                        $update['status_message'] = 'Impressora ativa na rede';
+                        $update['last_seen'] = $now;
                     }
-                    if ($counter > 0 && (int) $existing['page_counter'] === 0) {
-                        $update['page_counter'] = $counter;
+                    if ($counter > 0) {
+                        $update['page_counter'] = max($counter, (int) ($existing['page_counter'] ?? 0));
                     }
                     if ($tonerLevel !== null) {
                         $update['toner_level'] = $tonerLevel;
@@ -660,7 +740,13 @@ final class PrinterRepository
                     if ($wasteLevel !== null) {
                         $update['waste_level'] = $wasteLevel;
                     }
+                    if ($suppliesList !== []) {
+                        $update['supplies'] = json_encode($suppliesList, JSON_UNESCAPED_UNICODE);
+                    }
                     $DB->update(self::TABLE, $update, ['id' => (int) $existing['id']]);
+
+                    $targetPrinterId = (int) $existing['id'];
+                    $targetCounter = (int) ($update['page_counter'] ?? ($existing['page_counter'] ?? $counter));
                 } else {
                     $insert = [
                         'printers_id'    => $glpiId,
@@ -669,25 +755,46 @@ final class PrinterRepository
                         'ip'             => $ip,
                         'sector'         => $sector,
                         'serial'         => (string) ($p['serial'] ?? ''),
-                        'status'         => ($ip !== '0.0.0.0') ? 'online' : 'offline',
-                        'status_message' => ($ip !== '0.0.0.0') ? 'Impressora ativa no GLPI' : 'Sem IP configurado no GLPI',
+                        'status'         => $isValidIp ? 'online' : 'offline',
+                        'status_message' => $isValidIp ? 'Impressora ativa na rede' : 'Sem IP configurado no GLPI',
                         'toner_level'    => $tonerLevel,
                         'drum_level'     => $drumLevel,
                         'waste_level'    => $wasteLevel,
+                        'supplies'       => $suppliesList !== [] ? json_encode($suppliesList, JSON_UNESCAPED_UNICODE) : null,
                         'page_counter'   => $counter,
                         'is_active'      => 1,
-                        'last_seen'      => ($ip !== '0.0.0.0') ? $now : null,
+                        'last_seen'      => $isValidIp ? $now : null,
                         'date_creation'  => $now,
                         'date_mod'       => $now,
                     ];
                     $DB->insert(self::TABLE, $insert);
-                    $newId = (int) $DB->insertId();
+                    $targetPrinterId = (int) $DB->insertId();
+                    $targetCounter = $counter;
+                }
 
-                    if ($counter > 0) {
+                // Sincroniza contador de páginas na tabela histórica de volumetria
+                if ($targetCounter > 0 && $DB->tableExists(self::COUNTERS_TABLE)) {
+                    $cRow = $DB->request([
+                        'FROM'  => self::COUNTERS_TABLE,
+                        'WHERE' => [
+                            'printers_id' => $targetPrinterId,
+                            'date'        => date('Y-m-d'),
+                        ],
+                        'LIMIT' => 1,
+                    ])->current();
+
+                    if (is_array($cRow)) {
+                        if ($targetCounter > (int) $cRow['page_counter']) {
+                            $DB->update(self::COUNTERS_TABLE, [
+                                'page_counter' => $targetCounter,
+                                'date_mod'     => $now,
+                            ], ['id' => (int) $cRow['id']]);
+                        }
+                    } else {
                         $DB->insert(self::COUNTERS_TABLE, [
-                            'printers_id'  => $newId,
+                            'printers_id'  => $targetPrinterId,
                             'date'         => date('Y-m-d'),
-                            'page_counter' => $counter,
+                            'page_counter' => $targetCounter,
                             'date_mod'     => $now,
                         ]);
                     }
@@ -699,6 +806,16 @@ final class PrinterRepository
                     'NOT' => ['printers_id' => $activeIds],
                 ]);
             }
+
+            // Garante que todas as impressoras ativas com IP válido fiquem com status online
+            $DB->update(self::TABLE, [
+                'status'         => 'online',
+                'status_message' => 'Impressora ativa na rede',
+                'last_seen'      => $now,
+            ], [
+                'is_active' => 1,
+                'NOT'       => ['ip' => ['0.0.0.0', '']],
+            ]);
 
             // Remove contadores órfãos de impressoras inexistentes ou de seeds antigos
             if ($DB->tableExists(self::COUNTERS_TABLE)) {

@@ -563,10 +563,10 @@
             </div>
         </div>
 
-        <!-- Card 3: Impressões no período -->
+        <!-- Card 3: Total de Impressões -->
         <div class="ap-card">
             <div class="ap-card-top">
-                <span class="ap-card-title">Impressões no período</span>
+                <span class="ap-card-title">Total de Impressões</span>
                 <span class="ap-icon-tile ap-tile-blue">
                     <i class="ti ti-file-text"></i>
                 </span>
@@ -628,6 +628,7 @@
                         <th style="min-width: 140px;">IP / Rede <i class="ti ti-arrow-down small"></i></th>
                         <th style="min-width: 160px;">Setor</th>
                         <th style="min-width: 110px;">Status</th>
+                        <th style="min-width: 140px;">Total de Páginas</th>
                         <th style="min-width: 170px;">Nível de Toner</th>
                         <th style="min-width: 170px;">Nível do Cilindro</th>
                         {% if can_manage %}
@@ -659,6 +660,9 @@
                                 <span class="ap-badge-status {{ p.status_class }}">{{ p.status_label }}</span>
                             </td>
                             <td>
+                                <span class="fw-semibold font-monospace text-dark">{{ p.counter_fmt }}</span>
+                            </td>
+                            <td>
                                 <div class="ap-level-cell">
                                     <div class="ap-level-header">
                                         <span>{{ p.toner_level is not null ? (p.toner_level ~ '%') : '--' }}</span>
@@ -688,7 +692,7 @@
                         </tr>
                     {% else %}
                         <tr>
-                            <td colspan="7" class="text-center py-4 text-muted">
+                            <td colspan="8" class="text-center py-4 text-muted">
                                 Nenhuma impressora encontrada.
                             </td>
                         </tr>
@@ -985,7 +989,7 @@
     function renderPrinters(list) {
         if (!tbody || !Array.isArray(list)) return;
         if (list.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">Nenhuma impressora encontrada.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Nenhuma impressora encontrada.</td></tr>';
             return;
         }
 
@@ -1003,6 +1007,9 @@
                 <td>${p.sector || 'Geral'}</td>
                 <td>
                     <span class="ap-badge-status ${p.status_class}">${p.status_label}</span>
+                </td>
+                <td>
+                    <span class="fw-semibold font-monospace text-dark">${p.counter_fmt || '—'}</span>
                 </td>
                 <td>
                     <div class="ap-level-cell">

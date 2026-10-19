@@ -71,10 +71,30 @@ final class SnmpClient
      */
     public function get(array $oids): array
     {
+        try {
+            $result = [];
+            foreach ($this->request(self::PDU_GET, $oids) as [$oid, $type, $value]) {
+                if (!in_array($type, [self::TYPE_NO_SUCH_OBJECT, self::TYPE_NO_SUCH_INSTANCE, self::TYPE_END_OF_MIB, self::TYPE_NULL], true)) {
+                    $result[$oid] = $value;
+                }
+            }
+            if ($result !== []) {
+                return $result;
+            }
+        } catch (RuntimeException $e) {
+            // Se falhou o pacote agrupado, tenta consultar OIDs individualmente
+        }
+
         $result = [];
-        foreach ($this->request(self::PDU_GET, $oids) as [$oid, $type, $value]) {
-            if (!in_array($type, [self::TYPE_NO_SUCH_OBJECT, self::TYPE_NO_SUCH_INSTANCE, self::TYPE_END_OF_MIB, self::TYPE_NULL], true)) {
-                $result[$oid] = $value;
+        foreach ($oids as $oid) {
+            try {
+                foreach ($this->request(self::PDU_GET, [$oid]) as [$resOid, $type, $value]) {
+                    if (!in_array($type, [self::TYPE_NO_SUCH_OBJECT, self::TYPE_NO_SUCH_INSTANCE, self::TYPE_END_OF_MIB, self::TYPE_NULL], true)) {
+                        $result[$resOid] = $value;
+                    }
+                }
+            } catch (RuntimeException) {
+                // silencia OID individual não suportado
             }
         }
         return $result;

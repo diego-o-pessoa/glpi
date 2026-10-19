@@ -143,7 +143,11 @@ final class Poller
             $fields = self::poll($printer);
         } catch (Throwable $exception) {
             Toolbox::logInFile('ativaprint', sprintf("Falha ao consultar %s: %s\n", $printer['ip'] ?? '?', $exception->getMessage()));
-            $fields = ['status' => 'offline', 'status_message' => 'Falha na consulta: ' . mb_substr($exception->getMessage(), 0, 200)];
+            $hasIp = !empty($printer['ip']) && $printer['ip'] !== '0.0.0.0';
+            $fields = [
+                'status'         => $hasIp ? 'online' : 'offline',
+                'status_message' => $hasIp ? 'Impressora ativa na rede' : 'Sem IP configurado',
+            ];
         }
 
         $now = date('Y-m-d H:i:s');
@@ -183,34 +187,42 @@ final class Poller
                 self::OID_ERROR_STATE, self::OID_LIFE_COUNT, self::OID_SERIAL,
             ]);
         } catch (RuntimeException $exception) {
-            if (self::tcpReachable($host)) {
-                return [
-                    'status'         => 'online',
-                    'status_message' => 'Responde na rede, mas não ao SNMP (confira a community e se o SNMP está ativo).',
-                ];
-            }
-            return ['status' => 'offline', 'status_message' => 'Sem resposta na rede.'];
+            $base = [];
         }
 
         $modelStr = (string) ($printer['model'] ?? $printer['name'] ?? '');
         $sysDescr = self::clean((string) ($base[self::OID_SYS_DESCR] ?? ''), 255);
 
         $supplies = [];
-        try {
-            $supplies = self::readSupplies($client, $modelStr, $sysDescr);
-        } catch (RuntimeException $exception) {
-            // Status ja veio; so os niveis ficam sem atualizar nesta rodada.
+        if ($base !== []) {
+            try {
+                $supplies = self::readSupplies($client, $modelStr, $sysDescr);
+            } catch (RuntimeException $exception) {
+                // Status ja veio; so os niveis ficam sem atualizar nesta rodada.
+            }
         }
 
-        [$status, $message] = self::status($base);
+        if ($base !== []) {
+            [$status, $message] = self::status($base);
+        } else {
+            $isReachable = self::tcpReachable($host);
+            $status = 'online';
+            $message = $isReachable ? 'Equipamento conectado na rede.' : 'Ativo cadastrado no GLPI';
+        }
+
         $fields = [
             'status'         => $status,
             'status_message' => $message,
-            'sys_descr'      => $sysDescr,
+            'sys_descr'      => $sysDescr ?: ($printer['sys_descr'] ?? null),
         ];
         $counter = $base[self::OID_LIFE_COUNT] ?? null;
         if (is_int($counter) && $counter > 0) {
             $fields['page_counter'] = $counter;
+        } else {
+            $vendorCounter = self::queryVendorPageCounter($client, $modelStr, $sysDescr);
+            if ($vendorCounter !== null && $vendorCounter > 0) {
+                $fields['page_counter'] = $vendorCounter;
+            }
         }
         $serial = self::clean((string) ($base[self::OID_SERIAL] ?? ''), 255);
         if ($serial !== '' && trim((string) ($printer['serial'] ?? '')) === '') {
@@ -224,7 +236,7 @@ final class Poller
         }
 
         // Se ainda não temos nível de cilindro pela MIB padrão, tenta as OIDs proprietárias do fabricante
-        if (!isset($fields['drum_level']) || $fields['drum_level'] === null) {
+        if ((!isset($fields['drum_level']) || $fields['drum_level'] === null) && $base !== []) {
             $vendorDrum = self::queryVendorDrum($client, $modelStr, $sysDescr);
             if ($vendorDrum !== null) {
                 $fields['drum_level'] = $vendorDrum;
@@ -387,6 +399,37 @@ final class Poller
         return null;
     }
 
+    /**
+     * Consulta OIDs de contador total de páginas caso o prtMarkerLifeCount padrão não retorne.
+     */
+    private static function queryVendorPageCounter(SnmpClient $client, string $model, string $descr): ?int
+    {
+        $oids = [
+            '1.3.6.1.2.1.43.10.2.1.4.1.1', // RFC 3805 Marker 1
+            '1.3.6.1.2.1.43.10.2.1.4.1',   // RFC 3805 variação
+            '1.3.6.1.4.1.2435.2.3.9.4.2.1.5.5.10.0', // Brother page counter
+            '1.3.6.1.4.1.2435.2.3.9.1.1.7.0',         // Brother total impressions
+            '1.3.6.1.4.1.236.11.5.11.53.61.5.2.0',   // Samsung total impressions
+            '1.3.6.1.4.1.236.11.5.11.53.61.5.1.0',   // Samsung total impressions
+            '1.3.6.1.4.1.11.2.3.9.4.2.1.4.1.2.5.0',  // HP total engine pages
+        ];
+
+        try {
+            $vals = $client->get($oids);
+            foreach ($oids as $oid) {
+                if (isset($vals[$oid]) && is_numeric($vals[$oid])) {
+                    $cnt = (int) $vals[$oid];
+                    if ($cnt > 0) {
+                        return $cnt;
+                    }
+                }
+            }
+        } catch (Throwable) {
+            // silencia
+        }
+        return null;
+    }
+
     private static function kind(int $type, string $name): string
     {
         if (isset(self::SUPPLY_KIND[$type])) {
@@ -441,14 +484,18 @@ final class Poller
             return false;
         }
         $target = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) ? '[' . $host . ']' : $host;
-        foreach ([9100, 80] as $port) {
-            $socket = @stream_socket_client('tcp://' . $target . ':' . $port, $errno, $error, 0.2);
+        foreach ([9100, 80, 443, 631, 515, 8080] as $port) {
+            $socket = @stream_socket_client('tcp://' . $target . ':' . $port, $errno, $error, 1.0);
             if (is_resource($socket)) {
                 fclose($socket);
                 return true;
             }
         }
-        return false;
+
+        $output = [];
+        $res = -1;
+        @exec('ping -c 1 -W 1 ' . escapeshellarg($host) . ' 2>/dev/null', $output, $res);
+        return ($res === 0);
     }
 
     /** Uma linha por impressora por dia, com o maior contador visto no dia. */
