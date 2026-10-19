@@ -89,10 +89,16 @@ try {
                 break;
             }
             $result = Poller::pollAndSave($printer);
+            $snmpOk = !empty($result['snmp_ok']);
+            $msg = $snmpOk
+                ? "Leitura SNMP ao vivo realizada com sucesso! Páginas: " . number_format((int) ($result['page_counter'] ?? 0), 0, ',', '.') . " | Toner: " . ($result['toner_level'] !== null ? $result['toner_level'] . '%' : '--') . " | Cilindro: " . ($result['drum_level'] !== null ? $result['drum_level'] . '%' : '--')
+                : "Sem resposta SNMP em {$printer['ip']} (timeout UDP 161). Mantidos os dados do inventário do GLPI.";
+
             $response = [
                 'ok'      => true,
-                'message' => 'Status atualizado com sucesso.',
-                'status'  => $result['status'] ?? 'offline',
+                'message' => $msg,
+                'snmp_ok' => $snmpOk,
+                'status'  => $result['status'] ?? 'online',
             ];
             break;
 

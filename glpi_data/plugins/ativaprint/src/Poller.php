@@ -155,7 +155,9 @@ final class Poller
         if ($fields['status'] !== 'offline') {
             $fields['last_seen'] = $now;
         }
-        $DB->update(PrinterRepository::TABLE, $fields, ['id' => (int) $printer['id']]);
+        $saveFields = $fields;
+        unset($saveFields['snmp_ok']);
+        $DB->update(PrinterRepository::TABLE, $saveFields, ['id' => (int) $printer['id']]);
 
         if (!empty($fields['page_counter'])) {
             self::saveCounter((int) $printer['id'], (int) $fields['page_counter']);
@@ -210,7 +212,9 @@ final class Poller
             $message = $isReachable ? 'Equipamento conectado na rede.' : 'Ativo cadastrado no GLPI';
         }
 
+        $snmpOk = ($base !== []);
         $fields = [
+            'snmp_ok'        => $snmpOk,
             'status'         => $status,
             'status_message' => $message,
             'sys_descr'      => $sysDescr ?: ($printer['sys_descr'] ?? null),
@@ -314,6 +318,9 @@ final class Poller
                 $percent = $level;
             } elseif ($level >= 0 && $level <= 100 && $capacity === 100) {
                 $percent = $level;
+            } elseif ($level === -3) {
+                // RFC 3805 code -3 = "someRemaining" (comum em Brother monocromática sem sensor analógico contínuo)
+                $percent = 100;
             }
 
             $out[] = [
