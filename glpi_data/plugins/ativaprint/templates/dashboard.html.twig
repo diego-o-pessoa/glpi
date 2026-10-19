@@ -659,20 +659,20 @@
                             <td>
                                 <div class="ap-level-cell">
                                     <div class="ap-level-header">
-                                        <span>{{ p.toner_level !== null ? (p.toner_level ~ '%') : '--' }}</span>
+                                        <span>{{ p.toner_level is not null ? (p.toner_level ~ '%') : '--' }}</span>
                                     </div>
                                     <div class="ap-progress">
-                                        <div class="ap-progress-fill {{ p.toner_class }}" style="width: {{ p.toner_level !== null ? p.toner_level : 0 }}%;"></div>
+                                        <div class="ap-progress-fill {{ p.toner_class }}" style="width: {{ p.toner_level is not null ? p.toner_level : 0 }}%;"></div>
                                     </div>
                                 </div>
                             </td>
                             <td>
                                 <div class="ap-level-cell">
                                     <div class="ap-level-header">
-                                        <span>{{ p.drum_level !== null ? (p.drum_level ~ '%') : '--' }}</span>
+                                        <span>{{ p.drum_level is not null ? (p.drum_level ~ '%') : '--' }}</span>
                                     </div>
                                     <div class="ap-progress">
-                                        <div class="ap-progress-fill is-drum" style="width: {{ p.drum_level !== null ? p.drum_level : 0 }}%;"></div>
+                                        <div class="ap-progress-fill is-drum" style="width: {{ p.drum_level is not null ? p.drum_level : 0 }}%;"></div>
                                     </div>
                                 </div>
                             </td>

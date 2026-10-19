@@ -11,6 +11,22 @@ Session::checkRight('config', UPDATE);
 
 global $CFG_GLPI;
 
+require_once dirname(__DIR__) . '/setup.php';
+require_once dirname(__DIR__) . '/inc/menu.class.php';
+
+// Garante que o namespace @ativaprint esteja registrado no Twig
+$loader = TemplateRenderer::getInstance()->getEnvironment()->getLoader();
+if ($loader instanceof \Twig\Loader\FilesystemLoader) {
+    try {
+        $paths = $loader->getPaths('ativaprint');
+        if (empty($paths)) {
+            $loader->addPath(dirname(__DIR__) . '/templates', 'ativaprint');
+        }
+    } catch (\Twig\Error\LoaderError $e) {
+        $loader->addPath(dirname(__DIR__) . '/templates', 'ativaprint');
+    }
+}
+
 $errors = [];
 $success = false;
 
@@ -34,4 +50,3 @@ TemplateRenderer::getInstance()->display('@ativaprint/config.html.twig', [
 ]);
 
 Html::footer();
-
