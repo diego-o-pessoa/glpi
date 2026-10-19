@@ -93,11 +93,17 @@ final class Poller
      * @param int $olderThan     so as lidas ha mais de N segundos (0 = todas)
      * @param callable|null $each fn(array $printer, array $result)
      */
-    public static function pollMany(int $budget, int $olderThan = 0, ?callable $each = null): int
+    public static function pollMany(int $budget = 5, int $olderThan = 0, ?callable $each = null): int
     {
         global $DB;
 
-        $where = ['is_active' => 1];
+        $where = [
+            'is_active' => 1,
+            'NOT' => [
+                ['ip' => '0.0.0.0'],
+                ['ip' => ''],
+            ],
+        ];
         if ($olderThan > 0) {
             $limit = date('Y-m-d H:i:s', time() - $olderThan);
             $where['OR'] = [['last_poll' => null], ['last_poll' => ['<', $limit]]];
@@ -105,7 +111,7 @@ final class Poller
         $started = microtime(true);
         $done = 0;
         foreach ($DB->request(['FROM' => PrinterRepository::TABLE, 'WHERE' => $where, 'ORDER' => ['last_poll ASC', 'id ASC']]) as $printer) {
-            if (microtime(true) - $started >= $budget) {
+            if (microtime(true) - $started >= $budget || $done >= 10) {
                 break;
             }
             $result = self::pollAndSave($printer);
@@ -153,9 +159,17 @@ final class Poller
      */
     public static function poll(array $printer): array
     {
-        $host = (string) $printer['ip'];
+        $host = trim((string) ($printer['ip'] ?? ''));
+        if ($host === '' || $host === '0.0.0.0') {
+            return [
+                'status'         => 'offline',
+                'status_message' => 'Sem endereço IP configurado no GLPI.',
+            ];
+        }
+
         $community = trim((string) ($printer['snmp_community'] ?? '')) ?: PrintConfig::get('snmp_community');
-        $client = new SnmpClient($host, $community, PrintConfig::get('snmp_version'), PrintConfig::int('snmp_timeout') / 1000, 1);
+        $timeoutSec = max(0.2, min(2.0, PrintConfig::int('snmp_timeout') / 1000));
+        $client = new SnmpClient($host, $community, PrintConfig::get('snmp_version'), $timeoutSec, 1);
 
         try {
             $base = $client->get([
@@ -166,7 +180,7 @@ final class Poller
             if (self::tcpReachable($host)) {
                 return [
                     'status'         => 'online',
-                    'status_message' => 'Responde na rede, mas não ao SNMP (confira a community e se o SNMP está ligado).',
+                    'status_message' => 'Responde na rede, mas não ao SNMP (confira a community e se o SNMP está ativo).',
                 ];
             }
             return ['status' => 'offline', 'status_message' => 'Sem resposta na rede.'];
@@ -322,9 +336,12 @@ final class Poller
 
     private static function tcpReachable(string $host): bool
     {
+        if ($host === '' || $host === '0.0.0.0') {
+            return false;
+        }
         $target = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) ? '[' . $host . ']' : $host;
-        foreach (self::TCP_PORTS as $port) {
-            $socket = @stream_socket_client('tcp://' . $target . ':' . $port, $errno, $error, 0.4);
+        foreach ([9100, 80] as $port) {
+            $socket = @stream_socket_client('tcp://' . $target . ':' . $port, $errno, $error, 0.2);
             if (is_resource($socket)) {
                 fclose($socket);
                 return true;

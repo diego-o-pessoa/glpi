@@ -501,11 +501,6 @@
 </style>
 
 <div class="ap-wrap" id="ativa-print-app">
-    <!-- Breadcrumb -->
-    <div class="ap-breadcrumb">
-        <span>Ativa Central</span> / <span>Ativa Print</span>
-    </div>
-
     <!-- Cabeçalho -->
     <div class="ap-header">
         <div>
@@ -646,11 +641,18 @@
                             <td>
                                 <div class="ap-printer-name">
                                     <span class="ap-printer-icon"><i class="ti ti-printer"></i></span>
-                                    <span>{{ p.model ?: p.name }}</span>
+                                    {% if p.glpi_url %}
+                                        <a href="{{ p.glpi_url }}" target="_blank" class="text-decoration-none text-dark fw-bold" title="Abrir nos Ativos do GLPI">
+                                            <span>{{ p.model ?: p.name }}</span>
+                                            <i class="ti ti-arrow-up-right small text-muted ms-1"></i>
+                                        </a>
+                                    {% else %}
+                                        <span>{{ p.model ?: p.name }}</span>
+                                    {% endif %}
                                 </div>
                             </td>
                             <td>
-                                <span class="font-monospace text-muted">{{ p.ip }}</span>
+                                <span class="font-monospace {{ (p.ip == '0.0.0.0' or not p.ip) ? 'text-muted fst-italic' : 'text-dark' }}">{{ p.display_ip ?: p.ip }}</span>
                             </td>
                             <td>{{ p.sector ?: 'Geral' }}</td>
                             <td>
@@ -879,13 +881,12 @@
         periodSelect.addEventListener('change', () => fetchData());
     }
 
-    // Botão Atualizar
+    // Botão Atualizar (atualiza os dados da tela imediatamente sem travar)
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
             refreshIcon.classList.add('spin');
-            // Chama poll geral e depois atualiza dados
-            postAction('poll_all', {}).finally(() => {
-                fetchData().finally(() => refreshIcon.classList.remove('spin'));
+            fetchData().finally(() => {
+                refreshIcon.classList.remove('spin');
             });
         });
     }
@@ -989,15 +990,15 @@
         }
 
         tbody.innerHTML = list.map(p => `
-            <tr data-printer-id="${p.id}" data-search-text="${(p.name + ' ' + (p.model || '') + ' ' + p.ip + ' ' + (p.sector || '')).toLowerCase()}">
+            <tr data-printer-id="${p.id}" data-search-text="${(p.name + ' ' + (p.model || '') + ' ' + (p.display_ip || p.ip) + ' ' + (p.sector || '')).toLowerCase()}">
                 <td>
                     <div class="ap-printer-name">
                         <span class="ap-printer-icon"><i class="ti ti-printer"></i></span>
-                        <span>${p.model || p.name}</span>
+                        ${p.glpi_url ? `<a href="${p.glpi_url}" target="_blank" class="text-decoration-none text-dark fw-bold" title="Abrir nos Ativos do GLPI"><span>${p.model || p.name}</span><i class="ti ti-arrow-up-right small text-muted ms-1"></i></a>` : `<span>${p.model || p.name}</span>`}
                     </div>
                 </td>
                 <td>
-                    <span class="font-monospace text-muted">${p.ip}</span>
+                    <span class="font-monospace ${p.ip === '0.0.0.0' || !p.ip ? 'text-muted fst-italic' : 'text-dark'}">${p.display_ip || p.ip}</span>
                 </td>
                 <td>${p.sector || 'Geral'}</td>
                 <td>
@@ -1024,7 +1025,7 @@
                     </div>
                 </td>
                 <td style="text-align: right;">
-                    <button type="button" class="btn btn-sm btn-outline-primary btn-poll-printer" data-id="${p.id}" title="Consultar SNMP agora">
+                    <button type="button" class="btn btn-sm btn-outline-primary btn-poll-printer" data-id="${p.id}" title="Consultar status na rede">
                         <i class="ti ti-refresh"></i>
                     </button>
                 </td>

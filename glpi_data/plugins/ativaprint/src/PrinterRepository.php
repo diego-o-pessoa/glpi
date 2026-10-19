@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace GlpiPlugin\Ativaprint;
 
 use DateTime;
+use Glpi\DBAL\QueryExpression;
 
 /**
- * Repositório e cálculos analíticos para impressoras, contadores e insumos.
+ * Repositório e sincronização com os Ativos de Impressoras do GLPI (glpi_printers)
+ * e cálculos analíticos para monitoramento, contadores e insumos.
  */
 final class PrinterRepository
 {
@@ -29,7 +31,7 @@ final class PrinterRepository
             return [];
         }
 
-        self::seedInitialDataIfEmpty();
+        self::syncFromGlpi();
 
         $where = ['is_active' => 1];
 
@@ -79,11 +81,20 @@ final class PrinterRepository
      */
     public static function decorate(array $row): array
     {
+        global $CFG_GLPI;
+
+        $ip = trim((string) ($row['ip'] ?? ''));
+        $hasValidIp = ($ip !== '' && $ip !== '0.0.0.0');
+        $displayIp = $hasValidIp ? $ip : 'Não configurado';
+
         $status = (string) ($row['status'] ?? 'offline');
         $label = 'Offline';
         $badgeClass = 'is-offline';
 
-        if ($status === 'online') {
+        if (!$hasValidIp) {
+            $label = 'Sem IP';
+            $badgeClass = 'is-offline';
+        } elseif ($status === 'online') {
             $label = 'Online';
             $badgeClass = 'is-online';
         } elseif ($status === 'printing') {
@@ -111,7 +122,14 @@ final class PrinterRepository
             $suppliesList = json_decode((string) $row['supplies'], true) ?: [];
         }
 
+        $glpiId = (int) ($row['printers_id'] ?? 0);
+        $glpiUrl = ($glpiId > 0 && isset($CFG_GLPI['root_doc']))
+            ? ($CFG_GLPI['root_doc'] . '/front/printer.form.php?id=' . $glpiId)
+            : null;
+
         return $row + [
+            'display_ip'   => $displayIp,
+            'glpi_url'     => $glpiUrl,
             'status_label' => $label,
             'status_class' => $badgeClass,
             'toner_class'  => $tonerClass,
@@ -148,23 +166,25 @@ final class PrinterRepository
         $now = date('Y-m-d H:i:s');
         $name = trim((string) ($data['name'] ?? ''));
         $model = trim((string) ($data['model'] ?? ''));
-        $ip = trim((string) ($data['ip'] ?? ''));
+        $ip = trim((string) ($data['ip'] ?? '0.0.0.0'));
         $sector = trim((string) ($data['sector'] ?? 'Geral'));
         $community = trim((string) ($data['snmp_community'] ?? ''));
+        $glpiPrinterId = !empty($data['printers_id']) ? (int) $data['printers_id'] : null;
 
         if ($name === '' && $model !== '') {
             $name = $model;
         } elseif ($name === '') {
-            $name = 'Impressora ' . $ip;
+            $name = 'Impressora ' . ($ip !== '0.0.0.0' ? $ip : 'Nova');
         }
 
         $fields = [
+            'printers_id'    => $glpiPrinterId,
             'name'           => $name,
             'model'          => $model !== '' ? $model : $name,
             'ip'             => $ip,
             'sector'         => $sector !== '' ? $sector : 'Geral',
-            'status'         => 'offline',
-            'status_message' => 'Aguardando primeira verificação na rede',
+            'status'         => ($ip !== '0.0.0.0') ? 'online' : 'offline',
+            'status_message' => ($ip !== '0.0.0.0') ? 'Impressora cadastrada' : 'Sem IP configurado',
             'snmp_community' => $community !== '' ? $community : null,
             'is_active'      => 1,
             'date_creation'  => $now,
@@ -183,7 +203,7 @@ final class PrinterRepository
         global $DB;
 
         $fields = [];
-        foreach (['name', 'model', 'ip', 'sector', 'snmp_community', 'is_active'] as $key) {
+        foreach (['name', 'model', 'ip', 'sector', 'snmp_community', 'is_active', 'status', 'status_message'] as $key) {
             if (array_key_exists($key, $data)) {
                 $fields[$key] = $data[$key];
             }
@@ -201,7 +221,7 @@ final class PrinterRepository
     }
 
     /**
-     * Calcula os 4 KPIs operacionais superiores conforme especificação e print.
+     * Calcula os 4 KPIs operacionais superiores.
      *
      * @param int $days Período em dias (7, 30 ou 90)
      * @return array<string, mixed>
@@ -214,7 +234,7 @@ final class PrinterRepository
             return self::emptyKpis();
         }
 
-        self::seedInitialDataIfEmpty();
+        self::syncFromGlpi();
 
         $warningThreshold = PrintConfig::int('toner_warning');
         $criticalThreshold = PrintConfig::int('toner_critical');
@@ -229,12 +249,14 @@ final class PrinterRepository
         foreach ($DB->request(['FROM' => self::TABLE, 'WHERE' => ['is_active' => 1]]) as $p) {
             $totalPrinters++;
             $status = (string) ($p['status'] ?? 'offline');
+            $ip = trim((string) ($p['ip'] ?? ''));
+            $hasIp = ($ip !== '' && $ip !== '0.0.0.0');
 
-            if ($status === 'online' || $status === 'printing') {
+            if ($hasIp && ($status === 'online' || $status === 'printing')) {
                 $onlineCount++;
-            } elseif ($status === 'warning') {
+            } elseif ($hasIp && $status === 'warning') {
                 $warningCount++;
-                $onlineCount++; // responde na rede
+                $onlineCount++;
             } else {
                 $offlineCount++;
             }
@@ -262,7 +284,7 @@ final class PrinterRepository
             $signal = $delta >= 0 ? '+' : '';
             $deltaFormatted = $signal . str_replace('.', ',', (string) $delta) . '% em relação ' . $periodLabel;
         } else {
-            $deltaFormatted = 'estável no período';
+            $deltaFormatted = $volumeCurrent > 0 ? 'páginas acumuladas' : 'sem dados de impressão';
         }
 
         // 3. Insumos em Estoque
@@ -297,7 +319,7 @@ final class PrinterRepository
                 'count'       => $criticalTonerCount,
                 'threshold'   => $warningThreshold,
                 'critical_th' => $criticalThreshold,
-                'note'        => 'precisam de substituição',
+                'note'        => $criticalTonerCount > 0 ? 'precisam de substituição' : 'níveis adequados',
             ],
             'volume' => [
                 'current'     => $volumeCurrent,
@@ -331,7 +353,6 @@ final class PrinterRepository
 
         $volume = 0;
 
-        // Para cada impressora, calcula max(contador no final) - min(contador no início)
         $printers = $DB->request([
             'DISTINCT' => true,
             'SELECT'   => ['printers_id'],
@@ -375,11 +396,14 @@ final class PrinterRepository
             }
         }
 
-        // Se o histórico real for recente ou zerado, garante coerência proporcional
+        // Se ainda não há contadores históricos acumulados, soma o contador real das impressoras ativas
         if ($volume === 0 && $offsetDays === 0) {
-            $volume = 12450;
-        } elseif ($volume === 0 && $offsetDays > 0) {
-            $volume = (int) round(12450 / 1.05); // ~11857 (+5%)
+            $sumRow = $DB->request([
+                'SELECT' => [new QueryExpression('SUM(page_counter) AS total_pages')],
+                'FROM'   => self::TABLE,
+                'WHERE'  => ['is_active' => 1],
+            ])->current();
+            $volume = (int) ($sumRow['total_pages'] ?? 0);
         }
 
         return $volume;
@@ -398,7 +422,7 @@ final class PrinterRepository
             return [];
         }
 
-        self::seedInitialDataIfEmpty();
+        self::syncSuppliesFromGlpi();
 
         $items = [];
         foreach ($DB->request(['FROM' => self::SUPPLIES_TABLE, 'ORDER' => ['type ASC', 'name ASC']]) as $row) {
@@ -451,14 +475,364 @@ final class PrinterRepository
     {
         return [
             'printers' => ['total' => 0, 'online' => 0, 'offline' => 0, 'warning' => 0, 'percent' => 0, 'note' => '0% do total'],
-            'toners_critical' => ['count' => 0, 'threshold' => 15, 'critical_th' => 5, 'note' => 'nenhum em nível crítico'],
+            'toners_critical' => ['count' => 0, 'threshold' => 15, 'critical_th' => 5, 'note' => 'todos em nível adequado'],
             'volume' => ['current' => 0, 'formatted' => '0', 'previous' => 0, 'delta' => 0, 'delta_text' => 'sem dados'],
             'supplies' => ['total' => 0, 'low_stock' => 0, 'note' => 'nenhum insumo cadastrado'],
         ];
     }
 
     /**
-     * Alimenta a base com os dados iniciais do parque para visualização imediata idêntica ao print.
+     * Sincroniza as impressoras reais cadastradas nos Ativos do GLPI (glpi_printers)
+     * e elimina dados fictícios/seeds.
+     */
+    public static function syncFromGlpi(): void
+    {
+        global $DB;
+
+        if (!$DB->tableExists(self::TABLE)) {
+            return;
+        }
+
+        if (!$DB->fieldExists(self::TABLE, 'printers_id')) {
+            $DB->query("ALTER TABLE `" . self::TABLE . "` ADD `printers_id` int unsigned DEFAULT NULL AFTER `is_recursive`");
+        }
+
+        $hasGlpiPrinters = $DB->tableExists('glpi_printers')
+            && countElementsInTable('glpi_printers', ['is_deleted' => 0, 'is_template' => 0]) > 0;
+
+        if ($hasGlpiPrinters) {
+            // Remove registros falsos de seed
+            $DB->delete(self::TABLE, [
+                'OR' => [
+                    ['printers_id' => null],
+                    ['printers_id' => 0],
+                    ['serial' => ['LIKE', 'SN9%']],
+                    ['serial' => ['VNB3R92144', 'ZX81B92001', 'RC09918231', 'E78291K201', 'CN99281023', 'KY77123910', 'LX11299301']],
+                ],
+            ]);
+
+            // Busca as impressoras ativas cadastradas no GLPI
+            $glpiPrinters = $DB->request([
+                'SELECT' => [
+                    'id', 'name', 'serial', 'last_pages_counter', 'init_pages_counter',
+                    'comment', 'locations_id', 'printermodels_id', 'states_id',
+                ],
+                'FROM'   => 'glpi_printers',
+                'WHERE'  => [
+                    'is_deleted'  => 0,
+                    'is_template' => 0,
+                ],
+                'ORDER'  => ['name ASC', 'id ASC'],
+            ]);
+
+            $now = date('Y-m-d H:i:s');
+            $activeIds = [];
+
+            foreach ($glpiPrinters as $p) {
+                $glpiId = (int) $p['id'];
+                $activeIds[] = $glpiId;
+
+                // 1. Modelo da impressora
+                $model = '';
+                if (!empty($p['printermodels_id']) && $DB->tableExists('glpi_printermodels')) {
+                    $mRow = $DB->request([
+                        'SELECT' => ['name'],
+                        'FROM'   => 'glpi_printermodels',
+                        'WHERE'  => ['id' => (int) $p['printermodels_id']],
+                        'LIMIT'  => 1,
+                    ])->current();
+                    if (is_array($mRow) && !empty($mRow['name'])) {
+                        $model = (string) $mRow['name'];
+                    }
+                }
+                if ($model === '') {
+                    $model = (string) $p['name'];
+                }
+
+                // 2. Setor / Localização
+                $sector = '';
+                if (!empty($p['locations_id']) && $DB->tableExists('glpi_locations')) {
+                    $lRow = $DB->request([
+                        'SELECT' => ['name', 'completename'],
+                        'FROM'   => 'glpi_locations',
+                        'WHERE'  => ['id' => (int) $p['locations_id']],
+                        'LIMIT'  => 1,
+                    ])->current();
+                    if (is_array($lRow)) {
+                        $sector = (string) ($lRow['name'] ?? $lRow['completename'] ?? '');
+                    }
+                }
+                if ($sector === '') {
+                    $sector = 'Geral';
+                }
+
+                // 3. Endereço IP
+                $ip = self::findPrinterIp($glpiId, (string) ($p['name'] ?? ''), (string) ($p['comment'] ?? ''));
+
+                // 4. Contador de páginas
+                $counter = (int) ($p['last_pages_counter'] ?? 0);
+                if ($counter === 0 && !empty($p['init_pages_counter'])) {
+                    $counter = (int) $p['init_pages_counter'];
+                }
+
+                // 5. Níveis de suprimento no inventário nativo do GLPI
+                $tonerLevel = null;
+                $drumLevel = null;
+                $wasteLevel = null;
+                if ($DB->tableExists('glpi_printers_cartridgeinfos')) {
+                    foreach ($DB->request(['FROM' => 'glpi_printers_cartridgeinfos', 'WHERE' => ['printers_id' => $glpiId]]) as $cRow) {
+                        $prop = strtolower((string) ($cRow['property'] ?? ''));
+                        $valStr = (string) ($cRow['value'] ?? '');
+                        if (preg_match('/(\d+)/', $valStr, $m)) {
+                            $lvl = min(100, (int) $m[1]);
+                            if (str_contains($prop, 'toner') || str_contains($prop, 'black') || str_contains($prop, 'cartridge') || str_contains($prop, 'cyan') || str_contains($prop, 'magenta') || str_contains($prop, 'yellow')) {
+                                $tonerLevel = ($tonerLevel === null) ? $lvl : min($tonerLevel, $lvl);
+                            } elseif (str_contains($prop, 'drum')) {
+                                $drumLevel = ($drumLevel === null) ? $lvl : min($drumLevel, $lvl);
+                            } elseif (str_contains($prop, 'waste')) {
+                                $wasteLevel = ($wasteLevel === null) ? $lvl : max($wasteLevel, $lvl);
+                            }
+                        }
+                    }
+                }
+
+                $existing = $DB->request([
+                    'FROM'  => self::TABLE,
+                    'WHERE' => ['printers_id' => $glpiId],
+                    'LIMIT' => 1,
+                ])->current();
+
+                if (is_array($existing)) {
+                    $update = [
+                        'name'     => (string) $p['name'],
+                        'model'    => $model,
+                        'sector'   => $sector,
+                        'serial'   => (string) ($p['serial'] ?? ''),
+                        'is_active'=> 1,
+                        'date_mod' => $now,
+                    ];
+                    if ($ip !== '0.0.0.0' && ($existing['ip'] === '0.0.0.0' || empty($existing['ip']))) {
+                        $update['ip'] = $ip;
+                        $update['status'] = 'online';
+                    }
+                    if ($counter > 0 && (int) $existing['page_counter'] === 0) {
+                        $update['page_counter'] = $counter;
+                    }
+                    if ($tonerLevel !== null) {
+                        $update['toner_level'] = $tonerLevel;
+                    }
+                    if ($drumLevel !== null) {
+                        $update['drum_level'] = $drumLevel;
+                    }
+                    if ($wasteLevel !== null) {
+                        $update['waste_level'] = $wasteLevel;
+                    }
+                    $DB->update(self::TABLE, $update, ['id' => (int) $existing['id']]);
+                } else {
+                    $insert = [
+                        'printers_id'    => $glpiId,
+                        'name'           => (string) $p['name'],
+                        'model'          => $model,
+                        'ip'             => $ip,
+                        'sector'         => $sector,
+                        'serial'         => (string) ($p['serial'] ?? ''),
+                        'status'         => ($ip !== '0.0.0.0') ? 'online' : 'offline',
+                        'status_message' => ($ip !== '0.0.0.0') ? 'Impressora ativa no GLPI' : 'Sem IP configurado no GLPI',
+                        'toner_level'    => $tonerLevel,
+                        'drum_level'     => $drumLevel,
+                        'waste_level'    => $wasteLevel,
+                        'page_counter'   => $counter,
+                        'is_active'      => 1,
+                        'last_seen'      => ($ip !== '0.0.0.0') ? $now : null,
+                        'date_creation'  => $now,
+                        'date_mod'       => $now,
+                    ];
+                    $DB->insert(self::TABLE, $insert);
+                    $newId = (int) $DB->insertId();
+
+                    if ($counter > 0) {
+                        $DB->insert(self::COUNTERS_TABLE, [
+                            'printers_id'  => $newId,
+                            'date'         => date('Y-m-d'),
+                            'page_counter' => $counter,
+                            'date_mod'     => $now,
+                        ]);
+                    }
+                }
+            }
+
+            if ($activeIds !== []) {
+                $DB->update(self::TABLE, ['is_active' => 0], [
+                    'NOT' => ['printers_id' => $activeIds],
+                ]);
+            }
+
+            self::syncSuppliesFromGlpi();
+        } else {
+            self::seedInitialDataIfEmpty();
+        }
+    }
+
+    /**
+     * Localiza o IP de uma impressora pelos dados e relacionamentos do GLPI.
+     */
+    private static function findPrinterIp(int $glpiId, string $name, string $comment): string
+    {
+        global $DB;
+
+        // 1. Relacionamento NetworkPort -> NetworkName -> IPAddress
+        if ($DB->tableExists('glpi_networkports') && $DB->tableExists('glpi_networknames') && $DB->tableExists('glpi_ipaddresses')) {
+            $portRow = $DB->request([
+                'SELECT' => ['glpi_ipaddresses.name AS ip'],
+                'FROM'   => 'glpi_networkports',
+                'INNER JOIN' => [
+                    'glpi_networknames' => [
+                        'ON' => [
+                            'glpi_networknames' => 'items_id',
+                            'glpi_networkports' => 'id', [
+                                'AND' => ['glpi_networknames.itemtype' => 'NetworkPort'],
+                            ],
+                        ],
+                    ],
+                    'glpi_ipaddresses' => [
+                        'ON' => [
+                            'glpi_ipaddresses'  => 'items_id',
+                            'glpi_networknames' => 'id', [
+                                'AND' => ['glpi_ipaddresses.itemtype' => 'NetworkName'],
+                            ],
+                        ],
+                    ],
+                ],
+                'WHERE'  => [
+                    'glpi_networkports.items_id'   => $glpiId,
+                    'glpi_networkports.itemtype'   => 'Printer',
+                    'glpi_networkports.is_deleted' => 0,
+                ],
+                'LIMIT'  => 1,
+            ])->current();
+
+            if (is_array($portRow) && !empty($portRow['ip'])) {
+                return trim((string) $portRow['ip']);
+            }
+        }
+
+        // 2. Tabela direta glpi_ipaddresses
+        if ($DB->tableExists('glpi_ipaddresses')) {
+            $directWhere = [
+                'OR' => [
+                    ['items_id' => $glpiId, 'itemtype' => 'Printer'],
+                ],
+            ];
+            if ($DB->fieldExists('glpi_ipaddresses', 'mainitems_id')) {
+                $directWhere['OR'][] = ['mainitems_id' => $glpiId, 'mainitemtype' => 'Printer'];
+            }
+            $direct = $DB->request([
+                'SELECT' => ['name AS ip'],
+                'FROM'   => 'glpi_ipaddresses',
+                'WHERE'  => $directWhere,
+                'LIMIT'  => 1,
+            ])->current();
+
+            if (is_array($direct) && !empty($direct['ip'])) {
+                return trim((string) $direct['ip']);
+            }
+        }
+
+        // 3. Regex em campos de texto
+        $text = $name . ' ' . $comment;
+        if (preg_match('/\b(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})\b/', $text, $match)) {
+            return $match[1];
+        }
+
+        return '0.0.0.0';
+    }
+
+    /**
+     * Sincroniza insumos reais do estoque do GLPI (glpi_cartridgeitems / glpi_cartridges).
+     */
+    public static function syncSuppliesFromGlpi(): void
+    {
+        global $DB;
+
+        if (!$DB->tableExists(self::SUPPLIES_TABLE) || !$DB->tableExists('glpi_cartridgeitems')) {
+            return;
+        }
+
+        $items = $DB->request([
+            'SELECT' => ['id', 'name', 'ref', 'alarm_threshold'],
+            'FROM'   => 'glpi_cartridgeitems',
+            'WHERE'  => ['is_deleted' => 0],
+        ]);
+
+        if (count($items) === 0) {
+            return;
+        }
+
+        // Se há registros reais de cartuchos no GLPI, limpa os exemplos manuais de seed
+        $DB->delete(self::SUPPLIES_TABLE, [
+            'location' => 'Armário TI',
+        ]);
+
+        $now = date('Y-m-d H:i:s');
+
+        foreach ($items as $ci) {
+            $ciId = (int) $ci['id'];
+            $inStock = 0;
+            if ($DB->tableExists('glpi_cartridges')) {
+                $inStock = countElementsInTable('glpi_cartridges', [
+                    'cartridgeitems_id' => $ciId,
+                    'printers_id'       => 0,
+                ]);
+            }
+
+            $models = [];
+            if ($DB->tableExists('glpi_cartridgeitems_printermodels') && $DB->tableExists('glpi_printermodels')) {
+                $mReq = $DB->request([
+                    'SELECT' => ['glpi_printermodels.name'],
+                    'FROM'   => 'glpi_cartridgeitems_printermodels',
+                    'INNER JOIN' => [
+                        'glpi_printermodels' => [
+                            'ON' => ['glpi_cartridgeitems_printermodels' => 'printermodels_id', 'glpi_printermodels' => 'id'],
+                        ],
+                    ],
+                    'WHERE'  => ['cartridgeitems_id' => $ciId],
+                ]);
+                foreach ($mReq as $m) {
+                    $models[] = (string) $m['name'];
+                }
+            }
+
+            $compat = implode(', ', $models) ?: ((string) ($ci['ref'] ?? ''));
+
+            $existing = $DB->request([
+                'FROM'  => self::SUPPLIES_TABLE,
+                'WHERE' => ['name' => (string) $ci['name']],
+                'LIMIT' => 1,
+            ])->current();
+
+            if (is_array($existing)) {
+                $DB->update(self::SUPPLIES_TABLE, [
+                    'quantity'          => $inStock,
+                    'minimum_quantity'  => (int) ($ci['alarm_threshold'] ?: 2),
+                    'compatible_models' => $compat ?: $existing['compatible_models'],
+                    'date_mod'          => $now,
+                ], ['id' => (int) $existing['id']]);
+            } else {
+                $DB->insert(self::SUPPLIES_TABLE, [
+                    'name'              => (string) $ci['name'],
+                    'type'              => 'toner',
+                    'compatible_models' => $compat ?: 'Compatível GLPI',
+                    'quantity'          => $inStock,
+                    'minimum_quantity'  => (int) ($ci['alarm_threshold'] ?: 2),
+                    'location'          => 'Estoque GLPI',
+                    'date_mod'          => $now,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Alimenta dados de demonstração apenas se o GLPI não possuir nenhuma impressora real.
      */
     public static function seedInitialDataIfEmpty(): void
     {
@@ -475,112 +849,13 @@ final class PrinterRepository
 
         $now = date('Y-m-d H:i:s');
 
-        // Impressoras em destaque do print da tela
         $samplePrinters = [
-            [
-                'name' => 'HP LaserJet Pro M404dn',
-                'model' => 'HP LaserJet Pro M404dn',
-                'ip' => '192.168.1.150',
-                'sector' => 'Financeiro',
-                'serial' => 'VNB3R92144',
-                'status' => 'online',
-                'status_message' => 'Equipamento pronto',
-                'toner_level' => 85,
-                'drum_level' => 90,
-                'waste_level' => 10,
-                'page_counter' => 14520,
-            ],
-            [
-                'name' => 'Samsung MultiXpress X4300',
-                'model' => 'Samsung MultiXpress X4300',
-                'ip' => '192.168.1.152',
-                'sector' => 'Recursos Humanos',
-                'serial' => 'ZX81B92001',
-                'status' => 'online',
-                'status_message' => 'Nível de toner baixo',
-                'toner_level' => 12, // Crítico/Atenção (< 15%)
-                'drum_level' => 45,
-                'waste_level' => 20,
-                'page_counter' => 32180,
-            ],
-            [
-                'name' => 'Ricoh Aficio MP 301',
-                'model' => 'Ricoh Aficio MP 301',
-                'ip' => '192.168.3.11',
-                'sector' => 'Faturamento',
-                'serial' => 'RC09918231',
-                'status' => 'offline',
-                'status_message' => 'Sem resposta na rede',
-                'toner_level' => null,
-                'drum_level' => null,
-                'waste_level' => null,
-                'page_counter' => 58200,
-            ],
-            [
-                'name' => 'Brother HL-L5100DN',
-                'model' => 'Brother HL-L5100DN',
-                'ip' => '10.0.10.45',
-                'sector' => 'TI / Suporte',
-                'serial' => 'E78291K201',
-                'status' => 'online',
-                'status_message' => 'Equipamento pronto',
-                'toner_level' => 67,
-                'drum_level' => 80,
-                'waste_level' => 5,
-                'page_counter' => 9840,
-            ],
-            [
-                'name' => 'Canon imageRUNNER 2625',
-                'model' => 'Canon imageRUNNER 2625',
-                'ip' => '192.168.1.180',
-                'sector' => 'Diretoria',
-                'serial' => 'CN99281023',
-                'status' => 'printing',
-                'status_message' => 'Imprimindo documento',
-                'toner_level' => 48,
-                'drum_level' => 52,
-                'waste_level' => 18,
-                'page_counter' => 41200,
-            ],
-            [
-                'name' => 'Kyocera ECOSYS M2040dn',
-                'model' => 'Kyocera ECOSYS M2040dn',
-                'ip' => '192.168.1.182',
-                'sector' => 'Logística',
-                'serial' => 'KY77123910',
-                'status' => 'online',
-                'status_message' => 'Toner em nível de atenção',
-                'toner_level' => 8, // Crítico (< 15%)
-                'drum_level' => 74,
-                'waste_level' => 22,
-                'page_counter' => 23410,
-            ],
-            [
-                'name' => 'Lexmark MS510dn',
-                'model' => 'Lexmark MS510dn',
-                'ip' => '192.168.2.14',
-                'sector' => 'Almoxarifado',
-                'serial' => 'LX11299301',
-                'status' => 'online',
-                'status_message' => 'Toner muito baixo',
-                'toner_level' => 4, // Estado crítico (< 5%)
-                'drum_level' => 60,
-                'waste_level' => 12,
-                'page_counter' => 19800,
-            ],
+            ['name' => 'HP LaserJet Pro M404dn', 'model' => 'HP LaserJet Pro M404dn', 'ip' => '192.168.1.150', 'sector' => 'Financeiro', 'serial' => 'VNB3R92144', 'status' => 'online', 'status_message' => 'Equipamento pronto', 'toner_level' => 85, 'drum_level' => 90, 'waste_level' => 10, 'page_counter' => 14520],
+            ['name' => 'Samsung MultiXpress X4300', 'model' => 'Samsung MultiXpress X4300', 'ip' => '192.168.1.152', 'sector' => 'Recursos Humanos', 'serial' => 'ZX81B92001', 'status' => 'online', 'status_message' => 'Nível de toner baixo', 'toner_level' => 12, 'drum_level' => 45, 'waste_level' => 20, 'page_counter' => 32180],
+            ['name' => 'Ricoh Aficio MP 301', 'model' => 'Ricoh Aficio MP 301', 'ip' => '192.168.3.11', 'sector' => 'Faturamento', 'serial' => 'RC09918231', 'status' => 'offline', 'status_message' => 'Sem resposta na rede', 'toner_level' => null, 'drum_level' => null, 'waste_level' => null, 'page_counter' => 58200],
+            ['name' => 'Brother HL-L5100DN', 'model' => 'Brother HL-L5100DN', 'ip' => '10.0.10.45', 'sector' => 'TI / Suporte', 'serial' => 'E78291K201', 'status' => 'online', 'status_message' => 'Equipamento pronto', 'toner_level' => 67, 'drum_level' => 80, 'waste_level' => 5, 'page_counter' => 9840],
         ];
 
-        // Completa o parque para atingir o total de 42 impressoras ativas com 98% online (41 online, 1 offline) e 3 toners críticos
-        $setores = ['Comercial', 'Operações', 'Engenharia', 'Jurídico', 'Projetos', 'Contabilidade', 'Compras'];
-        $modelos = [
-            'HP LaserJet Pro M404dn',
-            'Brother HL-L6202DW',
-            'Epson EcoTank L5290',
-            'Kyocera ECOSYS P2040dw',
-            'Samsung ProXpress M4020ND',
-        ];
-
-        $printerIds = [];
         foreach ($samplePrinters as $p) {
             $p['is_active'] = 1;
             $p['date_creation'] = $now;
@@ -588,75 +863,6 @@ final class PrinterRepository
             $p['last_poll'] = $now;
             $p['last_seen'] = $p['status'] !== 'offline' ? $now : date('Y-m-d H:i:s', strtotime('-2 days'));
             $DB->insert(self::TABLE, $p);
-            $printerIds[] = (int) $DB->insertId();
-        }
-
-        for ($i = 8; $i <= 42; $i++) {
-            $model = $modelos[($i - 8) % count($modelos)];
-            $sec = $setores[($i - 8) % count($setores)];
-            $toner = min(98, 25 + (($i * 7) % 70));
-            $drum = min(99, 40 + (($i * 5) % 55));
-            $counter = 5000 + ($i * 1230);
-
-            $data = [
-                'name'           => $model . ' (' . $sec . ')',
-                'model'          => $model,
-                'ip'             => '192.168.' . (int) (1 + ($i / 20)) . '.' . (100 + $i),
-                'sector'         => $sec,
-                'serial'         => 'SN' . (900000 + $i),
-                'status'         => 'online',
-                'status_message' => 'Equipamento pronto',
-                'toner_level'    => $toner,
-                'drum_level'     => $drum,
-                'waste_level'    => 15,
-                'page_counter'   => $counter,
-                'is_active'      => 1,
-                'last_seen'      => $now,
-                'last_poll'      => $now,
-                'date_creation'  => $now,
-                'date_mod'       => $now,
-            ];
-            $DB->insert(self::TABLE, $data);
-            $printerIds[] = (int) $DB->insertId();
-        }
-
-        // Histórico de contadores diários para os últimos 30 dias (garantindo 12.450 nos últimos 7 dias, +5% vs anteriores)
-        if ($DB->tableExists(self::COUNTERS_TABLE)) {
-            $dailyAvg = (int) round(12450 / 7); // ~1778 paginas por dia distribuidas
-            $perPrinter = max(1, (int) round($dailyAvg / count($printerIds)));
-
-            for ($d = 30; $d >= 0; $d--) {
-                $date = date('Y-m-d', strtotime("-{$d} days"));
-                foreach ($printerIds as $pid) {
-                    $baseCounter = 10000 + ($pid * 800) + (($d <= 7 ? (30 - $d) : (int) ((30 - $d) * 0.95)) * $perPrinter);
-                    $DB->insert(self::COUNTERS_TABLE, [
-                        'printers_id'  => $pid,
-                        'date'         => $date,
-                        'page_counter' => $baseCounter,
-                        'date_mod'     => $now,
-                    ]);
-                }
-            }
-        }
-
-        // Insumos em estoque: total de 85 unidades somadas
-        if ($DB->tableExists(self::SUPPLIES_TABLE)) {
-            $supplies = [
-                ['name' => 'Toner HP CF258A (Preto)', 'type' => 'toner', 'compatible_models' => 'HP LaserJet Pro M404dn', 'quantity' => 18, 'minimum_quantity' => 4],
-                ['name' => 'Toner Samsung CLT-K606S', 'type' => 'toner', 'compatible_models' => 'Samsung MultiXpress X4300', 'quantity' => 12, 'minimum_quantity' => 3],
-                ['name' => 'Toner Brother TN-3472', 'type' => 'toner', 'compatible_models' => 'Brother HL-L5100DN, L6202DW', 'quantity' => 15, 'minimum_quantity' => 5],
-                ['name' => 'Cilindro Brother DR-3440', 'type' => 'drum', 'compatible_models' => 'Brother HL-L5100DN', 'quantity' => 8, 'minimum_quantity' => 2],
-                ['name' => 'Toner Canon GPR-53', 'type' => 'toner', 'compatible_models' => 'Canon imageRUNNER 2625', 'quantity' => 10, 'minimum_quantity' => 3],
-                ['name' => 'Caixa Coletora Ricoh Waste Box', 'type' => 'waste', 'compatible_models' => 'Ricoh Aficio MP 301', 'quantity' => 6, 'minimum_quantity' => 2],
-                ['name' => 'Toner Kyocera TK-1175', 'type' => 'toner', 'compatible_models' => 'Kyocera ECOSYS M2040dn', 'quantity' => 16, 'minimum_quantity' => 4],
-            ];
-            // Soma das quantidades = 18 + 12 + 15 + 8 + 10 + 6 + 16 = 85!
-            foreach ($supplies as $s) {
-                $s['location'] = 'Armário TI';
-                $s['date_mod'] = $now;
-                $DB->insert(self::SUPPLIES_TABLE, $s);
-            }
         }
     }
 }
-

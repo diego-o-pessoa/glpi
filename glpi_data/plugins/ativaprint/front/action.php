@@ -37,20 +37,37 @@ try {
     switch ($action) {
         case 'add_printer':
             $ip = trim((string) ($_POST['ip'] ?? ''));
+            $name = trim((string) ($_POST['name'] ?? ''));
+            $model = trim((string) ($_POST['model'] ?? ''));
+            $sector = trim((string) ($_POST['sector'] ?? 'Geral'));
+            $community = trim((string) ($_POST['snmp_community'] ?? ''));
+
             if ($ip === '') {
                 throw new Exception('O endereço IP da impressora é obrigatório.');
             }
+
+            $glpiPrinterId = null;
+            if (class_exists('Printer')) {
+                $pObj = new \Printer();
+                $input = [
+                    'name'        => $name !== '' ? $name : ($model !== '' ? $model : "Impressora $ip"),
+                    'comment'     => "IP: $ip",
+                    'entities_id' => $_SESSION['glpiactive_entity'] ?? 0,
+                ];
+                $glpiPrinterId = $pObj->add($input);
+            }
+
             $id = PrinterRepository::create([
-                'name'           => trim((string) ($_POST['name'] ?? '')),
-                'model'          => trim((string) ($_POST['model'] ?? '')),
+                'printers_id'    => $glpiPrinterId ? (int) $glpiPrinterId : null,
+                'name'           => $name,
+                'model'          => $model,
                 'ip'             => $ip,
-                'sector'         => trim((string) ($_POST['sector'] ?? 'Geral')),
-                'snmp_community' => trim((string) ($_POST['snmp_community'] ?? '')),
+                'sector'         => $sector,
+                'snmp_community' => $community,
             ]);
 
             $created = PrinterRepository::getById($id);
-            if ($created !== null) {
-                // Tenta primeira consulta imediata na rede
+            if ($created !== null && $ip !== '0.0.0.0') {
                 Poller::pollAndSave($created);
             }
 
@@ -63,6 +80,14 @@ try {
             if ($printer === null) {
                 throw new Exception('Impressora não encontrada.');
             }
+            if (($printer['ip'] ?? '') === '0.0.0.0' || empty($printer['ip'])) {
+                $response = [
+                    'ok'      => true,
+                    'message' => 'Impressora sem IP configurado no GLPI.',
+                    'status'  => 'offline',
+                ];
+                break;
+            }
             $result = Poller::pollAndSave($printer);
             $response = [
                 'ok'      => true,
@@ -72,7 +97,7 @@ try {
             break;
 
         case 'poll_all':
-            $count = Poller::pollMany(30);
+            $count = Poller::pollMany(5);
             $response = [
                 'ok'      => true,
                 'message' => "Verificação concluída para {$count} impressora(s).",
