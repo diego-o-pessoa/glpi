@@ -12,6 +12,8 @@ function plugin_ativaprint_install(): bool
 {
     global $DB;
 
+    require_once __DIR__ . '/setup.php';
+
     $migration = new Migration(PLUGIN_ATIVAPRINT_VERSION);
 
     if (

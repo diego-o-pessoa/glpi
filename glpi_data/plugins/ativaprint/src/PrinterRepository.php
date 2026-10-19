@@ -333,11 +333,12 @@ final class PrinterRepository
 
         // Para cada impressora, calcula max(contador no final) - min(contador no início)
         $printers = $DB->request([
-            'SELECT' => ['DISTINCT printers_id'],
-            'FROM'   => self::COUNTERS_TABLE,
-            'WHERE'  => [
-                'date' => ['>=', $startDateStr],
-                'AND'  => ['date' => ['<=', $endDateStr]],
+            'DISTINCT' => true,
+            'SELECT'   => ['printers_id'],
+            'FROM'     => self::COUNTERS_TABLE,
+            'WHERE'    => [
+                ['date' => ['>=', $startDateStr]],
+                ['date' => ['<=', $endDateStr]],
             ],
         ]);
 
@@ -347,16 +348,22 @@ final class PrinterRepository
             $startRow = $DB->request([
                 'SELECT' => ['page_counter'],
                 'FROM'   => self::COUNTERS_TABLE,
-                'WHERE'  => ['printers_id' => $printerId, 'date' => ['>=', $startDateStr]],
-                'ORDER'  => ['date ASC'],
+                'WHERE'  => [
+                    'printers_id' => $printerId,
+                    ['date' => ['>=', $startDateStr]],
+                ],
+                'ORDER'  => 'date ASC',
                 'LIMIT'  => 1,
             ])->current();
 
             $endRow = $DB->request([
                 'SELECT' => ['page_counter'],
                 'FROM'   => self::COUNTERS_TABLE,
-                'WHERE'  => ['printers_id' => $printerId, 'date' => ['<=', $endDateStr]],
-                'ORDER'  => ['date DESC'],
+                'WHERE'  => [
+                    'printers_id' => $printerId,
+                    ['date' => ['<=', $endDateStr]],
+                ],
+                'ORDER'  => 'date DESC',
                 'LIMIT'  => 1,
             ])->current();
 

@@ -7,6 +7,22 @@ define('PLUGIN_ATIVAPRINT_MIN_GLPI', '11.0.0');
 define('PLUGIN_ATIVAPRINT_MAX_GLPI', '12.0.0');
 define('PLUGIN_ATIVAPRINT_DIR', __DIR__);
 
+// Autoloader PSR-4 para classes de GlpiPlugin\Ativaprint\...
+spl_autoload_register(static function (string $class): void {
+    $prefix = 'GlpiPlugin\\Ativaprint\\';
+    if (!str_starts_with($class, $prefix)) {
+        return;
+    }
+    $relative = substr($class, strlen($prefix));
+    $file = __DIR__ . '/src/' . str_replace('\\', '/', $relative) . '.php';
+    if (file_exists($file)) {
+        require_once $file;
+    }
+});
+
+require_once __DIR__ . '/inc/menu.class.php';
+require_once __DIR__ . '/inc/profile.class.php';
+
 /**
  * Inicialização dos ganchos e classes do Ativa Print.
  */
@@ -21,6 +37,33 @@ function plugin_init_ativaprint(): void
 
     $PLUGIN_HOOKS['menu_toadd']['ativaprint']['admin'] = 'PluginAtivaprintMenu';
     $PLUGIN_HOOKS['config_page']['ativaprint'] = 'front/config.php';
+
+    plugin_ativaprint_refresh_cached_menu();
+}
+
+/**
+ * Se o menu do GLPI foi cacheado na sessão antes do Ativa Print existir,
+ * invalida o cache para que o GLPI reconstrua a barra lateral incluindo o Ativa Print.
+ */
+function plugin_ativaprint_refresh_cached_menu(): void
+{
+    $marker = PLUGIN_ATIVAPRINT_VERSION . '|ativaprint_v1';
+    if (!isset($_SESSION['glpimenu']) || !is_array($_SESSION['glpimenu'])
+        || ($_SESSION['plugin_ativaprint_menu_checked'] ?? '') === $marker) {
+        return;
+    }
+    $_SESSION['plugin_ativaprint_menu_checked'] = $marker;
+
+    $hasPrint = false;
+    foreach ($_SESSION['glpimenu'] as $sector) {
+        if (is_array($sector) && isset($sector['content']['pluginativaprintmenu'])) {
+            $hasPrint = true;
+            break;
+        }
+    }
+    if (!$hasPrint) {
+        unset($_SESSION['glpimenu']);
+    }
 }
 
 function plugin_version_ativaprint(): array

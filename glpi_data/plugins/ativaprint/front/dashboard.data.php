@@ -6,6 +6,10 @@ use GlpiPlugin\Ativaprint\PrinterRepository;
 
 include '../../../inc/includes.php';
 
+require_once dirname(__DIR__) . '/setup.php';
+require_once dirname(__DIR__) . '/src/PrintConfig.php';
+require_once dirname(__DIR__) . '/src/PrinterRepository.php';
+
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
@@ -26,16 +30,25 @@ $filters = [
     'critical_only' => !empty($_GET['critical_only']),
 ];
 
-$kpis = PrinterRepository::getKpis($days);
-$printers = PrinterRepository::getAll($filters);
-$supplies = PrinterRepository::getSupplies();
+try {
+    $kpis = PrinterRepository::getKpis($days);
+    $printers = PrinterRepository::getAll($filters);
+    $supplies = PrinterRepository::getSupplies();
 
-echo json_encode([
-    'ok'       => true,
-    'days'     => $days,
-    'kpis'     => $kpis,
-    'printers' => $printers,
-    'supplies' => $supplies,
-    'updated'  => date('H:i:s'),
-], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-
+    echo json_encode([
+        'ok'       => true,
+        'days'     => $days,
+        'kpis'     => $kpis,
+        'printers' => $printers,
+        'supplies' => $supplies,
+        'updated'  => date('H:i:s'),
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+} catch (\Throwable $e) {
+    http_response_code(500);
+    echo json_encode([
+        'ok'      => false,
+        'message' => $e->getMessage(),
+        'file'    => $e->getFile(),
+        'line'    => $e->getLine(),
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}

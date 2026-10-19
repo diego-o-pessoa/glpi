@@ -7,6 +7,12 @@ use GlpiPlugin\Ativaprint\PrinterRepository;
 
 include '../../../inc/includes.php';
 
+require_once dirname(__DIR__) . '/setup.php';
+require_once dirname(__DIR__) . '/src/PrintConfig.php';
+require_once dirname(__DIR__) . '/src/SnmpClient.php';
+require_once dirname(__DIR__) . '/src/Poller.php';
+require_once dirname(__DIR__) . '/src/PrinterRepository.php';
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     http_response_code(405);
     header('Allow: POST');
@@ -97,7 +103,7 @@ try {
         default:
             throw new Exception('Ação inválida.');
     }
-} catch (Exception $e) {
+} catch (\Throwable $e) {
     if ($ajax) {
         http_response_code(422);
         echo json_encode(['ok' => false, 'message' => $e->getMessage()]);
