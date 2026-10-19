@@ -1,0 +1,1055 @@
+<style>
+/* ==========================================================================
+   Ativa Print - Design System alinhado ao Ativa Central
+   ========================================================================== */
+.ap-wrap {
+    --ap-bg: #f8fafc;
+    --ap-card-bg: #ffffff;
+    --ap-ink: #0f172a;
+    --ap-muted: #64748b;
+    --ap-border: #e2e8f0;
+    --ap-primary: #6366f1;
+    --ap-primary-hover: #4f46e5;
+    --ap-purple-gradient: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+    --ap-green: #10b981;
+    --ap-amber: #f59e0b;
+    --ap-red: #ef4444;
+    --ap-blue: #0284c7;
+    --ap-radius-card: 20px;
+    --ap-radius-sm: 12px;
+    --ap-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.05), 0 2px 6px -2px rgba(15, 23, 42, 0.03);
+    --ap-shadow-hover: 0 12px 30px -8px rgba(99, 102, 241, 0.12), 0 4px 10px -2px rgba(15, 23, 42, 0.05);
+
+    max-width: 1680px;
+    margin: 0 auto;
+    padding: 10px 16px 40px;
+    color: var(--ap-ink);
+    font-family: inherit;
+}
+
+/* Breadcrumb & Cabeçalho */
+.ap-breadcrumb {
+    font-size: 13px;
+    color: var(--ap-muted);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+}
+.ap-breadcrumb span {
+    color: var(--ap-ink);
+}
+
+.ap-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 28px;
+}
+.ap-eyebrow {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: var(--ap-muted);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.ap-title {
+    font-size: 30px;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: -0.02em;
+    color: var(--ap-ink);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ap-spark {
+    color: #f59e0b;
+    font-size: 20px;
+}
+.ap-subtitle {
+    margin: 6px 0 0;
+    color: var(--ap-muted);
+    font-size: 14px;
+}
+
+.ap-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.ap-select {
+    height: 42px;
+    border-radius: var(--ap-radius-sm);
+    border: 1px solid var(--ap-border);
+    background-color: #fff;
+    padding: 0 36px 0 16px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ap-ink);
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    transition: all 0.2s;
+}
+.ap-select:focus, .ap-select:hover {
+    border-color: #cbd5e1;
+    outline: none;
+}
+
+.ap-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 42px;
+    padding: 0 18px;
+    border-radius: var(--ap-radius-sm);
+    font-size: 13.5px;
+    font-weight: 600;
+    border: 1px solid var(--ap-border);
+    background: #fff;
+    color: var(--ap-ink);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.ap-btn:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: var(--ap-ink);
+    transform: translateY(-1px);
+}
+.ap-btn.is-primary {
+    background: var(--ap-purple-gradient);
+    border: none;
+    color: #fff;
+    box-shadow: 0 8px 20px -4px rgba(124, 58, 237, 0.35);
+}
+.ap-btn.is-primary:hover {
+    filter: brightness(1.06);
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 12px 24px -4px rgba(124, 58, 237, 0.45);
+}
+.ap-btn i.spin {
+    animation: ap-spin 0.8s linear infinite;
+}
+
+@keyframes ap-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* ==========================================================================
+   Grid dos 4 Cards Superiores (KPIS)
+   ========================================================================== */
+.ap-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-bottom: 28px;
+}
+@media (max-width: 1200px) {
+    .ap-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+    .ap-kpi-grid { grid-template-columns: 1fr; }
+}
+
+.ap-card {
+    background: var(--ap-card-bg);
+    border-radius: var(--ap-radius-card);
+    border: 1px solid var(--ap-border);
+    box-shadow: var(--ap-shadow);
+    padding: 24px 22px 20px;
+    transition: transform 0.25s, box-shadow 0.25s;
+    position: relative;
+    overflow: hidden;
+}
+.ap-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--ap-shadow-hover);
+}
+
+.ap-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 14px;
+}
+.ap-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #475569;
+}
+
+.ap-icon-tile {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+.ap-tile-purple {
+    background: #f3e8ff;
+    color: #7c3aed;
+}
+.ap-tile-amber {
+    background: #fef3c7;
+    color: #d97706;
+}
+.ap-tile-blue {
+    background: #e0f2fe;
+    color: #0284c7;
+}
+.ap-tile-green {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.ap-card-val {
+    font-size: 38px;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--ap-ink);
+    letter-spacing: -0.03em;
+    margin-bottom: 8px;
+}
+
+.ap-card-sub {
+    font-size: 13px;
+    color: var(--ap-muted);
+    font-weight: 500;
+}
+.ap-card-sub b {
+    font-weight: 700;
+}
+.ap-text-green { color: #16a34a; }
+.ap-text-amber { color: #b45309; }
+.ap-text-muted { color: #64748b; }
+
+/* ==========================================================================
+   Painel Principal da Tabela (Impressoras na rede)
+   ========================================================================== */
+.ap-table-panel {
+    background: var(--ap-card-bg);
+    border-radius: var(--ap-radius-card);
+    border: 1px solid var(--ap-border);
+    box-shadow: var(--ap-shadow);
+    overflow: hidden;
+}
+
+.ap-panel-head {
+    padding: 20px 24px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+.ap-panel-title {
+    font-size: 18px;
+    font-weight: 750;
+    margin: 0;
+    color: var(--ap-ink);
+}
+.ap-link-all {
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    transition: background 0.2s;
+}
+.ap-link-all:hover {
+    background: #f1f5f9;
+    color: var(--ap-ink);
+}
+
+.ap-toolbar {
+    padding: 0 24px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.ap-search-box {
+    position: relative;
+    width: 320px;
+    max-width: 100%;
+}
+.ap-search-box i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    font-size: 16px;
+}
+.ap-search-input {
+    width: 100%;
+    height: 40px;
+    border-radius: var(--ap-radius-sm);
+    border: 1px solid var(--ap-border);
+    padding: 0 14px 0 38px;
+    font-size: 13.5px;
+    color: var(--ap-ink);
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.ap-search-input:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+    outline: none;
+}
+
+.ap-tool-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--ap-radius-sm);
+    border: 1px solid var(--ap-border);
+    background: #fff;
+    display: grid;
+    place-items: center;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.ap-tool-btn:hover {
+    background: #f8fafc;
+    color: var(--ap-ink);
+}
+
+/* Tabela Estilizada */
+.ap-table-wrap {
+    overflow-x: auto;
+}
+.ap-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    text-align: left;
+}
+.ap-table th {
+    background: #fcfdfe;
+    padding: 14px 20px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+    border-top: 1px solid var(--ap-border);
+    border-bottom: 1px solid var(--ap-border);
+    white-space: nowrap;
+}
+.ap-table td {
+    padding: 16px 20px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: #1e293b;
+}
+.ap-table tr:last-child td {
+    border-bottom: none;
+}
+.ap-table tr:hover td {
+    background-color: #f8fafc;
+}
+
+/* Colunas específicas */
+.ap-printer-name {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 600;
+    color: var(--ap-ink);
+}
+.ap-printer-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #f1f5f9;
+    color: #475569;
+    display: grid;
+    place-items: center;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.ap-badge-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+}
+.ap-badge-status.is-online {
+    background: #dcfce7;
+    color: #15803d;
+}
+.ap-badge-status.is-printing {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+.ap-badge-status.is-offline {
+    background: #f1f5f9;
+    color: #64748b;
+}
+.ap-badge-status.is-warning {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+/* Barras de Nível */
+.ap-level-cell {
+    min-width: 150px;
+}
+.ap-level-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+.ap-progress {
+    height: 5px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    overflow: hidden;
+}
+.ap-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ap-progress-fill.is-good {
+    background: #0284c7;
+}
+.ap-progress-fill.is-drum {
+    background: #4f46e5;
+}
+.ap-progress-fill.is-warning {
+    background: #f59e0b;
+}
+.ap-progress-fill.is-critical {
+    background: #ef4444;
+}
+
+/* Modais estilizados */
+.ap-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    z-index: 1050;
+    display: none;
+    place-items: center;
+    padding: 16px;
+}
+.ap-modal-backdrop.is-open {
+    display: grid;
+}
+.ap-modal {
+    background: #fff;
+    border-radius: 20px;
+    max-width: 600px;
+    width: 100%;
+    box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25);
+    overflow: hidden;
+    animation: ap-modal-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes ap-modal-in {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+.ap-modal-head {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--ap-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.ap-modal-body {
+    padding: 24px;
+    max-height: 75vh;
+    overflow-y: auto;
+}
+.ap-modal-foot {
+    padding: 16px 24px;
+    background: #f8fafc;
+    border-top: 1px solid var(--ap-border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+</style>
+
+<div class="ap-wrap" id="ativa-print-app">
+    <!-- Breadcrumb -->
+    <div class="ap-breadcrumb">
+        <span>Ativa Central</span> / <span>Ativa Print</span>
+    </div>
+
+    <!-- Cabeçalho -->
+    <div class="ap-header">
+        <div>
+            <div class="ap-eyebrow">PAINEL OPERACIONAL · ATIVA PRINT</div>
+            <h1 class="ap-title">Ativa Print <span class="ap-spark">✦</span></h1>
+            <p class="ap-subtitle">Acompanhe o status das impressoras, níveis de insumos e volumetria em um só lugar.</p>
+        </div>
+
+        <div class="ap-header-actions">
+            <!-- Seletor de Período -->
+            <select class="ap-select" id="ap-period-select" aria-label="Período de volumetria">
+                <option value="7" {% if days == 7 %}selected{% endif %}>Últimos 7 dias</option>
+                <option value="30" {% if days == 30 %}selected{% endif %}>Últimos 30 dias</option>
+                <option value="90" {% if days == 90 %}selected{% endif %}>Últimos 90 dias</option>
+            </select>
+
+            <!-- Botão Atualizar -->
+            <button type="button" class="ap-btn" id="ap-btn-refresh">
+                <i class="ti ti-refresh" id="ap-refresh-icon"></i>
+                <span>Atualizar</span>
+            </button>
+
+            <!-- Botão Adicionar Impressora -->
+            {% if can_manage %}
+                <button type="button" class="ap-btn is-primary" id="ap-btn-add-printer">
+                    <i class="ti ti-plus"></i>
+                    <span>Adicionar impressora</span>
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 4 Cards Superiores (KPIS) -->
+    <div class="ap-kpi-grid">
+        <!-- Card 1: Impressoras ativas -->
+        <div class="ap-card" id="card-printers" style="cursor: pointer;" title="Clique para filtrar apenas ativas">
+            <div class="ap-card-top">
+                <span class="ap-card-title">Impressoras ativas</span>
+                <span class="ap-icon-tile ap-tile-purple">
+                    <i class="ti ti-printer"></i>
+                </span>
+            </div>
+            <div class="ap-card-val" id="kpi-printers-count">{{ kpis.printers.total }}</div>
+            <div class="ap-card-sub" id="kpi-printers-note">
+                <b class="ap-text-green">{{ kpis.printers.note }}</b>
+            </div>
+        </div>
+
+        <!-- Card 2: Toners em nível crítico -->
+        <div class="ap-card" id="card-critical" style="cursor: pointer;" title="Clique para filtrar impressoras com toner baixo">
+            <div class="ap-card-top">
+                <span class="ap-card-title">Toners em nível crítico</span>
+                <span class="ap-icon-tile ap-tile-amber">
+                    <i class="ti ti-alert-triangle"></i>
+                </span>
+            </div>
+            <div class="ap-card-val" id="kpi-toners-count">{{ kpis.toners_critical.count }}</div>
+            <div class="ap-card-sub" id="kpi-toners-note">
+                <b class="ap-text-amber">{{ kpis.toners_critical.note }}</b>
+            </div>
+        </div>
+
+        <!-- Card 3: Impressões no período -->
+        <div class="ap-card">
+            <div class="ap-card-top">
+                <span class="ap-card-title">Impressões no período</span>
+                <span class="ap-icon-tile ap-tile-blue">
+                    <i class="ti ti-file-text"></i>
+                </span>
+            </div>
+            <div class="ap-card-val" id="kpi-volume-val">{{ kpis.volume.formatted }}</div>
+            <div class="ap-card-sub" id="kpi-volume-note">
+                <b class="ap-text-green">{{ kpis.volume.delta_text }}</b>
+            </div>
+        </div>
+
+        <!-- Card 4: Insumos em estoque -->
+        <div class="ap-card" id="card-supplies" style="cursor: pointer;" title="Clique para gerenciar o armário de insumos">
+            <div class="ap-card-top">
+                <span class="ap-card-title">Insumos em estoque</span>
+                <span class="ap-icon-tile ap-tile-green">
+                    <i class="ti ti-package"></i>
+                </span>
+            </div>
+            <div class="ap-card-val" id="kpi-supplies-count">{{ kpis.supplies.total }}</div>
+            <div class="ap-card-sub" id="kpi-supplies-note">
+                <span class="ap-text-muted">{{ kpis.supplies.note }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Painel de Impressoras na Rede -->
+    <div class="ap-table-panel">
+        <div class="ap-panel-head">
+            <h2 class="ap-panel-title">Impressoras na rede</h2>
+            <div class="d-flex align-items-center gap-2">
+                {% if urls.glpi_printers %}
+                    <a href="{{ urls.glpi_printers }}" target="_blank" class="ap-link-all">
+                        <span>Ver todas</span>
+                        <i class="ti ti-arrow-up-right"></i>
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="ap-toolbar">
+            <div class="ap-search-box">
+                <i class="ti ti-search"></i>
+                <input type="text" class="ap-search-input" id="ap-search" placeholder="Buscar..." autocomplete="off">
+            </div>
+
+            <button type="button" class="ap-tool-btn" id="ap-btn-filter-status" title="Filtrar por Status (Online/Offline)">
+                <i class="ti ti-filter"></i>
+            </button>
+            <a href="{{ urls.config }}" class="ap-tool-btn" title="Configurações SNMP e Parâmetros">
+                <i class="ti ti-adjustments-horizontal"></i>
+            </a>
+        </div>
+
+        <div class="ap-table-wrap">
+            <table class="ap-table">
+                <thead>
+                    <tr>
+                        <th style="min-width: 260px;">Nome / Modelo</th>
+                        <th style="min-width: 140px;">IP / Rede <i class="ti ti-arrow-down small"></i></th>
+                        <th style="min-width: 160px;">Setor</th>
+                        <th style="min-width: 110px;">Status</th>
+                        <th style="min-width: 170px;">Nível de Toner</th>
+                        <th style="min-width: 170px;">Nível do Cilindro</th>
+                        {% if can_manage %}
+                            <th style="width: 80px; text-align: right;">Ações</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody id="ap-printers-tbody">
+                    {% for p in printers %}
+                        <tr data-printer-id="{{ p.id }}" data-search-text="{{ (p.name ~ ' ' ~ p.model ~ ' ' ~ p.ip ~ ' ' ~ p.sector)|lower }}">
+                            <td>
+                                <div class="ap-printer-name">
+                                    <span class="ap-printer-icon"><i class="ti ti-printer"></i></span>
+                                    <span>{{ p.model ?: p.name }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="font-monospace text-muted">{{ p.ip }}</span>
+                            </td>
+                            <td>{{ p.sector ?: 'Geral' }}</td>
+                            <td>
+                                <span class="ap-badge-status {{ p.status_class }}">{{ p.status_label }}</span>
+                            </td>
+                            <td>
+                                <div class="ap-level-cell">
+                                    <div class="ap-level-header">
+                                        <span>{{ p.toner_level !== null ? (p.toner_level ~ '%') : '--' }}</span>
+                                    </div>
+                                    <div class="ap-progress">
+                                        <div class="ap-progress-fill {{ p.toner_class }}" style="width: {{ p.toner_level !== null ? p.toner_level : 0 }}%;"></div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="ap-level-cell">
+                                    <div class="ap-level-header">
+                                        <span>{{ p.drum_level !== null ? (p.drum_level ~ '%') : '--' }}</span>
+                                    </div>
+                                    <div class="ap-progress">
+                                        <div class="ap-progress-fill is-drum" style="width: {{ p.drum_level !== null ? p.drum_level : 0 }}%;"></div>
+                                    </div>
+                                </div>
+                            </td>
+                            {% if can_manage %}
+                                <td style="text-align: right;">
+                                    <button type="button" class="btn btn-sm btn-outline-primary btn-poll-printer" data-id="{{ p.id }}" title="Consultar SNMP agora">
+                                        <i class="ti ti-refresh"></i>
+                                    </button>
+                                </td>
+                            {% endif %}
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">
+                                Nenhuma impressora encontrada.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Adicionar Impressora -->
+<div class="ap-modal-backdrop" id="modal-add-printer">
+    <div class="ap-modal">
+        <div class="ap-modal-head">
+            <h3 class="m-0 fw-bold fs-5"><i class="ti ti-printer me-2 text-primary"></i>Nova Impressora</h3>
+            <button type="button" class="btn-close" id="btn-close-modal-add"></button>
+        </div>
+        <form id="form-add-printer">
+            <div class="ap-modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Endereço IP / Host <span class="text-danger">*</span></label>
+                    <input type="text" name="ip" class="form-control" placeholder="Ex: 192.168.1.150" required>
+                    <div class="form-text">O IP deve estar acessível pelo servidor GLPI.</div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Nome de Exibição</label>
+                        <input type="text" name="name" class="form-control" placeholder="Ex: HP Financeiro">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Modelo</label>
+                        <input type="text" name="model" class="form-control" placeholder="Ex: LaserJet Pro M404dn">
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Setor / Departamento</label>
+                        <input type="text" name="sector" class="form-control" placeholder="Ex: Financeiro" value="Financeiro">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Community SNMP (Opcional)</label>
+                        <input type="text" name="snmp_community" class="form-control" placeholder="Padrão: public">
+                    </div>
+                </div>
+            </div>
+            <div class="ap-modal-foot">
+                <button type="button" class="btn btn-outline-secondary" id="btn-cancel-modal-add">Cancelar</button>
+                <button type="submit" class="btn btn-primary" id="btn-submit-add-printer">
+                    <i class="ti ti-check me-1"></i> Salvar e Testar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Insumos em Estoque (Armário TI) -->
+<div class="ap-modal-backdrop" id="modal-supplies">
+    <div class="ap-modal" style="max-width: 720px;">
+        <div class="ap-modal-head">
+            <h3 class="m-0 fw-bold fs-5"><i class="ti ti-package me-2 text-success"></i>Insumos em Estoque (Armário TI)</h3>
+            <button type="button" class="btn-close" id="btn-close-modal-supplies"></button>
+        </div>
+        <div class="ap-modal-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="text-muted small">Toners, cilindros e caixas coletoras disponíveis na TI.</span>
+                {% if can_manage %}
+                    <button type="button" class="btn btn-sm btn-outline-success" id="btn-new-supply">
+                        <i class="ti ti-plus me-1"></i> Novo Insumo
+                    </button>
+                {% endif %}
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle">
+                    <thead>
+                        <tr class="table-light">
+                            <th>Insumo</th>
+                            <th>Tipo</th>
+                            <th>Modelos Compatíveis</th>
+                            <th class="text-center">Qtd</th>
+                            <th class="text-center">Mín</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ap-supplies-tbody">
+                        {% for s in supplies %}
+                            <tr class="{{ s.is_low ? 'table-warning' : '' }}">
+                                <td class="fw-bold">{{ s.name }}</td>
+                                <td><span class="badge bg-light text-dark">{{ s.type }}</span></td>
+                                <td class="small text-muted">{{ s.compatible_models ?: '—' }}</td>
+                                <td class="text-center fw-bold">{{ s.quantity }}</td>
+                                <td class="text-center text-muted">{{ s.minimum_quantity }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-3">Nenhum insumo cadastrado.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="ap-modal-foot">
+            <button type="button" class="btn btn-secondary" id="btn-close-modal-supplies-foot">Fechar</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    const urls = {
+        data: '{{ urls.data }}',
+        action: '{{ urls.action }}',
+    };
+
+    const getCsrf = () => document.querySelector('meta[property="glpi:csrf_token"]')?.getAttribute('content') || '';
+
+    // Elementos DOM
+    const periodSelect = document.getElementById('ap-period-select');
+    const refreshBtn = document.getElementById('ap-btn-refresh');
+    const refreshIcon = document.getElementById('ap-refresh-icon');
+    const searchInput = document.getElementById('ap-search');
+    const tbody = document.getElementById('ap-printers-tbody');
+
+    const kpiPrintersCount = document.getElementById('kpi-printers-count');
+    const kpiPrintersNote = document.getElementById('kpi-printers-note');
+    const kpiTonersCount = document.getElementById('kpi-toners-count');
+    const kpiTonersNote = document.getElementById('kpi-toners-note');
+    const kpiVolumeVal = document.getElementById('kpi-volume-val');
+    const kpiVolumeNote = document.getElementById('kpi-volume-note');
+    const kpiSuppliesCount = document.getElementById('kpi-supplies-count');
+    const kpiSuppliesNote = document.getElementById('kpi-supplies-note');
+
+    // Modais
+    const modalAdd = document.getElementById('modal-add-printer');
+    const btnOpenAdd = document.getElementById('ap-btn-add-printer');
+    const btnCloseAdd = document.getElementById('btn-close-modal-add');
+    const btnCancelAdd = document.getElementById('btn-cancel-modal-add');
+    const formAdd = document.getElementById('form-add-printer');
+
+    const modalSupplies = document.getElementById('modal-supplies');
+    const cardSupplies = document.getElementById('card-supplies');
+    const btnCloseSupplies = document.getElementById('btn-close-modal-supplies');
+    const btnCloseSuppliesFoot = document.getElementById('btn-close-modal-supplies-foot');
+
+    let currentCriticalFilter = false;
+
+    // Abertura / Fechamento de Modais
+    if (btnOpenAdd) {
+        btnOpenAdd.addEventListener('click', () => modalAdd.classList.add('is-open'));
+    }
+    [btnCloseAdd, btnCancelAdd].forEach(btn => {
+        if (btn) btn.addEventListener('click', () => modalAdd.classList.remove('is-open'));
+    });
+
+    if (cardSupplies) {
+        cardSupplies.addEventListener('click', () => modalSupplies.classList.add('is-open'));
+    }
+    [btnCloseSupplies, btnCloseSuppliesFoot].forEach(btn => {
+        if (btn) btn.addEventListener('click', () => modalSupplies.classList.remove('is-open'));
+    });
+
+    // Filtro rápido de toners críticos ao clicar no card 2
+    const cardCritical = document.getElementById('card-critical');
+    if (cardCritical) {
+        cardCritical.addEventListener('click', () => {
+            currentCriticalFilter = !currentCriticalFilter;
+            cardCritical.style.outline = currentCriticalFilter ? '2px solid var(--ap-amber)' : 'none';
+            fetchData();
+        });
+    }
+
+    // Busca instantânea no client-side
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            const term = searchInput.value.toLowerCase().trim();
+            const rows = tbody.querySelectorAll('tr[data-search-text]');
+            rows.forEach(row => {
+                const match = !term || row.getAttribute('data-search-text').includes(term);
+                row.style.display = match ? '' : 'none';
+            });
+        });
+    }
+
+    // Mudança de Período
+    if (periodSelect) {
+        periodSelect.addEventListener('change', () => fetchData());
+    }
+
+    // Botão Atualizar
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            refreshIcon.classList.add('spin');
+            // Chama poll geral e depois atualiza dados
+            postAction('poll_all', {}).finally(() => {
+                fetchData().finally(() => refreshIcon.classList.remove('spin'));
+            });
+        });
+    }
+
+    // Envio do formulário de nova impressora
+    if (formAdd) {
+        formAdd.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const submitBtn = document.getElementById('btn-submit-add-printer');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="ti ti-refresh spin me-1"></i> Verificando...';
+
+            const formData = new FormData(formAdd);
+            formData.append('action', 'add_printer');
+            formData.append('ajax', '1');
+
+            fetch(urls.action, {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-Glpi-Csrf-Token': getCsrf(),
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.ok) throw new Error(data.message || 'Falha ao cadastrar');
+                modalAdd.classList.remove('is-open');
+                formAdd.reset();
+                if (window.glpi_toast_info) window.glpi_toast_info(data.message);
+                fetchData();
+            })
+            .catch(err => {
+                alert(err.message);
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="ti ti-check me-1"></i> Salvar e Testar';
+            });
+        });
+    }
+
+    // Polling individual de impressora
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn-poll-printer');
+        if (!btn) return;
+        const id = btn.getAttribute('data-id');
+        const icon = btn.querySelector('i');
+        if (icon) icon.classList.add('spin');
+
+        postAction('poll_printer', { id })
+            .then(data => {
+                if (window.glpi_toast_info) window.glpi_toast_info(data.message);
+                fetchData();
+            })
+            .catch(err => alert(err.message))
+            .finally(() => {
+                if (icon) icon.classList.remove('spin');
+            });
+    });
+
+    // Requisição assíncrona para atualizar dashboard
+    function fetchData() {
+        const days = periodSelect ? periodSelect.value : 7;
+        const url = `${urls.data}?days=${days}&critical_only=${currentCriticalFilter ? '1' : '0'}`;
+
+        return fetch(url, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.ok) return;
+            renderKpis(data.kpis);
+            renderPrinters(data.printers);
+        })
+        .catch(err => console.error('Erro ao atualizar Ativa Print:', err));
+    }
+
+    function renderKpis(k) {
+        if (!k) return;
+        if (kpiPrintersCount) kpiPrintersCount.textContent = k.printers.total;
+        if (kpiPrintersNote) kpiPrintersNote.innerHTML = `<b class="ap-text-green">${k.printers.note}</b>`;
+
+        if (kpiTonersCount) kpiTonersCount.textContent = k.toners_critical.count;
+        if (kpiTonersNote) kpiTonersNote.innerHTML = `<b class="ap-text-amber">${k.toners_critical.note}</b>`;
+
+        if (kpiVolumeVal) kpiVolumeVal.textContent = k.volume.formatted;
+        if (kpiVolumeNote) kpiVolumeNote.innerHTML = `<b class="ap-text-green">${k.volume.delta_text}</b>`;
+
+        if (kpiSuppliesCount) kpiSuppliesCount.textContent = k.supplies.total;
+        if (kpiSuppliesNote) kpiSuppliesNote.innerHTML = `<span class="ap-text-muted">${k.supplies.note}</span>`;
+    }
+
+    function renderPrinters(list) {
+        if (!tbody || !Array.isArray(list)) return;
+        if (list.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">Nenhuma impressora encontrada.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = list.map(p => `
+            <tr data-printer-id="${p.id}" data-search-text="${(p.name + ' ' + (p.model || '') + ' ' + p.ip + ' ' + (p.sector || '')).toLowerCase()}">
+                <td>
+                    <div class="ap-printer-name">
+                        <span class="ap-printer-icon"><i class="ti ti-printer"></i></span>
+                        <span>${p.model || p.name}</span>
+                    </div>
+                </td>
+                <td>
+                    <span class="font-monospace text-muted">${p.ip}</span>
+                </td>
+                <td>${p.sector || 'Geral'}</td>
+                <td>
+                    <span class="ap-badge-status ${p.status_class}">${p.status_label}</span>
+                </td>
+                <td>
+                    <div class="ap-level-cell">
+                        <div class="ap-level-header">
+                            <span>${p.toner_level !== null ? p.toner_level + '%' : '--'}</span>
+                        </div>
+                        <div class="ap-progress">
+                            <div class="ap-progress-fill ${p.toner_class}" style="width: ${p.toner_level !== null ? p.toner_level : 0}%;"></div>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <div class="ap-level-cell">
+                        <div class="ap-level-header">
+                            <span>${p.drum_level !== null ? p.drum_level + '%' : '--'}</span>
+                        </div>
+                        <div class="ap-progress">
+                            <div class="ap-progress-fill is-drum" style="width: ${p.drum_level !== null ? p.drum_level : 0}%;"></div>
+                        </div>
+                    </div>
+                </td>
+                <td style="text-align: right;">
+                    <button type="button" class="btn btn-sm btn-outline-primary btn-poll-printer" data-id="${p.id}" title="Consultar SNMP agora">
+                        <i class="ti ti-refresh"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function postAction(action, extra = {}) {
+        const formData = new FormData();
+        formData.append('action', action);
+        formData.append('ajax', '1');
+        for (const [k, v] of Object.entries(extra)) {
+            formData.append(k, v);
+        }
+
+        return fetch(urls.action, {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-Glpi-Csrf-Token': getCsrf(),
+            }
+        }).then(res => res.json());
+    }
+})();
+</script>
+

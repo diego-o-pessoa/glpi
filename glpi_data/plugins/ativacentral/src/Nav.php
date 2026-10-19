@@ -28,6 +28,7 @@ final class Nav
         'ativaguardian'  => 'ti ti-shield-check',
         'ativaramal'     => 'ti ti-phone',
         'ativarede'      => 'ti ti-network',
+        'ativaprint'     => 'ti ti-printer',
         'ativaremote'    => 'ti ti-screen-share',
         'ativaupdater'   => 'ti ti-refresh',
         'ativawallpaper' => 'ti ti-photo',

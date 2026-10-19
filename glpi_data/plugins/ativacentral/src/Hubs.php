@@ -396,6 +396,7 @@ final class Hubs
         $solutions = [];
         foreach ([
             'ativaguardian'  => ['Saúde do ambiente', 'Identifique máquinas sem contato ou com alertas técnicos.', 'ti ti-heart-rate-monitor', 'Ver alertas', ''],
+            'ativaprint'     => ['Parque de impressão', 'Acompanhe status, toners e volumetria das impressoras.', 'ti ti-printer', 'Abrir Ativa Print', ''],
             'ativarede'      => ['Planta e rede', 'Veja em que mesa e em qual porta de switch cada máquina está.', 'ti ti-layout-board', 'Abrir planta', 'planta'],
             'ativaremote'    => ['Acesso remoto', 'Conecte-se à tela de um computador para dar suporte.', 'ti ti-screen-share', 'Abrir acesso remoto', ''],
             'ativaupdater'   => ['Atualizações do agente', 'Acompanhe a versão instalada e as falhas de atualização.', 'ti ti-refresh', 'Ver atualizações', ''],
