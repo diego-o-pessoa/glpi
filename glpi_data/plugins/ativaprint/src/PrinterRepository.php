@@ -669,8 +669,8 @@ final class PrinterRepository
                         }
 
                         // Determina o tipo do insumo pela propriedade
-                        // IMPORTANTE: checar 'drum' antes de 'black', pois 'drumblack' contém a palavra 'black'
-                        if (str_contains($prop, 'drum')) {
+                        // IMPORTANTE: checar 'drum'/imaging antes de 'black', pois 'drumblack' contém a palavra 'black'
+                        if (str_contains($prop, 'drum') || str_contains($prop, 'imaging') || str_contains($prop, 'cilindro') || str_contains($prop, 'opc')) {
                             $drumLevel = ($drumLevel === null) ? $lvl : min($drumLevel, $lvl);
                             $suppliesList[] = [
                                 'type'    => 'drum',
