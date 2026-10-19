@@ -108,12 +108,39 @@ final class PrinterRepository
         $toner = $row['toner_level'] !== null ? (int) $row['toner_level'] : null;
         $drum = $row['drum_level'] !== null ? (int) $row['drum_level'] : null;
 
+        $modelLower = mb_strtolower((string) ($row['model'] ?? '') . ' ' . (string) ($row['name'] ?? ''));
+        // Modelos HP All-in-One conhecidos (sem tambor/cilindro separado)
+        $hasIntegratedDrum = str_contains($modelLower, 'm252')
+            || str_contains($modelLower, 'laserjet pro m2')
+            || str_contains($modelLower, 'laserjet pro m1')
+            || str_contains($modelLower, 'laserjet p1')
+            || str_contains($modelLower, 'laserjet pro 400 color');
+
+        $drumLabel = '--';
+        $drumTitle = 'Nível não disponível via SNMP';
+        if ($drum !== null) {
+            $drumLabel = $drum . '%';
+            $drumTitle = 'Cilindro: ' . $drum . '%';
+        } elseif ($hasIntegratedDrum) {
+            $drumLabel = 'N/A';
+            $drumTitle = 'Cilindro integrado ao toner (All-in-One)';
+        }
+
         $tonerClass = 'is-good';
         if ($toner !== null) {
             if ($toner <= PrintConfig::int('toner_critical')) {
                 $tonerClass = 'is-critical';
             } elseif ($toner <= PrintConfig::int('toner_warning')) {
                 $tonerClass = 'is-warning';
+            }
+        }
+
+        $drumClass = 'is-good';
+        if ($drum !== null) {
+            if ($drum <= PrintConfig::int('toner_critical')) {
+                $drumClass = 'is-critical';
+            } elseif ($drum <= PrintConfig::int('toner_warning')) {
+                $drumClass = 'is-warning';
             }
         }
 
@@ -133,7 +160,9 @@ final class PrinterRepository
             'status_label' => $label,
             'status_class' => $badgeClass,
             'toner_class'  => $tonerClass,
-            'drum_class'   => 'is-good',
+            'drum_class'   => $drumClass,
+            'drum_label'   => $drumLabel,
+            'drum_title'   => $drumTitle,
             'supplies_list'=> $suppliesList,
             'last_poll_fmt'=> !empty($row['last_poll']) ? date('d/m/Y H:i', strtotime((string) $row['last_poll'])) : '—',
         ];
@@ -283,8 +312,10 @@ final class PrinterRepository
         if ($delta !== null) {
             $signal = $delta >= 0 ? '+' : '';
             $deltaFormatted = $signal . str_replace('.', ',', (string) $delta) . '% em relação ' . $periodLabel;
+        } elseif ($volumeCurrent > 0) {
+            $deltaFormatted = 'páginas impressas no período';
         } else {
-            $deltaFormatted = $volumeCurrent > 0 ? 'páginas acumuladas' : 'sem dados de impressão';
+            $deltaFormatted = 'início do monitoramento de páginas';
         }
 
         // 3. Insumos em Estoque
@@ -302,9 +333,11 @@ final class PrinterRepository
             }
         }
 
-        $suppliesNote = $lowStockCount > 0
-            ? ($lowStockCount === 1 ? '1 modelo atingiu estoque mínimo' : $lowStockCount . ' modelos abaixo do mínimo')
-            : 'toners e peças disponíveis';
+        $suppliesNote = $totalSupplies > 0
+            ? ($lowStockCount > 0
+                ? ($lowStockCount === 1 ? '1 modelo atingiu estoque mínimo' : $lowStockCount . ' modelos abaixo do mínimo')
+                : 'toners e peças disponíveis')
+            : '0 insumos cadastrados no armário';
 
         return [
             'printers' => [
@@ -338,13 +371,22 @@ final class PrinterRepository
     }
 
     /**
-     * Calcula total de páginas impressas no intervalo especificado.
+     * Calcula total de páginas impressas no intervalo especificado para as impressoras ativas.
      */
     private static function calculatePeriodVolume(int $days, int $offsetDays = 0): int
     {
         global $DB;
 
         if (!$DB->tableExists(self::COUNTERS_TABLE)) {
+            return 0;
+        }
+
+        $activePrinters = [];
+        foreach ($DB->request(['SELECT' => ['id'], 'FROM' => self::TABLE, 'WHERE' => ['is_active' => 1]]) as $pRow) {
+            $activePrinters[] = (int) $pRow['id'];
+        }
+
+        if ($activePrinters === []) {
             return 0;
         }
 
@@ -358,6 +400,7 @@ final class PrinterRepository
             'SELECT'   => ['printers_id'],
             'FROM'     => self::COUNTERS_TABLE,
             'WHERE'    => [
+                'printers_id' => $activePrinters,
                 ['date' => ['>=', $startDateStr]],
                 ['date' => ['<=', $endDateStr]],
             ],
@@ -394,16 +437,6 @@ final class PrinterRepository
                     $volume += $diff;
                 }
             }
-        }
-
-        // Se ainda não há contadores históricos acumulados, soma o contador real das impressoras ativas
-        if ($volume === 0 && $offsetDays === 0) {
-            $sumRow = $DB->request([
-                'SELECT' => [new QueryExpression('SUM(page_counter) AS total_pages')],
-                'FROM'   => self::TABLE,
-                'WHERE'  => ['is_active' => 1],
-            ])->current();
-            $volume = (int) ($sumRow['total_pages'] ?? 0);
         }
 
         return $volume;
@@ -667,6 +700,34 @@ final class PrinterRepository
                 ]);
             }
 
+            // Remove contadores órfãos de impressoras inexistentes ou de seeds antigos
+            if ($DB->tableExists(self::COUNTERS_TABLE)) {
+                $validPrinterIds = [];
+                foreach ($DB->request(['SELECT' => ['id'], 'FROM' => self::TABLE, 'WHERE' => ['is_active' => 1]]) as $pRow) {
+                    $validPrinterIds[] = (int) $pRow['id'];
+                }
+                if ($validPrinterIds !== []) {
+                    $DB->delete(self::COUNTERS_TABLE, [
+                        'NOT' => ['printers_id' => $validPrinterIds],
+                    ]);
+                }
+            }
+
+            // Remove registros de demonstração de insumos
+            if ($DB->tableExists(self::SUPPLIES_TABLE)) {
+                $DB->delete(self::SUPPLIES_TABLE, [
+                    'name' => [
+                        'Toner HP CF258A (Preto)',
+                        'Toner Samsung CLT-K606S',
+                        'Toner Brother TN-3472',
+                        'Cilindro Brother DR-3440',
+                        'Toner Canon GPR-53',
+                        'Caixa Coletora Ricoh Waste Box',
+                        'Toner Kyocera TK-1175',
+                    ],
+                ]);
+            }
+
             self::syncSuppliesFromGlpi();
         } else {
             self::seedInitialDataIfEmpty();
@@ -839,6 +900,11 @@ final class PrinterRepository
         global $DB;
 
         if (!$DB->tableExists(self::TABLE)) {
+            return;
+        }
+
+        // Se o GLPI já possui impressoras reais cadastradas, nunca executa seed
+        if ($DB->tableExists('glpi_printers') && countElementsInTable('glpi_printers', ['is_deleted' => 0, 'is_template' => 0]) > 0) {
             return;
         }
 

@@ -28,10 +28,16 @@ final class Poller
     private const OID_ERROR_STATE     = '1.3.6.1.2.1.25.3.5.1.2.1';    // hrPrinterDetectedErrorState
     private const OID_LIFE_COUNT      = '1.3.6.1.2.1.43.10.2.1.4.1.1'; // prtMarkerLifeCount
     private const OID_SERIAL          = '1.3.6.1.2.1.43.5.1.1.17.1';   // prtGeneralSerialNumber
-    private const OID_SUPPLY_TYPE     = '1.3.6.1.2.1.43.11.1.1.5.1';
-    private const OID_SUPPLY_DESCR    = '1.3.6.1.2.1.43.11.1.1.6.1';
-    private const OID_SUPPLY_MAX      = '1.3.6.1.2.1.43.11.1.1.8.1';
-    private const OID_SUPPLY_LEVEL    = '1.3.6.1.2.1.43.11.1.1.9.1';
+    private const OID_SUPPLY_TYPE     = '1.3.6.1.2.1.43.11.1.1.5';
+    private const OID_SUPPLY_DESCR    = '1.3.6.1.2.1.43.11.1.1.6';
+    private const OID_SUPPLY_MAX      = '1.3.6.1.2.1.43.11.1.1.8';
+    private const OID_SUPPLY_LEVEL    = '1.3.6.1.2.1.43.11.1.1.9';
+
+    // OIDs proprietárias para leitura do cilindro/imaging unit
+    private const OID_BROTHER_DRUM_1  = '1.3.6.1.4.1.2435.2.3.9.4.2.1.5.5.11.0';
+    private const OID_BROTHER_DRUM_2  = '1.3.6.1.4.1.2435.2.3.9.4.2.1.5.5.8.0';
+    private const OID_BROTHER_DRUM_3  = '1.3.6.1.4.1.2435.2.3.9.4.2.1.5.5.1.0';
+    private const OID_SAMSUNG_DRUM    = '1.3.6.1.4.1.236.11.5.11.55.11.1.2.1.0';
 
     /** prtMarkerSuppliesType -> categoria usada na tela. */
     private const SUPPLY_KIND = [
@@ -186,9 +192,12 @@ final class Poller
             return ['status' => 'offline', 'status_message' => 'Sem resposta na rede.'];
         }
 
+        $modelStr = (string) ($printer['model'] ?? $printer['name'] ?? '');
+        $sysDescr = self::clean((string) ($base[self::OID_SYS_DESCR] ?? ''), 255);
+
         $supplies = [];
         try {
-            $supplies = self::readSupplies($client);
+            $supplies = self::readSupplies($client, $modelStr, $sysDescr);
         } catch (RuntimeException $exception) {
             // Status ja veio; so os niveis ficam sem atualizar nesta rodada.
         }
@@ -197,7 +206,7 @@ final class Poller
         $fields = [
             'status'         => $status,
             'status_message' => $message,
-            'sys_descr'      => self::clean((string) ($base[self::OID_SYS_DESCR] ?? ''), 255),
+            'sys_descr'      => $sysDescr,
         ];
         $counter = $base[self::OID_LIFE_COUNT] ?? null;
         if (is_int($counter) && $counter > 0) {
@@ -212,6 +221,21 @@ final class Poller
             $fields['toner_level'] = self::lowest($supplies, 'toner');
             $fields['drum_level']  = self::lowest($supplies, 'drum');
             $fields['waste_level'] = self::lowest($supplies, 'waste');
+        }
+
+        // Se ainda não temos nível de cilindro pela MIB padrão, tenta as OIDs proprietárias do fabricante
+        if (!isset($fields['drum_level']) || $fields['drum_level'] === null) {
+            $vendorDrum = self::queryVendorDrum($client, $modelStr, $sysDescr);
+            if ($vendorDrum !== null) {
+                $fields['drum_level'] = $vendorDrum;
+                $supplies[] = [
+                    'name'  => 'Unidade de Imagem / Cilindro',
+                    'kind'  => 'drum',
+                    'level' => $vendorDrum,
+                    'some'  => false,
+                ];
+                $fields['supplies'] = json_encode($supplies, JSON_UNESCAPED_UNICODE);
+            }
         }
         return $fields;
     }
@@ -254,29 +278,34 @@ final class Poller
     }
 
     /** @return list<array{name: string, kind: string, level: int|null, some: bool}> */
-    private static function readSupplies(SnmpClient $client): array
+    private static function readSupplies(SnmpClient $client, string $model = '', string $descr = ''): array
     {
-        $names = self::byIndex($client->walk(self::OID_SUPPLY_DESCR));
+        $names = self::bySubId($client->walk(self::OID_SUPPLY_DESCR), self::OID_SUPPLY_DESCR);
         if ($names === []) {
             return [];
         }
-        $types = self::byIndex($client->walk(self::OID_SUPPLY_TYPE));
-        $max = self::byIndex($client->walk(self::OID_SUPPLY_MAX));
-        $levels = self::byIndex($client->walk(self::OID_SUPPLY_LEVEL));
+        $types = self::bySubId($client->walk(self::OID_SUPPLY_TYPE), self::OID_SUPPLY_TYPE);
+        $max = self::bySubId($client->walk(self::OID_SUPPLY_MAX), self::OID_SUPPLY_MAX);
+        $levels = self::bySubId($client->walk(self::OID_SUPPLY_LEVEL), self::OID_SUPPLY_LEVEL);
 
         $out = [];
-        foreach ($names as $index => $rawName) {
+        foreach ($names as $subKey => $rawName) {
             $name = self::clean((string) $rawName, 80);
-            $type = (int) ($types[$index] ?? 0);
-            $capacity = (int) ($max[$index] ?? -2);
-            $level = (int) ($levels[$index] ?? -2);
+            $type = (int) ($types[$subKey] ?? 0);
+            $capacity = (int) ($max[$subKey] ?? -2);
+            $level = (int) ($levels[$subKey] ?? -2);
 
             $percent = null;
             if ($capacity > 0 && $level >= 0) {
                 $percent = (int) max(0, min(100, round($level * 100 / $capacity)));
+            } elseif ($capacity === -2 && $level >= 0 && $level <= 100) {
+                $percent = $level;
+            } elseif ($level >= 0 && $level <= 100 && $capacity === 100) {
+                $percent = $level;
             }
+
             $out[] = [
-                'name'  => $name !== '' ? $name : 'Suprimento ' . $index,
+                'name'  => $name !== '' ? $name : 'Suprimento ' . $subKey,
                 'kind'  => self::kind($type, $name),
                 'level' => $percent,
                 // -3 = "ainda tem" (o equipamento nao sabe quanto).
@@ -286,7 +315,76 @@ final class Poller
                 break;
             }
         }
+
+        // Se nenhum cilindro foi detectado pela RFC 3805, tenta OIDs de fabricante
+        $hasDrum = false;
+        foreach ($out as $item) {
+            if ($item['kind'] === 'drum' && $item['level'] !== null) {
+                $hasDrum = true;
+                break;
+            }
+        }
+
+        if (!$hasDrum) {
+            $drumLevel = self::queryVendorDrum($client, $model, $descr);
+            if ($drumLevel !== null) {
+                $out[] = [
+                    'name'  => 'Unidade de Imagem / Cilindro',
+                    'kind'  => 'drum',
+                    'level' => $drumLevel,
+                    'some'  => false,
+                ];
+            }
+        }
+
         return $out;
+    }
+
+    /**
+     * Consulta OIDs proprietárias de fabricante para cilindro/imaging unit (Brother e Samsung).
+     */
+    private static function queryVendorDrum(SnmpClient $client, string $model, string $descr): ?int
+    {
+        $ident = mb_strtolower($model . ' ' . $descr);
+
+        // Brother (MFC, DCP, HL)
+        if (str_contains($ident, 'brother') || str_contains($ident, 'mfc') || str_contains($ident, 'dcp') || str_contains($ident, 'hl-')) {
+            try {
+                $brotherOids = [
+                    self::OID_BROTHER_DRUM_1,
+                    self::OID_BROTHER_DRUM_2,
+                    self::OID_BROTHER_DRUM_3,
+                ];
+                $vals = $client->get($brotherOids);
+                foreach ($brotherOids as $oid) {
+                    if (isset($vals[$oid]) && is_numeric($vals[$oid])) {
+                        $v = (int) $vals[$oid];
+                        if ($v >= 0 && $v <= 100) {
+                            return $v;
+                        }
+                    }
+                }
+            } catch (Throwable) {
+                // silencia falha
+            }
+        }
+
+        // Samsung (ProXpress, MultiXpress, M4080, etc.)
+        if (str_contains($ident, 'samsung') || str_contains($ident, 'm4080') || str_contains($ident, 'proxpress') || str_contains($ident, 'multixpress')) {
+            try {
+                $vals = $client->get([self::OID_SAMSUNG_DRUM]);
+                if (isset($vals[self::OID_SAMSUNG_DRUM]) && is_numeric($vals[self::OID_SAMSUNG_DRUM])) {
+                    $v = (int) $vals[self::OID_SAMSUNG_DRUM];
+                    if ($v >= 0 && $v <= 100) {
+                        return $v;
+                    }
+                }
+            } catch (Throwable) {
+                // silencia falha
+            }
+        }
+
+        return null;
     }
 
     private static function kind(int $type, string $name): string
@@ -309,16 +407,19 @@ final class Poller
 
     /**
      * @param array<string, int|string> $walk
-     * @return array<int, int|string> indice final do OID => valor
+     * @return array<string, int|string> subcaminho relativo ao OID base => valor
      */
-    private static function byIndex(array $walk): array
+    private static function bySubId(array $walk, string $baseOid): array
     {
+        $prefix = rtrim($baseOid, '.') . '.';
+        $prefixLen = strlen($prefix);
         $out = [];
         foreach ($walk as $oid => $value) {
-            $parts = explode('.', (string) $oid);
-            $out[(int) end($parts)] = $value;
+            $key = str_starts_with((string) $oid, $prefix)
+                ? substr((string) $oid, $prefixLen)
+                : (string) $oid;
+            $out[$key] = $value;
         }
-        ksort($out);
         return $out;
     }
 

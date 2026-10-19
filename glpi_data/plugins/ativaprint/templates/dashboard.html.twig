@@ -669,12 +669,12 @@
                                 </div>
                             </td>
                             <td>
-                                <div class="ap-level-cell">
+                                <div class="ap-level-cell" title="{{ p.drum_title|default('') }}">
                                     <div class="ap-level-header">
-                                        <span>{{ p.drum_level is not null ? (p.drum_level ~ '%') : '--' }}</span>
+                                        <span>{{ p.drum_label|default(p.drum_level is not null ? (p.drum_level ~ '%') : '--') }}</span>
                                     </div>
                                     <div class="ap-progress">
-                                        <div class="ap-progress-fill is-drum" style="width: {{ p.drum_level is not null ? p.drum_level : 0 }}%;"></div>
+                                        <div class="ap-progress-fill is-drum {{ p.drum_class|default('') }}" style="width: {{ p.drum_level is not null ? p.drum_level : 0 }}%;"></div>
                                     </div>
                                 </div>
                             </td>
@@ -1015,12 +1015,12 @@
                     </div>
                 </td>
                 <td>
-                    <div class="ap-level-cell">
+                    <div class="ap-level-cell" title="${p.drum_title || ''}">
                         <div class="ap-level-header">
-                            <span>${p.drum_level !== null ? p.drum_level + '%' : '--'}</span>
+                            <span>${p.drum_label || (p.drum_level !== null ? p.drum_level + '%' : '--')}</span>
                         </div>
                         <div class="ap-progress">
-                            <div class="ap-progress-fill is-drum" style="width: ${p.drum_level !== null ? p.drum_level : 0}%;"></div>
+                            <div class="ap-progress-fill is-drum ${p.drum_class || ''}" style="width: ${p.drum_level !== null ? p.drum_level : 0}%;"></div>
                         </div>
                     </div>
                 </td>
