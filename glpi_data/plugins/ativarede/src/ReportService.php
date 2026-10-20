@@ -117,6 +117,8 @@ final class ReportService
             'link'             => $link,
             'ip'               => self::text($network['ip'] ?? '', 64),
             'mac'              => strtoupper(self::text($network['mac'] ?? '', 32)),
+            'gateway_ip'       => self::text($network['gateway_ip'] ?? '', 64),
+            'gateway_mac'      => strtoupper(self::text($network['gateway_mac'] ?? '', 32)),
             'lldp'             => $lldp,
             'monitors'         => $cleanMonitors,
             'monitors_known'   => $monitorsKnown,
@@ -170,6 +172,26 @@ final class ReportService
             'guardian_version' => $report['guardian_version'],
             'last_report'      => $now,
         ];
+        if ($DB->fieldExists(Settings::TABLE_MACHINES, 'gateway_ip')) {
+            $fields['gateway_ip'] = $report['gateway_ip'];
+        }
+        if ($DB->fieldExists(Settings::TABLE_MACHINES, 'gateway_mac')) {
+            $fields['gateway_mac'] = $report['gateway_mac'];
+        }
+        if ($DB->fieldExists(Settings::TABLE_MACHINES, 'last_known_branch')) {
+            $currentBranch = Branches::resolveCurrentBranch(
+                $report['gateway_mac'],
+                $report['gateway_ip'],
+                $report['ip'],
+                $computersId
+            );
+            if ($currentBranch !== '') {
+                $fields['last_known_branch'] = $currentBranch;
+            }
+        }
+        if ($report['gateway_mac'] !== '' && $DB->tableExists(Settings::TABLE_NETWORKS)) {
+            Branches::registerDiscoveredNetwork($report['gateway_ip'], $report['gateway_mac']);
+        }
         $hasSchema = $DB->fieldExists(Settings::TABLE_MACHINES, 'monitors_seen');
         if ($hasSchema) {
             $fields['diagnostic'] = $report['diagnostic'];

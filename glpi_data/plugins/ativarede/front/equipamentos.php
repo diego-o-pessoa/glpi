@@ -42,7 +42,27 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (($_POST['action'] ?? '') === 'branches') {
         $result = Branches::save((string) ($_POST['rules'] ?? ''));
         Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);
-        Html::redirect($selfUrl);
+        Html::redirect($selfUrl . '#branches');
+    }
+    // Associar roteador/rede local -> filial por MAC
+    if (($_POST['action'] ?? '') === 'save_network') {
+        Schema::upgrade();
+        $gwIp = (string) ($_POST['gateway_ip'] ?? '');
+        $gwMac = (string) ($_POST['gateway_mac'] ?? '');
+        $name = trim((string) ($_POST['branch_name'] ?? ''));
+        if ($name === '__custom__') {
+            $name = trim((string) ($_POST['custom_branch_name'] ?? ''));
+        }
+        $result = Branches::saveNetwork($gwIp, $gwMac, $name);
+        Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);
+        Html::redirect($selfUrl . '#branches');
+    }
+    if (($_POST['action'] ?? '') === 'delete_network') {
+        Schema::upgrade();
+        $id = (int) ($_POST['id'] ?? 0);
+        $result = Branches::deleteNetwork($id);
+        Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);
+        Html::redirect($selfUrl . '#branches');
     }
     // "Nao e switch" / desfazer.
     if (in_array($_POST['action'] ?? '', ['ignore_switch', 'restore_switch'], true)) {
@@ -65,6 +85,7 @@ foreach ($machines as &$machine) {
     $desk = Inventory::deskOf($machine);
     $machine['desk'] = $desk['name'] ?? '';
     $machine['branch'] = Branches::ofMachine($machine, $allSwitches);
+    $machine['is_roaming'] = Branches::isRoaming($machine, $machine['branch']);
     // Nome principal da linha: a pessoa; sem pessoa, a maquina.
     $machine['title'] = $machine['person'] !== '' ? $machine['person'] : ($machine['computer'] ?: $machine['hostname']);
 }
@@ -105,19 +126,21 @@ $asset = static fn(string $file): string => $CFG_GLPI['root_doc'] . '/plugins/at
 
 Html::header('Ativa Rede - Equipamentos', '', 'ativarede', 'equipamentos');
 TemplateRenderer::getInstance()->display('@ativarede/equipamentos.html.twig', [
-    'machines'   => $machines,
-    'branches'   => $branches,
-    'counts'     => $counts,
-    'branch_rules' => Branches::rulesText(),
-    'today'      => date('d/m/Y'),
-    'monitors'   => Inventory::monitors(),
-    'missing'    => Inventory::guardianWithoutReport(),
-    'switches'   => $switches,
-    'ignored_switches' => Inventory::ignoredSwitches(),
-    'self_url'   => $selfUrl,
-    'can_manage' => PluginAtivaredeProfile::canManage(),
+    'machines'            => $machines,
+    'branches'            => $branches,
+    'counts'              => $counts,
+    'branch_rules'        => Branches::rulesText(),
+    'discovered_networks' => Branches::discoveredNetworks(),
+    'known_branches'      => Branches::KNOWN_BRANCHES,
+    'today'               => date('d/m/Y'),
+    'monitors'            => Inventory::monitors(),
+    'missing'             => Inventory::guardianWithoutReport(),
+    'switches'            => $switches,
+    'ignored_switches'    => Inventory::ignoredSwitches(),
+    'self_url'            => $selfUrl,
+    'can_manage'          => PluginAtivaredeProfile::canManage(),
     // Data do arquivo: CSS/JS novos chegam sem subir a versao do plugin.
-    'css_url'    => $asset('css/ativarede.css'),
-    'js_url'     => $asset('js/equipamentos.js'),
+    'css_url'             => $asset('css/ativarede.css'),
+    'js_url'              => $asset('js/equipamentos.js'),
 ]);
 Html::footer();

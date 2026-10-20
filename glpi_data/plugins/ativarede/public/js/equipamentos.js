@@ -38,6 +38,15 @@
 
     function openFromHash() {
         var hash = (location.hash || '').replace('#', '');
+        if (hash === 'branches' || hash === 'ar-branch-rules') {
+            showTab('maquinas');
+            var panel = document.getElementById('ar-branch-rules');
+            if (panel) {
+                panel.hidden = false;
+                panel.scrollIntoView({ block: 'nearest' });
+            }
+            return;
+        }
         if (/^machine-\d+$/.test(hash)) {
             // Volta de "salvar nome": mostra a linha, mesmo se um filtro a escondia.
             showTab('maquinas');
@@ -162,6 +171,23 @@
         b.addEventListener('click', function () {
             var target = document.querySelector(b.getAttribute('data-ar-toggle'));
             if (target) { target.hidden = !target.hidden; }
+        });
+    });
+
+    // Select de filial na tabela de roteadores/redes: alterna campo de texto customizado
+    all('select[data-ar-branch-select]').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+            var form = sel.closest('form');
+            if (!form) { return; }
+            var custom = form.querySelector('input[data-ar-branch-custom]');
+            if (custom) {
+                var isCustom = sel.value === '__custom__';
+                custom.style.display = isCustom ? 'block' : 'none';
+                if (isCustom) {
+                    custom.value = '';
+                    custom.focus();
+                }
+            }
         });
     });
 

@@ -72,29 +72,118 @@
             </div>
 
             {% if can_manage %}
-                <form method="post" action="{{ self_url }}" class="ar-eq-rules" id="ar-branch-rules" hidden>
-                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="branches">
-                    <div class="row g-3 align-items-start">
-                        <div class="col-md-5">
-                            <label class="form-label" for="ar-rules-text">Uma rede por linha</label>
-                            <textarea class="form-control font-monospace" id="ar-rules-text" name="rules" rows="4" placeholder="192.168.80 = Matriz">{{ branch_rules }}</textarea>
+                <div class="ar-eq-rules" id="ar-branch-rules" hidden>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h4 class="mb-0 d-flex align-items-center"><i class="ti ti-network me-2 text-primary"></i>Filiais por rede</h4>
+                            <div class="text-muted small">
+                                Identifique a filial de cada roteador pelo MAC físico. Como Limeira, Campo Grande e Londrina usam a mesma faixa de IP (<code>192.168.0.1</code>), o MAC do roteador garante que cada máquina fique na sua filial correta.
+                            </div>
                         </div>
-                        <div class="col-md-7 small text-muted">
-                            <p class="mb-1">A filial de cada máquina sai, nesta ordem:</p>
-                            <ol class="mb-2 ps-3">
-                                <li>da rede do <strong>switch</strong> onde ela está ligada (ou do IP da própria máquina, no Wi-Fi);</li>
-                                <li>da <strong>entidade</strong> ou da <strong>localização</strong> do computador no GLPI;</li>
-                                <li>senão, <strong>Sem filial</strong>.</li>
-                            </ol>
-                            <p class="mb-0">Exemplo: <code>192.168.80 = Matriz</code> vale para todo IP 192.168.80.x.</p>
-                        </div>
+                        <button type="button" class="btn btn-sm btn-ghost-secondary" data-ar-toggle="#ar-branch-rules" title="Fechar painel"><i class="ti ti-x"></i></button>
                     </div>
-                    <div class="d-flex gap-2 mt-2">
-                        <button type="submit" class="btn btn-sm btn-primary"><i class="ti ti-device-floppy me-1"></i>Salvar</button>
-                        <button type="button" class="btn btn-sm btn-ghost-secondary" data-ar-toggle="#ar-branch-rules">Cancelar</button>
+
+                    <div class="table-responsive mb-3">
+                        <table class="table table-vcenter card-table table-striped table-hover bg-white border rounded">
+                            <thead>
+                                <tr>
+                                    <th>Rede (gateway)</th>
+                                    <th>MAC do roteador</th>
+                                    <th>Máquinas</th>
+                                    <th>Filial</th>
+                                    <th class="text-end" style="width: 120px;">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for net in discovered_networks %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <i class="ti ti-router text-muted"></i>
+                                            <strong class="font-monospace">{{ net.gateway_ip ?: '—' }}</strong>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <code class="font-monospace user-select-all">{{ net.gateway_mac }}</code>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-blue-lt">{{ net.machine_count }} máquina(s)</span>
+                                        {% if net.sample_machines %}
+                                            <div class="text-muted small text-truncate mt-1" style="max-width: 280px;" title="Máquinas nesta rede: {{ net.sample_machines }}">
+                                                {{ net.sample_machines }}
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <form method="post" action="{{ self_url }}" class="d-flex gap-2 align-items-center" id="net-form-{{ loop.index }}">
+                                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="action" value="save_network">
+                                            <input type="hidden" name="gateway_ip" value="{{ net.gateway_ip }}">
+                                            <input type="hidden" name="gateway_mac" value="{{ net.gateway_mac }}">
+                                            <select name="branch_name" class="form-select form-select-sm" style="min-width: 180px;" data-ar-branch-select>
+                                                <option value="">-- Escolher filial --</option>
+                                                {% for kb in known_branches %}
+                                                    <option value="{{ kb }}" {% if net.branch_name == kb %}selected{% endif %}>{{ kb }}</option>
+                                                {% endfor %}
+                                                <option value="__custom__" {% if net.branch_name and net.branch_name not in known_branches %}selected{% endif %}>Outro nome...</option>
+                                            </select>
+                                            <input type="text" name="custom_branch_name" class="form-control form-control-sm" style="min-width: 130px; {% if net.branch_name in known_branches or not net.branch_name %}display: none;{% endif %}" placeholder="Nome da filial" value="{% if net.branch_name not in known_branches %}{{ net.branch_name }}{% endif %}" data-ar-branch-custom>
+                                        </form>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="d-inline-flex gap-1">
+                                            <button type="submit" form="net-form-{{ loop.index }}" class="btn btn-sm btn-primary" title="Salvar filial para este roteador">
+                                                <i class="ti ti-check me-1"></i>Salvar
+                                            </button>
+                                            {% if net.is_saved and net.id > 0 %}
+                                                <form method="post" action="{{ self_url }}" class="d-inline" onsubmit="return confirm('Remover associação deste roteador?');">
+                                                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                                                    <input type="hidden" name="action" value="delete_network">
+                                                    <input type="hidden" name="id" value="{{ net.id }}">
+                                                    <button type="submit" class="btn btn-sm btn-ghost-danger" title="Remover"><i class="ti ti-trash"></i></button>
+                                                </form>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-3">
+                                        Nenhum roteador reportado com MAC ainda. Assim que as máquinas enviarem o relatório com o Ativa Guardian, aparecerão aqui automaticamente.
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
-                </form>
+
+                    {# Regras de IP para faixas exclusivas #}
+                    <details class="mt-2 border rounded p-2 bg-white">
+                        <summary class="cursor-pointer text-muted small fw-bold">
+                            <i class="ti ti-adjustments-alt me-1"></i>Regras gerais por faixa de IP (redes com IP exclusivo: Matriz, Uberlândia, Araçatuba, Ribeirão Preto, Cuiabá)
+                        </summary>
+                        <form method="post" action="{{ self_url }}" class="mt-3">
+                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="branches">
+                            <div class="row g-3 align-items-start">
+                                <div class="col-md-5">
+                                    <label class="form-label small" for="ar-rules-text">Uma rede por linha (prefixo = Filial)</label>
+                                    <textarea class="form-control font-monospace form-control-sm" id="ar-rules-text" name="rules" rows="5" placeholder="192.168.80 = Matriz&#10;192.168.200 = Uberlandia">{{ branch_rules }}</textarea>
+                                </div>
+                                <div class="col-md-7 small text-muted">
+                                    <p class="mb-1">Ordem de prioridade para identificar a filial:</p>
+                                    <ol class="mb-2 ps-3">
+                                        <li><strong>MAC do roteador</strong> (definido na tabela acima — resolve duplicidades de 192.168.0.1);</li>
+                                        <li><strong>Switch</strong> onde o cabo está ligado ou faixa de IP exclusiva;</li>
+                                        <li><strong>Entidade ou localização</strong> do GLPI;</li>
+                                        <li><strong>Última filial conhecida</strong> (quando em trânsito ou home office).</li>
+                                    </ol>
+                                    <button type="submit" class="btn btn-sm btn-secondary"><i class="ti ti-device-floppy me-1"></i>Salvar regras de IP</button>
+                                </div>
+                            </div>
+                        </form>
+                    </details>
+                </div>
             {% endif %}
 
             {% for b in branches %}
@@ -123,7 +212,7 @@
                                     data-online="{{ m.online ? '1' : '0' }}"
                                     data-nodesk="{{ m.desk ? '0' : '1' }}"
                                     data-diag="{{ m.diagnostic ? '1' : '0' }}"
-                                    data-search="{{ [m.title, m.person, m.user_auto, m.user_vpn, m.vpn_profile, m.user, m.group, m.computer, m.hostname, m.desk, m.ip, m.switch, m.port, monitors_text]|join(' ')|lower }}">
+                                    data-search="{{ [m.title, m.person, m.user_auto, m.user_vpn, m.vpn_profile, m.user, m.group, m.computer, m.hostname, m.desk, m.ip, m.gateway_ip, m.gateway_mac, m.switch, m.port, monitors_text]|join(' ')|lower }}">
                                     <td class="ar-eq-who">
                                         <div class="ar-eq-person">
                                             <span class="ar-dot {{ m.online ? 'is-on' : 'is-off' }}" title="{{ m.online ? 'Ligada agora' : 'Sem contato agora' ~ (m.last_contact ? ' (último: ' ~ m.last_contact ~ ')' : '') }}"></span>
@@ -175,6 +264,11 @@
                                         <div class="ar-eq-sub">
                                             {%- if m.link == 'wifi' %}<i class="ti ti-wifi"></i> Wi-Fi{% elseif m.link == 'wired' %}<i class="ti ti-plug"></i> Cabo{% elseif m.link == 'none' %}Sem rede{% endif -%}
                                             {%- if m.ip %} · <span class="font-monospace">{{ m.ip }}</span>{% endif -%}
+                                            {%- if m.is_roaming %}
+                                                <span class="badge bg-purple-lt ms-1" title="Em trânsito / Home office (Gateway: {{ m.gateway_ip ?: 'Desconhecido' }}{{ m.gateway_mac ? ' · MAC: ' ~ m.gateway_mac : '' }})"><i class="ti ti-home me-1"></i>Remoto</span>
+                                            {%- elseif m.gateway_mac %}
+                                                <span class="text-muted small ms-1" title="Roteador: {{ m.gateway_ip }} (MAC {{ m.gateway_mac }})"><i class="ti ti-router"></i></span>
+                                            {%- endif -%}
                                         </div>
                                         {% if m.pending %}<div class="text-warning small"><i class="ti ti-arrows-exchange"></i> mudando para {{ m.pending }}?</div>{% endif %}
                                     </td>

@@ -316,6 +316,8 @@ class ReportTests(unittest.TestCase):
         report = nr.build_report("abc123", "ATV-045", "1.6.0", self.SYSTEM, lldp)
         self.assertEqual(report["network"]["link"], "wired")
         self.assertEqual(report["network"]["mac"], "D0:C1:B5:7D:F3:EB")
+        self.assertEqual(report["network"]["gateway_ip"], "")
+        self.assertEqual(report["network"]["gateway_mac"], "")
         self.assertEqual(report["network"]["lldp"]["mgmt_ip"], "192.168.80.43")
         self.assertEqual(report["bios_serial"], "BRJ123ABC")
         # Tela interna do notebook e monitor inativo ficam de fora.
@@ -323,6 +325,30 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report["monitors"][0]["connection"], "HDMI")
         self.assertEqual(report["monitors"][0]["serial"], "CN0ABC123")
         json.dumps(report)  # serializavel
+
+    def test_build_report_includes_gateway_mac(self):
+        system = dict(self.SYSTEM, adapter={
+            "description": "Intel(R) Ethernet", "media": "802.3",
+            "ip": "192.168.0.50", "mac": "AA-BB-CC-DD-EE-FF",
+            "gateway_ip": "192.168.0.1", "gateway_mac": "6C:3B:6B:11:22:A2",
+        })
+        report = nr.build_report("abc", "PC", "1.6.0", system, None)
+        self.assertEqual(report["network"]["gateway_ip"], "192.168.0.1")
+        self.assertEqual(report["network"]["gateway_mac"], "6C:3B:6B:11:22:A2")
+
+    def test_resolve_gateway_mac_empty(self):
+        self.assertEqual(nr.resolve_gateway_mac(""), "")
+        self.assertEqual(nr.resolve_gateway_mac(None), "")
+
+    def test_resolve_gateway_mac_fallback(self):
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                ["arp", "-a"], 0, b"Interface: 192.168.0.50\n  192.168.0.1   18-e8-29-33-44-5f   dinamico\n", b""
+            )
+            # SendARP falhando forca o fallback do arp
+            with mock.patch("ctypes.WinDLL", side_effect=Exception("DLL mock")):
+                mac = nr.resolve_gateway_mac("192.168.0.1")
+                self.assertEqual(mac, "18:E8:29:33:44:5F")
 
     def test_wifi_never_sends_lldp(self):
         system = dict(self.SYSTEM, adapter={"description": "Intel(R) Wi-Fi 6 AX201", "media": "Native 802.11"})

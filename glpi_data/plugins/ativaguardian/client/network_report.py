@@ -539,6 +539,54 @@ def _last_stage(output: Any) -> str:
     return stages[-1] if stages else ""
 
 
+def resolve_gateway_mac(gateway_ip: str) -> str:
+    """Obtem o MAC do gateway/roteador via ARP (SendARP nativo do Windows).
+
+    O computador conversa diretamente com o roteador local, entao o MAC
+    fisico do roteador e resolvido na hora sem precisar de internet ou VPN.
+    """
+    gateway_ip = (gateway_ip or "").strip()
+    if not gateway_ip:
+        return ""
+    # 1. Win32 SendARP (iphlpapi.dll)
+    try:
+        import ctypes
+        import socket
+        import struct
+
+        iphlpapi = ctypes.WinDLL("iphlpapi")
+        dest = struct.unpack("<I", socket.inet_aton(gateway_ip))[0]
+        mac = (ctypes.c_ubyte * 6)()
+        mac_len = ctypes.c_ulong(6)
+        res = iphlpapi.SendARP(dest, 0, ctypes.byref(mac), ctypes.byref(mac_len))
+        if res == 0 and mac_len.value == 6:
+            mac_str = ":".join(f"{b:02X}" for b in mac[:6])
+            if mac_str not in ("00:00:00:00:00:00", "FF:FF:FF:FF:FF:FF"):
+                return mac_str
+    except Exception:
+        pass
+
+    # 2. Fallback: ler do cache ARP local (arp -a <gateway_ip>)
+    try:
+        completed = subprocess.run(
+            [str(SYSTEM32 / "arp.exe"), "-a", gateway_ip],
+            capture_output=True,
+            timeout=5,
+            creationflags=NO_WINDOW,
+        )
+        if completed.returncode == 0:
+            text = completed.stdout.decode("ascii", errors="ignore")
+            m = re.search(r"([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}", text)
+            if m:
+                mac_norm = m.group(0).replace("-", ":").upper()
+                if mac_norm not in ("00:00:00:00:00:00", "FF:FF:FF:FF:FF:FF"):
+                    return mac_norm
+    except Exception:
+        pass
+
+    return ""
+
+
 def native_network() -> dict[str, Any] | None:
     """Adaptador principal e MACs pela API do Windows (GetAdaptersAddresses).
 
@@ -626,6 +674,8 @@ def native_network() -> dict[str, Any] | None:
                 "media": "802.3" if wired else "Native 802.11",
                 "mac": mac,
                 "ip": ip,
+                "gateway_ip": gateway,
+                "gateway_mac": resolve_gateway_mac(gateway),
             }))
         node = item.next
     # Cabo antes de Wi-Fi: e o que tem porta de switch.
@@ -794,6 +844,8 @@ def build_report(machine_id: str, hostname: str, guardian_version: str, system: 
             "link": link,
             "ip": str((adapter or {}).get("ip", ""))[:64],
             "mac": str((adapter or {}).get("mac", "")).replace("-", ":")[:32],
+            "gateway_ip": str((adapter or {}).get("gateway_ip", ""))[:64],
+            "gateway_mac": str((adapter or {}).get("gateway_mac", "")).replace("-", ":").upper()[:32],
             "lldp": lldp if link == "wired" else None,
         },
         "monitors": normalize_monitors(system.get("monitors")),

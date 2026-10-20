@@ -53,6 +53,19 @@ final class Schema
                 ADD `vpn_seen_at` timestamp NULL DEFAULT NULL AFTER `vpn_user`");
         }
 
+        // IP e MAC do gateway da rede local (roteador fisico da filial), para
+        // diferenciar filiais que compartilham a mesma faixa de IP (como Limeira,
+        // Campo Grande e Londrina em 192.168.0.1).
+        if (!$DB->fieldExists($machines, 'gateway_ip')) {
+            $DB->doQuery("ALTER TABLE `{$machines}` ADD `gateway_ip` varchar(64) NOT NULL DEFAULT '' AFTER `ip`");
+        }
+        if (!$DB->fieldExists($machines, 'gateway_mac')) {
+            $DB->doQuery("ALTER TABLE `{$machines}` ADD `gateway_mac` varchar(32) NOT NULL DEFAULT '' AFTER `mac`");
+        }
+        if (!$DB->fieldExists($machines, 'last_known_branch')) {
+            $DB->doQuery("ALTER TABLE `{$machines}` ADD `last_known_branch` varchar(64) NOT NULL DEFAULT '' AFTER `link`");
+        }
+
         // "Nao e switch": PC ou switchzinho de mesa visto pelo LLDP. Fica
         // gravado para os relatorios seguintes tambem o ignorarem.
         $switches = Settings::TABLE_SWITCHES;
@@ -108,6 +121,24 @@ final class Schema
                 `last_at` timestamp NULL DEFAULT NULL,
                 PRIMARY KEY (`id`),
                 UNIQUE KEY `machine_id` (`machine_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} ROW_FORMAT=DYNAMIC");
+        }
+
+        // Tabela de redes/roteadores identificados por IP de gateway e MAC fisico
+        // do roteador. Permite diferenciar filiais como Limeira, Campo Grande e
+        // Londrina que usam o mesmo IP 192.168.0.1.
+        $networks = Settings::TABLE_NETWORKS;
+        if (!$DB->tableExists($networks)) {
+            $DB->doQuery("CREATE TABLE `{$networks}` (
+                `id` int {$sign} NOT NULL AUTO_INCREMENT,
+                `gateway_ip` varchar(64) NOT NULL DEFAULT '',
+                `gateway_mac` varchar(32) NOT NULL DEFAULT '',
+                `name` varchar(64) NOT NULL DEFAULT '',
+                `comment` varchar(255) NOT NULL DEFAULT '',
+                `date_mod` timestamp NULL DEFAULT NULL,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `net_gw` (`gateway_ip`, `gateway_mac`),
+                KEY `gateway_mac` (`gateway_mac`)
             ) ENGINE=InnoDB DEFAULT CHARSET={$charset} COLLATE={$collation} ROW_FORMAT=DYNAMIC");
         }
     }

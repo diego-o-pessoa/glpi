@@ -119,7 +119,10 @@ function plugin_ativarede_install_tables(): void
             `bios_serial` varchar(128) NOT NULL DEFAULT '',
             `ip` varchar(64) NOT NULL DEFAULT '',
             `mac` varchar(32) NOT NULL DEFAULT '',
+            `gateway_ip` varchar(64) NOT NULL DEFAULT '',
+            `gateway_mac` varchar(32) NOT NULL DEFAULT '',
             `link` varchar(16) NOT NULL DEFAULT 'unknown',
+            `last_known_branch` varchar(64) NOT NULL DEFAULT '',
             `switches_id` int {$sign} NOT NULL DEFAULT '0',
             `port` varchar(64) NOT NULL DEFAULT '',
             `port_id` varchar(128) NOT NULL DEFAULT '',
@@ -183,6 +186,17 @@ function plugin_ativarede_install_tables(): void
             KEY `machines_id` (`machines_id`),
             KEY `monitors_id` (`monitors_id`),
             KEY `date_creation` (`date_creation`)",
+
+        'glpi_plugin_ativarede_networks' => "
+            `id` int {$sign} NOT NULL AUTO_INCREMENT,
+            `gateway_ip` varchar(64) NOT NULL DEFAULT '',
+            `gateway_mac` varchar(32) NOT NULL DEFAULT '',
+            `name` varchar(64) NOT NULL DEFAULT '',
+            `comment` varchar(255) NOT NULL DEFAULT '',
+            `date_mod` timestamp NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `net_gw` (`gateway_ip`, `gateway_mac`),
+            KEY `gateway_mac` (`gateway_mac`)",
     ];
 
     foreach ($tables as $table => $columns) {
