@@ -98,7 +98,7 @@ function plugin_ativawallpaper_refresh_cached_menu(): void
 {
     global $CFG_GLPI;
 
-    $marker = PLUGIN_ATIVAWALLPAPER_VERSION . '|dashboard';
+    $marker = PLUGIN_ATIVAWALLPAPER_VERSION . '|dashboard|gestor';
     if (!isset($_SESSION['glpimenu']) || !is_array($_SESSION['glpimenu'])
         || ($_SESSION['plugin_ativawallpaper_menu_checked'] ?? '') === $marker) {
         return;
@@ -107,12 +107,19 @@ function plugin_ativawallpaper_refresh_cached_menu(): void
 
     $expectedPage = $CFG_GLPI['root_doc'] . '/plugins/ativawallpaper/front/dashboard.php';
     $expectedTitle = PluginAtivawallpaperMenu::getTypeName();
+    $found = false;
     foreach ($_SESSION['glpimenu'] as $sector) {
         $entry = is_array($sector) ? ($sector['content'][strtolower(PluginAtivawallpaperMenu::class)] ?? null) : null;
         if (is_array($entry) && (($entry['page'] ?? '') !== $expectedPage || ($entry['title'] ?? '') !== $expectedTitle)) {
             unset($_SESSION['glpimenu']);
             return;
         }
+        $found = $found || is_array($entry);
+    }
+    // Com direito e sem o item no menu guardado (ex.: Ativa - Gestor do
+    // Marketing que entrou antes desta correcao): monta o menu de novo.
+    if (!$found) {
+        unset($_SESSION['glpimenu']);
     }
 }
 

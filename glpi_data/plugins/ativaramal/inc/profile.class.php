@@ -149,7 +149,15 @@ class PluginAtivaramalProfile extends Profile
         if (!self::isGestorActive()) {
             return;
         }
-        $_SESSION['glpiactiveprofile'][self::RIGHT_VIEW] = self::gestorHasArea(self::AREA_COMERCIAL) ? READ : 0;
+        try {
+            $comercial = self::gestorHasArea(self::AREA_COMERCIAL);
+        } catch (Throwable $exception) {
+            // Erro no plugin_init faz o GLPI DESATIVAR o plugin: so registra e
+            // mantem como era antes (Ativa Ramal).
+            Toolbox::logInFile('ativaramal', 'Cargo do Ativa - Gestor nao lido: ' . $exception->getMessage() . "\n");
+            $comercial = true;
+        }
+        $_SESSION['glpiactiveprofile'][self::RIGHT_VIEW] = $comercial ? READ : 0;
         $_SESSION['glpiactiveprofile'][self::RIGHT_CONFIG] = 0;
         $_SESSION['glpiactiveprofile'][self::RIGHT_ALL_SECTORS] = 0;
     }

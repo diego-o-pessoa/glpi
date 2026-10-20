@@ -20,10 +20,16 @@ class PluginAtivawallpaperProfile extends Profile
      */
     public static function applyGestorArea(): void
     {
-        if (!class_exists(PluginAtivaramalProfile::class) || !PluginAtivaramalProfile::isGestorActive()) {
+        if (!self::gestorRuleAvailable() || !PluginAtivaramalProfile::isGestorActive()) {
             return;
         }
-        $marketing = PluginAtivaramalProfile::gestorHasArea(PluginAtivaramalProfile::AREA_MARKETING);
+        try {
+            $marketing = PluginAtivaramalProfile::gestorHasArea(PluginAtivaramalProfile::AREA_MARKETING);
+        } catch (Throwable $exception) {
+            // Erro no plugin_init faz o GLPI DESATIVAR o plugin: so registra.
+            Toolbox::logInFile('ativawallpaper', 'Cargo do Ativa - Gestor nao lido: ' . $exception->getMessage() . "\n");
+            $marketing = false;
+        }
         $_SESSION['glpiactiveprofile'][self::RIGHT_VIEW] = $marketing ? READ : 0;
         $_SESSION['glpiactiveprofile'][self::RIGHT_PUBLISH] = $marketing ? (READ | UPDATE) : 0;
         $_SESSION['glpiactiveprofile'][self::RIGHT_CONFIG] = 0;
@@ -37,7 +43,26 @@ class PluginAtivawallpaperProfile extends Profile
     /** So a aba "Visao geral" (sem Historico, Alteracoes, Configuracoes e logs). */
     public static function overviewOnly(): bool
     {
-        return class_exists(PluginAtivaramalProfile::class) && PluginAtivaramalProfile::isGestorActive();
+        return self::gestorRuleAvailable() && PluginAtivaramalProfile::isGestorActive();
+    }
+
+    /**
+     * A regra do "Ativa - Gestor" fica no Ativa Ramal. O GLPI so registra o
+     * carregador de classes de um plugin quando chega a vez dele, e o Ativa
+     * Wallpaper inicia ANTES do Ativa Ramal: a classe ainda nao existia, o
+     * acesso do Marketing nunca era liberado e o menu ficava vazio. Carrega o
+     * arquivo direto quando preciso.
+     */
+    private static function gestorRuleAvailable(): bool
+    {
+        if (class_exists(PluginAtivaramalProfile::class, false)) {
+            return true;
+        }
+        $file = Plugin::getPhpDir('ativaramal') . '/inc/profile.class.php';
+        if (is_file($file)) {
+            require_once $file;
+        }
+        return class_exists(PluginAtivaramalProfile::class, false);
     }
 
     /** Paginas alem da Visao geral: bloqueadas para quem so ve a Visao geral. */
