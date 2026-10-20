@@ -13,8 +13,10 @@ class PluginAtivawallpaperProfile extends Profile
 
     /**
      * "Ativa - Gestor" do Marketing (cargo no Titulo, Categoria ou Grupo do
-     * usuario; regra no Ativa Ramal): ve so a Visao geral, sem publicar nem
-     * configurar. Os outros "Ativa - Gestor" nao veem o Ativa Wallpaper.
+     * usuario; regra no Ativa Ramal): ve so a Visao geral e publica wallpaper
+     * (sempre em "Fill" e com bloqueio: PUBLISH_STYLE / PUBLISH_LOCK), sem
+     * configurar nem administrar computadores. Os outros "Ativa - Gestor" nao
+     * veem o Ativa Wallpaper.
      */
     public static function applyGestorArea(): void
     {
@@ -23,10 +25,14 @@ class PluginAtivawallpaperProfile extends Profile
         }
         $marketing = PluginAtivaramalProfile::gestorHasArea(PluginAtivaramalProfile::AREA_MARKETING);
         $_SESSION['glpiactiveprofile'][self::RIGHT_VIEW] = $marketing ? READ : 0;
-        $_SESSION['glpiactiveprofile'][self::RIGHT_PUBLISH] = 0;
+        $_SESSION['glpiactiveprofile'][self::RIGHT_PUBLISH] = $marketing ? (READ | UPDATE) : 0;
         $_SESSION['glpiactiveprofile'][self::RIGHT_CONFIG] = 0;
         $_SESSION['glpiactiveprofile'][self::RIGHT_CLIENTS] = 0;
     }
+
+    /** Modo e bloqueio fixos na publicacao de quem so ve a Visao geral. */
+    public const PUBLISH_STYLE = 'fill';
+    public const PUBLISH_LOCK = true;
 
     /** So a aba "Visao geral" (sem Historico, Alteracoes, Configuracoes e logs). */
     public static function overviewOnly(): bool

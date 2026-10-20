@@ -41,11 +41,14 @@ try {
             // message. Do not leave a reference to a temporary file that this
             // action is about to move or remove.
             unset($_FILES['wallpaper']);
+            // Ativa - Gestor: sempre "Fill" e com bloqueio, mesmo que o
+            // formulario seja alterado no navegador.
+            $locked = PluginAtivawallpaperProfile::overviewOnly();
             $wallpaper = (new WallpaperManager())->publishUploaded(
                 $upload,
-                (string) ($_POST['style'] ?? 'fill'),
+                $locked ? PluginAtivawallpaperProfile::PUBLISH_STYLE : (string) ($_POST['style'] ?? 'fill'),
                 // "1" from the "Aplicar bloqueio" select (or the former checkbox).
-                ($_POST['lock_change'] ?? '') === '1',
+                $locked ? PluginAtivawallpaperProfile::PUBLISH_LOCK : ($_POST['lock_change'] ?? '') === '1',
                 (int) Session::getLoginUserID(),
                 Security::cleanText($_POST['version_name'] ?? '', 64)
             );

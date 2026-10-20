@@ -35,6 +35,8 @@ final class ConfigService
             'monitor_started_at'         => '0',
             'monitor_completed_at'       => '0',
             'monitor_total'              => '0',
+            // Computadores que nao responderam a tempo no ultimo ciclo (ficaram de fora).
+            'monitor_late'               => '0',
             'bootstrap_configured'       => '0',
             'setup_completed'            => '0',
             'preserve_data_on_uninstall' => '1',

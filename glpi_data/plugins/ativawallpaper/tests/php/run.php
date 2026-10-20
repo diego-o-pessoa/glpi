@@ -86,6 +86,27 @@ $tests['verification cycle'] = static function (): void {
     ], 1202, $wait, $grace);
     assert($restarted['view']['current']['applying'] === true);
 
+    // A computer that stops answering in the middle of the cycle (shut down, lost
+    // the VPN) leaves it after the grace time: the cycle closes and counts it as late.
+    $stuck = MonitorCycle::evaluate(['phase' => 'analyzing', 'started_at' => 2000], [
+        $client('A', 2010, 2075, 2010),
+        $client('B', 1950, 2030, 1950),
+    ], 2100, $wait, $grace);
+    assert($stuck['view']['phase'] === 'analyzing' && $stuck['view']['current']['hostname'] === 'B', 'still within the grace');
+    $closed = MonitorCycle::evaluate($stuck['state'], [
+        $client('A', 2010, 2075, 2010),
+        $client('B', 1950, 2030, 1950),
+    ], 2131, $wait, $grace);
+    assert($closed['view']['phase'] === 'waiting', 'the late computer no longer holds the bar');
+    assert($closed['view']['late'] === 1 && $closed['view']['total'] === 1);
+    assert(MonitorCycle::evaluate($closed['state'], [], 2160, $wait, $grace)['view']['late'] === 1, 'kept while waiting');
+    // Applying (downloading) gets the longer grace.
+    $applying = MonitorCycle::evaluate(['phase' => 'analyzing', 'started_at' => 3000], [
+        $client('A', 3010, 3075, 3010),
+        $client('B', 2950, 3030, 2950, true),
+    ], 3200, $wait, $grace, 300);
+    assert($applying['view']['phase'] === 'analyzing' && $applying['view']['current']['applying'] === true);
+
     // Invalid or empty state starts analyzing now.
     $fresh = MonitorCycle::evaluate([], [], 5000, $wait, $grace);
     assert($fresh['state']['phase'] === 'analyzing' && $fresh['state']['started_at'] === 5000);

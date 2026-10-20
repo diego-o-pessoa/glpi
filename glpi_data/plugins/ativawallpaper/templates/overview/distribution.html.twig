@@ -50,6 +50,11 @@
       <i class="ti ti-clock"></i>Nenhum computador ativo no momento
     {% endif %}
   </div>
+  {% if cycle.late|default(0) > 0 %}
+    <div class="awp-rollout-line is-late" title="Desligaram ou perderam a conexão durante a verificação. Entram de novo quando voltarem a responder.">
+      <i class="ti ti-plug-connected-x"></i>{{ cycle.late }} computador{{ cycle.late > 1 ? 'es' : '' }} não respondeu{{ cycle.late > 1 ? 'ram' : '' }} a tempo e fica{{ cycle.late > 1 ? 'm' : '' }} para o próximo ciclo
+    </div>
+  {% endif %}
 
   {# Visao simples: atualizados (inclui quem esta desligado com o wallpaper
      atual) e offline. Pendentes e erros ficam na lista de computadores. #}

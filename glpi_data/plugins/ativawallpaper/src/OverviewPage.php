@@ -88,7 +88,9 @@ final class OverviewPage
                 'computer'  => $rootDoc . '/front/computer.form.php',
             ],
             'rights'         => [
-                'publish'       => !$limited && Session::haveRight(PluginAtivawallpaperProfile::RIGHT_PUBLISH, UPDATE),
+                // Ativa - Gestor publica, mas com modo e bloqueio fixos (publish_locked).
+                'publish'       => Session::haveRight(PluginAtivawallpaperProfile::RIGHT_PUBLISH, UPDATE),
+                'publish_locked' => $limited,
                 'config'        => !$limited && Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, UPDATE),
                 'config_view'   => !$limited && Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, READ),
                 'clients'       => !$limited && Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CLIENTS, UPDATE),

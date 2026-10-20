@@ -113,6 +113,23 @@
                  title="Opcional. Letras, números, ponto, hífen ou sublinhado. Em branco, a versão é gerada automaticamente.">
 
           <div class="awp-form-row">
+            {% if rights.publish_locked %}
+              {# Ativa - Gestor: fixos (o servidor tambem aplica Fill + bloqueio). #}
+              <div>
+                <label class="form-label" for="awp-style">Modo de exibição</label>
+                <select class="form-select" id="awp-style" disabled title="Definido pela T.I.">
+                  <option selected>Fill</option>
+                </select>
+                <input type="hidden" name="style" value="fill">
+              </div>
+              <div>
+                <label class="form-label" for="awp-lock">Aplicar bloqueio</label>
+                <select class="form-select" id="awp-lock" disabled title="Definido pela T.I.: o usuário não pode trocar o wallpaper">
+                  <option selected>Sim</option>
+                </select>
+                <input type="hidden" name="lock_change" value="1">
+              </div>
+            {% else %}
             <div>
               <label class="form-label" for="awp-style">Modo de exibição</label>
               <select class="form-select" id="awp-style" name="style">
@@ -128,7 +145,11 @@
                 <option value="1">Sim</option>
               </select>
             </div>
+            {% endif %}
           </div>
+          {% if rights.publish_locked %}
+            <small class="text-muted d-block mb-2"><i class="ti ti-lock"></i> Modo de exibição e bloqueio definidos pela T.I.</small>
+          {% endif %}
 
           <button type="submit" class="btn awp-btn-primary w-100"><i class="ti ti-upload"></i>Enviar e publicar</button>
         </form>
