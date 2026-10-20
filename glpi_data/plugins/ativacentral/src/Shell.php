@@ -66,7 +66,7 @@ final class Shell
             $_SESSION[self::SESSION_BRAND] = 1;
             $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::assetUrl('css/brand-intro.css')]];
         }
-        if (self::isNativeHome()) {
+        if (self::isNativeHome() && !self::panelOnly()) {
             // A pagina inicial do GLPI vira a "Visao geral". O plugin nao
             // consegue redirecionar no servidor nesta fase, entao a propria
             // pagina manda o navegador para la antes de desenhar qualquer coisa.
@@ -74,6 +74,19 @@ final class Shell
             $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
         }
         $PLUGIN_HOOKS[Hooks::ADD_HEADER_TAG]['ativacentral'] = $tags;
+    }
+
+    /**
+     * Sem chamados, ativos nem configuracao: a pessoa so usa paineis de
+     * plugins (ex.: "Ativa - Gestor" com o Ativa Ramal ou o Ativa Wallpaper).
+     * A "Visao geral" da T.I. nao e para ela: a pagina inicial fica com o GLPI,
+     * que leva cada um ao seu painel.
+     */
+    public static function panelOnly(): bool
+    {
+        return !Session::haveRightsOr('ticket', [CREATE, \Ticket::READMY, \Ticket::READALL, \Ticket::READGROUP])
+            && !Session::haveRight('computer', READ)
+            && !Session::haveRight('config', READ);
     }
 
     /** Visual novo valendo para esta sessao. */
@@ -156,7 +169,7 @@ final class Shell
         }
 
         return [
-            'home'      => self::url('/front/home.php'),
+            'home'      => self::panelOnly() ? self::glpiUrl('/front/central.php') : self::url('/front/home.php'),
             'helpdesk'  => self::glpiUrl(Nav::hubUrl('helpdesk')),
             'classic'   => self::url('/front/toggle.php?mode=classic'),
             'finish'    => self::url('/front/ticket.finish.php'),

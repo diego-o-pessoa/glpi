@@ -24,7 +24,9 @@ final class DashboardService
         $iterator = $DB->request([
             'SELECT' => [
                 new QueryExpression('COUNT(*) AS managed'),
-                new QueryExpression("SUM(CASE WHEN {$online} AND status = 'success' AND wallpaper_version = {$currentVersion} THEN 1 ELSE 0 END) AS updated"),
+                // Atualizado = o ultimo relato foi o wallpaper atual aplicado, ligado
+                // ou nao: quem saiu de ferias depois de aplicar continua atualizado.
+                new QueryExpression("SUM(CASE WHEN status = 'success' AND wallpaper_version = {$currentVersion} THEN 1 ELSE 0 END) AS updated"),
                 new QueryExpression("SUM(CASE WHEN {$online} AND status = 'error' THEN 1 ELSE 0 END) AS errors"),
                 new QueryExpression("SUM(CASE WHEN {$offlineSql} THEN 1 ELSE 0 END) AS offline"),
                 new QueryExpression("SUM(CASE WHEN {$online} AND status <> 'error' AND (status <> 'success' OR wallpaper_version IS NULL OR wallpaper_version <> {$currentVersion}) THEN 1 ELSE 0 END) AS pending"),
@@ -98,6 +100,9 @@ final class DashboardService
         ]);
         foreach ($iterator as $row) {
             $row['computed_status'] = $this->computeStatus($row, $current);
+            // Offline, mas com o wallpaper atual aplicado no ultimo relato.
+            $row['up_to_date'] = $current !== null && ($row['status'] ?? '') === 'success'
+                && ($row['wallpaper_version'] ?? '') === $current['version'];
             $rows[] = $row;
         }
         $updater = $this->updaterContacts(array_column($rows, 'machine_guid'));
@@ -460,7 +465,7 @@ final class DashboardService
         return match ($status) {
             'offline' => $offline,
             'error'   => "({$online}) AND status = 'error'",
-            'updated' => "({$online}) AND status = 'success' AND wallpaper_version = {$version}",
+            'updated' => "status = 'success' AND wallpaper_version = {$version}",
             'pending' => "({$online}) AND status <> 'error' AND (status <> 'success' OR wallpaper_version IS NULL OR wallpaper_version <> {$version})",
         };
     }

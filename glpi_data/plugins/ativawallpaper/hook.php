@@ -81,3 +81,20 @@ function plugin_ativawallpaper_init_session(): void
 
     InventoryUserMatcher::assignFromLogin($userId, $ipAddress);
 }
+
+/**
+ * Pagina inicial do GLPI para quem so tem a Visao geral do Ativa Wallpaper
+ * (Ativa - Gestor do Marketing): vai direto para ela.
+ */
+function plugin_ativawallpaper_display_central(): void
+{
+    global $CFG_GLPI;
+
+    if (!class_exists(PluginAtivawallpaperProfile::class)
+        || !PluginAtivawallpaperProfile::overviewOnly()
+        || !Session::haveRight(PluginAtivawallpaperProfile::RIGHT_VIEW, READ)) {
+        return;
+    }
+    $url = $CFG_GLPI['root_doc'] . '/plugins/ativawallpaper/front/dashboard.php';
+    echo '<script>window.location.replace(' . json_encode($url, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) . ');</script>';
+}

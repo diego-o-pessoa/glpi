@@ -53,7 +53,10 @@ final class Nav
     {
         $out = [];
         $out['ac_sec_workspace'] = self::label('Workspace');
-        $out['ac_home'] = self::link('Visão geral', 'ti ti-layout-dashboard', self::homeUrl());
+        // Quem so tem paineis (ex.: Ativa - Gestor) nao ve o painel da T.I.
+        if (!Shell::panelOnly()) {
+            $out['ac_home'] = self::link('Visão geral', 'ti ti-layout-dashboard', self::homeUrl());
+        }
 
         if (self::hasOwnPages($menu['helpdesk'] ?? null)) {
             // Mesmo titulo na secao original: e por ele que o GLPI marca o
@@ -75,6 +78,11 @@ final class Nav
                     $menu['assets']['default'] = self::hubUrl('computers');
                 }
             }
+        }
+
+        // Secao sem nenhum item (perfil so com paineis): sai o titulo tambem.
+        if (count($out) === 1) {
+            unset($out['ac_sec_workspace']);
         }
 
         // --- Solucoes Ativa: plugins com secao propria e os que entram em

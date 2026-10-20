@@ -1,6 +1,7 @@
 {#
   Shared page header: title and tabs of Ativa Wallpaper.
-  Parameters: active ('overview'|'history'|'events'|'settings'), urls, show_settings, live (bool).
+  Parameters: active ('overview'|'history'|'events'|'settings'), urls, show_settings, live (bool),
+  limited (bool: so a Visao geral, sem as outras abas).
 #}
 <header class="awp-hero">
   <div class="awp-brand">
@@ -20,8 +21,10 @@
 </header>
 <nav class="awp-tabs" aria-label="Navegação Ativa Wallpaper">
   <a class="awp-tab {{ active == 'overview' ? 'is-active' : '' }}" href="{{ urls.dashboard }}"><i class="ti ti-home"></i>Visão geral</a>
+  {% if not limited|default(false) %}
   <a class="awp-tab {{ active == 'history' ? 'is-active' : '' }}" href="{{ urls.history }}"><i class="ti ti-history"></i>Histórico</a>
   <a class="awp-tab {{ active == 'events' ? 'is-active' : '' }}" href="{{ urls.events }}"><i class="ti ti-shield-check"></i>Alterações</a>
+  {% endif %}
   {% if show_settings|default(false) %}
     <a class="awp-tab {{ active == 'settings' ? 'is-active' : '' }}" href="{{ urls.settings }}"><i class="ti ti-settings"></i>Configurações</a>
   {% endif %}

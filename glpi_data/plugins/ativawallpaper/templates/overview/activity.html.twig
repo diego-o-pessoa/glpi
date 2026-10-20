@@ -1,6 +1,6 @@
 <div class="awp-card-header">
   <h2 class="awp-card-title"><i class="ti ti-clock-hour-4"></i>Atividade recente</h2>
-  <a class="btn btn-sm awp-btn-light" href="{{ urls.events }}">Ver todos</a>
+  {% if not limited %}<a class="btn btn-sm awp-btn-light" href="{{ urls.events }}">Ver todos</a>{% endif %}
 </div>
 <div class="awp-card-body awp-activity-body">
   {% if activity is empty %}

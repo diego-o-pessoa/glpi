@@ -43,6 +43,9 @@
         <td>
           <span class="awp-badge {{ badge[1] }}">{{ badge[0] }}</span>
           {% if client.force_reapply %}<small class="awp-row-note">Reaplicação solicitada</small>{% endif %}
+          {% if client.computed_status == 'offline' and client.up_to_date %}
+            <small class="awp-row-note is-ok" title="Ele está desligado, mas o último relato foi com o wallpaper atual aplicado">Wallpaper atualizado</small>
+          {% endif %}
           {% if client.computed_status == 'revoked' %}
             <small class="awp-row-note is-error" title="{{ client.last_error ?: 'Revogado no painel' }}">Revogado em {{ client.revoked_at|formatted_datetime }}</small>
           {% elseif client.computed_status == 'error' and client.last_error %}
@@ -56,8 +59,10 @@
         </td>
         <td class="text-end">
           <span class="awp-row-actions">
+            {% if not limited %}
             <button type="button" class="awp-icon-btn" data-awp-client-logs data-id="{{ client.id }}" data-hostname="{{ client.hostname }}"
                     title="Ver os logs deste computador (erros como HTTP 404)"><i class="ti ti-file-text"></i></button>
+            {% endif %}
             {% if rights.clients and client.computed_status != 'revoked' %}
               <button type="button" class="awp-icon-btn" data-awp-client-action="force" data-id="{{ client.id }}" title="Forçar nova aplicação neste computador"><i class="ti ti-refresh"></i></button>
               <button type="button" class="awp-icon-btn is-danger" data-awp-client-action="revoke" data-id="{{ client.id }}"

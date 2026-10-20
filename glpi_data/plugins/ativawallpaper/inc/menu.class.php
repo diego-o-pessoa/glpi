@@ -45,6 +45,9 @@ class PluginAtivawallpaperMenu extends CommonGLPI
             'page'  => $base . '/dashboard.php',
             'icon'  => 'ti ti-home',
         ];
+        if (PluginAtivawallpaperProfile::overviewOnly()) {
+            return $menu;
+        }
         $menu['options']['history'] = [
             'title' => 'Histórico',
             'page'  => $base . '/history.php',

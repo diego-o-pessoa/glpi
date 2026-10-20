@@ -55,6 +55,12 @@ function plugin_init_ativaramal(): void
     Plugin::registerClass(PluginAtivaramalMenu::class);
     Plugin::registerClass(PluginAtivaramalProfile::class, ['addtabon' => [Profile::class]]);
 
+    // Ativa - Gestor: o cargo decide se a pessoa ve o Ativa Ramal (Comercial)
+    // ou so o Ativa Wallpaper (Marketing). Antes de qualquer checagem de direito.
+    if (Session::getLoginUserID() !== false) {
+        PluginAtivaramalProfile::applyGestorArea();
+    }
+
     if (PluginAtivaramalProfile::canView()) {
         // Chave nova + valor em array = secao propria na barra lateral.
         $PLUGIN_HOOKS['menu_toadd']['ativaramal'] = [

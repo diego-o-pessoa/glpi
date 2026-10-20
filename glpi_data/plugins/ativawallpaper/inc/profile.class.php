@@ -11,6 +11,38 @@ class PluginAtivawallpaperProfile extends Profile
 
     public static $rightname = 'profile';
 
+    /**
+     * "Ativa - Gestor" do Marketing (cargo no Titulo, Categoria ou Grupo do
+     * usuario; regra no Ativa Ramal): ve so a Visao geral, sem publicar nem
+     * configurar. Os outros "Ativa - Gestor" nao veem o Ativa Wallpaper.
+     */
+    public static function applyGestorArea(): void
+    {
+        if (!class_exists(PluginAtivaramalProfile::class) || !PluginAtivaramalProfile::isGestorActive()) {
+            return;
+        }
+        $marketing = PluginAtivaramalProfile::gestorHasArea(PluginAtivaramalProfile::AREA_MARKETING);
+        $_SESSION['glpiactiveprofile'][self::RIGHT_VIEW] = $marketing ? READ : 0;
+        $_SESSION['glpiactiveprofile'][self::RIGHT_PUBLISH] = 0;
+        $_SESSION['glpiactiveprofile'][self::RIGHT_CONFIG] = 0;
+        $_SESSION['glpiactiveprofile'][self::RIGHT_CLIENTS] = 0;
+    }
+
+    /** So a aba "Visao geral" (sem Historico, Alteracoes, Configuracoes e logs). */
+    public static function overviewOnly(): bool
+    {
+        return class_exists(PluginAtivaramalProfile::class) && PluginAtivaramalProfile::isGestorActive();
+    }
+
+    /** Paginas alem da Visao geral: bloqueadas para quem so ve a Visao geral. */
+    public static function checkFullAccess(): void
+    {
+        Session::checkRight(self::RIGHT_VIEW, READ);
+        if (self::overviewOnly()) {
+            Html::displayRightError();
+        }
+    }
+
     public static function getTypeName($nb = 0): string
     {
         return 'Ativa Wallpaper';

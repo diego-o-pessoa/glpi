@@ -7,7 +7,8 @@ use GlpiPlugin\Ativawallpaper\WallpaperManager;
 
 include '../../../inc/includes.php';
 
-Session::checkRight(PluginAtivawallpaperProfile::RIGHT_VIEW, READ);
+// Quem so ve a Visao geral (Ativa - Gestor) nao abre esta pagina.
+PluginAtivawallpaperProfile::checkFullAccess();
 $page = max(1, (int) ($_GET['page'] ?? 1));
 $limit = 24;
 $manager = new WallpaperManager();

@@ -14,6 +14,12 @@ include '../../../inc/includes.php';
 // "Visao geral": pagina inicial da interface de administracao.
 Session::checkCentralAccess();
 
+// Quem so tem paineis de plugin volta para a pagina inicial do GLPI, que o
+// leva ao painel dele (Ativa Ramal, Ativa Wallpaper...).
+if (Shell::panelOnly()) {
+    Html::redirect(Shell::glpiUrl('/front/central.php?ac_native=1'));
+}
+
 $data = Metrics::dashboard(Settings::periodDays());
 $data['urls'] = [
     'data'     => Shell::url('/front/home.data.php'),

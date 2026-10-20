@@ -67,8 +67,15 @@ function plugin_init_ativawallpaper(): void
         ['addtabon' => [Computer::class]]
     );
 
+    // Ativa - Gestor do Marketing: so a Visao geral (antes de checar o direito).
+    if (Session::getLoginUserID() !== false) {
+        PluginAtivawallpaperProfile::applyGestorArea();
+    }
+
     if (Session::haveRight(PluginAtivawallpaperProfile::RIGHT_VIEW, READ)) {
         $PLUGIN_HOOKS['menu_toadd']['ativawallpaper']['admin'] = PluginAtivawallpaperMenu::class;
+        // Quem so tem o Wallpaper (Marketing) cai direto na Visao geral ao entrar.
+        $PLUGIN_HOOKS[Hooks::DISPLAY_CENTRAL]['ativawallpaper'] = 'plugin_ativawallpaper_display_central';
         plugin_ativawallpaper_refresh_cached_menu();
     }
 

@@ -57,7 +57,10 @@ final class OverviewPage
         $rollout = $dashboard->rolloutProgress();
         $lastCheckAge = $dashboard->lastCheckAgeSeconds();
 
+        $limited = PluginAtivawallpaperProfile::overviewOnly();
         return [
+            'limited'        => $limited,
+            'offline_percentage' => $summary['managed'] > 0 ? round(($summary['offline'] / $summary['managed']) * 100, 1) : 0.0,
             'current'        => $current,
             'enabled'        => ConfigService::getBool('enabled'),
             'summary'        => $summary,
@@ -85,10 +88,10 @@ final class OverviewPage
                 'computer'  => $rootDoc . '/front/computer.form.php',
             ],
             'rights'         => [
-                'publish'       => Session::haveRight(PluginAtivawallpaperProfile::RIGHT_PUBLISH, UPDATE),
-                'config'        => Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, UPDATE),
-                'config_view'   => Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, READ),
-                'clients'       => Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CLIENTS, UPDATE),
+                'publish'       => !$limited && Session::haveRight(PluginAtivawallpaperProfile::RIGHT_PUBLISH, UPDATE),
+                'config'        => !$limited && Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, UPDATE),
+                'config_view'   => !$limited && Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CONFIG, READ),
+                'clients'       => !$limited && Session::haveRight(PluginAtivawallpaperProfile::RIGHT_CLIENTS, UPDATE),
             ],
         ];
     }

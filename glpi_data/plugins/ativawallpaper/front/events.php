@@ -7,7 +7,8 @@ use GlpiPlugin\Ativawallpaper\ClientEventRepository;
 
 include '../../../inc/includes.php';
 
-Session::checkRight(PluginAtivawallpaperProfile::RIGHT_VIEW, READ);
+// Quem so ve a Visao geral (Ativa - Gestor) nao abre esta pagina.
+PluginAtivawallpaperProfile::checkFullAccess();
 
 $filters = [
     'q'    => $_GET['q'] ?? '',

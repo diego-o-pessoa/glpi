@@ -67,6 +67,93 @@ class PluginAtivaramalProfile extends Profile
         return (bool) Session::haveRight(self::RIGHT_VIEW, READ);
     }
 
+    // ------------------------------------------------------------------
+    // Perfil "Ativa - Gestor" dividido pelo cargo da pessoa
+    //
+    // Um perfil so para os gestores, e o que cada um ve sai do cargo:
+    // Comercial -> Ativa Ramal; Marketing -> Ativa Wallpaper (so a Visao
+    // geral). O cargo e procurado no Titulo do usuario, na Categoria e nos
+    // Grupos dele. Sem "comercial" nem "marketing" em nenhum, fica como era
+    // antes (Ativa Ramal), para nao tirar o acesso de quem ja usava.
+    // ------------------------------------------------------------------
+    public const GESTOR_PROFILE = 'Ativa - Gestor';
+    public const AREA_COMERCIAL = 'comercial';
+    public const AREA_MARKETING = 'marketing';
+
+    /** @var array<int, list<string>> */
+    private static array $areas = [];
+
+    /** O perfil ativo da sessao e o "Ativa - Gestor". */
+    public static function isGestorActive(): bool
+    {
+        return strcasecmp(trim((string) ($_SESSION['glpiactiveprofile']['name'] ?? '')), self::GESTOR_PROFILE) === 0;
+    }
+
+    /** @return list<string> Areas do usuario logado (comercial, marketing). */
+    public static function gestorAreas(): array
+    {
+        global $DB;
+
+        $userId = (int) Session::getLoginUserID();
+        if ($userId <= 0) {
+            return [];
+        }
+        if (isset(self::$areas[$userId])) {
+            return self::$areas[$userId];
+        }
+        $texts = [];
+        $user = $DB->request([
+            'SELECT'    => ['glpi_usertitles.name AS title', 'glpi_usercategories.name AS category'],
+            'FROM'      => 'glpi_users',
+            'LEFT JOIN' => [
+                'glpi_usertitles'     => ['ON' => ['glpi_users' => 'usertitles_id', 'glpi_usertitles' => 'id']],
+                'glpi_usercategories' => ['ON' => ['glpi_users' => 'usercategories_id', 'glpi_usercategories' => 'id']],
+            ],
+            'WHERE'     => ['glpi_users.id' => $userId],
+            'LIMIT'     => 1,
+        ])->current();
+        $texts[] = (string) ($user['title'] ?? '');
+        $texts[] = (string) ($user['category'] ?? '');
+        foreach ($DB->request([
+            'SELECT'     => ['glpi_groups.completename'],
+            'FROM'       => 'glpi_groups_users',
+            'INNER JOIN' => ['glpi_groups' => ['ON' => ['glpi_groups_users' => 'groups_id', 'glpi_groups' => 'id']]],
+            'WHERE'      => ['glpi_groups_users.users_id' => $userId],
+        ]) as $group) {
+            $texts[] = (string) $group['completename'];
+        }
+
+        $haystack = ' ' . mb_strtolower(implode(' | ', $texts), 'UTF-8') . ' ';
+        $areas = [];
+        if (str_contains($haystack, 'comercial')) {
+            $areas[] = self::AREA_COMERCIAL;
+        }
+        if (str_contains($haystack, 'marketing') || preg_match('/[^a-z]mkt[^a-z]/', $haystack) === 1) {
+            $areas[] = self::AREA_MARKETING;
+        }
+        return self::$areas[$userId] = $areas !== [] ? $areas : [self::AREA_COMERCIAL];
+    }
+
+    public static function gestorHasArea(string $area): bool
+    {
+        return self::isGestorActive() && in_array($area, self::gestorAreas(), true);
+    }
+
+    /**
+     * Ajusta, so nesta sessao, o acesso do Ativa - Gestor ao Ativa Ramal pelo
+     * cargo. O perfil no banco nao muda. Roda a cada requisicao (plugin_init),
+     * entao trocar o cargo vale na proxima pagina.
+     */
+    public static function applyGestorArea(): void
+    {
+        if (!self::isGestorActive()) {
+            return;
+        }
+        $_SESSION['glpiactiveprofile'][self::RIGHT_VIEW] = self::gestorHasArea(self::AREA_COMERCIAL) ? READ : 0;
+        $_SESSION['glpiactiveprofile'][self::RIGHT_CONFIG] = 0;
+        $_SESSION['glpiactiveprofile'][self::RIGHT_ALL_SECTORS] = 0;
+    }
+
     /**
      * Retorna o perfil Ativa - Gestor disponivel para a sessao atual quando
      * ele ainda nao e o perfil ativo. O endpoint nativo do GLPI valida

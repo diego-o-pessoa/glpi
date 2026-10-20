@@ -5,7 +5,7 @@
      data-action-url="{{ urls.action }}"
      data-server-epoch="{{ server_epoch }}"
      data-poll="1">
-  {{ include('@ativawallpaper/partials/header.html.twig', {active: 'overview', urls: urls, show_settings: rights.config_view, live: true}) }}
+  {{ include('@ativawallpaper/partials/header.html.twig', {active: 'overview', urls: urls, show_settings: rights.config_view and not limited, live: true, limited: limited}) }}
 
   {% if not enabled %}
     <div class="awp-alert is-warning" role="alert">
