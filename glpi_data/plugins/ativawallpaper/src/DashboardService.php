@@ -13,13 +13,9 @@ final class DashboardService
     public function summary(?array $current): array
     {
         global $DB;
-        $offline = max(120, ConfigService::getInt('offline_after_seconds'));
         $currentVersion = $DB->quoteValue((string) ($current['version'] ?? ''));
-        // Compared with a server-clock string, not NOW(): the database session timezone
-        // follows the GLPI user and differs from the clock used to store the dates.
-        $threshold = $DB->quoteValue(ServerClock::format(time() - $offline));
-        $online = "last_check IS NOT NULL AND last_check >= {$threshold}";
-        $offlineSql = "last_check IS NULL OR last_check < {$threshold}";
+        $online = self::onlineCondition();
+        $offlineSql = "NOT {$online}";
 
         $iterator = $DB->request([
             'SELECT' => [
@@ -165,8 +161,7 @@ final class DashboardService
         if (!empty($client['revoked_at'])) {
             return 'revoked';
         }
-        $lastCheck = ServerClock::toTimestamp((string) ($client['last_check'] ?? ''));
-        if ($lastCheck === 0 || $lastCheck < time() - max(120, ConfigService::getInt('offline_after_seconds'))) {
+        if (!self::isOnline($client)) {
             return 'offline';
         }
         if (($client['status'] ?? '') === 'error') {
@@ -216,7 +211,7 @@ final class DashboardService
         ];
         $machines = [];
         $now = time();
-        $offlineAfter = max(120, ConfigService::getInt('offline_after_seconds'));
+
         $defaultCycleSeconds = max(5, ConfigService::getInt('poll_interval_seconds') + ConfigService::getInt('poll_jitter_seconds'));
         $iterator = $DB->request([
             'SELECT' => [
@@ -247,7 +242,7 @@ final class DashboardService
                 'next_check_at' => $nextCheckTimestamp === false ? '' : ServerClock::format($nextCheckTimestamp),
                 'seconds_until_check' => $nextCheckTimestamp === false ? null : max(0, $nextCheckTimestamp - $now),
                 'cycle_seconds' => $cycleSeconds,
-                'online' => $lastCheckTimestamp !== false && $lastCheckTimestamp >= $now - $offlineAfter,
+                'online' => self::isOnline($row, $now),
                 'last_cycle_action' => (string) ($row['last_cycle_action'] ?? ''),
                 'last_cycle_at' => (string) ($row['last_cycle_at'] ?? ''),
             ];
@@ -455,16 +450,64 @@ final class DashboardService
         return ['at' => $at, 'time' => $time, 'message' => $message, 'tone' => $tone];
     }
 
+    /**
+     * Prazos de presenca (segundos). Um computador esta ONLINE enquanto estiver
+     * no prazo da proxima verificacao que ele mesmo informou (next_check_at)
+     * mais a tolerancia do ciclo; sem esse prazo, ate intervalo + variacao +
+     * tolerancia depois do ultimo contato. E a mesma regra do ciclo da barra
+     * (MonitorCycle): antes o painel usava "Offline apos" (1 h por padrao) e
+     * um computador desligado ha 40 min ainda contava como online, por isso
+     * "Online 41" e "40 analisados" nao batiam. "Offline apos" das
+     * Configuracoes continua como limite maximo.
+     *
+     * @return array{grace:int, window:int, max:int}
+     */
+    public static function presence(): array
+    {
+        $poll = max(60, ConfigService::getInt('poll_interval_seconds'));
+        $jitter = max(0, ConfigService::getInt('poll_jitter_seconds'));
+        $grace = max(90, $jitter + 60);
+        $max = max(120, ConfigService::getInt('offline_after_seconds'));
+        return ['grace' => $grace, 'window' => min($max, $poll + $jitter + $grace), 'max' => $max];
+    }
+
+    /** Condicao SQL de "online agora" (datas no relogio do servidor, nao NOW()). */
+    public static function onlineCondition(?int $now = null): string
+    {
+        global $DB;
+        $now ??= time();
+        $presence = self::presence();
+        $max = $DB->quoteValue(ServerClock::format($now - $presence['max']));
+        $grace = $DB->quoteValue(ServerClock::format($now - $presence['grace']));
+        $window = $DB->quoteValue(ServerClock::format($now - $presence['window']));
+        return "(last_check IS NOT NULL AND last_check >= {$max} AND ("
+            . "(next_check_at IS NOT NULL AND next_check_at >= {$grace})"
+            . " OR (next_check_at IS NULL AND last_check >= {$window})))";
+    }
+
+    /** Mesma regra do onlineCondition() para uma linha ja lida. */
+    public static function isOnline(array $client, ?int $now = null): bool
+    {
+        $now ??= time();
+        $presence = self::presence();
+        $lastCheck = ServerClock::toTimestamp((string) ($client['last_check'] ?? ''));
+        if ($lastCheck === 0 || $lastCheck < $now - $presence['max']) {
+            return false;
+        }
+        $nextCheck = ServerClock::toTimestamp((string) ($client['next_check_at'] ?? ''));
+        return $nextCheck > 0
+            ? $nextCheck >= $now - $presence['grace']
+            : $lastCheck >= $now - $presence['window'];
+    }
+
     private function statusExpression(string $status, ?array $current): ?string
     {
         global $DB;
         if (!in_array($status, ['updated', 'outdated', 'pending', 'offline', 'error'], true)) {
             return null;
         }
-        $seconds = max(120, ConfigService::getInt('offline_after_seconds'));
-        $threshold = $DB->quoteValue(ServerClock::format(time() - $seconds));
-        $online = "last_check IS NOT NULL AND last_check >= {$threshold}";
-        $offline = "(last_check IS NULL OR last_check < {$threshold})";
+        $online = self::onlineCondition();
+        $offline = "(NOT {$online})";
         $version = $DB->quoteValue((string) ($current['version'] ?? ''));
         return match ($status) {
             'offline' => $offline,

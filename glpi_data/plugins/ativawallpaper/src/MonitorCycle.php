@@ -147,7 +147,7 @@ final class MonitorCycle
         $waitSeconds = max(60, (int) $settings['poll_interval_seconds']);
         // Time a computer may be late (jitter, network) before it leaves this cycle.
         // Not the offline time: that is 1 h by default and held the bar for an hour.
-        $graceSeconds = max(90, (int) $settings['poll_jitter_seconds'] + 60);
+        $graceSeconds = DashboardService::presence()['grace'];
         // Downloading/applying a new wallpaper can take longer.
         $applyingGraceSeconds = max(300, $graceSeconds);
 
