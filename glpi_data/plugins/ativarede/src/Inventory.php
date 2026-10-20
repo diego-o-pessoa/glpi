@@ -365,7 +365,8 @@ final class Inventory
             // primeiro nome da VPN conectada ("...-atv.ana.csouza" -> Ana).
             $auto = (string) (($contact['username'] ?? '') ?: ($computer['user'] ?? ''));
             $userLabel = trim((string) ($row['user_label'] ?? ''));
-            $vpnUser = trim((string) ($row['vpn_user'] ?? ''));
+            // Refeito do perfil da VPN (regra atual: nome completo, sem numeros).
+            $vpnUser = PersonName::vpnName($row);
             $who = PersonName::resolve($userLabel, $auto, $vpnUser);
             $out[] = [
                 'id'           => $id,

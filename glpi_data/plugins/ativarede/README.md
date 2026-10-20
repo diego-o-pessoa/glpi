@@ -77,17 +77,20 @@ Em **Editar planta**:
 
 ## Nome de quem usa a máquina
 
-O nome mostrado em Equipamentos, na Planta e no Ativa Workspace segue esta ordem:
+O nome da pessoa segue a mesma regra em todos os plugins Ativa (Rede, Workspace,
+Wallpaper, Guardian, Updater e Remote), nesta ordem:
 
 1. o nome corrigido à mão em **Equipamentos** (lápis ao lado do nome);
 2. a conta do Windows ou o usuário do computador no GLPI, se for de uma pessoa.
    Contas genéricas ("Ativa", "Ativa Locação", "Ativa - Comercial", "User",
    "Usuário", "Admin", "Suporte"...) são puladas;
-3. o **primeiro nome da VPN conectada**. O Guardian (1.6.14+) informa o perfil
-   do OpenVPN GUI conectado, por exemplo `SIMP-ATI-VPN-01-UDP4-1195-atv.ana.csouza`,
-   que vira **Ana**. Fica guardado, então o nome continua com a VPN desconectada.
+3. o **nome da VPN conectada**. O Guardian (1.6.14+) informa o perfil do OpenVPN
+   GUI conectado, por exemplo `SIMP-ATI-VPN-01-UDP4-1195-atv.diego.pessoa`, que vira
+   **Diego Pessoa** (números são ignorados: `diego.pessoa2` também vira Diego Pessoa).
+   Fica guardado, então o nome continua com a VPN desconectada.
 
-O computador no GLPI não é alterado: o nome só vale no Ativa Rede e no Ativa Workspace.
+O computador no GLPI não é alterado: o nome só vale nas telas dos plugins Ativa.
+A regra fica em `src/PersonName.php` (`PersonName::forComputer()`).
 
 ## Mapeando as mesas
 

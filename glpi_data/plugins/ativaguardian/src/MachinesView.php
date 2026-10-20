@@ -121,7 +121,13 @@ final class MachinesView
         [$overallLabel, $overallClass] = HealthStatus::badge((string) $machine['effective_status']);
 
         $antivirus = trim((string) $machine['antivirus']);
+        // Nome da pessoa pela regra de todos os plugins Ativa: o definido no
+        // Ativa Rede > Equipamentos; a conta do Windows, se for de uma pessoa;
+        // senao o nome da VPN ("atv.diego.pessoa" -> Diego Pessoa).
         $username = trim((string) ($machine['username'] ?? ''));
+        $username = class_exists(\GlpiPlugin\Ativarede\PersonName::class)
+            ? \GlpiPlugin\Ativarede\PersonName::forComputer((int) ($machine['computers_id'] ?? 0), (string) $machine['hostname'], $username)
+            : $username;
         $machineCell = "<td><div class='ag-machine'><i class='fas fa-desktop'></i><div>"
             . '<strong>' . htmlescape($name) . '</strong>'
             // Quem está usando a máquina, como no Ativa Updater. Vazio quando

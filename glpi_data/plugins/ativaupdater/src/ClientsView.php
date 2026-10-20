@@ -323,7 +323,12 @@ final class ClientsView
 
         $problem = in_array($statusKey, ['error', 'offline', 'service_down', 'manual_no_response', InstallStatus::STATUS_INSTALL_FAILED], true);
         $html = "<tr class='" . ($problem ? 'aw-row-error' : '') . "'>";
+        // Nome da pessoa pela regra de todos os plugins Ativa (Ativa Rede >
+        // Equipamentos, conta do Windows de uma pessoa ou nome da VPN).
         $username = trim((string) ($client['username'] ?? ''));
+        $username = class_exists(\GlpiPlugin\Ativarede\PersonName::class)
+            ? \GlpiPlugin\Ativarede\PersonName::forComputer(0, $hostname, $username)
+            : $username;
         $html .= "<td><div class='aw-computer'><i class='fas fa-desktop'></i><div><strong>" . htmlescape($hostname) . '</strong>'
             . ($username !== ''
                 ? "<small title='Usuário informado pelo Ativa Wallpaper'><i class='fas fa-user'></i> " . htmlescape($username) . '</small>'

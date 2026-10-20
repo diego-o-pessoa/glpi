@@ -88,7 +88,6 @@ final class Inventory
             ],
         ]);
         $users = self::windowsUsers();
-        $rede = self::redeNames();
         // O servico envia inventario a cada minuto: sem relato ha 3 min, esta offline.
         $onlineSince = strtotime((string) ($_SESSION['glpi_currenttime'] ?? 'now')) - 180;
         foreach ($iterator as $row) {
@@ -98,11 +97,11 @@ final class Inventory
             $hostname = (string) $row['hostname'];
             $user = $users['id'][$computersId] ?? $users['host'][mb_strtolower($hostname)] ?? '';
             $user = $user !== '' ? $user : self::shortUser((string) ($row['contact'] ?? ''));
-            // Mesmo nome do Ativa Rede: o corrigido a mao em Equipamentos; a conta
-            // de uma pessoa; ou o primeiro nome da VPN conectada.
-            $named = $rede['id'][$computersId] ?? $rede['host'][mb_strtolower($hostname)] ?? null;
-            if ($named !== null) {
-                $user = self::resolveName($named['manual'], $user, $named['vpn']);
+            // Mesmo nome de todos os plugins Ativa: o definido no Ativa Rede >
+            // Equipamentos; a conta do Windows, se for de uma pessoa; ou o nome
+            // da VPN ("atv.diego.pessoa" -> Diego Pessoa).
+            if (class_exists(\GlpiPlugin\Ativarede\PersonName::class)) {
+                $user = \GlpiPlugin\Ativarede\PersonName::forComputer($computersId, $hostname, $user);
             }
             $rows[] = [
                 'computers_id' => $computersId,
@@ -156,49 +155,6 @@ final class Inventory
             $users['host'][mb_strtolower((string) $row['hostname'])] = $user;
         }
         return $users;
-    }
-
-    /**
-     * Nome corrigido a mao e primeiro nome da VPN de cada maquina, do Ativa
-     * Rede (por computers_id e por hostname). Vazio sem o Ativa Rede.
-     *
-     * @return array{id: array<int, array{manual: string, vpn: string}>, host: array<string, array{manual: string, vpn: string}>}
-     */
-    private static function redeNames(): array
-    {
-        global $DB;
-
-        $names = ['id' => [], 'host' => []];
-        $table = 'glpi_plugin_ativarede_machines';
-        if (!$DB->tableExists($table) || !$DB->fieldExists($table, 'user_label')) {
-            return $names;
-        }
-        $hasVpn = $DB->fieldExists($table, 'vpn_user');
-        $iterator = $DB->request([
-            'SELECT' => array_merge(['computers_id', 'hostname', 'user_label'], $hasVpn ? ['vpn_user'] : []),
-            'FROM'   => $table,
-            'ORDER'  => ['last_report ASC'],
-        ]);
-        foreach ($iterator as $row) {
-            $entry = ['manual' => trim((string) $row['user_label']), 'vpn' => trim((string) ($row['vpn_user'] ?? ''))];
-            if ($entry['manual'] === '' && $entry['vpn'] === '') {
-                continue;
-            }
-            if ((int) $row['computers_id'] > 0) {
-                $names['id'][(int) $row['computers_id']] = $entry;
-            }
-            $names['host'][mb_strtolower((string) $row['hostname'])] = $entry;
-        }
-        return $names;
-    }
-
-    /** Regra do Ativa Rede (PersonName); sem ele, o nome manual vence. */
-    private static function resolveName(string $manual, string $auto, string $vpn): string
-    {
-        if (class_exists(\GlpiPlugin\Ativarede\PersonName::class)) {
-            return \GlpiPlugin\Ativarede\PersonName::resolve($manual, $auto, $vpn);
-        }
-        return $manual !== '' ? $manual : ($auto !== '' ? $auto : $vpn);
     }
 
     /** "DOMINIO\usuario" ou "usuario@dominio" -> "usuario". */

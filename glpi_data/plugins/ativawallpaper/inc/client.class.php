@@ -34,6 +34,9 @@ class PluginAtivawallpaperClient extends CommonDBTM
         $client = (new ClientRepository())->findByComputer((int) $item->getID());
         $current = (new WallpaperManager())->current();
         $computedStatus = $client === null ? 'unregistered' : (new DashboardService())->computeStatus($client, $current);
+        if ($client !== null) {
+            $client['person'] = DashboardService::personName($client);
+        }
         TemplateRenderer::getInstance()->display('@ativawallpaper/computer_tab.html.twig', [
             'client'          => $client,
             'current'         => $current,

@@ -89,6 +89,7 @@ final class ClientEventRepository
             'LIMIT' => $limit,
         ]);
         foreach ($iterator as $row) {
+            $row['person'] = DashboardService::personName($row);
             $rows[] = $row;
         }
 

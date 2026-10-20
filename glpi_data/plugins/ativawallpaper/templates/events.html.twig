@@ -42,7 +42,7 @@
             <tr>
               <td class="text-nowrap">{{ event.occurred_at|formatted_datetime }}</td>
               <td><strong>{{ event.hostname }}</strong>{% if event.computers_id %}<div><a class="small" href="{{ config('root_doc') }}/front/computer.form.php?id={{ event.computers_id }}">Abrir computador #{{ event.computers_id }}</a></div>{% endif %}</td>
-              <td>{{ event.username ?: 'Sessao nao informada' }}</td>
+              <td>{{ event.person ?: event.username ?: 'Sessao nao informada' }}</td>
               <td><i class="ti {{ icons[event.event_type] ?? 'ti-circle' }} me-1"></i>{{ labels[event.event_type] ?? event.event_type }}</td>
               <td><code>{{ event.wallpaper_version ?: '-' }}</code></td>
               <td>{{ not event.lock_requested ? 'Nao solicitado' : (event.policy_enforced ? 'Ativo' : 'Fallback por sincronizacao') }}</td>

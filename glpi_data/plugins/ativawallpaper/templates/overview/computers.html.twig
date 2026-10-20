@@ -36,7 +36,7 @@
             <strong>{{ client.hostname }}</strong>
           {% endif %}
         </td>
-        <td>{{ client.username ?: '—' }}</td>
+        <td{% if client.person and client.username and client.person != client.username %} title="Conta do Windows: {{ client.username }}"{% endif %}>{{ client.person ?: client.username ?: '—' }}</td>
         <td>{% if client.wallpaper_version %}<code class="awp-pill">{{ client.wallpaper_version }}</code>{% else %}—{% endif %}</td>
         <td>{{ client.client_version }}</td>
         <td>{{ client.last_check ? client.last_check|formatted_datetime : '—' }}</td>

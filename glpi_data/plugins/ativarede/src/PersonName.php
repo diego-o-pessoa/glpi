@@ -10,9 +10,10 @@ namespace GlpiPlugin\Ativarede;
  * Ordem:
  *  1. o nome definido a mao em Equipamentos;
  *  2. a conta do Windows / usuario do GLPI, se for de uma pessoa;
- *  3. o primeiro nome tirado da VPN conectada
- *     ("SIMP-ATI-VPN-01-UDP4-1195-atv.ana.csouza" -> "Ana"), guardado: vale
- *     mesmo com a VPN desconectada;
+ *  3. o nome tirado da VPN conectada
+ *     ("SIMP-ATI-VPN-01-UDP4-1195-atv.diego.pessoa" -> "Diego Pessoa";
+ *     numeros sao ignorados: "diego.pessoa2" -> "Diego Pessoa"), guardado:
+ *     vale mesmo com a VPN desconectada;
  *  4. senao, o que houver (mesmo generico).
  *
  * Conta generica = de uso comum, nao de uma pessoa: "Ativa", "Ativa
@@ -65,8 +66,9 @@ final class PersonName
     }
 
     /**
-     * Primeiro nome no perfil da VPN. O export do pfSense nomeia o perfil
-     * "<servidor>-<UDP4|TCP4>-<porta>-<usuario>"; o usuario e "prefixo.nome.sobrenome".
+     * Nome da pessoa no perfil da VPN. O export do pfSense nomeia o perfil
+     * "<servidor>-<UDP4|TCP4>-<porta>-<usuario>"; o usuario e
+     * "prefixo.nome.sobrenome" -> "Nome Sobrenome" (numeros ignorados).
      */
     public static function fromVpnProfile(string $profile): string
     {
@@ -81,15 +83,98 @@ final class PersonName
             $pos = strrpos($profile, '-');
             $user = $pos === false ? $profile : substr($profile, $pos + 1);
         }
-        $tokens = array_values(array_filter(preg_split('/[._\s-]+/u', mb_strtolower($user)) ?: [], 'strlen'));
+        // Numeros fora ("diego.pessoa2" -> "diego.pessoa"); so letras ficam.
+        $user = (string) preg_replace('/\d+/', '', mb_strtolower($user, 'UTF-8'));
+        $tokens = array_values(array_filter(preg_split('/[^\p{L}]+/u', $user) ?: [], 'strlen'));
         while (count($tokens) > 1 && in_array($tokens[0], self::VPN_PREFIXES, true)) {
             array_shift($tokens);
         }
         $first = $tokens[0] ?? '';
-        if (preg_match('/^\p{L}{2,30}$/u', $first) !== 1 || in_array($first, self::VPN_PREFIXES, true) || self::isGeneric($first)) {
+        if (mb_strlen($first) < 2 || in_array($first, self::VPN_PREFIXES, true) || self::isGeneric($first)) {
             return '';
         }
-        return mb_convert_case($first, MB_CASE_TITLE, 'UTF-8');
+        // Nome + sobrenome(s); letra solta ("a") e prefixo repetido ficam de fora.
+        $parts = array_filter(array_slice($tokens, 0, 4), static fn(string $t): bool => mb_strlen($t) >= 2);
+        return mb_substr(implode(' ', array_map(
+            static fn(string $t): string => mb_convert_case($t, MB_CASE_TITLE, 'UTF-8'),
+            $parts
+        )), 0, 64);
+    }
+
+    /** "DOMINIO\usuario" ou "usuario@dominio" -> "usuario". */
+    public static function shortUser(string $user): string
+    {
+        $user = trim($user);
+        if (str_contains($user, '\\')) {
+            $user = substr($user, strrpos($user, '\\') + 1);
+        }
+        if (str_contains($user, '@')) {
+            $user = substr($user, 0, strpos($user, '@'));
+        }
+        return trim($user);
+    }
+
+    // ------------------------------------------------------------------
+    // Regra unica para todos os plugins Ativa (Wallpaper, Guardian,
+    // Updater, Remote, Workspace...): quem usa um computador.
+    // ------------------------------------------------------------------
+
+    /** @var array{id: array<int, array{manual: string, vpn: string}>, host: array<string, array{manual: string, vpn: string}>}|null */
+    private static ?array $directory = null;
+
+    /**
+     * Nome da pessoa de um computador: o definido em Ativa Rede > Equipamentos;
+     * senao a conta do Windows, se for de uma pessoa; senao o nome da VPN.
+     * Sem nada melhor, a propria conta do Windows (mesmo generica).
+     */
+    public static function forComputer(int $computersId, string $hostname, string $windowsUser): string
+    {
+        $windowsUser = self::shortUser($windowsUser);
+        $entry = self::lookup($computersId, $hostname);
+        if ($entry === null) {
+            return $windowsUser;
+        }
+        return self::resolve($entry['manual'], $windowsUser, $entry['vpn']);
+    }
+
+    /** @return array{manual: string, vpn: string}|null */
+    private static function lookup(int $computersId, string $hostname): ?array
+    {
+        global $DB;
+
+        if (self::$directory === null) {
+            self::$directory = ['id' => [], 'host' => []];
+            $table = Settings::TABLE_MACHINES;
+            if ($DB->tableExists($table) && $DB->fieldExists($table, 'user_label')) {
+                $hasVpn = $DB->fieldExists($table, 'vpn_user');
+                $fields = array_merge(['computers_id', 'hostname', 'user_label'], $hasVpn ? ['vpn_profile', 'vpn_user'] : []);
+                // Mais antigo primeiro: o relato mais recente sobrescreve.
+                foreach ($DB->request(['SELECT' => $fields, 'FROM' => $table, 'ORDER' => ['last_report ASC']]) as $row) {
+                    $entry = ['manual' => trim((string) $row['user_label']), 'vpn' => self::vpnName($row)];
+                    if ($entry['manual'] === '' && $entry['vpn'] === '') {
+                        continue;
+                    }
+                    if ((int) $row['computers_id'] > 0) {
+                        self::$directory['id'][(int) $row['computers_id']] = $entry;
+                    }
+                    self::$directory['host'][self::hostKey((string) $row['hostname'])] = $entry;
+                }
+            }
+        }
+        return self::$directory['id'][$computersId] ?? self::$directory['host'][self::hostKey($hostname)] ?? null;
+    }
+
+    /** Nome da VPN de uma linha de maquinas: refeito do perfil (regra atual), senao o guardado. */
+    public static function vpnName(array $row): string
+    {
+        $fromProfile = self::fromVpnProfile((string) ($row['vpn_profile'] ?? ''));
+        return $fromProfile !== '' ? $fromProfile : trim((string) ($row['vpn_user'] ?? ''));
+    }
+
+    private static function hostKey(string $hostname): string
+    {
+        // "PC01.dominio.local" e "pc01" sao o mesmo computador.
+        return mb_strtolower(explode('.', trim($hostname))[0]);
     }
 
     /** Minusculas, sem acento, so letras/numeros separados por um espaco. */

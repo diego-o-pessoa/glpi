@@ -38,7 +38,8 @@ final class DashboardData
                 'id'                => (int) $row['id'],
                 'hostname'          => (string) $row['hostname'],
                 'computer_url'      => (int) $row['computers_id'] > 0 ? $computerUrl . (int) $row['computers_id'] : '',
-                'username'          => $users[strtolower((string) $row['machine_guid'])] ?? '',
+                // Nome da pessoa pela regra de todos os plugins Ativa (Ativa Rede).
+                'username'          => self::personName($row, $users[strtolower((string) $row['machine_guid'])] ?? ''),
                 'client_version'    => (string) ($row['client_version'] ?? ''),
                 'online'            => (bool) $row['online'],
                 'last_check_ts'     => $lastCheck,
@@ -114,5 +115,14 @@ final class DashboardData
             }
         }
         return $users;
+    }
+
+    /** Quem usa o computador: o definido no Ativa Rede, a conta do Windows de uma pessoa ou o nome da VPN. */
+    private static function personName(array $row, string $windowsUser): string
+    {
+        if (!class_exists(\GlpiPlugin\Ativarede\PersonName::class)) {
+            return $windowsUser;
+        }
+        return \GlpiPlugin\Ativarede\PersonName::forComputer((int) ($row['computers_id'] ?? 0), (string) ($row['hostname'] ?? ''), $windowsUser);
     }
 }

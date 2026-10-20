@@ -100,6 +100,7 @@ final class DashboardService
         ]);
         foreach ($iterator as $row) {
             $row['computed_status'] = $this->computeStatus($row, $current);
+            $row['person'] = self::personName($row);
             // Offline, mas com o wallpaper atual aplicado no ultimo relato.
             $row['up_to_date'] = $current !== null && ($row['status'] ?? '') === 'success'
                 && ($row['wallpaper_version'] ?? '') === $current['version'];
@@ -448,6 +449,24 @@ final class DashboardService
             ? substr($at, 11, 8)
             : substr($at, 8, 2) . '/' . substr($at, 5, 2) . ' ' . substr($at, 11, 5);
         return ['at' => $at, 'time' => $time, 'message' => $message, 'tone' => $tone];
+    }
+
+    /**
+     * Quem usa o computador, pela regra de todos os plugins Ativa: o nome
+     * definido no Ativa Rede > Equipamentos; a conta do Windows, se for de uma
+     * pessoa; senao o nome da VPN ("atv.diego.pessoa" -> Diego Pessoa).
+     */
+    public static function personName(array $row): string
+    {
+        $user = trim((string) ($row['username'] ?? ''));
+        if (!class_exists(\GlpiPlugin\Ativarede\PersonName::class)) {
+            return $user;
+        }
+        return \GlpiPlugin\Ativarede\PersonName::forComputer(
+            (int) ($row['computers_id'] ?? 0),
+            (string) ($row['hostname'] ?? ''),
+            $user
+        );
     }
 
     /**

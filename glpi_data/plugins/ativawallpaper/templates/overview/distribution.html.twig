@@ -43,9 +43,9 @@
     {% if waiting %}
       <i class="ti ti-circle-check"></i>Verificação concluída em todos os computadores. Nova análise a cada {{ cycle.wait_seconds }} s.
     {% elseif cycle.current %}
-      <i class="ti ti-loader-2 ativa-spin"></i>{{ cycle.current.hostname }}: {{ cycle.current.applying ? 'aplicando o wallpaper' : 'verificando o wallpaper' }}
+      <i class="ti ti-loader-2 ativa-spin"></i>{{ cycle.current.hostname }}{% if cycle.current.person|default('') %} ({{ cycle.current.person }}){% endif %}: {{ cycle.current.applying ? 'aplicando o wallpaper' : 'verificando o wallpaper' }}
     {% elseif cycle.next %}
-      <i class="ti ti-clock"></i>Próximo: {{ cycle.next.hostname }}
+      <i class="ti ti-clock"></i>Próximo: {{ cycle.next.hostname }}{% if cycle.next.person|default('') %} ({{ cycle.next.person }}){% endif %}
     {% else %}
       <i class="ti ti-clock"></i>Nenhum computador ativo no momento
     {% endif %}

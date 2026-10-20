@@ -96,6 +96,7 @@ final class MonitorCycle
             }
             $candidate = [
                 'hostname' => (string) $client['hostname'],
+                'person'   => (string) ($client['person'] ?? ''),
                 'at'       => $expected,
                 'applying' => (bool) $client['applying'],
             ];
@@ -153,13 +154,14 @@ final class MonitorCycle
 
         $clients = [];
         $iterator = $DB->request([
-            'SELECT' => ['hostname', 'last_check', 'next_check_at', 'last_cycle_at', 'rollout_status'],
+            'SELECT' => ['hostname', 'username', 'computers_id', 'last_check', 'next_check_at', 'last_cycle_at', 'rollout_status'],
             'FROM'   => self::TABLE,
             'WHERE'  => ['revoked_at' => null],
         ]);
         foreach ($iterator as $row) {
             $clients[] = [
                 'hostname'   => (string) $row['hostname'],
+                'person'     => DashboardService::personName($row),
                 'last_check' => ServerClock::toTimestamp((string) ($row['last_check'] ?? '')),
                 'next_check' => ServerClock::toTimestamp((string) ($row['next_check_at'] ?? '')),
                 'cycle_at'   => ServerClock::toTimestamp((string) ($row['last_cycle_at'] ?? '')),
