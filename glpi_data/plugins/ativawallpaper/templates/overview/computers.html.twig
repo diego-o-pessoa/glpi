@@ -1,6 +1,7 @@
 {% set badges = {'updated': ['Atualizado', 'is-green'], 'pending': ['Pendente', 'is-yellow'], 'offline': ['Offline', 'is-gray'], 'error': ['Erro', 'is-red'], 'revoked': ['Revogado', 'is-red']} %}
 {% set query = {q: filters.q, status: filters.status, sort: filters.sort, direction: filters.direction} %}
-{% if revoked_count > 0 and filters.status != 'revoked' %}
+{# Quem so ve a Visao geral (Ativa - Gestor) nao precisa do aviso de revogados nem das acoes. #}
+{% if revoked_count > 0 and filters.status != 'revoked' and not limited %}
   <div class="awp-alert is-warning awp-table-alert" role="status">
     <i class="ti ti-ban"></i>
     <span>
@@ -21,7 +22,7 @@
         <th>Último contato</th>
         <th>Última aplicação</th>
         <th>Status</th>
-        <th class="text-end">Ações</th>
+        {% if not limited %}<th class="text-end">Ações</th>{% endif %}
       </tr>
     </thead>
     <tbody>
@@ -57,6 +58,7 @@
             </small>
           {% endif %}
         </td>
+        {% if not limited %}
         <td class="text-end">
           <span class="awp-row-actions">
             {% if not limited %}
@@ -71,9 +73,10 @@
             {% endif %}
           </span>
         </td>
+        {% endif %}
       </tr>
     {% else %}
-      <tr><td colspan="8" class="awp-table-empty">
+      <tr><td colspan="{{ limited ? 7 : 8 }}" class="awp-table-empty">
         {% if summary.managed == 0 %}
           Nenhum computador registrado. Os computadores aparecem aqui depois que o AtivaWallpaperClient é instalado.
         {% else %}

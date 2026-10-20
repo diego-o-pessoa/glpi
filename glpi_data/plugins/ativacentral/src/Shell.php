@@ -169,7 +169,9 @@ final class Shell
         }
 
         return [
-            'home'      => self::panelOnly() ? self::glpiUrl('/front/central.php') : self::url('/front/home.php'),
+            // Quem so tem paineis nao tem "Visao geral": o shell.js leva ao painel dele.
+            'home'      => self::panelOnly() ? '' : self::url('/front/home.php'),
+            'panelOnly' => self::panelOnly(),
             'helpdesk'  => self::glpiUrl(Nav::hubUrl('helpdesk')),
             'classic'   => self::url('/front/toggle.php?mode=classic'),
             'finish'    => self::url('/front/ticket.finish.php'),

@@ -49,15 +49,34 @@
     // isso numa tag <meta>; aqui e a garantia caso o navegador ignore).
     // ------------------------------------------------------------------
     function redirectHome() {
-        if (!data.home || !/\/(front\/central\.php|Central)$/.test(location.pathname)) {
+        if (!/\/(front\/central\.php|Central)$/.test(location.pathname)) {
             return false;
         }
         var query = new URLSearchParams(location.search);
         if (query.has('embed') || query.has('redirect') || query.has('ac_native')) {
             return false;
         }
-        location.replace(data.home);
+        // Perfil so com paineis (ex.: Ativa - Gestor): a pagina inicial do GLPI
+        // nao tem nada para ele. Vai para o primeiro painel da barra lateral,
+        // que o GLPI ja montou so com o que ele pode ver (Wallpaper, Ramal...).
+        var target = data.panelOnly ? firstPanelLink() : data.home;
+        if (!target || target === location.pathname + location.search) {
+            return false;
+        }
+        location.replace(target);
         return true;
+    }
+
+    function firstPanelLink() {
+        var links = document.querySelectorAll('.sidebar #navbar-menu .navbar-nav > li > a.nav-link[href]');
+        for (var i = 0; i < links.length; i++) {
+            var href = links[i].getAttribute('href') || '';
+            if (href && href.indexOf('#') === -1 && !links[i].classList.contains('dropdown-toggle')
+                && !/\/front\/central\.php/.test(href)) {
+                return href;
+            }
+        }
+        return '';
     }
 
     // ------------------------------------------------------------------
