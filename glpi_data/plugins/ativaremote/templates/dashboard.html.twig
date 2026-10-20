@@ -59,6 +59,9 @@
 .ar-toast{min-width:260px;max-width:420px;padding:11px 14px;border-radius:9px;background:#142a5b;color:#fff;box-shadow:0 10px 30px #07132c40;font-size:13px;display:flex;gap:9px;align-items:flex-start}
 .ar-toast.is-error{background:#a8232d}
 .ar-spin{animation:ar-spin 1s linear infinite;display:inline-block}@keyframes ar-spin{to{transform:rotate(360deg)}}
+.modal-backdrop{z-index:10050 !important}
+#ativa-remote-ti-password,#ativa-remote-connect{z-index:10055 !important}
+#ativa-remote-ti-password .modal-dialog,#ativa-remote-connect .modal-dialog{z-index:10056 !important;position:relative}
 @media(max-width:1200px){.ar-kpis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:700px){.ar-kpis{grid-template-columns:repeat(2,1fr)}.ar-search{min-width:0;width:100%}}
 </style>
@@ -530,6 +533,9 @@
 
     // Conexao (RustDesk) -------------------------------------------------------
     const dialog = document.getElementById('ativa-remote-connect');
+    if (dialog && dialog.parentNode !== document.body) {
+        document.body.appendChild(dialog);
+    }
     const showConnection = (rustdeskId, password, url) => {
         dialog.querySelector('[data-connect-field="id"]').value = rustdeskId;
         dialog.querySelector('[data-connect-field="password"]').value = password;
@@ -582,6 +588,9 @@
 
     // Senha do T.I. (computadores protegidos) ------------------------------
     const tiDialog = document.getElementById('ativa-remote-ti-password');
+    if (tiDialog && tiDialog.parentNode !== document.body) {
+        document.body.appendChild(tiDialog);
+    }
     const tiForm = tiDialog.querySelector('[data-ti-password-form]');
     const tiError = tiDialog.querySelector('[data-ti-error]');
     const tiSubmit = tiDialog.querySelector('[data-ti-submit]');
@@ -600,7 +609,9 @@
         showTiError(message);
         bootstrap.Modal.getOrCreateInstance(tiDialog).show();
     };
-    tiDialog.addEventListener('shown.bs.modal', () => tiPassword.focus());
+    tiDialog.addEventListener('shown.bs.modal', () => {
+        setTimeout(() => tiPassword.focus(), 50);
+    });
     tiDialog.addEventListener('hidden.bs.modal', () => { tiPassword.value = ''; tiClient = null; });
     tiForm.addEventListener('submit', async (event) => {
         event.preventDefault();
