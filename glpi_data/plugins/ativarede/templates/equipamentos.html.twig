@@ -96,11 +96,14 @@
                             </thead>
                             <tbody>
                             {% for net in discovered_networks %}
-                                <tr>
+                                {# Nome escolhido: o salvo; sem ele, a sugestao pelo IP (a T.I. confirma). #}
+                                {%- set chosen = net.branch_name ?: net.suggested -%}
+                                <tr class="{{ net.branch_name ? '' : 'ar-net-pending' }}">
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
                                             <i class="ti ti-router text-muted"></i>
                                             <strong class="font-monospace">{{ net.gateway_ip ?: '—' }}</strong>
+                                            {% if not net.branch_name %}<span class="badge bg-orange-lt">sem filial</span>{% endif %}
                                         </div>
                                     </td>
                                     <td>
@@ -123,12 +126,17 @@
                                             <select name="branch_name" class="form-select form-select-sm" style="min-width: 180px;" data-ar-branch-select>
                                                 <option value="">-- Escolher filial --</option>
                                                 {% for kb in known_branches %}
-                                                    <option value="{{ kb }}" {% if net.branch_name == kb %}selected{% endif %}>{{ kb }}</option>
+                                                    <option value="{{ kb }}" {% if chosen == kb %}selected{% endif %}>{{ kb }}</option>
                                                 {% endfor %}
-                                                <option value="__custom__" {% if net.branch_name and net.branch_name not in known_branches %}selected{% endif %}>Outro nome...</option>
+                                                <option value="__custom__" {% if chosen and chosen not in known_branches %}selected{% endif %}>Outro nome...</option>
                                             </select>
-                                            <input type="text" name="custom_branch_name" class="form-control form-control-sm" style="min-width: 130px; {% if net.branch_name in known_branches or not net.branch_name %}display: none;{% endif %}" placeholder="Nome da filial" value="{% if net.branch_name not in known_branches %}{{ net.branch_name }}{% endif %}" data-ar-branch-custom>
+                                            <input type="text" name="custom_branch_name" class="form-control form-control-sm" style="min-width: 130px; {% if chosen in known_branches or not chosen %}display: none;{% endif %}" placeholder="Nome da filial" value="{% if chosen not in known_branches %}{{ chosen }}{% endif %}" data-ar-branch-custom>
                                         </form>
+                                        {% if not net.branch_name and net.suggested %}
+                                            <div class="small text-warning mt-1"><i class="ti ti-bulb"></i> Sugerido pelo IP ({{ net.machine_count }} máquinas neste roteador). Confira e salve.</div>
+                                        {% elseif not net.branch_name and net.machine_count < 2 %}
+                                            <div class="small text-muted mt-1">Uma máquina só: pode ser o roteador da casa de alguém (home office).</div>
+                                        {% endif %}
                                     </td>
                                     <td class="text-end">
                                         <div class="d-inline-flex gap-1">
@@ -173,10 +181,11 @@
                                 <div class="col-md-7 small text-muted">
                                     <p class="mb-1">Ordem de prioridade para identificar a filial:</p>
                                     <ol class="mb-2 ps-3">
-                                        <li><strong>MAC do roteador</strong> (definido na tabela acima — resolve duplicidades de 192.168.0.1);</li>
-                                        <li><strong>Switch</strong> onde o cabo está ligado ou faixa de IP exclusiva;</li>
+                                        <li><strong>Roteador com filial</strong> definida na tabela acima (resolve as filiais em 192.168.0.1);</li>
+                                        <li><strong>Switch</strong> da empresa onde o cabo está ligado;</li>
+                                        <li><strong>Faixa de IP</strong> abaixo, mas só para roteador visto por 2 ou mais máquinas (192.168.1.1 e 192.168.0.1 também são IPs de roteador de casa);</li>
                                         <li><strong>Entidade ou localização</strong> do GLPI;</li>
-                                        <li><strong>Última filial conhecida</strong> (quando em trânsito ou home office).</li>
+                                        <li><strong>Última filial</strong> onde a máquina foi vista (home office).</li>
                                     </ol>
                                     <button type="submit" class="btn btn-sm btn-secondary"><i class="ti ti-device-floppy me-1"></i>Salvar regras de IP</button>
                                 </div>

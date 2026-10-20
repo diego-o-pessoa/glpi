@@ -85,7 +85,7 @@ foreach ($machines as &$machine) {
     $desk = Inventory::deskOf($machine);
     $machine['desk'] = $desk['name'] ?? '';
     $machine['branch'] = Branches::ofMachine($machine, $allSwitches);
-    $machine['is_roaming'] = Branches::isRoaming($machine, $machine['branch']);
+    $machine['is_roaming'] = Branches::isRoaming($machine, $allSwitches);
     // Nome principal da linha: a pessoa; sem pessoa, a maquina.
     $machine['title'] = $machine['person'] !== '' ? $machine['person'] : ($machine['computer'] ?: $machine['hostname']);
 }
@@ -131,7 +131,7 @@ TemplateRenderer::getInstance()->display('@ativarede/equipamentos.html.twig', [
     'counts'              => $counts,
     'branch_rules'        => Branches::rulesText(),
     'discovered_networks' => Branches::discoveredNetworks(),
-    'known_branches'      => Branches::KNOWN_BRANCHES,
+    'known_branches'      => Branches::knownBranches(),
     'today'               => date('d/m/Y'),
     'monitors'            => Inventory::monitors(),
     'missing'             => Inventory::guardianWithoutReport(),

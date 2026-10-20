@@ -555,9 +555,13 @@ def resolve_gateway_mac(gateway_ip: str) -> str:
         import struct
 
         iphlpapi = ctypes.WinDLL("iphlpapi")
+        # Tipos declarados: sem isso, IP com ultimo octeto >= 128 (ex.: .254)
+        # nao cabe no int padrao do ctypes e a chamada falhava.
+        iphlpapi.SendARP.argtypes = [ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+        iphlpapi.SendARP.restype = ctypes.c_ulong
         dest = struct.unpack("<I", socket.inet_aton(gateway_ip))[0]
-        mac = (ctypes.c_ubyte * 6)()
-        mac_len = ctypes.c_ulong(6)
+        mac = (ctypes.c_ubyte * 8)()  # a API pede espaco para 8 bytes (ULONG[2])
+        mac_len = ctypes.c_ulong(8)
         res = iphlpapi.SendARP(dest, 0, ctypes.byref(mac), ctypes.byref(mac_len))
         if res == 0 and mac_len.value == 6:
             mac_str = ":".join(f"{b:02X}" for b in mac[:6])

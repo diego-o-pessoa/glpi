@@ -819,3 +819,6 @@ tr:hover .ar-eq-edit-btn,
 }
 
 .ar-equip .ar-eq-pane { position: relative; clear: both; }
+
+/* Filiais por rede: roteador ainda sem filial em destaque. */
+.ar-net-pending > td { background: rgba(234, 88, 12, .04); }

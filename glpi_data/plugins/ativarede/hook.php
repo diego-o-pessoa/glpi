@@ -242,6 +242,7 @@ function plugin_ativarede_uninstall(): bool
     foreach ([
         'glpi_plugin_ativarede_rejections',
         'glpi_plugin_ativarede_walls',
+        'glpi_plugin_ativarede_networks',
         'glpi_plugin_ativarede_events',
         'glpi_plugin_ativarede_monitors',
         'glpi_plugin_ativarede_machines',

@@ -11,37 +11,36 @@ use Location;
 /**
  * Filial de cada maquina, para separar Equipamentos por filial.
  *
- * Prioridade:
- * 1. MAC do roteador (gateway) fisico da filial: diferencia filiais que
- *    compartilham a mesma faixa de IP (Limeira, Campo Grande e Londrina em 192.168.0.1).
- * 2. IP do switch onde a maquina esta ligada.
- * 3. IP do gateway ou da maquina para faixas de IP unicas (Matriz, Uberlandia,
- *    Aracatuba, Ribeirao Preto, Cuiaba).
- * 4. GLPI: entidade ou localizacao do computador.
- * 5. Ultima filial conhecida (para notebooks em home office / em transito).
- * 6. Senao, vazio ("Sem filial").
+ * Prioridade (networkBranch + ofMachine):
+ * 1. o roteador (MAC do gateway) com nome dado pela T.I.: diferencia filiais
+ *    com o mesmo IP (Limeira, Campo Grande e Londrina em 192.168.0.1);
+ * 2. o switch da empresa onde a maquina esta ligada (IP de gerencia);
+ * 3. roteador ainda sem nome: sugestao pelas regras de IP, so se varias
+ *    maquinas usam o mesmo roteador (em casa ha uma so);
+ * 4. Guardian antigo (sem MAC do roteador): o IP da maquina, como antes;
+ * 5. GLPI: entidade ou localizacao do computador;
+ * 6. a ultima filial onde a maquina foi vista (home office);
+ * 7. senao, vazio ("Sem filial").
  */
 final class Branches
 {
     public const SETTING = 'branch_networks';
-    public const DEFAULT_RULES = "192.168.80 = Matriz\n192.168.200 = Uberlandia\n192.168.88 = Araçatuba\n192.168.31 = Ribeirão preto\n192.168.1 = Cuiabá";
+    // 192.168.0 fica de fora: e de Limeira, Campo Grande e Londrina (so o roteador diferencia).
+    public const DEFAULT_RULES = "192.168.80 = Matriz\n192.168.200 = Uberlândia\n192.168.88 = Araçatuba\n192.168.31 = Ribeirão Preto\n192.168.1 = Cuiabá";
 
     public const KNOWN_BRANCHES = [
         'Matriz',
-        'Uberlandia',
+        'Uberlândia',
         'Limeira',
         'Campo Grande',
         'Araçatuba',
-        'Ribeirão preto',
+        'Ribeirão Preto',
         'Londrina',
         'Cuiabá',
     ];
 
     /** @var list<array{prefix: string, name: string}>|null */
     private static ?array $rules = null;
-
-    /** @var array<string, string>|null */
-    private static ?array $macBranches = null;
 
     /** @var array<string, string> */
     private static array $glpiNames = [];
@@ -117,49 +116,143 @@ final class Branches
         return '';
     }
 
-    /** Busca o nome da filial pelo MAC do roteador fisico. */
+    // ------------------------------------------------------------------
+    // Roteador da filial (MAC do gateway)
+    //
+    // Limeira, Campo Grande e Londrina usam o mesmo 192.168.0.1: so o MAC do
+    // roteador (aparelho fisico) diz qual e qual. A T.I. da o nome de cada
+    // roteador uma vez em Equipamentos > Filiais por rede.
+    //
+    // Cuidado com o IP sozinho: 192.168.0.1, 192.168.1.1, 192.168.31.1 e
+    // 192.168.88.1 sao os IPs de fabrica dos roteadores de casa mais comuns.
+    // Um notebook em home office nao pode virar "Cuiaba" so pelo IP. Por isso
+    // um roteador novo nunca e nomeado sozinho: o IP so SUGERE o nome, e so
+    // quando o mesmo roteador e visto por varias maquinas (uma filial).
+    // ------------------------------------------------------------------
+
+    /** Maquinas no mesmo roteador para a sugestao pelo IP valer (casa tem uma). */
+    public const SUGGEST_MIN_MACHINES = 2;
+
+    /** @var array<string, string>|null MAC -> filial (roteadores nomeados) */
+    private static ?array $macBranches = null;
+
+    /** @var array<string, int>|null MAC -> maquinas vistas nele */
+    private static ?array $macCounts = null;
+
+    /** Filial do roteador nomeado pela T.I. ('' se ainda sem nome). */
     public static function byRouterMac(string $mac): string
     {
-        $mac = strtoupper(trim($mac));
-        if ($mac === '' || $mac === '00:00:00:00:00:00') {
+        $mac = self::normalizeMac($mac);
+        if ($mac === '') {
             return '';
         }
         if (self::$macBranches === null) {
-            self::$macBranches = self::loadMacBranches();
+            self::$macBranches = [];
+            global $DB;
+            if ($DB->tableExists(Settings::TABLE_NETWORKS)) {
+                foreach ($DB->request(['FROM' => Settings::TABLE_NETWORKS]) as $row) {
+                    $rowMac = self::normalizeMac((string) $row['gateway_mac']);
+                    $name = trim((string) $row['name']);
+                    if ($rowMac !== '' && $name !== '') {
+                        self::$macBranches[$rowMac] = $name;
+                    }
+                }
+            }
         }
         return self::$macBranches[$mac] ?? '';
     }
 
-    private static function loadMacBranches(): array
+    /** Quantas maquinas usam este roteador (ultimo relatorio de cada uma). */
+    public static function machinesOnRouter(string $mac): int
     {
-        global $DB;
-
-        $map = [];
-        if ($DB->tableExists(Settings::TABLE_NETWORKS)) {
-            foreach ($DB->request(['FROM' => Settings::TABLE_NETWORKS]) as $row) {
-                $gwMac = strtoupper(trim((string) ($row['gateway_mac'] ?? '')));
-                $name = trim((string) ($row['name'] ?? ''));
-                if ($gwMac !== '' && $name !== '') {
-                    $map[$gwMac] = $name;
-                }
+        $mac = self::normalizeMac($mac);
+        if ($mac === '') {
+            return 0;
+        }
+        if (self::$macCounts === null) {
+            self::$macCounts = [];
+            foreach (self::routerMachines() as $routerMac => $info) {
+                self::$macCounts[$routerMac] = count($info['hosts']);
             }
         }
-        return $map;
+        return self::$macCounts[$mac] ?? 0;
+    }
+
+    /** Nome sugerido para um roteador ainda sem nome: pelo IP, se for de filial. */
+    public static function suggestedForRouter(string $mac, string $gatewayIp): string
+    {
+        if (self::machinesOnRouter($mac) < self::SUGGEST_MIN_MACHINES) {
+            return '';
+        }
+        return self::byIp($gatewayIp);
     }
 
     /**
-     * Registra novo roteador descoberto pelo Guardian no glpi_plugin_ativarede_networks.
+     * Filial pela REDE onde a maquina esta agora ('' = rede desconhecida,
+     * ex.: home office). Ordem: roteador nomeado; switch da empresa (IP de
+     * gerencia); roteador ainda sem nome, mas sugerido pelo IP; e, so para
+     * Guardian antigo (sem MAC do roteador), o IP da maquina.
      */
+    public static function networkBranch(string $gatewayMac, string $gatewayIp, string $switchIp, string $machineIp): string
+    {
+        $gatewayMac = self::normalizeMac($gatewayMac);
+        if ($gatewayMac !== '') {
+            $named = self::byRouterMac($gatewayMac);
+            if ($named !== '') {
+                return $named;
+            }
+        }
+        // Switch gerenciavel: equipamento da empresa, nao existe em casa.
+        $bySwitch = self::byIp($switchIp);
+        if ($bySwitch !== '') {
+            return $bySwitch;
+        }
+        if ($gatewayMac !== '') {
+            return self::suggestedForRouter($gatewayMac, $gatewayIp);
+        }
+        return self::byIp($machineIp);
+    }
+
+    /**
+     * @param array<string, mixed> $machine Linha de Inventory::decoratedMachines()
+     * @param array<int, array<string, mixed>> $switches Inventory::switches()
+     */
+    public static function ofMachine(array $machine, array $switches): string
+    {
+        $switchIp = (string) ($switches[(int) ($machine['switches_id'] ?? 0)]['mgmt_ip'] ?? '');
+        return self::networkBranch(
+            (string) ($machine['gateway_mac'] ?? ''),
+            (string) ($machine['gateway_ip'] ?? ''),
+            $switchIp,
+            (string) ($machine['ip'] ?? '')
+        )
+            ?: self::fromGlpi((int) ($machine['computer_entity'] ?? 0), (int) ($machine['computer_location'] ?? 0))
+            // Fora de uma rede da empresa (home office): a ultima filial onde foi vista.
+            ?: trim((string) ($machine['last_known_branch'] ?? ''));
+    }
+
+    /**
+     * Fora da rede da filial agora (home office, hotel...): a maquina mandou
+     * o roteador dela e ele nao e de nenhuma filial.
+     */
+    public static function isRoaming(array $machine, array $switches = []): bool
+    {
+        $gatewayMac = self::normalizeMac((string) ($machine['gateway_mac'] ?? ''));
+        if ($gatewayMac === '') {
+            return false; // Guardian antigo: nao da para saber
+        }
+        $switchIp = (string) ($switches[(int) ($machine['switches_id'] ?? 0)]['mgmt_ip'] ?? '');
+        return self::networkBranch($gatewayMac, (string) ($machine['gateway_ip'] ?? ''), $switchIp, '') === '';
+    }
+
+    /** Novo roteador visto pelo Guardian: entra na lista SEM nome (a T.I. confirma). */
     public static function registerDiscoveredNetwork(string $gatewayIp, string $gatewayMac): void
     {
         global $DB;
 
         $gatewayIp = trim($gatewayIp);
-        $gatewayMac = strtoupper(trim($gatewayMac));
-        if ($gatewayMac === '' || $gatewayMac === '00:00:00:00:00:00') {
-            return;
-        }
-        if (!$DB->tableExists(Settings::TABLE_NETWORKS)) {
+        $gatewayMac = self::normalizeMac($gatewayMac);
+        if ($gatewayMac === '' || !$DB->tableExists(Settings::TABLE_NETWORKS)) {
             return;
         }
         $existing = $DB->request([
@@ -168,50 +261,41 @@ final class Branches
             'LIMIT' => 1,
         ])->current();
         if ($existing) {
-            if ($gatewayIp !== '' && ($existing['gateway_ip'] ?? '') !== $gatewayIp) {
+            if ($gatewayIp !== '' && (string) $existing['gateway_ip'] !== $gatewayIp) {
                 $DB->update(Settings::TABLE_NETWORKS, ['gateway_ip' => $gatewayIp], ['id' => (int) $existing['id']]);
             }
             return;
         }
-        // Sugere o nome se o IP for de rede unica (ex: 192.168.80 = Matriz).
-        // 192.168.0.x fica vazio porque e compartilhado entre Limeira, Campo Grande e Londrina.
-        $suggested = '';
-        if ($gatewayIp !== '' && !str_starts_with($gatewayIp, '192.168.0.')) {
-            $suggested = self::byIp($gatewayIp);
-        }
         $DB->insert(Settings::TABLE_NETWORKS, [
             'gateway_ip'  => $gatewayIp,
             'gateway_mac' => $gatewayMac,
-            'name'        => $suggested,
+            'name'        => '',
             'comment'     => '',
             'date_mod'    => date('Y-m-d H:i:s'),
         ]);
-        self::$macBranches = null;
     }
 
-    /** Associa ou atualiza a filial de um roteador fisico. */
+    /** Nome da filial de um roteador (vazio = tira o nome; ele continua na lista). */
     public static function saveNetwork(string $gatewayIp, string $gatewayMac, string $name): array
     {
         global $DB;
 
-        $gatewayIp = trim($gatewayIp);
-        $gatewayMac = strtoupper(trim($gatewayMac));
-        $name = trim($name);
+        $gatewayIp = mb_substr(trim($gatewayIp), 0, 64);
+        $gatewayMac = self::normalizeMac($gatewayMac);
+        $name = mb_substr(trim((string) preg_replace('/\s+/u', ' ', $name)), 0, 64);
         if ($gatewayMac === '') {
-            return ['ok' => false, 'message' => 'MAC do roteador não informado.'];
+            return ['ok' => false, 'message' => 'MAC do roteador inválido.'];
         }
-        if (!$DB->tableExists(Settings::TABLE_NETWORKS)) {
-            Schema::upgrade();
-        }
+        Schema::upgrade();
+        $now = date('Y-m-d H:i:s');
         $existing = $DB->request([
             'FROM'  => Settings::TABLE_NETWORKS,
             'WHERE' => ['gateway_mac' => $gatewayMac],
             'LIMIT' => 1,
         ])->current();
-        $now = date('Y-m-d H:i:s');
         if ($existing) {
             $DB->update(Settings::TABLE_NETWORKS, [
-                'gateway_ip' => $gatewayIp ?: (string) $existing['gateway_ip'],
+                'gateway_ip' => $gatewayIp !== '' ? $gatewayIp : (string) $existing['gateway_ip'],
                 'name'       => $name,
                 'date_mod'   => $now,
             ], ['id' => (int) $existing['id']]);
@@ -225,15 +309,20 @@ final class Branches
             ]);
         }
         self::$macBranches = null;
+        // As maquinas que ja estao nesse roteador passam a ter essa filial
+        // como "ultima filial conhecida" (vale quando elas sairem dela).
+        if ($name !== '' && $DB->fieldExists(Settings::TABLE_MACHINES, 'last_known_branch')) {
+            $DB->update(Settings::TABLE_MACHINES, ['last_known_branch' => $name], ['gateway_mac' => $gatewayMac]);
+        }
         return [
             'ok'      => true,
             'message' => $name !== ''
-                ? "Filial '{$name}' associada à rede {$gatewayIp} (MAC {$gatewayMac})."
-                : "Associação do roteador {$gatewayMac} removida.",
+                ? 'Roteador ' . $gatewayMac . ' (' . ($gatewayIp ?: 'sem IP') . ') agora é da filial ' . $name . '.'
+                : 'O roteador ' . $gatewayMac . ' ficou sem filial.',
         ];
     }
 
-    /** Remove um roteador da tabela de filiais. */
+    /** Tira um roteador da lista (volta sozinho, sem nome, se for visto de novo). */
     public static function deleteNetwork(int $id): array
     {
         global $DB;
@@ -243,210 +332,128 @@ final class Branches
         }
         $DB->delete(Settings::TABLE_NETWORKS, ['id' => $id]);
         self::$macBranches = null;
-        return ['ok' => true, 'message' => 'Roteador removido da lista de filiais.'];
+        return ['ok' => true, 'message' => 'Roteador removido da lista.'];
     }
 
     /**
-     * Lista de redes/roteadores para exibicao em "Filiais por rede".
+     * Roteadores para "Filiais por rede": os cadastrados e os vistos pelas
+     * maquinas, com quantas maquinas e quais, e o nome sugerido pelo IP.
      *
-     * @return list<array{id: int, gateway_ip: string, gateway_mac: string, branch_name: string, machine_count: int, sample_machines: string, is_saved: bool}>
+     * @return list<array{id: int, gateway_ip: string, gateway_mac: string, branch_name: string, suggested: string,
+     *                    machine_count: int, sample_machines: string, is_saved: bool}>
      */
     public static function discoveredNetworks(): array
     {
         global $DB;
 
-        $statsByMac = [];
-        $hasGwMac = $DB->tableExists(Settings::TABLE_MACHINES) && $DB->fieldExists(Settings::TABLE_MACHINES, 'gateway_mac');
-        if ($hasGwMac) {
-            $query = [
-                'SELECT' => [
-                    'gateway_mac',
-                    'gateway_ip',
-                    'COUNT(*) AS cnt',
-                    'GROUP_CONCAT(COALESCE(NULLIF(hostname, ""), CONCAT("#", id)) ORDER BY id SEPARATOR ", ") AS samples',
-                ],
-                'FROM' => Settings::TABLE_MACHINES,
-                'WHERE' => [
-                    'gateway_mac' => ['<>', ''],
-                ],
-                'GROUPBY' => ['gateway_mac', 'gateway_ip'],
-            ];
-            foreach ($DB->request($query) as $row) {
-                $gwMac = strtoupper(trim((string) $row['gateway_mac']));
-                if ($gwMac === '' || $gwMac === '00:00:00:00:00:00') {
-                    continue;
-                }
-                $samples = explode(', ', (string) $row['samples']);
-                $statsByMac[$gwMac] = [
-                    'gateway_ip' => (string) $row['gateway_ip'],
-                    'cnt'        => (int) $row['cnt'],
-                    'samples'    => implode(', ', array_slice($samples, 0, 4)) . (count($samples) > 4 ? '...' : ''),
-                ];
-            }
-        }
-
+        $byMac = self::routerMachines();
         $networks = [];
-        $seenMacs = [];
         if ($DB->tableExists(Settings::TABLE_NETWORKS)) {
             foreach ($DB->request(['FROM' => Settings::TABLE_NETWORKS, 'ORDER' => ['name', 'gateway_ip']]) as $row) {
-                $gwMac = strtoupper(trim((string) $row['gateway_mac']));
-                $gwIp = trim((string) $row['gateway_ip']);
-                $stat = $statsByMac[$gwMac] ?? null;
-                $networks[] = [
-                    'id'              => (int) $row['id'],
-                    'gateway_ip'      => $gwIp ?: ($stat['gateway_ip'] ?? ''),
-                    'gateway_mac'     => $gwMac,
-                    'branch_name'     => (string) $row['name'],
-                    'machine_count'   => $stat ? $stat['cnt'] : 0,
-                    'sample_machines' => $stat ? $stat['samples'] : '',
-                    'is_saved'        => true,
-                ];
-                $seenMacs[$gwMac] = true;
+                $mac = self::normalizeMac((string) $row['gateway_mac']);
+                if ($mac === '' || isset($networks[$mac])) {
+                    continue;
+                }
+                $networks[$mac] = self::networkRow((int) $row['id'], (string) $row['gateway_ip'], $mac, (string) $row['name'], $byMac[$mac] ?? null);
             }
         }
-
-        // Redes vistas pelo Guardian mas ainda nao cadastradas no glpi_plugin_ativarede_networks
-        foreach ($statsByMac as $gwMac => $stat) {
-            if (isset($seenMacs[$gwMac])) {
-                continue;
+        // Visto pelas maquinas e ainda fora da tabela (ex.: tabela criada depois).
+        foreach ($byMac as $mac => $info) {
+            if (!isset($networks[$mac])) {
+                $networks[$mac] = self::networkRow(0, $info['ip'], $mac, '', $info);
             }
-            $gwIp = $stat['gateway_ip'];
-            $suggested = ($gwIp !== '' && !str_starts_with($gwIp, '192.168.0.')) ? self::byIp($gwIp) : '';
-            $networks[] = [
-                'id'              => 0,
-                'gateway_ip'      => $gwIp,
-                'gateway_mac'     => $gwMac,
-                'branch_name'     => $suggested,
-                'machine_count'   => $stat['cnt'],
-                'sample_machines' => $stat['samples'],
-                'is_saved'        => false,
-            ];
         }
-
-        // Ordenacao: redes cadastradas e com mais maquinas primeiro
-        usort($networks, static function (array $a, array $b): int {
-            if ($a['machine_count'] !== $b['machine_count']) {
-                return $b['machine_count'] <=> $a['machine_count'];
-            }
-            return strnatcasecmp($a['gateway_ip'], $b['gateway_ip']);
-        });
-
+        $networks = array_values($networks);
+        // Sem nome primeiro (o que falta fazer), depois os com mais maquinas.
+        usort($networks, static fn(array $a, array $b): int
+            => (($a['branch_name'] !== '') <=> ($b['branch_name'] !== ''))
+            ?: ($b['machine_count'] <=> $a['machine_count'])
+            ?: strnatcasecmp($a['gateway_ip'], $b['gateway_ip']));
         return $networks;
     }
 
-    /**
-     * Determina se a rede atual da maquina aponta diretamente para uma filial da empresa.
-     */
-    public static function resolveCurrentBranch(string $gatewayMac, string $gatewayIp, string $machineIp, int $computersId = 0): string
+    /** Filiais para escolher na lista: as conhecidas, as das regras e as ja usadas. */
+    public static function knownBranches(): array
     {
-        $gwMac = strtoupper(trim($gatewayMac));
-        if ($gwMac !== '') {
-            $byMac = self::byRouterMac($gwMac);
-            if ($byMac !== '') {
-                return $byMac;
+        global $DB;
+
+        $names = self::KNOWN_BRANCHES;
+        foreach (self::rules() as $rule) {
+            $names[] = $rule['name'];
+        }
+        if ($DB->tableExists(Settings::TABLE_NETWORKS)) {
+            foreach ($DB->request(['SELECT' => ['name'], 'FROM' => Settings::TABLE_NETWORKS, 'WHERE' => ['NOT' => ['name' => '']]]) as $row) {
+                $names[] = (string) $row['name'];
             }
         }
-        $gwIp = trim($gatewayIp);
-        if ($gwIp !== '' && !str_starts_with($gwIp, '192.168.0.')) {
-            $byGw = self::byIp($gwIp);
-            if ($byGw !== '') {
-                return $byGw;
+        $unique = [];
+        foreach ($names as $name) {
+            $name = trim($name);
+            if ($name !== '' && !in_array(mb_strtolower($name), array_map('mb_strtolower', $unique), true)) {
+                $unique[] = $name;
             }
         }
-        $machIp = trim($machineIp);
-        if ($machIp !== '' && !str_starts_with($machIp, '192.168.0.')) {
-            $byMach = self::byIp($machIp);
-            if ($byMach !== '') {
-                return $byMach;
-            }
-        }
-        return '';
+        natcasesort($unique);
+        return array_values($unique);
+    }
+
+    /** @param array{ip: string, hosts: list<string>}|null $info */
+    private static function networkRow(int $id, string $ip, string $mac, string $name, ?array $info): array
+    {
+        $ip = trim($ip) !== '' ? trim($ip) : (string) ($info['ip'] ?? '');
+        $hosts = $info['hosts'] ?? [];
+        $name = trim($name);
+        return [
+            'id'              => $id,
+            'gateway_ip'      => $ip,
+            'gateway_mac'     => $mac,
+            'branch_name'     => $name,
+            'suggested'       => $name === '' ? self::suggestedForRouter($mac, $ip) : '',
+            'machine_count'   => count($hosts),
+            'sample_machines' => implode(', ', array_slice($hosts, 0, 4)) . (count($hosts) > 4 ? '…' : ''),
+            'is_saved'        => $id > 0,
+        ];
     }
 
     /**
-     * @param array<string, mixed> $machine Linha de Inventory::decoratedMachines()
-     * @param array<int, array<string, mixed>> $switches Inventory::switches()
+     * Maquinas por roteador, do ultimo relatorio de cada uma. Agrupado aqui
+     * (e nao com COUNT/GROUP_CONCAT no SQL): o GLPI poe crases em expressoes
+     * no SELECT e a consulta quebrava a pagina Equipamentos.
+     *
+     * @return array<string, array{ip: string, hosts: list<string>}>
      */
-    public static function ofMachine(array $machine, array $switches): string
+    private static function routerMachines(): array
     {
-        // 1. MAC do roteador/gateway fisico da maquina (diferencia 192.168.0.1)
-        $gwMac = strtoupper(trim((string) ($machine['gateway_mac'] ?? '')));
-        if ($gwMac !== '') {
-            $branch = self::byRouterMac($gwMac);
-            if ($branch !== '') {
-                return $branch;
+        global $DB;
+
+        $out = [];
+        if (!$DB->tableExists(Settings::TABLE_MACHINES) || !$DB->fieldExists(Settings::TABLE_MACHINES, 'gateway_mac')) {
+            return $out;
+        }
+        foreach ($DB->request([
+            'SELECT' => ['id', 'hostname', 'gateway_ip', 'gateway_mac'],
+            'FROM'   => Settings::TABLE_MACHINES,
+            'WHERE'  => ['NOT' => ['gateway_mac' => '']],
+            'ORDER'  => 'hostname',
+        ]) as $row) {
+            $mac = self::normalizeMac((string) $row['gateway_mac']);
+            if ($mac === '') {
+                continue;
             }
+            $out[$mac] ??= ['ip' => (string) $row['gateway_ip'], 'hosts' => []];
+            $out[$mac]['hosts'][] = (string) $row['hostname'] !== '' ? (string) $row['hostname'] : '#' . $row['id'];
         }
-
-        // 2. IP do switch onde esta ligada
-        $switchIp = (string) ($switches[(int) ($machine['switches_id'] ?? 0)]['mgmt_ip'] ?? '');
-        $branch = self::byIp($switchIp);
-        if ($branch !== '') {
-            return $branch;
-        }
-
-        // 3. IP do gateway da maquina (apenas para faixas unicas, excluindo 192.168.0.x)
-        $gwIp = trim((string) ($machine['gateway_ip'] ?? ''));
-        if ($gwIp !== '' && !str_starts_with($gwIp, '192.168.0.')) {
-            $branch = self::byIp($gwIp);
-            if ($branch !== '') {
-                return $branch;
-            }
-        }
-
-        // 4. IP da propria maquina (apenas para faixas unicas, excluindo 192.168.0.x)
-        $machIp = trim((string) ($machine['ip'] ?? ''));
-        if ($machIp !== '' && !str_starts_with($machIp, '192.168.0.')) {
-            $branch = self::byIp($machIp);
-            if ($branch !== '') {
-                return $branch;
-            }
-        }
-
-        // 5. Entidade ou Localizacao no GLPI
-        $fromGlpi = self::fromGlpi((int) ($machine['computer_entity'] ?? 0), (int) ($machine['computer_location'] ?? 0));
-        if ($fromGlpi !== '') {
-            return $fromGlpi;
-        }
-
-        // 6. Filial de origem conhecida (notebook em home office ou em transito)
-        $lastKnown = trim((string) ($machine['last_known_branch'] ?? ''));
-        if ($lastKnown !== '') {
-            return $lastKnown;
-        }
-
-        return '';
+        return $out;
     }
 
-    /**
-     * Indica se a maquina esta fora de sua filial de origem (remoto ou visitando outra filial).
-     */
-    public static function isRoaming(array $machine, string $currentBranch): bool
+    /** "6c-3b-6b-11-22-a2" -> "6C:3B:6B:11:22:A2"; invalido/zerado/broadcast -> ''. */
+    public static function normalizeMac(string $mac): string
     {
-        if ($currentBranch === '') {
-            return false;
+        $hex = strtoupper((string) preg_replace('/[^0-9A-Fa-f]/', '', $mac));
+        if (strlen($hex) !== 12 || $hex === '000000000000' || $hex === 'FFFFFFFFFFFF') {
+            return '';
         }
-        $lastKnown = trim((string) ($machine['last_known_branch'] ?? ''));
-        $gwMac = strtoupper(trim((string) ($machine['gateway_mac'] ?? '')));
-        $gwIp = trim((string) ($machine['gateway_ip'] ?? ''));
-
-        // Caso A: Esta em home office (rede nao reconhecida da empresa, mantida por last_known_branch)
-        if ($lastKnown !== '' && $currentBranch === $lastKnown) {
-            $netBranch = $gwMac !== '' ? self::byRouterMac($gwMac) : '';
-            if ($netBranch === '' && $gwIp !== '') {
-                $netBranch = !str_starts_with($gwIp, '192.168.0.') ? self::byIp($gwIp) : '';
-            }
-            if ($netBranch === '' && $gwIp !== '') {
-                return true;
-            }
-        }
-
-        // Caso B: Visitando outra filial (rede atual e da empresa, mas diferente da origem)
-        if ($lastKnown !== '' && $currentBranch !== $lastKnown) {
-            return true;
-        }
-
-        return false;
+        return implode(':', str_split($hex, 2));
     }
 
     public static function fromGlpi(int $entityId, int $locationId): string
