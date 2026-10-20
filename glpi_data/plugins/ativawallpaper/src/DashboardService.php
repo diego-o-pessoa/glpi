@@ -42,6 +42,10 @@ final class DashboardService
         $summary['percentage'] = $summary['managed'] > 0
             ? round(($summary['updated'] / $summary['managed']) * 100, 1)
             : 0.0;
+        // Visao geral: atualizados x desatualizados (somam o total) e
+        // online x offline (tambem somam o total).
+        $summary['outdated'] = max(0, $summary['managed'] - $summary['updated']);
+        $summary['online'] = max(0, $summary['managed'] - $summary['offline']);
         return $summary;
     }
 
@@ -454,7 +458,7 @@ final class DashboardService
     private function statusExpression(string $status, ?array $current): ?string
     {
         global $DB;
-        if (!in_array($status, ['updated', 'pending', 'offline', 'error'], true)) {
+        if (!in_array($status, ['updated', 'outdated', 'pending', 'offline', 'error'], true)) {
             return null;
         }
         $seconds = max(120, ConfigService::getInt('offline_after_seconds'));
@@ -466,6 +470,8 @@ final class DashboardService
             'offline' => $offline,
             'error'   => "({$online}) AND status = 'error'",
             'updated' => "status = 'success' AND wallpaper_version = {$version}",
+            // Tudo que nao e "atualizado" (ligado ou nao): o complemento exato.
+            'outdated' => "(status IS NULL OR status <> 'success' OR wallpaper_version IS NULL OR wallpaper_version <> {$version})",
             'pending' => "({$online}) AND status <> 'error' AND (status <> 'success' OR wallpaper_version IS NULL OR wallpaper_version <> {$version})",
         };
     }

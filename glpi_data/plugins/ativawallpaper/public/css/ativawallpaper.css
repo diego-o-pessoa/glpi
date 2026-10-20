@@ -248,3 +248,10 @@ body.awp-modal-open { overflow: hidden; }
 .awp-activity time { font-variant-numeric: tabular-nums; }
 /* Cartao do topo sem link (quem so ve a Visao geral). */
 div.awp-kpi { cursor: default; }
+
+/* Desatualizados (cartao do topo): laranja quando ha algum. */
+.awp-kpi.is-orange .awp-kpi-icon { background: #fff2e2; color: #e07b0c; font-size: 30px; }
+.awp-kpi.is-orange .awp-kpi-percent { color: #e07b0c; }
+/* Mini cartao que abre a lista filtrada (Offline). */
+a.awp-mini { color: inherit; text-decoration: none; transition: border-color .15s, box-shadow .15s; }
+a.awp-mini:hover { border-color: #b9c6dd; box-shadow: 0 2px 8px rgba(30, 50, 90, .08); color: inherit; }

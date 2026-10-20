@@ -24,6 +24,7 @@ final class OverviewPage
     public const STATUSES = [
         'all'     => 'Todos',
         'updated' => 'Atualizados',
+        'outdated' => 'Desatualizados',
         'pending' => 'Pendentes',
         'offline' => 'Offline',
         'error'   => 'Com erro',
@@ -60,7 +61,7 @@ final class OverviewPage
         $limited = PluginAtivawallpaperProfile::overviewOnly();
         return [
             'limited'        => $limited,
-            'offline_percentage' => $summary['managed'] > 0 ? round(($summary['offline'] / $summary['managed']) * 100, 1) : 0.0,
+            'outdated_percentage' => $summary['managed'] > 0 ? round(($summary['outdated'] / $summary['managed']) * 100, 1) : 0.0,
             'current'        => $current,
             'enabled'        => ConfigService::getBool('enabled'),
             'summary'        => $summary,

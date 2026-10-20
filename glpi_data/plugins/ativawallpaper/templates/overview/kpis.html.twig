@@ -26,13 +26,13 @@
   <span class="awp-kpi-percent">{{ summary.percentage|number_format(0, ',', '.') }}%</span>
   <i class="ti ti-chevron-right awp-kpi-arrow"></i>
 </a>
-<a class="awp-kpi is-gray" href="{{ urls.dashboard }}?status=offline#awp-computers">
-  <span class="awp-kpi-icon"><i class="ti ti-wifi-off"></i></span>
+<a class="awp-kpi {{ summary.outdated > 0 ? 'is-orange' : 'is-gray' }}" href="{{ urls.dashboard }}?status=outdated#awp-computers">
+  <span class="awp-kpi-icon"><i class="ti ti-refresh-alert"></i></span>
   <span class="awp-kpi-text">
-    <span class="awp-kpi-label">Offline</span>
-    <span class="awp-kpi-value">{{ summary.offline }}</span>
-    <span class="awp-kpi-note">Sem contato agora</span>
+    <span class="awp-kpi-label">Desatualizados</span>
+    <span class="awp-kpi-value">{{ summary.outdated }}</span>
+    <span class="awp-kpi-note">Ainda sem o wallpaper atual</span>
   </span>
-  <span class="awp-kpi-percent">{{ offline_percentage|number_format(0, ',', '.') }}%</span>
+  <span class="awp-kpi-percent">{{ outdated_percentage|number_format(0, ',', '.') }}%</span>
   <i class="ti ti-chevron-right awp-kpi-arrow"></i>
 </a>

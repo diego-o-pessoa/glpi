@@ -56,11 +56,11 @@
     </div>
   {% endif %}
 
-  {# Visao simples: atualizados (inclui quem esta desligado com o wallpaper
-     atual) e offline. Pendentes e erros ficam na lista de computadores. #}
+  {# Visao simples: quantos computadores estao ligados e quantos nao (somam o
+     total). Atualizados/desatualizados ficam nos cartoes do topo. #}
   <div class="awp-mini-stats is-two">
-    <div class="awp-mini is-green" title="Computadores com o wallpaper atual aplicado, ligados ou não"><i class="ti ti-circle-check-filled"></i><span>Atualizados</span><strong>{{ summary.updated }}</strong></div>
-    <div class="awp-mini is-gray" title="Computadores desligados ou sem contato agora"><i class="ti ti-wifi-off"></i><span>Offline</span><strong>{{ summary.offline }}</strong></div>
+    <div class="awp-mini is-green" title="Computadores ligados e respondendo agora"><i class="ti ti-wifi"></i><span>Online</span><strong>{{ summary.online }}</strong></div>
+    <a class="awp-mini is-gray" href="{{ urls.dashboard }}?status=offline#awp-computers" title="Computadores desligados ou sem contato agora"><i class="ti ti-wifi-off"></i><span>Offline</span><strong>{{ summary.offline }}</strong></a>
   </div>
 
   <div class="awp-distribution-footer">
