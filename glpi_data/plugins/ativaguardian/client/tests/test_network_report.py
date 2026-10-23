@@ -259,6 +259,30 @@ class CaptureTests(unittest.TestCase):
             self.assertIsNone(nr.capture_lldp(self.work / "net", quiet_logger(), runner=FakePktmon()))
 
 
+class DeskSwitchTests(unittest.TestCase):
+    """Switchzinho de mesa (ES205G) entre o PC e o switch principal."""
+
+    @staticmethod
+    def other_switch(port: bytes = b"port_5") -> bytes:
+        frame = lldp_frame(port_description=port, caps=0x0004)
+        return frame.replace(bytes.fromhex("14ABEC22C9EC"), bytes.fromhex("5091E3AA0001"))
+
+    def test_both_switches_are_reported(self):
+        core = lldp_frame(port_description=b"Port #10", caps=0x0004)
+        desk = self.other_switch()
+        found = nr.switch_announcements([core, desk, core, desk])
+        self.assertEqual([f["port_description"] for f in found], ["Port #10", "port_5"])
+
+    def test_report_carries_all_without_internal_key(self):
+        system = dict(ReportTests.SYSTEM)
+        lldp = nr.parse_lldp_frame(lldp_frame(caps=0x0004))
+        lldp["_all"] = [nr.parse_lldp_frame(lldp_frame(caps=0x0004)), nr.parse_lldp_frame(self.other_switch())]
+        report = nr.build_report("abc", "PC", "1.6.0", system, lldp)
+        self.assertNotIn("_all", report["network"]["lldp"])
+        self.assertEqual(len(report["network"]["lldp_all"]), 2)
+        json.dumps(report)
+
+
 class VpnTests(unittest.TestCase):
     PROFILE = "SIMP-ATI-VPN-01-UDP4-1195-atv.ana.csouza"
 

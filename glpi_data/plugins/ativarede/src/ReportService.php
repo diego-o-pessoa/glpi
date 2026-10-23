@@ -66,21 +66,21 @@ final class ReportService
             if (!is_array($network['lldp'])) {
                 throw new InvalidArgumentException('network.lldp invalido.');
             }
-            $chassis = self::text($network['lldp']['chassis_id'] ?? '', 64);
-            if ($chassis === '') {
+            $lldp = self::parseLldp($network['lldp']);
+            if ($lldp === null) {
                 throw new InvalidArgumentException('network.lldp.chassis_id obrigatorio.');
             }
-            $lldp = [
-                'chassis_id'         => strtoupper($chassis),
-                'port_id'            => self::text($network['lldp']['port_id'] ?? '', 128),
-                'port_description'   => self::text($network['lldp']['port_description'] ?? '', 128),
-                'system_name'        => self::text($network['lldp']['system_name'] ?? '', 255),
-                'system_description' => self::text($network['lldp']['system_description'] ?? '', 255),
-                'mgmt_ip'            => self::text($network['lldp']['mgmt_ip'] ?? '', 64),
-                // Bits LLDP habilitados (Guardian 1.6.9+); -1 = nao informado.
-                'capabilities'       => filter_var($network['lldp']['capabilities'] ?? -1, FILTER_VALIDATE_INT,
-                    ['options' => ['min_range' => 0, 'max_range' => 0xFFFF, 'default' => -1]]),
-            ];
+        }
+        // Todos os switches ouvidos (Guardian 1.6.16+): switchzinho de mesa +
+        // principal. Item invalido e so ignorado.
+        $lldpAll = [];
+        if (is_array($network['lldp_all'] ?? null)) {
+            foreach (array_slice(array_values($network['lldp_all']), 0, 4) as $item) {
+                $parsed = is_array($item) ? self::parseLldp($item) : null;
+                if ($parsed !== null) {
+                    $lldpAll[] = $parsed;
+                }
+            }
         }
 
         $monitors = $payload['monitors'] ?? [];
@@ -120,6 +120,7 @@ final class ReportService
             'gateway_ip'       => self::text($network['gateway_ip'] ?? '', 64),
             'gateway_mac'      => Branches::normalizeMac(self::text($network['gateway_mac'] ?? '', 32)),
             'lldp'             => $lldp,
+            'lldp_all'         => $lldpAll,
             'monitors'         => $cleanMonitors,
             'monitors_known'   => $monitorsKnown,
             'diagnostic'       => self::diagnostic($payload['problems'] ?? []),
@@ -252,10 +253,10 @@ final class ReportService
         }
 
         if ($report['lldp'] !== null && $report['link'] === 'wired') {
-            $switchId = self::upsertSwitch($report['lldp'], $now);
-            $port = self::portOf($report['lldp']);
-            if ($switchId > 0 && $port !== '') {
-                $events += self::handlePosition($machine, $switchId, $port, $report['lldp']['port_id'], $now);
+            $chosen = self::nearestSwitch($machine, $machineDbId, $report, $now);
+            if ($chosen !== null) {
+                [$switchId, $port, $portId] = $chosen;
+                $events += self::handlePosition($machine, $switchId, $port, $portId, $now);
             }
         }
 
@@ -263,6 +264,85 @@ final class ReportService
             $events += self::handleMonitors($machineDbId, $report['machine_id'], $report['monitors'], $monitorBaseline, $now);
         }
         return ['events' => $events];
+    }
+
+    /** Campos de um anuncio LLDP vindo do Guardian; null sem chassis. */
+    private static function parseLldp(array $raw): ?array
+    {
+        $chassis = self::text($raw['chassis_id'] ?? '', 64);
+        if ($chassis === '') {
+            return null;
+        }
+        return [
+            'chassis_id'         => strtoupper($chassis),
+            'port_id'            => self::text($raw['port_id'] ?? '', 128),
+            'port_description'   => self::text($raw['port_description'] ?? '', 128),
+            'system_name'        => self::text($raw['system_name'] ?? '', 255),
+            'system_description' => self::text($raw['system_description'] ?? '', 255),
+            'mgmt_ip'            => self::text($raw['mgmt_ip'] ?? '', 64),
+            // Bits LLDP habilitados (Guardian 1.6.9+); -1 = nao informado.
+            'capabilities'       => filter_var($raw['capabilities'] ?? -1, FILTER_VALIDATE_INT,
+                ['options' => ['min_range' => 0, 'max_range' => 0xFFFF, 'default' => -1]]),
+        ];
+    }
+
+    /**
+     * Porta da mesa quando a maquina ouve mais de um switch.
+     *
+     * Com um switchzinho de mesa (ex.: ES205G) entre o PC e o switch principal,
+     * a maquina ouve os dois: a porta do switchzinho (a mesa) e a porta do
+     * principal onde o switchzinho esta ligado - que e a MESMA para todos os
+     * PCs atras dele. Antes valia o anuncio que chegasse primeiro: as maquinas
+     * trocavam de mesa sem parar e varias apareciam juntas numa mesa so.
+     *
+     * Escolhe a porta compartilhada pelo MENOR numero de outras maquinas (a da
+     * mesa); empate: fica onde ja esta (sem troca a toa); senao, o primeiro.
+     *
+     * @return array{0: int, 1: string, 2: string}|null [switches_id, porta, port_id]
+     */
+    private static function nearestSwitch(array $machine, int $machineDbId, array $report, string $now): ?array
+    {
+        $candidates = [];
+        foreach (array_merge([$report['lldp']], $report['lldp_all'] ?? []) as $lldp) {
+            if (self::isOwnAnnouncement($lldp['chassis_id'], $report['mac']) || !self::isSwitchAnnouncement($lldp)) {
+                continue;
+            }
+            $port = self::portOf($lldp);
+            if ($port === '') {
+                continue;
+            }
+            $key = $lldp['chassis_id'] . '|' . $port;
+            if (isset($candidates[$key])) {
+                continue;
+            }
+            $switchId = self::upsertSwitch($lldp, $now); // 0 = marcado "nao e switch"
+            if ($switchId > 0) {
+                $candidates[$key] = [$switchId, $port, $lldp['port_id']];
+            }
+        }
+        if ($candidates === []) {
+            return null;
+        }
+        $candidates = array_values($candidates);
+        if (count($candidates) === 1) {
+            return $candidates[0];
+        }
+
+        $best = null;
+        $bestCount = PHP_INT_MAX;
+        foreach ($candidates as $candidate) {
+            $count = countElementsInTable(Settings::TABLE_MACHINES, [
+                'switches_id' => $candidate[0],
+                'port'        => $candidate[1],
+                'NOT'         => ['id' => $machineDbId],
+            ]);
+            $current = (int) ($machine['switches_id'] ?? 0) === $candidate[0] && (string) ($machine['port'] ?? '') === $candidate[1];
+            if ($count < $bestCount || ($count === $bestCount && $current)) {
+                $best = $candidate;
+                $bestCount = $count;
+            }
+        }
+        return $best;
     }
 
     /**

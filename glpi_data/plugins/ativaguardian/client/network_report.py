@@ -278,6 +278,36 @@ def first_lldp(frames: list[bytes], local_macs: set[str] | frozenset[str] = froz
     return fallback
 
 
+MAX_SWITCH_ANNOUNCEMENTS = 4
+
+
+def switch_announcements(frames: list[bytes], local_macs: set[str] | frozenset[str] = frozenset()) -> list[dict[str, Any]]:
+    """Todos os SWITCHES ouvidos na captura (um por chassis + porta), na ordem.
+
+    Com um switchzinho de mesa gerenciavel (ex.: ES205G) entre o PC e o switch
+    principal, chegam os dois anuncios: o do switchzinho (porta da mesa) e o do
+    principal repassado por ele (porta onde o switchzinho esta ligado). So o
+    primeiro ia para o GLPI, e qual chegava primeiro era sorte: a maquina ficava
+    trocando de mesa. O GLPI escolhe entre eles."""
+    local = {normalize_mac(m) for m in local_macs if normalize_mac(m)}
+    found: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for frame in frames:
+        if len(frame) >= 12 and frame[6:12].hex().upper() in local:
+            continue
+        parsed = parse_lldp_frame(frame)
+        if not parsed or normalize_mac(parsed["chassis_id"]) in local or is_switch_announcement(parsed) is not True:
+            continue
+        key = (str(parsed["chassis_id"]).upper(), str(parsed.get("port_id", "")))
+        if key in seen:
+            continue
+        seen.add(key)
+        found.append(parsed)
+        if len(found) >= MAX_SWITCH_ANNOUNCEMENTS:
+            break
+    return found
+
+
 def _decode(raw: bytes | str) -> str:
     """Texto do pktmon. Conforme a versao do Windows ele escreve em UTF-8 ou na
     pagina de codigo do console: lido como ANSI, o UTF-8 virava "jÃ¡"."""
@@ -463,7 +493,13 @@ def _capture_locked(work_dir: Path, logger: logging.Logger, wait: Callable[[floa
                            _output(converted), etl.stat().st_size)
             _problem(problems, f"pktmon nao converteu a captura: {_output(converted)}")
             return None
-        return first_lldp(read_pcapng_frames(pcap.read_bytes()), local_macs)
+        frames = read_pcapng_frames(pcap.read_bytes())
+        found = first_lldp(frames, local_macs)
+        if found is not None:
+            # Todos os switches ouvidos (o build_report separa): o GLPI escolhe o
+            # mais proximo quando ha um switchzinho de mesa no caminho.
+            found = dict(found, _all=switch_announcements(frames, local_macs))
+        return found
     except OSError as exc:
         logger.warning("Ativa Rede: falha ao ler a captura: %s", exc)
         _problem(problems, f"pktmon: falha ao ler a captura: {exc}")
@@ -850,7 +886,9 @@ def build_report(machine_id: str, hostname: str, guardian_version: str, system: 
             "mac": str((adapter or {}).get("mac", "")).replace("-", ":")[:32],
             "gateway_ip": str((adapter or {}).get("gateway_ip", ""))[:64],
             "gateway_mac": str((adapter or {}).get("gateway_mac", "")).replace("-", ":").upper()[:32],
-            "lldp": lldp if link == "wired" else None,
+            "lldp": ({k: v for k, v in lldp.items() if k != "_all"} if lldp else None) if link == "wired" else None,
+            # Todos os switches ouvidos (switchzinho de mesa + principal).
+            "lldp_all": list((lldp or {}).get("_all") or [])[:MAX_SWITCH_ANNOUNCEMENTS] if link == "wired" else [],
         },
         "monitors": normalize_monitors(system.get("monitors")),
         # Nome do perfil da VPN conectada: o GLPI tira dele o primeiro nome da

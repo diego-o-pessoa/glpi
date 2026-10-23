@@ -22,7 +22,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (!PluginAtivaredeProfile::canManage()) {
         throw new AccessDeniedHttpException();
     }
-    $result = Events::resolve((int) ($_POST['id'] ?? 0), (string) ($_POST['resolution'] ?? ''));
+    $result = ($_POST['action'] ?? '') === 'authorize_all'
+        ? Events::authorizeAll((string) ($_POST['type'] ?? ''))
+        : Events::resolve((int) ($_POST['id'] ?? 0), (string) ($_POST['resolution'] ?? ''));
     $message = htmlescape($result['message']);
     if (!empty($result['ticket_url'])) {
         $message .= ' <a href="' . htmlescape($result['ticket_url']) . '">Abrir o chamado</a>';
@@ -43,9 +45,12 @@ if ($type !== '' && !isset(Events::labels()[$type])) {
     $type = '';
 }
 
+$events = Inventory::events($status, $type);
 Html::header('Ativa Rede - Alertas', '', 'ativarede', 'alertas');
 TemplateRenderer::getInstance()->display('@ativarede/alertas.html.twig', [
-    'events'        => Inventory::events($status, $type),
+    'events'        => $events,
+    // Abertos que podem ser autorizados (para o botao "Autorizar todos").
+    'authorizable'  => count(array_filter($events, static fn(array $e): bool => $e['status'] === Events::OPEN && $e['can_authorize'])),
     'status'        => $status,
     'type'          => $type,
     'types'         => Events::labels(),

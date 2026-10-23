@@ -760,7 +760,7 @@ final class Inventory
             'ticket_url'  => (int) $event['tickets_id'] > 0 ? $CFG_GLPI['root_doc'] . '/front/ticket.form.php?id=' . (int) $event['tickets_id'] : '',
             'tickets_id'  => (int) $event['tickets_id'],
             'computer_url' => $text['computer_url'] ?? '',
-            'can_authorize' => in_array($event['type'], [Events::COMPUTER_MOVED, Events::MONITOR_MOVED, Events::MONITOR_NEW], true),
+            'can_authorize' => in_array($event['type'], Events::AUTHORIZABLE, true),
         ];
     }
 

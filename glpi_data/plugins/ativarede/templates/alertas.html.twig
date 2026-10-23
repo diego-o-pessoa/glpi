@@ -8,7 +8,21 @@
                 {{ open_count }} alerta(s) aberto(s). Mudanças de mesa só viram alerta depois de confirmadas em dois relatórios seguidos.
             </div>
         </div>
-        <a class="btn btn-sm btn-outline-primary" href="{{ plant_url }}"><i class="ti ti-layout-board me-1"></i>Ver na planta</a>
+        <div class="d-flex gap-2">
+            {% if can_manage and authorizable > 0 %}
+                <form method="post" action="{{ self_url }}"
+                      onsubmit="return confirm('Autorizar {{ authorizable }} alerta(s) aberto(s){{ type ? ' deste tipo' : '' }}? Mudanças de mesa também atualizam a Localização dos computadores no GLPI.');">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="authorize_all">
+                    <input type="hidden" name="type" value="{{ type }}">
+                    <input type="hidden" name="status" value="{{ status }}">
+                    <button class="btn btn-sm btn-success" title="Autoriza de uma vez as mudanças de mesa e de monitores abertas{{ type ? ' (só o tipo filtrado)' : '' }}">
+                        <i class="ti ti-checks me-1"></i>Autorizar todos ({{ authorizable }})
+                    </button>
+                </form>
+            {% endif %}
+            <a class="btn btn-sm btn-outline-primary" href="{{ plant_url }}"><i class="ti ti-layout-board me-1"></i>Ver na planta</a>
+        </div>
     </div>
 
     <form class="card mb-3" method="get" action="{{ self_url }}">

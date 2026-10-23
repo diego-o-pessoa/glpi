@@ -117,6 +117,8 @@ var
     seguem instalando; o aviso aparece no fim. }
   AgentFailure: String;
   WallpaperFailure: String;
+  { Outro antivirus ativo (o Windows desligou o Defender): nome para o aviso final. }
+  OtherAntivirus: String;
   { Algum arquivo instalado estava sem permissao e precisou de conserto. }
   PermissionsRepaired: Boolean;
 
@@ -134,6 +136,69 @@ begin
 
   if (ResultCode = 1641) or (ResultCode = 3010) then
     AgentRestartRequired := True;
+end;
+
+{ sc.exe com a saida guardada: o codigo sozinho ("2", "1072") nao diz nada
+  na tela; o texto do Windows vai para o log e para a mensagem de erro. }
+function ScRun(const Parameters: String; var Output: String): Integer;
+var
+  OutFile: String;
+  Lines: TArrayOfString;
+  I, ResultCode: Integer;
+begin
+  OutFile := ExpandConstant('{tmp}\sc-saida.txt');
+  DeleteFile(OutFile);
+  if not Exec(ExpandConstant('{cmd}'),
+      '/C ""' + ExpandConstant('{sys}\sc.exe') + '" ' + Parameters + ' > "' + OutFile + '" 2>&1"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    ResultCode := -1;
+  Output := '';
+  if LoadStringsFromFile(OutFile, Lines) then
+    for I := 0 to GetArrayLength(Lines) - 1 do
+      if Trim(Lines[I]) <> '' then
+        Output := Output + ' ' + Trim(Lines[I]);
+  Output := Trim(Output);
+  Log('sc ' + Parameters + ' -> codigo ' + IntToStr(ResultCode) + ': ' + Output);
+  Result := ResultCode;
+end;
+
+{ Registra/atualiza o servico AtivaUnifiedUpdater.
+  Visto em campo: logo apos desinstalar, o servico antigo ainda existia
+  ("sc query" achava) mas o "sc config" falhava (codigo 2) e o instalador
+  parava. Servico marcado para exclusao, ou com o registro pela metade, nao
+  aceita alteracao: agora ele e parado, apagado, o Windows tem ate 30 s para
+  solta-lo e ele e criado de novo. }
+procedure ConfigureUpdaterService(const UpdaterPath: String);
+var
+  Code, Tries: Integer;
+  Output, ServiceArgs: String;
+begin
+  ServiceArgs := 'binPath= "' + UpdaterPath + ' --service" start= auto DisplayName= "Ativa Unified Updater"';
+  WizardForm.StatusLabel.Caption := 'Atualizando os parametros do servico...';
+  if ScRun('query AtivaUnifiedUpdater', Output) = 0 then begin
+    if ScRun('config AtivaUnifiedUpdater ' + ServiceArgs, Output) = 0 then
+      exit;
+    Log('O servico antigo nao aceitou a nova configuracao; recriando.');
+    WizardForm.StatusLabel.Caption := 'Recriando o servico de atualizacao...';
+    ScRun('stop AtivaUnifiedUpdater', Output);
+    Sleep(3000);
+    ScRun('delete AtivaUnifiedUpdater', Output);
+  end;
+  { Servico "marcado para exclusao" so some quando o Windows solta o ultimo
+    acesso a ele (processo antigo, console de servicos aberto...). }
+  Tries := 0;
+  while (ScRun('query AtivaUnifiedUpdater', Output) = 0) and (Tries < 15) do begin
+    Sleep(2000);
+    Tries := Tries + 1;
+  end;
+  WizardForm.StatusLabel.Caption := 'Registrando o servico de atualizacao...';
+  Code := ScRun('create AtivaUnifiedUpdater ' + ServiceArgs, Output);
+  if Code <> 0 then
+    RaiseException(
+      'Nao foi possivel registrar o servico Ativa Unified Updater (codigo ' + IntToStr(Code) + ').' + #13#10 +
+      'Windows: ' + Output + #13#10#13#10 +
+      'O servico da instalacao anterior ainda esta preso no Windows. Feche a janela "Servicos" se estiver ' +
+      'aberta, reinicie o computador e rode o instalador de novo.');
 end;
 
 procedure RunOptional(const Filename, Parameters: String);
@@ -535,6 +600,43 @@ end;
   Falhar aqui nao interrompe a instalacao. Em maquina com outro antivirus, com o
   Defender desativado por politica ou sem os cmdlets do modulo Defender, o comando
   apenas retorna erro e o restante segue normalmente. }
+{ O Windows Defender e o antivirus em uso (servico WinDefend rodando). Com
+  outro antivirus instalado (ex.: Bitdefender) o Windows desliga o Defender. }
+function DefenderIsActive(): Boolean;
+var
+  Output: String;
+begin
+  Result := (ScRun('query WinDefend', Output) = 0) and
+            ((Pos('RUNNING', Uppercase(Output)) > 0) or (Pos(': 4 ', Output) > 0));
+end;
+
+{ Nome do antivirus ativo que nao e o Defender (Central de Seguranca do
+  Windows), so para o aviso no fim e no log. Vazio se nao achar. }
+function OtherAntivirusName(): String;
+var
+  Locator, Service, Products, Product: Variant;
+  I: Integer;
+  Name: String;
+begin
+  Result := '';
+  try
+    Locator := CreateOleObject('WbemScripting.SWbemLocator');
+    Service := Locator.ConnectServer('.', 'root\SecurityCenter2');
+    Products := Service.ExecQuery('SELECT displayName, productState FROM AntiVirusProduct');
+    for I := 0 to Products.Count - 1 do begin
+      Product := Products.ItemIndex(I);
+      Name := Trim(String(Product.displayName));
+      { Bit 12 do productState = antivirus ligado. }
+      if (Pos('defender', Lowercase(Name)) = 0) and (((Integer(Product.productState) shr 12) and $F) = 1) then begin
+        Result := Name;
+        exit;
+      end;
+    end;
+  except
+    Result := '';
+  end;
+end;
+
 procedure ExcludeFromDefender();
 var
   ProductDir: String;
@@ -568,6 +670,18 @@ begin
       'exit 0 ' +
     '} catch { exit 1 }"';
 
+  { So com o Defender em uso. Com outro antivirus (Bitdefender...) o Windows
+    desliga o Defender e estas exclusoes nao protegem nada; e alterar a
+    configuracao de um antivirus e justamente o que os outros vigiam: visto
+    em campo, o instalador era fechado e removido nesse ponto. A liberacao,
+    nesse caso, e feita na console do antivirus em uso (aviso no fim). }
+  if not DefenderIsActive() then begin
+    OtherAntivirus := OtherAntivirusName();
+    if OtherAntivirus = '' then
+      OtherAntivirus := 'outro antivirus';
+    Log('Windows Defender nao esta em uso (' + OtherAntivirus + '); exclusoes do Defender nao registradas.');
+    exit;
+  end;
   WizardForm.StatusLabel.Caption := 'Registrando exclusoes no Windows Defender...';
   RunOptional(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'), Command);
 end;
@@ -866,18 +980,7 @@ begin
   RunOptional(ExpandConstant('{sys}\schtasks.exe'), '/Delete /TN "Ativa Wallpaper Updater" /F');
   SetupWatchdog(UpdaterPath);
 
-  if not Exec(ExpandConstant('{sys}\sc.exe'), 'query AtivaUnifiedUpdater', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then begin
-    RunRequired(
-      'Registrando o servico de atualizacao...',
-      ExpandConstant('{sys}\sc.exe'),
-      'create AtivaUnifiedUpdater binPath= "' + UpdaterPath + ' --service" start= auto DisplayName= "Ativa Unified Updater"'
-    );
-  end;
-  RunRequired(
-    'Atualizando os parametros do servico...',
-    ExpandConstant('{sys}\sc.exe'),
-    'config AtivaUnifiedUpdater binPath= "' + UpdaterPath + ' --service" start= auto DisplayName= "Ativa Unified Updater"'
-  );
+  ConfigureUpdaterService(UpdaterPath);
   RunOptional(
     ExpandConstant('{sys}\sc.exe'),
     'failure AtivaUnifiedUpdater reset= 86400 actions= restart/60000/restart/60000/restart/60000'
@@ -911,8 +1014,15 @@ procedure CurPageChanged(CurPageID: Integer);
 var
   Text: String;
 begin
-  if (CurPageID <> wpFinished) or ((AgentFailure = '') and (WallpaperFailure = '')) then
+  if CurPageID <> wpFinished then
     exit;
+  if (AgentFailure = '') and (WallpaperFailure = '') then begin
+    if OtherAntivirus <> '' then
+      WizardForm.FinishedLabel.Caption := WizardForm.FinishedLabel.Caption + #13#10#13#10 +
+        'Antivirus em uso: ' + OtherAntivirus + '. Se ele bloquear algum componente Ativa, libere na console dele ' +
+        'as pastas C:\ProgramData\AtivaLocacao e C:\Program Files\Ativa Locacao.';
+    exit;
+  end;
   Text := 'Os demais componentes Ativa foram instalados, mas:' + #13#10;
   if AgentFailure <> '' then
     Text := Text + #13#10 + '- GLPI Agent NAO foi instalado (' + AgentFailure + '). Log: ' +
@@ -920,6 +1030,9 @@ begin
   if WallpaperFailure <> '' then
     Text := Text + #13#10 + '- Wallpaper NAO foi instalado (' + WallpaperFailure + '). Log: ' +
       'C:\ProgramData\AtivaLocacao\Wallpaper\logs';
+  if OtherAntivirus <> '' then
+    Text := Text + #13#10#13#10 + 'Antivirus em uso: ' + OtherAntivirus + '. Libere na console dele as pastas ' +
+      'C:\ProgramData\AtivaLocacao e C:\Program Files\Ativa Locacao.';
   WizardForm.FinishedLabel.Caption := Text + #13#10#13#10 +
     'O Ativa Guardian mostra o que falta no painel. Reinicie o computador e rode este instalador de novo.';
 end;

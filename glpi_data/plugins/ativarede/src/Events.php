@@ -126,6 +126,40 @@ final class Events
      *
      * @return array{ok: bool, message: string, ticket_url?: string}
      */
+    /** Tipos que podem ser autorizados (a mudanca esta certa). */
+    public const AUTHORIZABLE = [self::COMPUTER_MOVED, self::MONITOR_MOVED, self::MONITOR_NEW];
+
+    /**
+     * "Autorizar todos": autoriza os alertas abertos autorizaveis (so do tipo
+     * filtrado, se houver). Cada um passa pelo resolve(), entao a mudanca de
+     * mesa tambem atualiza a Localizacao do computador, como um por um.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public static function authorizeAll(string $type = ''): array
+    {
+        global $DB;
+
+        $types = $type !== '' ? array_values(array_intersect([$type], self::AUTHORIZABLE)) : self::AUTHORIZABLE;
+        if ($types === []) {
+            return ['ok' => false, 'message' => 'Este tipo de alerta não pode ser autorizado.'];
+        }
+        $done = 0;
+        foreach ($DB->request([
+            'SELECT' => ['id'],
+            'FROM'   => Settings::TABLE_EVENTS,
+            'WHERE'  => ['status' => self::OPEN, 'type' => $types],
+            'ORDER'  => ['id ASC'],
+        ]) as $row) {
+            if (self::resolve((int) $row['id'], 'authorize')['ok']) {
+                $done++;
+            }
+        }
+        return $done > 0
+            ? ['ok' => true, 'message' => $done . ' alerta(s) autorizado(s).']
+            : ['ok' => false, 'message' => 'Nenhum alerta aberto para autorizar.'];
+    }
+
     public static function resolve(int $eventId, string $action): array
     {
         global $DB, $CFG_GLPI;
