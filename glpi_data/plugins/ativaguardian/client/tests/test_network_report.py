@@ -181,6 +181,11 @@ class CaptureTests(unittest.TestCase):
         patcher = mock.patch.object(nr, "PKTMON", Path(self.tmp.name) / "pktmon.exe")
         patcher.start()
         self.addCleanup(patcher.stop)
+        # Mutex proprio: o Guardian instalado na maquina do build pode estar
+        # capturando agora e a coleta do teste seria "pulada".
+        mutex = mock.patch.object(nr, "CAPTURE_MUTEX", "Local\\AtivaRedeTeste-" + Path(self.tmp.name).name)
+        mutex.start()
+        self.addCleanup(mutex.stop)
         (Path(self.tmp.name) / "pktmon.exe").write_bytes(b"")
 
     def tearDown(self):

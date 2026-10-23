@@ -366,8 +366,10 @@ def _run(runner: Runner, args: list[str], timeout: int = 60) -> subprocess.Compl
 class CaptureLock:
     """Mutex nomeado do Windows; acquired=False quando outra coleta esta em curso."""
 
-    def __init__(self, name: str = CAPTURE_MUTEX, wait_seconds: float = 0) -> None:
-        self.name = name
+    def __init__(self, name: str | None = None, wait_seconds: float = 0) -> None:
+        # Lido na hora (nao no import): os testes trocam o nome e nao disputam
+        # o mutex com o Guardian de verdade rodando na maquina do build.
+        self.name = name or CAPTURE_MUTEX
         self.wait_ms = max(0, int(wait_seconds * 1000))
         self.handle = None
         self.acquired = False
