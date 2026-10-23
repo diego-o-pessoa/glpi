@@ -908,6 +908,7 @@
 
     /* Porta do switch (cabo) ou vinculo direto (Wi-Fi / sem porta). */
     function unmappedTag(u) {
+        if (u.kind === 'machine' && u.shared) { return u.switch + ' · porta ' + u.port + ' (compartilhada)'; }
         if (u.kind === 'machine') { return u.link === 'wifi' ? 'Wi-Fi · sem porta' : 'sem porta'; }
         return u.switch + ' · porta ' + u.port;
     }

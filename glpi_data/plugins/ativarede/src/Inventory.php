@@ -58,11 +58,9 @@ final class Inventory
     {
         global $DB;
 
-        $desk = self::deskAt((int) $machine['switches_id'], (string) $machine['port']);
-        if ($desk || (int) ($machine['id'] ?? 0) <= 0) {
-            return $desk;
-        }
-        return $DB->request([
+        // Vinculo direto vence a porta: numa porta compartilhada (switchzinho de
+        // mesa) cada pessoa pode estar numa mesa diferente.
+        $direct = (int) ($machine['id'] ?? 0) <= 0 ? null : ($DB->request([
             'SELECT'    => [Settings::TABLE_DESKS . '.*', Settings::TABLE_PLANS . '.locations_id', Settings::TABLE_PLANS . '.name AS plan_name'],
             'FROM'      => Settings::TABLE_DESKS,
             'LEFT JOIN' => [
@@ -70,7 +68,8 @@ final class Inventory
             ],
             'WHERE'     => [Settings::TABLE_DESKS . '.machines_id' => (int) $machine['id']],
             'LIMIT'     => 1,
-        ])->current() ?: null;
+        ])->current() ?: null);
+        return $direct ?? self::deskAt((int) $machine['switches_id'], (string) $machine['port']);
     }
 
     /** @return array<int, array> switches por id, com o rotulo curto pronto. */
@@ -196,6 +195,13 @@ final class Inventory
             }
         }
 
+        // Maquinas vinculadas direto a uma mesa (Wi-Fi, ou separada de uma porta
+        // compartilhada): maquina -> mesa. Elas nao aparecem na mesa da porta.
+        $assignedDesk = [];
+        foreach ($DB->request(['SELECT' => ['id', 'machines_id'], 'FROM' => Settings::TABLE_DESKS, 'WHERE' => ['machines_id' => ['>', 0]]]) as $row) {
+            $assignedDesk[(int) $row['machines_id']] = (int) $row['id'];
+        }
+
         $openEvents = self::openEventsIndex();
         $switches = self::switches();
         $mapped = [];
@@ -211,6 +217,12 @@ final class Inventory
             // Sem porta (notebook no Wi-Fi): a maquina e vinculada direto a mesa.
             $fixedId = $hasPort ? 0 : (int) ($desk['machines_id'] ?? 0);
             $here = $hasPort ? ($byPort[$key] ?? []) : (isset($byId[$fixedId]) ? [$byId[$fixedId]] : []);
+            if ($hasPort) {
+                // Porta compartilhada (switchzinho de mesa): quem ja foi posto em
+                // outra mesa sai desta.
+                $here = array_values(array_filter($here, static fn(array $m): bool
+                    => !isset($assignedDesk[$m['id']]) || $assignedDesk[$m['id']] === (int) $desk['id']));
+            }
 
             $alerts = [];
             foreach ($openEvents['desk'][(int) $desk['id']] ?? [] as $event) {
@@ -267,10 +279,30 @@ final class Inventory
         }
         $unmapped = [];
         foreach ($byPort as $key => $list) {
+            [$switchId, $port] = explode('|', $key, 2);
+            // Porta com 2+ maquinas (switchzinho de mesa no caminho): cada pessoa
+            // pode ir para uma mesa diferente, vinculada pela maquina. Antes vinha
+            // uma entrada so ("Adrielly / Francine") e nao dava para separar.
+            if (count($list) >= 2) {
+                foreach ($list as $machine) {
+                    if (isset($assignedDesk[$machine['id']])) {
+                        continue;
+                    }
+                    $unmapped[] = [
+                        'kind'        => 'machine',
+                        'machines_id' => $machine['id'],
+                        'link'        => $machine['link'],
+                        'shared'      => true,
+                        'switch'      => $switches[(int) $switchId]['display'] ?? '#' . $switchId,
+                        'port'        => $port,
+                        'machines'    => [self::pickView($machine)],
+                    ];
+                }
+                continue;
+            }
             if (isset($allMapped[$key])) {
                 continue;
             }
-            [$switchId, $port] = explode('|', $key, 2);
             $unmapped[] = [
                 'kind'        => 'port',
                 'switches_id' => (int) $switchId,
