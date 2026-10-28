@@ -172,8 +172,14 @@
         }
         q('[data-ar-plan-name]').textContent = state.plan.name;
         q('[data-ar-updated]').textContent = (state.updated || '').split(' ')[1] || state.updated || '—';
+        // Planta criada do zero: sem desenho de fundo, so o quadriculado.
+        var hasBg = !!state.plan.background;
+        bg.hidden = !hasBg;
+        canvas.classList.toggle('is-blank', !hasBg);
+        canvas.style.setProperty('--ar-grid-x', (30 / state.plan.width * 100) + '%');
+        canvas.style.setProperty('--ar-grid-y', (30 / state.plan.height * 100) + '%');
         var src = plansUrl + encodeURIComponent(state.plan.id);
-        if (bg.getAttribute('src') !== src) { bg.setAttribute('src', src); }
+        if (hasBg && bg.getAttribute('src') !== src) { bg.setAttribute('src', src); }
         canvas.style.aspectRatio = state.plan.width + ' / ' + state.plan.height;
         renderLegend();
         renderDesks();
@@ -587,6 +593,7 @@
 
     function selectWall(id) {
         selectedWallId = id;
+        planForm = '';
         selectedId = 0;
         Array.prototype.forEach.call(desksLayer.querySelectorAll('.ar-desk.is-selected'), function (n) { n.classList.remove('is-selected'); });
         renderWalls();
@@ -641,6 +648,92 @@
         box.appendChild(actions);
         panel.appendChild(box);
     }
+
+    // ------------------------------------------------------------------
+    // Plantas: criar do zero, renomear, mudar tamanho, excluir
+    // ------------------------------------------------------------------
+    var planForm = '';   // '' | 'edit' | 'new'
+
+    function openPlanForm(mode) {
+        planForm = mode;
+        selectedId = 0;
+        selectedWallId = 0;
+        renderWalls();
+        renderPanel();
+        panel.scrollIntoView({ block: 'nearest' });
+    }
+
+    function renderPlanForm(mode) {
+        var isNew = mode === 'new';
+        var plan = state.plan;
+        var form = el('form');
+        form.appendChild(el('h3', 'mb-1', isNew ? 'Nova planta' : 'Planta ' + plan.name));
+        form.appendChild(el('p', 'text-muted small', isNew
+            ? 'Começa vazia (quadriculado) com as quatro paredes externas como divisórias: estique, mova ou apague e desenhe o resto.'
+            : 'O tamanho é o da área de desenho (em unidades da planta; as mesas têm cerca de 42 × 46).'));
+        var row = el('div', 'row g-2');
+        function field(label, control, col) {
+            var wrap = el('div', col || 'col-md-6');
+            wrap.appendChild(el('label', 'form-label small mb-1', label));
+            wrap.appendChild(control);
+            row.appendChild(wrap);
+            return control;
+        }
+        var name = el('input', 'form-control form-control-sm');
+        name.required = true; name.maxLength = 100; name.value = isNew ? '' : plan.name; name.placeholder = 'ex.: Financeiro';
+        field('Nome', name);
+        var label = el('input', 'form-control form-control-sm');
+        label.maxLength = 64; label.value = isNew ? '' : (plan.label || ''); label.placeholder = 'Texto da aba (opcional)';
+        field('Nome na aba', label);
+        var w = el('input', 'form-control form-control-sm'); w.type = 'number'; w.min = '400'; w.max = '4000'; w.step = '10';
+        w.value = String(isNew ? 1600 : plan.width);
+        field('Largura', w, 'col-md-3');
+        var h = el('input', 'form-control form-control-sm'); h.type = 'number'; h.min = '200'; h.max = '2000'; h.step = '10';
+        h.value = String(isNew ? 500 : plan.height);
+        field('Altura', h, 'col-md-3');
+        form.appendChild(row);
+
+        var actions = el('div', 'd-flex gap-2 mt-3');
+        var save = el('button', 'btn btn-sm btn-primary');
+        save.type = 'submit';
+        save.appendChild(icon(isNew ? 'file-plus' : 'device-floppy'));
+        save.appendChild(document.createTextNode(isNew ? ' Criar planta' : ' Salvar'));
+        actions.appendChild(save);
+        var cancel = el('button', 'btn btn-sm btn-outline-secondary', 'Cancelar');
+        cancel.type = 'button';
+        cancel.addEventListener('click', function () { planForm = ''; renderPanel(); });
+        actions.appendChild(cancel);
+        if (!isNew) {
+            var del = el('button', 'btn btn-sm btn-outline-danger ms-auto');
+            del.type = 'button';
+            del.appendChild(icon('trash'));
+            del.appendChild(document.createTextNode(' Excluir planta'));
+            del.addEventListener('click', function () {
+                if (!window.confirm('Excluir a planta ' + plan.name + ' com todas as mesas e divisórias dela?\n\nIsso não tem volta (o histórico de alertas é mantido).')) { return; }
+                post({ action: 'delete_plan' }).then(function (r) { if (r.ok) { window.location.href = selfUrl; } });
+            });
+            actions.appendChild(del);
+        }
+        form.appendChild(actions);
+
+        form.addEventListener('submit', function (ev) {
+            ev.preventDefault();
+            var fields = { action: isNew ? 'add_plan' : 'save_plan', name: name.value.trim(), label: label.value.trim(), width: w.value, height: h.value };
+            post(fields).then(function (r) {
+                if (!r.ok) { return; }
+                if (isNew) { window.location.href = selfUrl + '?plan=' + encodeURIComponent(r.plan_id); return; }
+                // Nome da aba ou tamanho mudou: recarrega para as abas e o desenho.
+                window.location.href = selfUrl + '?plan=' + encodeURIComponent(state.plan.id);
+            });
+        });
+        panel.appendChild(form);
+        name.focus();
+    }
+
+    var planConfigBtn = q('[data-ar-plan-config]');
+    if (planConfigBtn) { planConfigBtn.addEventListener('click', function () { openPlanForm('edit'); }); }
+    var planNewBtn = q('[data-ar-plan-new]');
+    if (planNewBtn) { planNewBtn.addEventListener('click', function () { openPlanForm('new'); }); }
 
     var EDIT_HINTS = {
         '': 'Modo edição: arraste as mesas e as divisórias; clique em uma para editar.',
@@ -739,6 +832,7 @@
 
     function select(id) {
         selectedId = id;
+        planForm = '';
         if (selectedWallId) {
             selectedWallId = 0;
             renderWalls();
@@ -766,6 +860,7 @@
 
     function renderPanel() {
         panel.innerHTML = '';
+        if (editing && planForm) { renderPlanForm(planForm); return; }
         var wall = editing ? wallById(selectedWallId) : null;
         if (wall) { renderWallForm(wall); return; }
         var desk = deskById(selectedId);
@@ -1258,6 +1353,7 @@
 
     function setEditing(on) {
         editing = on;
+        planForm = '';
         draft = null;
         selectedWallId = 0;
         setTool('');

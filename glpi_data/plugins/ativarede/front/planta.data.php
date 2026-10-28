@@ -6,6 +6,7 @@ use GlpiPlugin\Ativarede\Collector;
 use GlpiPlugin\Ativarede\Desks;
 use GlpiPlugin\Ativarede\Events;
 use GlpiPlugin\Ativarede\Inventory;
+use GlpiPlugin\Ativarede\Plans;
 use GlpiPlugin\Ativarede\Schema;
 use GlpiPlugin\Ativarede\Walls;
 
@@ -54,6 +55,9 @@ try {
         'add_wall'     => Walls::add($planId, $_POST),
         'save_wall'    => Walls::save($_POST),
         'delete_wall'  => Walls::delete((int) ($_POST['id'] ?? 0)),
+        'add_plan'     => Plans::add($_POST),
+        'save_plan'    => Plans::save($planId, $_POST),
+        'delete_plan'  => Plans::delete($planId),
         'resolve'      => Events::resolve((int) ($_POST['id'] ?? 0), (string) ($_POST['resolution'] ?? '')),
         'switch_label' => Desks::saveSwitchLabel((int) ($_POST['id'] ?? 0), (string) ($_POST['label'] ?? '')),
         'collect'      => Collector::requestAll(),
@@ -65,7 +69,7 @@ try {
 }
 
 Inventory::resetCache();
-if ($planId > 0 && ($result['ok'] ?? false)) {
+if ($planId > 0 && ($result['ok'] ?? false) && $action !== 'delete_plan' && $action !== 'add_plan') {
     $result['state'] = Inventory::planState($planId);
 }
 $respond($result, ($result['ok'] ?? false) ? 200 : 422);

@@ -23,6 +23,7 @@ $base = $CFG_GLPI['root_doc'] . '/plugins/ativarede';
 Schema::upgrade();
 Seed::ensureSecondFloor();
 Seed::applySecondFloorFixups();
+Seed::ensureFinanceiro();
 
 $plans = Inventory::plans();
 $planId = (int) ($_GET['plan'] ?? 0);

@@ -184,6 +184,26 @@ final class Seed
     }
 
     /**
+     * Planta "Financeiro": criada uma vez, do zero (sem desenho de fundo, com
+     * as paredes externas como divisorias). Se a T.I. excluir, nao volta.
+     */
+    public static function ensureFinanceiro(): void
+    {
+        global $DB;
+
+        $flag = 'seed_financeiro';
+        $done = \Config::getConfigurationValues(Settings::CONTEXT, [$flag]);
+        if (!empty($done[$flag]) || !$DB->tableExists(Settings::TABLE_WALLS) || !$DB->fieldExists(Settings::TABLE_PLANS, 'label')
+            || countElementsInTable(Settings::TABLE_PLANS) === 0) {
+            return;
+        }
+        if (countElementsInTable(Settings::TABLE_PLANS, ['name' => 'Financeiro']) === 0) {
+            Plans::add(['name' => 'Financeiro', 'label' => 'Financeiro', 'width' => 1600, 'height' => 500]);
+        }
+        \Config::setConfigurationValues(Settings::CONTEXT, [$flag => '1']);
+    }
+
+    /**
      * Mesas do 2º andar (viewBox 1800 x 450 do matriz-2andar.svg), no mesmo
      * estilo do Anexo: mesas de 42 x 46 encostadas e os grupos a cada 140
      * unidades (entre um e outro so as cadeiras). As letras continuam as do

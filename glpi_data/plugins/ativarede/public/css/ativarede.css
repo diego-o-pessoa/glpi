@@ -822,3 +822,14 @@ tr:hover .ar-eq-edit-btn,
 
 /* Filiais por rede: roteador ainda sem filial em destaque. */
 .ar-net-pending > td { background: rgba(234, 88, 12, .04); }
+
+/* Planta criada do zero (sem desenho de fundo): piso quadriculado. --ar-grid-x/-y
+   = 30 unidades da planta, em % da largura/altura (definido pelo planta.js). */
+.ar-canvas.is-blank {
+    background-color: #fbfaf6;
+    background-image:
+        linear-gradient(to right, #ece8de 1px, transparent 1px),
+        linear-gradient(to bottom, #ece8de 1px, transparent 1px);
+    background-size: var(--ar-grid-x, 2%) var(--ar-grid-y, 6%);
+    border-radius: 6px;
+}
