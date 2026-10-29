@@ -69,13 +69,13 @@
         return a;
     }
 
-    function showToast(message, isError) {
+    function showToast(message, isError, ms) {
         if (!toast || !message) { return; }
         toast.textContent = message;
         toast.classList.toggle('is-error', !!isError);
         toast.hidden = false;
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(function () { toast.hidden = true; }, isError ? 6000 : 3500);
+        toastTimer = setTimeout(function () { toast.hidden = true; }, ms || (isError ? 6000 : 3500));
     }
 
     function post(fields) {
@@ -107,49 +107,88 @@
             .catch(function () { /* tenta de novo no proximo ciclo */ });
     }
 
-    /* "Atualizar agora": recarrega ja e, para quem edita, pede as maquinas
-     * uma coleta imediata. Depois acompanha a cada 10 s por 4 minutos (tempo
-     * da coleta + confirmacao de troca de mesa), com contagem no botao. */
-    var WATCH_MS = 4 * 60 * 1000;
+    /* "Atualizar agora": recarrega ja e, para quem edita, pede a posicao as
+     * maquinas ligadas - primeiro so as que ainda nao estao em Equipamentos.
+     * Acompanha quem ja respondeu (a cada 5 s) e para assim que todas
+     * responderem; no fim diz quem ficou sem resposta. Antes eram 4 minutos
+     * fixos, mesmo com tudo ja recebido. */
     var watchUntil = 0;
     var watchTimer = null;
+    var watchDone = -1;
+    var lastStatusAt = 0;
+    var statusBusy = false;
     var refreshBtn = q('[data-ar-refresh]');
+    var refreshAllBtn = q('[data-ar-refresh-all]');
+
+    function refreshLabel(text) {
+        var label = refreshBtn ? refreshBtn.querySelector('span') : null;
+        if (label) { label.textContent = text; }
+    }
+
+    function finishWatch(data) {
+        clearInterval(watchTimer);
+        watchTimer = null;
+        refreshLabel('Atualizar agora');
+        if (refreshBtn) { refreshBtn.disabled = false; }
+        if (refreshAllBtn) { refreshAllBtn.disabled = false; }
+        refresh();
+        if (!data || !data.total) { return; }
+        var msg = data.done >= data.total
+            ? 'Pronto: ' + (data.total === 1 ? 'a máquina respondeu.' : 'as ' + data.total + ' máquinas responderam.')
+            : data.done + ' de ' + data.total + ' máquina(s) responderam. Sem resposta: '
+                + data.waiting.join(', ') + (data.waiting_count > data.waiting.length ? '…' : '')
+                + ' (desligada, sem rede ou Guardian parado).';
+        (data.rejected || []).forEach(function (r) { msg += ' ' + r.host + ' recusada pelo GLPI: ' + r.message; });
+        showToast(msg, data.done < data.total || (data.rejected || []).length > 0, 12000);
+    }
+
+    function checkStatus() {
+        if (statusBusy) { return; }
+        statusBusy = true;
+        lastStatusAt = Date.now();
+        fetch(dataUrl + '?collect_status=1', { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data || !data.ok || !watchTimer) { return; }
+                if (data.done !== watchDone) {
+                    watchDone = data.done;
+                    refresh();
+                }
+                refreshLabel('Procurando… ' + data.done + '/' + data.total);
+                if (data.finished || Date.now() >= watchUntil) { finishWatch(data); }
+            })
+            .catch(function () { /* tenta de novo no proximo ciclo */ })
+            .then(function () { statusBusy = false; });
+    }
 
     function watchTick() {
-        var left = watchUntil - Date.now();
-        var label = refreshBtn ? refreshBtn.querySelector('span') : null;
-        if (left <= 0) {
-            clearInterval(watchTimer);
-            watchTimer = null;
-            if (label) { label.textContent = 'Atualizar agora'; }
-            if (refreshBtn) { refreshBtn.disabled = false; }
-            refresh();
-            return;
-        }
-        var sec = Math.ceil(left / 1000);
-        if (label) { label.textContent = 'Acompanhando… ' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
-        if (Date.now() - lastWatchRefresh >= 10000) {
-            lastWatchRefresh = Date.now();
-            refresh();
-        }
+        if (Date.now() - lastStatusAt >= 5000) { checkStatus(); }
+        if (Date.now() >= watchUntil + 15000) { finishWatch(null); }
     }
-    var lastWatchRefresh = 0;
 
-    function startWatch() {
-        watchUntil = Date.now() + WATCH_MS;
+    function startWatch(seconds, total) {
+        watchUntil = Date.now() + (seconds || 210) * 1000;
+        watchDone = -1;
+        lastStatusAt = Date.now();
+        refreshLabel('Procurando… 0/' + total);
         if (refreshBtn) { refreshBtn.disabled = true; }
+        if (refreshAllBtn) { refreshAllBtn.disabled = true; }
         if (!watchTimer) { watchTimer = setInterval(watchTick, 1000); }
-        watchTick();
+    }
+
+    function collect(scope) {
+        refresh();
+        if (!canManage) { showToast('Planta atualizada.'); return; }
+        post({ action: 'collect', scope: scope }).then(function (r) {
+            if (r.ok && r.requested > 0) { startWatch(r.watch_seconds, r.requested); }
+        });
     }
 
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', function () {
-            refresh();
-            if (!canManage) { showToast('Planta atualizada.'); return; }
-            post({ action: 'collect' }).then(function (r) {
-                if (r.ok && r.requested > 0) { startWatch(); }
-            });
-        });
+        refreshBtn.addEventListener('click', function () { collect('new'); });
+    }
+    if (refreshAllBtn) {
+        refreshAllBtn.addEventListener('click', function () { collect('all'); });
     }
 
     function deskById(id) {
@@ -214,10 +253,20 @@
         }
     }
 
+    /* Mesa sem porta, com a maquina vinculada direto: pelo que a maquina
+     * informou agora. Antes toda mesa assim aparecia como "Wi-Fi", inclusive
+     * maquina no cabo cujo switch nao anuncia a porta (sem LLDP). */
+    function fixedLink(desk) {
+        var m = desk.machines && desk.machines[0];
+        if (m && m.link === 'wired') { return { label: 'Cabo', text: 'máquina no cabo, mas o switch não informou a porta (sem LLDP)' }; }
+        if (m && m.link === 'wifi') { return { label: 'Wi-Fi', text: 'máquina no Wi-Fi vinculada à mesa' }; }
+        return { label: 'Sem porta', text: 'máquina vinculada direto à mesa' };
+    }
+
     function deskTitle(desk) {
         var parts = ['Mesa ' + desk.name];
         if (desk.port) { parts.push('Switch ' + desk.switch_display + ' · porta ' + desk.port); }
-        else if (desk.machines_id) { parts.push('Sem porta (máquina no Wi-Fi vinculada à mesa)'); }
+        else if (desk.machines_id) { parts.push('Sem porta (' + fixedLink(desk).text + ')'); }
         desk.machines.forEach(function (m) {
             parts.push((m.label || m.computer || m.hostname) + (m.group ? ' · ' + m.group : '') + (m.online ? ' — ligada' : ' — desligada'));
         });
@@ -786,7 +835,7 @@
             node.classList.add('ch-' + chair);
             node.appendChild(el('span', 'ar-chair c-' + chair));
             var portLine = el('span', 'ar-desk-port' + (desk.machines_id ? ' is-wifi' : ''),
-                desk.port || (desk.machines_id ? 'Wi-Fi' : (editing ? '+' : '–')));
+                desk.port || (desk.machines_id ? fixedLink(desk).label : (editing ? '+' : '–')));
             if (desk.switch) { portLine.appendChild(el('span', 'ar-desk-sw', desk.switch)); }
             node.appendChild(portLine);
             node.appendChild(el('span', 'ar-desk-name', desk.name));
@@ -888,7 +937,13 @@
         if (desk.port) {
             kv(info, 'Porta do switch', 'Switch ' + desk.switch_display + ' · porta ' + desk.port);
         } else if (desk.machines_id) {
-            var fixed = el('span', '', 'Sem porta: máquina vinculada direto à mesa (Wi-Fi). Quando ela for ligada no cabo, a porta do switch entra aqui sozinha. ');
+            var fixedInfo = fixedLink(desk);
+            var fixedMachine = desk.machines && desk.machines[0];
+            var fixedText = fixedInfo.label === 'Cabo'
+                ? 'Sem porta: ' + fixedInfo.text + '. Assim que o switch anunciar a porta, ela entra aqui sozinha. '
+                : 'Sem porta: ' + fixedInfo.text + '. Quando ela for ligada no cabo, a porta do switch entra aqui sozinha. ';
+            if (fixedMachine && fixedMachine.diagnostic) { fixedText += 'Coleta: ' + fixedMachine.diagnostic + '. '; }
+            var fixed = el('span', '', fixedText);
             if (canManage) {
                 var unlink = el('button', 'btn btn-sm btn-link p-0 align-baseline', 'Desvincular');
                 unlink.type = 'button';
@@ -955,7 +1010,7 @@
             if (!m.computer) { kv(list, 'Computador GLPI', 'não vinculado (série/nome não encontrados no inventário)'); }
             if (m.person) { kv(list, 'Usuário', m.person + (m.person_source === 'vpn' ? ' (pela VPN: ' + m.vpn_profile + ')' : '')); }
             kv(list, 'Usuário (GLPI)', m.user ? m.user + (m.group ? ' · ' + m.group : '') : '');
-            kv(list, 'IP', m.ip + (m.link === 'wifi' ? ' (Wi-Fi agora)' : ''));
+            kv(list, 'IP', m.ip + (m.link === 'wifi' ? ' (Wi-Fi agora)' : (m.link === 'wired' ? ' (cabo)' : '')));
             kv(list, 'Nesta mesa desde', m.since);
             if (m.pending) { kv(list, 'Possível mudança', 'apareceu em ' + m.pending + ' — aguardando confirmação'); }
             kv(list, 'Último contato', m.online ? 'agora' : (m.last_contact || m.last_report));
@@ -1004,7 +1059,7 @@
     /* Porta do switch (cabo) ou vinculo direto (Wi-Fi / sem porta). */
     function unmappedTag(u) {
         if (u.kind === 'machine' && u.shared) { return u.switch + ' · porta ' + u.port + ' (compartilhada)'; }
-        if (u.kind === 'machine') { return u.link === 'wifi' ? 'Wi-Fi · sem porta' : 'sem porta'; }
+        if (u.kind === 'machine') { return u.link === 'wifi' ? 'Wi-Fi · sem porta' : (u.link === 'wired' ? 'cabo · sem porta (sem LLDP)' : 'sem porta'); }
         return u.switch + ' · porta ' + u.port;
     }
     function unmappedChanges(u) {

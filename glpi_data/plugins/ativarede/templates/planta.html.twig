@@ -33,10 +33,25 @@
                 <button type="button" class="btn btn-outline-secondary" data-ar-zoom="0" title="Ajustar à tela"><span data-ar-zoom-label>100%</span></button>
                 <button type="button" class="btn btn-outline-secondary" data-ar-zoom="1" title="Aumentar"><i class="ti ti-zoom-in"></i></button>
             </div>
-            <button type="button" class="btn btn-sm btn-primary" data-ar-refresh
-                    title="{{ can_manage ? 'Pede às máquinas ligadas que informem a posição agora e acompanha as mudanças por alguns minutos' : 'Recarrega a planta agora' }}">
-                <i class="ti ti-refresh me-1"></i><span>Atualizar agora</span>
-            </button>
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-primary" data-ar-refresh
+                        title="{{ can_manage ? 'Procura primeiro as máquinas ligadas que ainda não estão em Equipamentos (sem nenhuma nova, pede a todas) e acompanha até elas responderem' : 'Recarrega a planta agora' }}">
+                    <i class="ti ti-refresh me-1"></i><span>Atualizar agora</span>
+                </button>
+                {% if can_manage %}
+                    <button type="button" class="btn btn-primary dropdown-toggle dropdown-toggle-split"
+                            data-bs-toggle="dropdown" aria-expanded="false" title="Mais opções">
+                        <span class="visually-hidden">Mais opções</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <button type="button" class="dropdown-item" data-ar-refresh-all>
+                                <i class="ti ti-refresh-dot me-1"></i>Recoletar todas as máquinas ligadas
+                            </button>
+                        </li>
+                    </ul>
+                {% endif %}
+            </div>
             {% if can_manage %}
                 <button type="button" class="btn btn-sm btn-outline-primary" data-ar-edit>
                     <i class="ti ti-pencil me-1"></i><span>Editar planta</span>

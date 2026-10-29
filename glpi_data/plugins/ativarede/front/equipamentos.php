@@ -27,7 +27,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
     // "Pedir envio agora" nas maquinas sem posicao.
     if (($_POST['action'] ?? '') === 'collect') {
-        $result = Collector::requestAll();
+        $result = Collector::request(Collector::SCOPE_NEW);
         Session::addMessageAfterRedirect(htmlescape($result['message']), false, $result['ok'] ? INFO : ERROR);
         Html::redirect($selfUrl . '#missing');
     }

@@ -33,6 +33,11 @@ Schema::upgrade();
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     session_write_close();
+    // Acompanhamento do "Atualizar agora": quem ja respondeu ao pedido.
+    if (isset($_GET['collect_status'])) {
+        $respond(Collector::status());
+        return;
+    }
     $state = Inventory::planState((int) ($_GET['plan'] ?? 0));
     $respond(['ok' => $state['plan'] !== null] + $state);
     return;
@@ -60,7 +65,7 @@ try {
         'delete_plan'  => Plans::delete($planId),
         'resolve'      => Events::resolve((int) ($_POST['id'] ?? 0), (string) ($_POST['resolution'] ?? '')),
         'switch_label' => Desks::saveSwitchLabel((int) ($_POST['id'] ?? 0), (string) ($_POST['label'] ?? '')),
-        'collect'      => Collector::requestAll(),
+        'collect'      => Collector::request((string) ($_POST['scope'] ?? Collector::SCOPE_NEW)),
         default        => ['ok' => false, 'message' => 'Ação inválida.'],
     };
 } catch (Throwable $exception) {
