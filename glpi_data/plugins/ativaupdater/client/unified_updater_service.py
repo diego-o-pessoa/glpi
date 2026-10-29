@@ -535,6 +535,18 @@ def _tasklist_csv() -> str:
         return ""
 
 
+def setup_in_progress() -> bool:
+    """Algum instalador unificado rodando (automatico ou aberto por uma pessoa)?
+
+    Ele para Guardian/Workspace de proposito para trocar os executaveis:
+    religar um deles nesse meio tempo trava o arquivo e o instalador da
+    "acesso negado".
+    """
+    if os.name != "nt":
+        return False
+    return bool(parse_setup_processes(_tasklist_csv()))
+
+
 def interactive_setup_processes() -> list[int]:
     """Unified installers a person opened by hand (outside session 0).
 
@@ -847,6 +859,11 @@ def ensure_guardian_running(logger: logging.Logger) -> None:
     except OSError:
         return
 
+    if service is not None and service[0] in (SERVICE_STATE_RUNNING, SERVICE_STATE_START_PENDING):
+        return
+    if setup_in_progress():
+        return
+
     if GUARDIAN_EXE.is_file():
         if service is None:
             # Executavel presente, servico sumiu: o proprio Guardian se re-registra.
@@ -926,6 +943,10 @@ def ensure_workspace_running(logger: logging.Logger) -> None:
     try:
         service = query_service(WORKSPACE_SERVICE_NAME)
     except OSError:
+        return
+    if service is not None and service[0] in (SERVICE_STATE_RUNNING, SERVICE_STATE_START_PENDING):
+        return
+    if setup_in_progress():
         return
     if not WORKSPACE_EXE.is_file():
         if service is not None:

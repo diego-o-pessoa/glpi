@@ -1569,7 +1569,7 @@ class GuardianWatchdogTests(unittest.TestCase):
     RUNNING = (updater.SERVICE_STATE_RUNNING, 1234)
     STOPPED = (1, 0)
 
-    def _run(self, service, exe_present, maintenance=False, due=True):
+    def _run(self, service, exe_present, maintenance=False, due=True, setup=False):
         calls = {"start": [], "install_service": False, "reinstall": False}
 
         def fake_run(cmd, **kw):
@@ -1579,6 +1579,7 @@ class GuardianWatchdogTests(unittest.TestCase):
 
         with mock.patch.object(updater.os, "name", "nt"), \
              mock.patch.object(updater, "guardian_maintenance_active", return_value=maintenance), \
+             mock.patch.object(updater, "setup_in_progress", return_value=setup), \
              mock.patch.object(updater, "query_service", return_value=service), \
              mock.patch.object(type(updater.GUARDIAN_EXE), "is_file", return_value=exe_present), \
              mock.patch.object(updater, "_guardian_recovery_due", return_value=due), \
@@ -1618,6 +1619,41 @@ class GuardianWatchdogTests(unittest.TestCase):
         c = self._run(None, exe_present=False, maintenance=True)
         self.assertFalse(c["reinstall"])
         self.assertFalse(c["install_service"])
+
+    def test_installer_running_is_respected(self):
+        # O instalador parou o Guardian para trocar o executavel: religar agora
+        # trava o arquivo e o instalador da "acesso negado".
+        c = self._run(self.STOPPED, exe_present=True, setup=True)
+        self.assertEqual(c["start"], [])
+        c = self._run(None, exe_present=False, setup=True)
+        self.assertFalse(c["reinstall"])
+
+
+class WorkspaceWatchdogTests(unittest.TestCase):
+    def _run(self, service, setup):
+        calls = []
+        with mock.patch.object(updater.os, "name", "nt"), \
+             mock.patch.object(updater, "guardian_maintenance_active", return_value=False), \
+             mock.patch.object(updater, "setup_in_progress", return_value=setup), \
+             mock.patch.object(updater, "query_service", return_value=service), \
+             mock.patch.object(type(updater.WORKSPACE_EXE), "is_file", return_value=True), \
+             mock.patch.object(updater, "wait_service_state", return_value=True), \
+             mock.patch.object(updater, "run_sc", side_effect=lambda *a: calls.append(a) or 0):
+            updater.ensure_workspace_running(quiet_logger("workspace-watchdog"))
+        return calls
+
+    def test_stopped_workspace_is_started(self):
+        self.assertIn(("start", updater.WORKSPACE_SERVICE_NAME), self._run((1, 0), setup=False))
+
+    def test_installer_running_is_respected(self):
+        self.assertEqual(self._run((1, 0), setup=True), [])
+
+    def test_running_workspace_skips_tasklist(self):
+        with mock.patch.object(updater, "setup_in_progress", side_effect=AssertionError("nao devia consultar")):
+            with mock.patch.object(updater.os, "name", "nt"), \
+                 mock.patch.object(updater, "guardian_maintenance_active", return_value=False), \
+                 mock.patch.object(updater, "query_service", return_value=(updater.SERVICE_STATE_RUNNING, 9)):
+                updater.ensure_workspace_running(quiet_logger("workspace-watchdog"))
 
 
 class GuardianRecoveryRateLimitTests(unittest.TestCase):

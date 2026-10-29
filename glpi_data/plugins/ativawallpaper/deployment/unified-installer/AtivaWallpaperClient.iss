@@ -991,6 +991,7 @@ var
   AgentMsi: String;
   AgentParameters: String;
   ResultCode: Integer;
+  GuardianChanged, WorkspaceChanged: Boolean;
 begin
   if CurStep = ssInstall then begin
     { Ask the installed Guardian BEFORE changing any file/service. Automatic
@@ -1016,16 +1017,25 @@ begin
     ExcludeFromDefender();
     { So para (ou renomeia) o que vai ser regravado: executavel identico ao do
       pacote fica como esta e o servico dele segue rodando. }
+    GuardianChanged := FileDiffers('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe', '{#GuardianSha1}');
+#ifdef WorkspacePath
+    WorkspaceChanged := FileDiffers('{commonappdata}\AtivaLocacao\Workspace\AtivaWorkspace.exe', '{#WorkspaceSha1}');
+#else
+    WorkspaceChanged := False;
+#endif
     if FileDiffers('{commonappdata}\AtivaLocacao\UnifiedUpdater\AtivaUnifiedUpdater.exe', '{#UpdaterSha1}') then
-      PrepareUpdaterExecutable();
+      PrepareUpdaterExecutable()
+    { Updater igual, mas Guardian/Workspace mudam: o Updater rodando religaria
+      o servico parado em ate 15 s (ele vigia os dois) e o [Files] voltaria a
+      dar "acesso negado". Para ele tambem; e religado no fim, como sempre. }
+    else if GuardianChanged or WorkspaceChanged then
+      StopUpdaterService();
     { Libera AtivaGuardian.exe antes de [Files] tentar substitui-lo. }
-    if FileDiffers('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe', '{#GuardianSha1}') then
+    if GuardianChanged then
       StopGuardianService();
     { Idem para o servico proprio do Workspace. }
-#ifdef WorkspacePath
-    if FileDiffers('{commonappdata}\AtivaLocacao\Workspace\AtivaWorkspace.exe', '{#WorkspaceSha1}') then
+    if WorkspaceChanged then
       StopWorkspaceService();
-#endif
     exit;
   end;
 
