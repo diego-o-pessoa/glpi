@@ -12,8 +12,15 @@ services:
       - MYSQL_USER=glpiuser
       - MYSQL_PASSWORD=Ativ@Adm2026
     command:
-      - --binlog-expire-logs-seconds=86400
-      - --max-binlog-size=100M
+      # The whole database (~305 MB) must fit in memory. The default 128 MB
+      # forced constant disk reads under the agents' traffic.
+      - --innodb-buffer-pool-size=512M
+      # Binary logs are only for replication/point-in-time recovery, and
+      # neither is used (backup.sh uses mysqldump). They doubled every write.
+      - --skip-log-bin
+      # Flush the redo log to disk once per second instead of on every
+      # commit. An OS crash or power loss may lose up to ~1 s of changes.
+      - --innodb-flush-log-at-trx-commit=2
     volumes:
       # Database files live outside the Git working tree. A git pull can no
       # longer replace or delete InnoDB redo logs.

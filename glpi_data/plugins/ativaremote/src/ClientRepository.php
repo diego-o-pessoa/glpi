@@ -19,9 +19,17 @@ use Throwable;
 final class ClientRepository
 {
     public const TABLE = 'glpi_plugin_ativaremote_clients';
-    public const ONLINE_SECONDS = 60;
-    public const POLL_SECONDS = 10;
-    /** The computer polls every 10 s and the user has 60 s to answer. */
+    /** Tolerates one late poll before showing the computer as offline. */
+    public const ONLINE_SECONDS = 90;
+    /**
+     * Idle computers poll every 30 s: with ~100 computers, 10 s alone was a
+     * quarter of all requests to the GLPI server. While an access is being
+     * requested or is open, the computer polls every 10 s so that closing
+     * the session stays quick.
+     */
+    public const POLL_SECONDS = 30;
+    public const ACTIVE_POLL_SECONDS = 10;
+    /** The computer polls every 30 s and the user has 60 s to answer. */
     public const PENDING_TIMEOUT_SECONDS = 180;
     public const CLOSING_TIMEOUT_SECONDS = 180;
     public const SESSION_MAX_SECONDS = 4 * 3600;
@@ -115,8 +123,15 @@ final class ClientRepository
         return [
             'require_consent'    => self::requiresConsent($client),
             'request'            => $request,
-            'poll_after_seconds' => self::POLL_SECONDS,
+            'poll_after_seconds' => self::pollSeconds($client),
         ];
+    }
+
+    private static function pollSeconds(array $client): int
+    {
+        $active = !empty($client['request_action'])
+            || in_array($client['remote_access_status'], [self::STATUS_PENDING, self::STATUS_ACCEPTED, self::STATUS_CLOSING], true);
+        return $active ? self::ACTIVE_POLL_SECONDS : self::POLL_SECONDS;
     }
 
     private function applyResult(array $client, array $result): void

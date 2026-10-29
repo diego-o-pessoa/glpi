@@ -175,6 +175,11 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     };
     const refreshUpdates = async () => {
+      // Aba em segundo plano: nao consulta o servidor; volta ao ficar visivel.
+      if (document.hidden) {
+        document.addEventListener('visibilitychange', refreshUpdates, { once: true });
+        return;
+      }
       try {
         const response = await fetch(updateMonitor.dataset.progressUrl, {
           credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' },
