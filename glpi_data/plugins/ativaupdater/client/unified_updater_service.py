@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.16"
+UPDATER_VERSION = "1.7.17"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -453,15 +453,29 @@ def collect_install_log(
     return text
 
 
-def parse_setup_processes(tasklist_csv: str) -> list[int]:
-    """PIDs of the unified installer (setup EXE and Inno Setup's .tmp stub)."""
+def parse_setup_processes(tasklist_csv: str, interactive: bool | None = None) -> list[int]:
+    """PIDs of the unified installer (setup EXE and Inno Setup's .tmp stub).
+
+    interactive=None returns every installer. False keeps only the ones in
+    session 0 (started by this service, as SYSTEM); True only the ones a person
+    opened in their own session (Session# of tasklist > 0). An installer whose
+    session cannot be read counts as interactive: it is never killed by mistake.
+    """
     pids = []
     for row in csv.reader(io.StringIO(tasklist_csv)):
         if len(row) >= 2 and row[0].strip().lower().startswith(SETUP_IMAGE_PREFIX):
             try:
-                pids.append(int(row[1]))
+                pid = int(row[1])
             except ValueError:
                 continue
+            if interactive is not None:
+                try:
+                    in_user_session = int(row[3].strip()) != 0
+                except (IndexError, ValueError):
+                    in_user_session = True
+                if in_user_session != interactive:
+                    continue
+            pids.append(pid)
     return pids
 
 
@@ -510,17 +524,39 @@ def own_process_ids() -> set[int]:
     return {os.getpid(), os.getppid()}
 
 
-def running_setup_processes() -> list[int]:
-    """Unified installers and install runners in progress (never this process)."""
-    if os.name != "nt":
-        return []
+def _tasklist_csv() -> str:
     try:
-        completed = subprocess.run(
+        return subprocess.run(
             ["tasklist.exe", "/FO", "CSV", "/NH"],
             capture_output=True, text=True, errors="replace", timeout=60,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        setups = parse_setup_processes(completed.stdout)
+        ).stdout or ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def interactive_setup_processes() -> list[int]:
+    """Unified installers a person opened by hand (outside session 0).
+
+    This service must never kill them nor start an automatic installation while
+    one runs: killing the manual installer near the end (it restarts this service
+    before installing Guardian and Workspace) closed it without warning.
+    """
+    if os.name != "nt":
+        return []
+    return parse_setup_processes(_tasklist_csv(), interactive=True)
+
+
+def running_setup_processes() -> list[int]:
+    """Automatic unified installers (session 0) and install runners in progress.
+
+    Never this process and never an installer a person opened by hand: every
+    caller may kill what this returns.
+    """
+    if os.name != "nt":
+        return []
+    try:
+        setups = parse_setup_processes(_tasklist_csv(), interactive=False)
     except (OSError, subprocess.SubprocessError):
         setups = []
     try:
@@ -1709,6 +1745,18 @@ def check_once(
             atomic_json(STATE_PATH, state)
             logger.info("Verificacao manual: contador de falhas de instalacao zerado.")
 
+        manual_setups = interactive_setup_processes()
+        if manual_setups:
+            # Someone is installing by hand on this computer. That installer
+            # restarts this service before it finishes (Guardian and Workspace
+            # come last); starting an automatic installation now would kill it.
+            api.report(
+                "checking", installed,
+                message="Instalacao manual em andamento neste computador; a verificacao espera ela terminar.",
+            )
+            logger.info("Instalador manual em execucao (PIDs %s); verificacao adiada.", manual_setups)
+            return RESULT_RETRY
+
         pending_version = str(state.get("pending_version", ""))
         if pending_version:
             # A pending installation survives only when the service restarted
@@ -2372,12 +2420,15 @@ def run_watchdog(logger: logging.Logger) -> int:
     try:
         now = time.time()
         state = get_state()
+        # Only automatic installers may be killed; a manual one still counts as
+        # "installation in progress" (it stops the services on purpose).
         setup_pids = running_setup_processes()
+        setup_running = bool(setup_pids) or bool(interactive_setup_processes())
         service = query_service()
         actions = plan_watchdog(
             service,
-            bool(setup_pids),
-            setup_running_age(bool(setup_pids), state, now),
+            setup_running,
+            setup_running_age(setup_running, state, now),
             heartbeat_age(now),
             service_exe_healthy,
         )

@@ -44,6 +44,17 @@
   #define GuardianVersion "?"
 #endif
 
+; SHA-1 dos executaveis do pacote, calculado no build. Na maquina, o arquivo
+; instalado so e regravado (e o servico dele so e parado) quando e diferente:
+; reinstalar a mesma versao nao mexe em executavel em uso e nao da mais
+; "acesso negado" (Repetir/Ignorar) para cada servico.
+#define UpdaterSha1 GetSHA1OfFile(UnifiedUpdaterPath)
+#define RustDeskSha1 GetSHA1OfFile(RustDeskPath)
+#define GuardianSha1 GetSHA1OfFile(GuardianPath)
+#ifdef WorkspacePath
+  #define WorkspaceSha1 GetSHA1OfFile(WorkspacePath)
+#endif
+
 [Setup]
 AppId={{9F8B7C6D-E5D4-4C32-8A1A-B445015310C1}
 AppName=Ativa Unified Agent
@@ -76,14 +87,14 @@ CloseApplicationsFilter=*.ativa-restart-manager-disabled
 
 [Files]
 Source: "{#WallpaperClientPath}"; DestDir: "{tmp}"; DestName: "AtivaWallpaperClient.exe"; Flags: deleteafterinstall ignoreversion
-Source: "{#UnifiedUpdaterPath}"; DestDir: "{commonappdata}\AtivaLocacao\UnifiedUpdater"; DestName: "AtivaUnifiedUpdater.exe"; Flags: ignoreversion
-Source: "{#RustDeskPath}"; DestDir: "{commonappdata}\AtivaLocacao\UnifiedUpdater"; DestName: "rustdesk.exe"; Flags: ignoreversion
+Source: "{#UnifiedUpdaterPath}"; DestDir: "{commonappdata}\AtivaLocacao\UnifiedUpdater"; DestName: "AtivaUnifiedUpdater.exe"; Flags: ignoreversion; Check: FileDiffers('{commonappdata}\AtivaLocacao\UnifiedUpdater\AtivaUnifiedUpdater.exe', '{#UpdaterSha1}')
+Source: "{#RustDeskPath}"; DestDir: "{commonappdata}\AtivaLocacao\UnifiedUpdater"; DestName: "rustdesk.exe"; Flags: ignoreversion; Check: FileDiffers('{commonappdata}\AtivaLocacao\UnifiedUpdater\rustdesk.exe', '{#RustDeskSha1}')
 Source: "{#AgentMsiPath}"; DestDir: "{tmp}"; DestName: "GLPI-Agent-{#AgentVersion}-x64.msi"; Flags: deleteafterinstall ignoreversion
 Source: "{#BootstrapConfigPath}"; DestDir: "{tmp}"; DestName: "bootstrap-config.json"; Flags: deleteafterinstall ignoreversion
 Source: "{#UpdaterConfigPath}"; DestDir: "{tmp}"; DestName: "ativaupdater-service-config.json"; Flags: deleteafterinstall ignoreversion
 ; O Guardian mora em Program Files (nao em ProgramData, onde ficam so os dados dele).
 ; O servico e parado em ssInstall para o arquivo nao estar em uso nesta copia.
-Source: "{#GuardianPath}"; DestDir: "{commonpf}\Ativa Locacao\Guardian"; DestName: "AtivaGuardian.exe"; Flags: ignoreversion
+Source: "{#GuardianPath}"; DestDir: "{commonpf}\Ativa Locacao\Guardian"; DestName: "AtivaGuardian.exe"; Flags: ignoreversion; Check: FileDiffers('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe', '{#GuardianSha1}')
 ; Copia para liberar a manutencao quando o Guardian instalado sumiu (so sob demanda).
 Source: "{#GuardianPath}"; DestName: "AtivaGuardianAuth.exe"; Flags: dontcopy
 Source: "{#GuardianConfigPath}"; DestDir: "{tmp}"; DestName: "ativaguardian-service-config.json"; Flags: deleteafterinstall ignoreversion
@@ -94,7 +105,7 @@ Source: "{#WorkspaceConfigPath}"; DestDir: "{tmp}"; DestName: "ativaworkspace-se
 #endif
 #ifdef WorkspacePath
 ; Servico Ativa Workspace, proprio (independente do Updater). Mora em ProgramData.
-Source: "{#WorkspacePath}"; DestDir: "{commonappdata}\AtivaLocacao\Workspace"; DestName: "AtivaWorkspace.exe"; Flags: ignoreversion
+Source: "{#WorkspacePath}"; DestDir: "{commonappdata}\AtivaLocacao\Workspace"; DestName: "AtivaWorkspace.exe"; Flags: ignoreversion; Check: FileDiffers('{commonappdata}\AtivaLocacao\Workspace\AtivaWorkspace.exe', '{#WorkspaceSha1}')
 #endif
 #ifdef UninstallerPath
 ; Desinstalador (AtivaUninstaller.iss), registrado em Aplicativos do Windows.
@@ -160,6 +171,82 @@ begin
   Output := Trim(Output);
   Log('sc ' + Parameters + ' -> codigo ' + IntToStr(ResultCode) + ': ' + Output);
   Result := ResultCode;
+end;
+
+{ O executavel instalado e diferente do que vem no pacote (ou nao existe)?
+  Usado no [Files] (Check) e antes de parar cada servico. Na duvida (arquivo
+  ilegivel), considera diferente: o comportamento antigo, de regravar. }
+function FileDiffers(const Path, Sha1: String): Boolean;
+var
+  Target, Current: String;
+begin
+  Target := ExpandConstant(Path);
+  Result := True;
+  if not FileExists(Target) then
+    exit;
+  try
+    Current := GetSHA1OfFile(Target);
+  except
+    Log('Nao foi possivel ler ' + Target + ' para comparar: ' + GetExceptionMessage);
+    exit;
+  end;
+  Result := CompareText(Current, Sha1) <> 0;
+  if not Result then
+    Log('Ja instalado e identico ao do pacote; nao sera regravado: ' + Target);
+end;
+
+{ PID do processo de um servico (0 se parado ou nao achado), pelo "sc queryex". }
+function ServicePid(const Service: String): Integer;
+var
+  Output, Digits: String;
+  P, I: Integer;
+begin
+  Result := 0;
+  if ScRun('queryex ' + Service, Output) <> 0 then
+    exit;
+  P := Pos('PID', Uppercase(Output));
+  if P = 0 then
+    exit;
+  Output := Copy(Output, P + 3, 40);
+  P := Pos(':', Output);
+  if P = 0 then
+    exit;
+  Digits := '';
+  for I := P + 1 to Length(Output) do begin
+    if (Output[I] >= '0') and (Output[I] <= '9') then
+      Digits := Digits + Output[I]
+    else if Digits <> '' then
+      break
+    else if Output[I] <> ' ' then
+      break;
+  end;
+  Result := StrToIntDef(Digits, 0);
+end;
+
+{ Espera o servico chegar a STOPPED; se nao chegar no prazo, encerra o
+  processo dele. Sem isso o [Files] seguia com o executavel ainda em uso e o
+  Windows respondia "acesso negado" (Repetir/Ignorar) para cada servico. }
+procedure WaitServiceStopped(const Service: String; Seconds: Integer);
+var
+  Attempt, Pid, ResultCode: Integer;
+  Output: String;
+begin
+  for Attempt := 1 to Seconds do begin
+    ScRun('query ' + Service, Output);
+    if Pos('STOPPED', Uppercase(Output)) > 0 then begin
+      Log('Servico ' + Service + ' parado.');
+      { O SCM informa STOPPED pouco antes de o processo liberar o executavel. }
+      Sleep(2000);
+      exit;
+    end;
+    Sleep(1000);
+  end;
+  Pid := ServicePid(Service);
+  if Pid > 0 then begin
+    Log('Servico ' + Service + ' nao parou em ' + IntToStr(Seconds) + ' s; encerrando o processo ' + IntToStr(Pid) + '.');
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/PID ' + IntToStr(Pid) + ' /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(3000);
+  end;
 end;
 
 { Registra/atualiza o servico AtivaUnifiedUpdater.
@@ -411,7 +498,6 @@ end;
 
 procedure StopUpdaterService();
 var
-  Attempt: Integer;
   ResultCode: Integer;
 begin
   if not Exec(ExpandConstant('{sys}\sc.exe'), 'query AtivaUnifiedUpdater', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then begin
@@ -421,22 +507,11 @@ begin
 
   { O servico pode ter iniciado este proprio instalador. Pare-o antes de substituir o executavel. }
   RunOptional(ExpandConstant('{sys}\sc.exe'), 'stop AtivaUnifiedUpdater');
-  for Attempt := 1 to 60 do begin
-    if Exec(ExpandConstant('{cmd}'),
-      '/C ""' + ExpandConstant('{sys}\sc.exe') + '" query AtivaUnifiedUpdater | "' + ExpandConstant('{sys}\find.exe') + '" "STOPPED""',
-      '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then begin
-      Log('Servico AtivaUnifiedUpdater parado.');
-      break;
-    end;
-    Sleep(1000);
-  end;
-  { O SCM informa STOPPED pouco antes de o processo liberar o executavel. }
-  Sleep(3000);
+  WaitServiceStopped('AtivaUnifiedUpdater', 60);
 end;
 
 procedure StopGuardianService();
 var
-  Attempt: Integer;
   ResultCode: Integer;
 begin
   if not Exec(ExpandConstant('{sys}\sc.exe'), 'query AtivaGuardian', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then begin
@@ -449,17 +524,8 @@ begin
     quem executa esta instalacao, entao parar e suficiente - nao ha necessidade
     de renomear o arquivo. }
   RunOptional(ExpandConstant('{sys}\sc.exe'), 'stop AtivaGuardian');
-  for Attempt := 1 to 30 do begin
-    if Exec(ExpandConstant('{cmd}'),
-      '/C ""' + ExpandConstant('{sys}\sc.exe') + '" query AtivaGuardian | "' + ExpandConstant('{sys}\find.exe') + '" "STOPPED""',
-      '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then begin
-      Log('Servico AtivaGuardian parado para atualizacao.');
-      break;
-    end;
-    Sleep(1000);
-  end;
-  { O SCM informa STOPPED pouco antes de o processo liberar o executavel. }
-  Sleep(2000);
+  { A coleta do Ativa Rede (captura LLDP de ~65 s) pode segurar o processo. }
+  WaitServiceStopped('AtivaGuardian', 30);
 end;
 
 procedure InstallGuardian();
@@ -694,8 +760,12 @@ procedure StopWorkspaceService();
 var
   ResultCode: Integer;
 begin
-  if Exec(ExpandConstant('{sys}\sc.exe'), 'query AtivaWorkspace', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
-    RunOptional(ExpandConstant('{sys}\sc.exe'), 'stop AtivaWorkspace');
+  if not Exec(ExpandConstant('{sys}\sc.exe'), 'query AtivaWorkspace', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+    exit;
+  { Antes so pedia para parar e seguia: o [Files] encontrava AtivaWorkspace.exe
+    ainda em uso e dava "acesso negado". }
+  RunOptional(ExpandConstant('{sys}\sc.exe'), 'stop AtivaWorkspace');
+  WaitServiceStopped('AtivaWorkspace', 30);
 end;
 
 { Grava a config e registra o servico Ativa Workspace. So roda quando o exe foi
@@ -944,11 +1014,18 @@ begin
     end;
     { Antes de PrepareUpdaterExecutable, que ja grava o executavel em disco. }
     ExcludeFromDefender();
-    PrepareUpdaterExecutable();
+    { So para (ou renomeia) o que vai ser regravado: executavel identico ao do
+      pacote fica como esta e o servico dele segue rodando. }
+    if FileDiffers('{commonappdata}\AtivaLocacao\UnifiedUpdater\AtivaUnifiedUpdater.exe', '{#UpdaterSha1}') then
+      PrepareUpdaterExecutable();
     { Libera AtivaGuardian.exe antes de [Files] tentar substitui-lo. }
-    StopGuardianService();
+    if FileDiffers('{commonpf}\Ativa Locacao\Guardian\AtivaGuardian.exe', '{#GuardianSha1}') then
+      StopGuardianService();
     { Idem para o servico proprio do Workspace. }
-    StopWorkspaceService();
+#ifdef WorkspacePath
+    if FileDiffers('{commonappdata}\AtivaLocacao\Workspace\AtivaWorkspace.exe', '{#WorkspaceSha1}') then
+      StopWorkspaceService();
+#endif
     exit;
   end;
 

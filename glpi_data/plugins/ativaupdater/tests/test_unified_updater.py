@@ -50,8 +50,8 @@ class GuardianMaintenanceTests(unittest.TestCase):
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.7.15")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 15))
+        self.assertEqual(updater.UPDATER_VERSION, "1.7.17")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 17))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -184,6 +184,18 @@ class ProcessAndLogTests(unittest.TestCase):
         )
         self.assertEqual(updater.parse_setup_processes(output), [4242, 4243])
         self.assertEqual(updater.parse_setup_processes("INFORMACOES: nenhuma tarefa em execucao.\n"), [])
+
+    def test_parse_setup_processes_separates_manual_from_automatic(self) -> None:
+        output = (
+            '"Ativa-Unified-Agent-Setup-1.6.0.exe","4242","Services","0","3.100 K"\n'
+            '"Ativa-Unified-Agent-Setup.exe","5000","Console","1","3.100 K"\n'
+            '"Ativa-Unified-Agent-Setup.tmp","5001","RDP-Tcp#3","2","9.800 K"\n'
+            '"Ativa-Unified-Agent-Setup.tmp","5002"\n'
+        )
+        self.assertEqual(updater.parse_setup_processes(output), [4242, 5000, 5001, 5002])
+        self.assertEqual(updater.parse_setup_processes(output, interactive=False), [4242])
+        # Unknown session counts as manual: it must never be killed by mistake.
+        self.assertEqual(updater.parse_setup_processes(output, interactive=True), [5000, 5001, 5002])
 
     def test_read_log_tail_decodes_utf8_and_utf16(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -324,7 +336,9 @@ class InstallRunnerTests(unittest.TestCase):
         self.started: list[list[str]] = []
         self.supervision = ("exited", 0)
         (self.root / "AtivaUnifiedUpdater.exe").write_bytes(b"updater")
-        (self.root / "service-config.json").write_text("{}", encoding="utf-8")
+        (self.root / "service-config.json").write_text(json.dumps({
+            "api_url": API_URL, "api_token": "a" * 64, "verify_tls": True, "check_interval_seconds": 3600,
+        }), encoding="utf-8")
         for name, value in {
             "INSTALL_RESULT_PATH": self.root / "install-result.json",
             "STATE_PATH": self.root / "state.json",
@@ -405,7 +419,10 @@ class InstallRunnerTests(unittest.TestCase):
 class ProcessDiscoveryTests(unittest.TestCase):
     def test_running_setup_processes_include_runners_but_never_itself(self) -> None:
         own = updater.own_process_ids()
-        tasklist = subprocess.CompletedProcess([], 0, stdout='"Ativa-Unified-Agent-Setup-1.6.3.exe","4242","Services","0","3 K"\n')
+        tasklist = subprocess.CompletedProcess([], 0, stdout=(
+            '"Ativa-Unified-Agent-Setup-1.6.3.exe","4242","Services","0","3 K"\n'
+            '"Ativa-Unified-Agent-Setup.exe","4300","Console","1","3 K"\n'
+        ))
         with mock.patch.object(updater.os, "name", "nt"), \
                 mock.patch.object(updater.subprocess, "run", return_value=tasklist), \
                 mock.patch.object(updater, "process_ids_by_image", return_value=[5000, *own]):
@@ -515,6 +532,7 @@ class CheckOnceFixture(unittest.TestCase):
         self.launched: list[Path] = []
         self.killed: list[int] = []
         self.setup_processes: list[int] = []
+        self.manual_setups: list[int] = []
         # What the fake installer does when launched: (exit_code, state written by --configure).
         self.installer_exit_code: int | None = 0
         self.installer_configures: bool = True
@@ -532,6 +550,7 @@ class CheckOnceFixture(unittest.TestCase):
             "ApiClient": FakeApi,
             "launch_installer": self.fake_launch,
             "running_setup_processes": lambda: list(self.setup_processes),
+            "interactive_setup_processes": lambda: list(self.manual_setups),
             "kill_process_tree": self.killed.append,
         }.items():
             patcher = mock.patch.object(updater, name, value)
@@ -579,6 +598,17 @@ class CheckOnceFixture(unittest.TestCase):
 
 class CheckOnceTests(CheckOnceFixture):
     # Normal flow ---------------------------------------------------------
+
+    def test_manual_installer_defers_the_automatic_installation(self) -> None:
+        # The manual installer restarts the service before it finishes: an
+        # automatic installation started now would kill it.
+        self.write_state(installed_version="1.5.1", pending_version="1.6.0", pending_started_at=1)
+        self.publish("1.6.0")
+        self.manual_setups = [5000]
+        self.assertEqual(updater.check_once(self.logger), updater.RESULT_RETRY)
+        self.assertEqual(self.launched, [])
+        self.assertEqual(self.killed, [])
+        self.assertIn("Instalacao manual em andamento", self.last_report()["message"])
 
     def test_successful_supervised_install_reports_updated(self) -> None:
         self.write_state(installed_version="1.5.1")
