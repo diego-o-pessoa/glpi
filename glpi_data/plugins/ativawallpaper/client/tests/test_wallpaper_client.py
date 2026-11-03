@@ -598,6 +598,90 @@ class OfflineStartupTests(unittest.TestCase):
             self.assertNotIn("config_etag", state)
             apply.assert_not_called()
 
+    # Sem VPN ------------------------------------------------------------
+
+    def _machine_record_client(self, root, calls, current=True, mtime=None):
+        data = root / "data"
+        data.mkdir(parents=True, exist_ok=True)
+        image = data / "wallpaper-v2.jpg"
+        image.write_bytes(b"glpi wallpaper")
+        times = {"value": mtime}
+        client = wc.WallpaperClient(root, apply_function=lambda *_: calls.append("apply"),
+                                    policy_function=lambda *_: None, current_function=lambda *_: current,
+                                    displayed_mtime_function=lambda: times["value"])
+        return client, image, times
+
+    def test_user_without_state_gets_the_machine_wallpaper_without_network(self):
+        # Outro usuario sincronizou com a VPN; este nunca: recebe a mesma imagem.
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            client, image, _ = self._machine_record_client(Path(directory), calls)
+            client.save_machine_record({"distribution_enabled": True, "wallpaper_path": str(image),
+                                        "sha256": wc.sha256_file(image), "style": "fill",
+                                        "lock_change": True, "wallpaper_version": "v2", "config_etag": "x"})
+            self.assertNotIn("config_etag", wc.load_json(client.machine_record_path))
+            client.api_factory = lambda *_: self.fail("sem rede")
+            stop = mock.Mock()
+            stop.wait.return_value = False
+            client.enforce_at_session_start(stop, delays=(0,), desktop_ready=lambda: True)
+            self.assertEqual(calls, ["apply"])
+            state = client.load_state()
+            self.assertEqual(state["wallpaper_version"], "v2")
+            self.assertTrue(state["lock_change"])
+            self.assertNotIn("config_etag", state, "a primeira consulta com VPN traz a configuracao completa")
+
+    def test_machine_record_outside_data_dir_is_ignored(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            calls = []
+            client, _, _ = self._machine_record_client(root, calls)
+            other = root / "other.jpg"
+            other.write_bytes(b"x")
+            wc.atomic_write_json(client.machine_record_path, {"distribution_enabled": True,
+                "wallpaper_path": str(other), "sha256": wc.sha256_file(other)})
+            self.assertEqual(client.load_state_or_machine_record(), {})
+
+    def test_disabled_distribution_is_recorded_for_the_machine(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            client, _, _ = self._machine_record_client(Path(directory), calls)
+            client.save_machine_record({"distribution_enabled": False, "wallpaper_path": "x"})
+            self.assertEqual(client.load_state_or_machine_record(), {"distribution_enabled": False})
+
+    def test_windows_repainting_another_image_is_corrected(self):
+        # Registro continua apontando para o nosso arquivo (current=True), mas o
+        # Windows regravou a imagem da tela depois da nossa aplicacao.
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            client, image, times = self._machine_record_client(Path(directory), calls, current=True, mtime=1000.0)
+            state = {"distribution_enabled": True, "wallpaper_path": str(image),
+                     "sha256": wc.sha256_file(image), "style": "fill"}
+            self.assertFalse(client.enforce_cached_wallpaper(state), "primeira conferencia so guarda a referencia")
+            self.assertEqual(state["displayed_mtime"], 1000.0)
+            self.assertFalse(client.enforce_cached_wallpaper(state))
+            self.assertEqual(calls, [])
+            times["value"] = 1500.0
+            self.assertTrue(client.enforce_cached_wallpaper(state))
+            self.assertEqual(calls, ["apply"])
+            self.assertNotIn("displayed_mtime", state, "nova referencia depois de reaplicar")
+            self.assertFalse(client.enforce_cached_wallpaper(state))
+            self.assertEqual(calls, ["apply"], "a propria aplicacao nao vira um novo drift")
+
+    def test_wait_checks_wallpaper_every_minute_without_network(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            client, image, _ = self._machine_record_client(Path(directory), calls, current=False)
+            wc.atomic_write_json(client.state_path, {"distribution_enabled": True, "wallpaper_path": str(image),
+                "sha256": wc.sha256_file(image), "style": "fill"})
+            client.api_factory = lambda *_: self.fail("a conferencia local nao usa a rede")
+            stop = mock.Mock()
+            stop.wait.side_effect = [False, False, True]
+            with mock.patch.object(wc.time, "monotonic", side_effect=[0, 0, 60, 60, 120, 120, 180]):
+                self.assertTrue(client.wait_and_enforce(stop, 900))
+            self.assertEqual([c.args[0] for c in stop.wait.call_args_list], [60, 60, 60])
+            self.assertEqual(calls, ["apply", "apply"])
+            self.assertTrue(client.load_state()["status_pending"], "o drift corrigido e informado quando a VPN voltar")
+
     def test_normal_stop_preserves_policy_for_next_logon(self):
         client = mock.Mock()
         client.sync_once.return_value = (60, 0)

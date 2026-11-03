@@ -35,7 +35,7 @@ else:  # pragma: no cover - imported only to make unit tests platform-neutral
     winreg = None  # type: ignore[assignment]
 
 
-CLIENT_VERSION = "1.6.9"
+CLIENT_VERSION = "1.7.0"
 SERVER_HOSTNAME = "chamados.ativalocacao.com.br"
 PRODUCT_DIR = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AtivaLocacao" / "Wallpaper"
 EXECUTABLE_NAME = "AtivaWallpaperClient.exe"
@@ -58,6 +58,15 @@ ERROR_ALREADY_EXISTS = 183
 # segundos). Nada disso depende de rede/VPN.
 DESKTOP_WAIT_SECONDS = 90
 SESSION_START_REAPPLY_DELAYS = (0, 20)
+# Conferencia local (sem rede) entre as consultas ao servidor: sem VPN, as
+# consultas falham e o intervalo cresce ate 15 min; o wallpaper nao pode
+# ficar errado esse tempo todo.
+LOCAL_CHECK_SECONDS = 60
+# Ultimo wallpaper valido do computador (qualquer usuario): quem nunca
+# sincronizou com a VPN ainda recebe a imagem definida no GLPI.
+MACHINE_RECORD_NAME = "current.json"
+MACHINE_RECORD_FIELDS = ("distribution_enabled", "wallpaper_path", "sha256", "style", "lock_change",
+                         "wallpaper_version", "config_revision", "rollout_id")
 
 
 if os.name == "nt":
@@ -537,6 +546,22 @@ def desktop_is_ready() -> bool:
     return bool(user32.FindWindowW("Progman", None)) and bool(user32.FindWindowW("Shell_TrayWnd", None))
 
 
+def displayed_wallpaper_mtime() -> float | None:
+    """Quando o Windows gravou a imagem que esta na tela (TranscodedWallpaper).
+
+    Toda troca de wallpaper - inclusive sincronizacao de tema da conta, tema
+    do Windows ou o Explorer repintando a imagem antiga apos o logon - regrava
+    esse arquivo, mesmo quando o caminho no registro continua sendo o nosso.
+    """
+    appdata = os.environ.get("APPDATA")
+    if os.name != "nt" or not appdata:
+        return None
+    try:
+        return (Path(appdata) / "Microsoft" / "Windows" / "Themes" / "TranscodedWallpaper").stat().st_mtime
+    except OSError:
+        return None
+
+
 def wallpaper_is_current(path: Path, style: str) -> bool:
     """Check the wallpaper actually displayed by the interactive Windows user."""
     if os.name != "nt" or winreg is None:
@@ -654,9 +679,12 @@ class WallpaperClient:
         apply_function: Callable[[Path, str], None] = apply_wallpaper,
         policy_function: Callable[[bool, Path | None, str, dict[str, Any]], None] = manage_lock_policy,
         current_function: Callable[[Path, str], bool] = wallpaper_is_current,
+        displayed_mtime_function: Callable[[], float | None] = displayed_wallpaper_mtime,
     ) -> None:
         self.root = root
         self.data_dir = root / "data"
+        self.machine_record_path = self.data_dir / MACHINE_RECORD_NAME
+        self.displayed_mtime_function = displayed_mtime_function
         self.state_path = root / "state" / f"state-{user_key()}.json"
         self.config_path = root / "client.json"
         self.logger = configure_logging(root, debug)
@@ -689,6 +717,69 @@ class WallpaperClient:
             return {}
         return load_json(self.state_path)
 
+    def save_machine_record(self, state: dict[str, Any]) -> None:
+        """Guarda o wallpaper valido para os outros usuarios deste computador."""
+        if state.get("distribution_enabled") is False:
+            record: dict[str, Any] = {"distribution_enabled": False}
+        elif state.get("wallpaper_path") and len(str(state.get("sha256", ""))) == 64:
+            record = {key: state[key] for key in MACHINE_RECORD_FIELDS if key in state}
+        else:
+            return
+        try:
+            if self.machine_record_path.is_file() and load_json(self.machine_record_path) == record:
+                return
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(self.machine_record_path, record)
+        except (ClientError, OSError):
+            self.logger.debug("Could not save the machine wallpaper record", exc_info=True)
+
+    def load_state_or_machine_record(self) -> dict[str, Any]:
+        """Estado deste usuario; sem ele, o ultimo wallpaper valido do computador.
+
+        Antes, um usuario que nunca tinha sincronizado com a VPN (perfil novo,
+        outra pessoa no mesmo computador) nao tinha o que reaplicar e ficava
+        com o wallpaper antigo ate conectar.
+        """
+        state = self.load_state()
+        if state:
+            return state
+        try:
+            record = load_json(self.machine_record_path) if self.machine_record_path.is_file() else {}
+        except ClientError:
+            return {}
+        if record.get("distribution_enabled") is False:
+            return {"distribution_enabled": False}
+        path_value = record.get("wallpaper_path")
+        if not path_value:
+            return {}
+        # So imagens da pasta de dados do produto.
+        try:
+            if Path(str(path_value)).resolve().parent != self.data_dir.resolve():
+                return {}
+        except OSError:
+            return {}
+        state = {key: record[key] for key in MACHINE_RECORD_FIELDS if key in record}
+        state["distribution_enabled"] = True
+        self.logger.info("No wallpaper state for this user yet; using the machine record %s",
+                         record.get("wallpaper_version", ""))
+        return state
+
+    def windows_repainted(self, state: dict[str, Any]) -> bool:
+        """O Windows trocou a imagem da tela depois da nossa ultima aplicacao?
+
+        A primeira conferencia apos aplicar so guarda a referencia (o Windows
+        pode terminar de gravar a imagem alguns segundos depois); dai em
+        diante, qualquer regravacao e de outra origem.
+        """
+        mtime = self.displayed_mtime_function()
+        if mtime is None:
+            return False
+        baseline = state.get("displayed_mtime")
+        if not isinstance(baseline, (int, float)):
+            state["displayed_mtime"] = mtime
+            return False
+        return mtime > baseline + 1
+
     def apply_and_enforce(
         self,
         path: Path,
@@ -705,6 +796,8 @@ class WallpaperClient:
             # recorded as ours, apply, and restore the lock immediately.
             self.policy_function(False, None, style, state)
             self.apply_function(path, style)
+            # Nova referencia da imagem na tela na proxima conferencia.
+            state.pop("displayed_mtime", None)
         self.policy_function(lock_change, path, style, state)
         if state.get("policy_error"):
             self.logger.warning("Wallpaper policy fallback: %s", state["policy_error"])
@@ -733,6 +826,10 @@ class WallpaperClient:
             return False
         style = str(state.get("style", "fill"))
         changed = not self.current_function(path, style)
+        if not changed and not force and self.windows_repainted(state):
+            # Caminho certo no registro, mas o Windows pintou outra imagem.
+            changed = True
+            self.logger.warning("Windows repainted the desktop with another image; reapplying")
         self.apply_and_enforce(
             path,
             style,
@@ -762,7 +859,7 @@ class WallpaperClient:
         for delay in delays:
             if delay and stop.wait(delay):
                 return
-            state = self.load_state()
+            state = self.load_state_or_machine_record()
             if not state:
                 return
             try:
@@ -796,8 +893,31 @@ class WallpaperClient:
         state.pop("apply_reason", None)
         state.pop("apply_event_id", None)
 
+    def wait_and_enforce(self, stop: "StopEvent", seconds: float) -> bool:
+        """Espera ate a proxima consulta ao servidor conferindo o wallpaper
+        localmente a cada minuto (sem rede). True se pediram para parar."""
+        deadline = time.monotonic() + max(0.0, float(seconds))
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            if stop.wait(min(LOCAL_CHECK_SECONDS, remaining)):
+                return True
+            if deadline - time.monotonic() <= 1:
+                return False  # a consulta ao servidor ja vai conferir
+            try:
+                state = self.load_state_or_machine_record()
+                if not state:
+                    continue
+                before = json.dumps(state, sort_keys=True, default=str)
+                self.enforce_cached_wallpaper(state)
+                if json.dumps(state, sort_keys=True, default=str) != before:
+                    atomic_write_json(self.state_path, state)
+            except Exception:
+                self.logger.exception("Local wallpaper check failed")
+
     def sync_once(self) -> tuple[int, int]:
-        state = self.load_state()
+        state = self.load_state_or_machine_record()
         # Reapply the last verified image BEFORE any network operation, including
         # config validation. A laptop can log on without VPN/Internet for days.
         corrected = False
@@ -822,6 +942,7 @@ class WallpaperClient:
                 state["status_pending"] = False
                 self.finish_apply_event(state)
             atomic_write_json(self.state_path, state)
+            self.save_machine_record(state)
             return bounded_interval(state.get("poll_interval_seconds", 900)), bounded_interval(state.get("poll_jitter_seconds", 120), 0, 3600)
 
         interval = bounded_interval(server.get("poll_interval_seconds"))
@@ -842,6 +963,7 @@ class WallpaperClient:
             self.logger.info("Distribution is disabled; keeping current wallpaper")
             state["last_cycle_action"] = "disabled"
             atomic_write_json(self.state_path, state)
+            self.save_machine_record(state)
             return interval, jitter
 
         required = ("wallpaper_version", "download_url", "sha256", "style", "mime_type", "filesize")
@@ -930,6 +1052,7 @@ class WallpaperClient:
             state["last_cycle_action"] = "already_current"
             atomic_write_json(self.state_path, state)
             self.logger.info("Wallpaper is already current: %s", server["wallpaper_version"])
+        self.save_machine_record(state)
         return interval, jitter
 
     def report_heartbeat(self, wait_seconds: int, cycle_action: str | None = None) -> None:
@@ -1480,7 +1603,7 @@ def run_client(once: bool, debug: bool) -> int:
                     client.report_heartbeat(wait_seconds, "error")
                 else:
                     client.report_heartbeat(wait_seconds)
-                if stop.wait(wait_seconds):
+                if client.wait_and_enforce(stop, wait_seconds):
                     updateRestart = UPDATE_RESTART_FLAG.exists()
                     if updateRestart:
                         _spawn_update_relauncher()

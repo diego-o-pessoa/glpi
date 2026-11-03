@@ -2,6 +2,12 @@
 
 ## Em desenvolvimento
 
+- Wallpaper Client 1.7.0: o wallpaper definido no GLPI fica na tela **sem VPN**, inclusive
+  depois de reiniciar. Usuario que nunca sincronizou com a VPN recebe o ultimo wallpaper
+  valido do computador (`data/current.json`); o cliente percebe quando o Windows repinta
+  outra imagem (sincronizacao de tema, Explorer) mesmo com o caminho certo no registro e
+  confere o wallpaper localmente a cada minuto, sem depender da rede.
+
 - Tabela de computadores: a primeira ação abre os **logs do computador** (resumo, último erro,
   eventos do servidor e o log do Wallpaper Client coletado na máquina pelo Ativa Updater,
   com o histórico de erros como HTTP 404). O nome do computador passa a abrir o inventário.
