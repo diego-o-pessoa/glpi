@@ -263,9 +263,17 @@
         return { label: 'Sem porta', text: 'máquina vinculada direto à mesa' };
     }
 
+    /* Nome da porta como o switch anuncia: uns mandam "19", outros "Port #16".
+     * So a exibicao fica curta ("16"); o valor gravado (que liga a mesa a
+     * maquina) nao muda. */
+    function portLabel(port) {
+        var m = /^\s*(?:port|porta|interface|eth(?:ernet)?)\s*#?\s*(\d+)\s*$/i.exec(String(port || ''));
+        return m ? m[1] : String(port || '');
+    }
+
     function deskTitle(desk) {
         var parts = ['Mesa ' + desk.name];
-        if (desk.port) { parts.push('Switch ' + desk.switch_display + ' · porta ' + desk.port); }
+        if (desk.port) { parts.push('Switch ' + desk.switch_display + ' · porta ' + portLabel(desk.port)); }
         else if (desk.machines_id) { parts.push('Sem porta (' + fixedLink(desk).text + ')'); }
         desk.machines.forEach(function (m) {
             parts.push((m.label || m.computer || m.hostname) + (m.group ? ' · ' + m.group : '') + (m.online ? ' — ligada' : ' — desligada'));
@@ -835,7 +843,7 @@
             node.classList.add('ch-' + chair);
             node.appendChild(el('span', 'ar-chair c-' + chair));
             var portLine = el('span', 'ar-desk-port' + (desk.machines_id ? ' is-wifi' : ''),
-                desk.port || (desk.machines_id ? fixedLink(desk).label : (editing ? '+' : '–')));
+                (desk.port ? portLabel(desk.port) : '') || (desk.machines_id ? fixedLink(desk).label : (editing ? '+' : '–')));
             if (desk.switch) { portLine.appendChild(el('span', 'ar-desk-sw', desk.switch)); }
             node.appendChild(portLine);
             node.appendChild(el('span', 'ar-desk-name', desk.name));
@@ -935,7 +943,7 @@
         var info = el('dl', 'ar-kv');
         if (desk.sector) { kv(info, 'Setor', desk.sector); }
         if (desk.port) {
-            kv(info, 'Porta do switch', 'Switch ' + desk.switch_display + ' · porta ' + desk.port);
+            kv(info, 'Porta do switch', 'Switch ' + desk.switch_display + ' · porta ' + portLabel(desk.port));
         } else if (desk.machines_id) {
             var fixedInfo = fixedLink(desk);
             var fixedMachine = desk.machines && desk.machines[0];
@@ -1058,9 +1066,9 @@
 
     /* Porta do switch (cabo) ou vinculo direto (Wi-Fi / sem porta). */
     function unmappedTag(u) {
-        if (u.kind === 'machine' && u.shared) { return u.switch + ' · porta ' + u.port + ' (compartilhada)'; }
+        if (u.kind === 'machine' && u.shared) { return u.switch + ' · porta ' + portLabel(u.port) + ' (compartilhada)'; }
         if (u.kind === 'machine') { return u.link === 'wifi' ? 'Wi-Fi · sem porta' : (u.link === 'wired' ? 'cabo · sem porta (sem LLDP)' : 'sem porta'); }
-        return u.switch + ' · porta ' + u.port;
+        return u.switch + ' · porta ' + portLabel(u.port);
     }
     function unmappedChanges(u) {
         return u.kind === 'machine'
