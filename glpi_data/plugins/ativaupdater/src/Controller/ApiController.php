@@ -6,6 +6,7 @@ namespace GlpiPlugin\Ativaupdater\Controller;
 
 use Glpi\Controller\AbstractController;
 use GlpiPlugin\Ativaupdater\ConfigService;
+use GlpiPlugin\Ativaupdater\DownloadSlots;
 use GlpiPlugin\Ativaupdater\InstallStatus;
 use GlpiPlugin\Ativaupdater\ManualCheck;
 use GlpiPlugin\Ativaupdater\ReleasePolicy;
@@ -165,6 +166,17 @@ final class ApiController extends AbstractController
         $path = $this->safeReleasePath($release);
         if ($path === null) {
             return $this->error('FILE_UNAVAILABLE', 'O instalador publicado nao esta disponivel.', 404);
+        }
+
+        // Poucos downloads por vez: com todos juntos o servidor ficava sem memoria.
+        if (!DownloadSlots::acquire()) {
+            $busy = $this->error(
+                'DOWNLOAD_BUSY',
+                'Muitos computadores baixando agora; tente novamente em instantes.',
+                503
+            );
+            $busy->headers->set('Retry-After', (string) DownloadSlots::RETRY_AFTER_SECONDS);
+            return $busy;
         }
 
         $response = new BinaryFileResponse($path);

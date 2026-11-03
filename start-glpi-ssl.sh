@@ -21,6 +21,24 @@ for php_conf_dir in /etc/php/*/apache2/conf.d; do
     printf '%s\n' 'session.gc_probability=1' 'session.gc_divisor=1000' "session.gc_maxlifetime=${session_lifetime}" > "$php_conf_dir/99-ativa-sessions.ini"
 done
 
+# Apache workers: each one loads GLPI (tens of MB). The default limit (150)
+# exceeds the host memory (8 GB, no swap, shared with MySQL and other
+# containers): a burst of requests - e.g. every computer downloading the
+# unified installer after "Verificar agora" - made the whole server freeze.
+# Requests above the limit wait in the queue instead of exhausting memory.
+apache_workers="${APACHE_MAX_WORKERS:-50}"
+cat > /etc/apache2/conf-available/ativa-workers.conf <<CONF
+<IfModule mpm_prefork_module>
+    MaxRequestWorkers ${apache_workers}
+    MaxConnectionsPerChild 2000
+</IfModule>
+<IfModule mpm_event_module>
+    MaxRequestWorkers ${apache_workers}
+    MaxConnectionsPerChild 2000
+</IfModule>
+CONF
+a2enconf ativa-workers
+
 # The GLPI tree is a bind mount. Files created by maintenance commands on the
 # host may therefore arrive with an owner that Apache/PHP cannot write as.
 glpi_files_dir=/var/www/html/glpi/files

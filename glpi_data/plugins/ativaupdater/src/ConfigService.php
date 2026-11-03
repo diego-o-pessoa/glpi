@@ -16,6 +16,7 @@ class ConfigService
             'api_base_url'          => 'https://chamados.ativalocacao.com.br:8443/plugins/ativaupdater/api/v1',
             'check_interval_seconds' => '3600',
             'max_upload_mb'         => '500',
+            'max_parallel_downloads' => '4',
         ];
     }
 
