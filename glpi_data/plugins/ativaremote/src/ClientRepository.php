@@ -52,7 +52,7 @@ final class ClientRepository
      *
      * @throws ApiException
      */
-    public function report(array $payload, string $ipAddress): array
+    public function report(array $payload, string $ipAddress, bool $mobile = false): array
     {
         global $DB;
 
@@ -86,16 +86,22 @@ final class ClientRepository
         } elseif (!$installed) {
             $data['rustdesk_id'] = null;
         }
+        if ($mobile) {
+            // Celular do app Ativa Suporte: sem computador no inventario.
+            MobileDevices::ensureSchema();
+            $data['device_type'] = 'mobile';
+            $data['device_owner'] = mb_substr(trim((string) ($payload['owner'] ?? '')), 0, 128) ?: null;
+        }
 
         $client = $this->findByMachineGuid($guid);
         if ($client === null) {
             $DB->insert(self::TABLE, $data + [
                 'machine_guid'  => $guid,
                 'registered_at' => $now,
-                'computers_id'  => $this->computerId($data['hostname']),
+                'computers_id'  => $mobile ? 0 : $this->computerId($data['hostname']),
             ]);
         } else {
-            if (empty($client['computers_id'])) {
+            if (!$mobile && empty($client['computers_id'])) {
                 $data['computers_id'] = $this->computerId($data['hostname']);
             }
             $DB->update(self::TABLE, $data, ['id' => (int) $client['id']]);
@@ -107,6 +113,9 @@ final class ClientRepository
 
         if (is_array($payload['result'] ?? null)) {
             $this->applyResult($client, $payload['result']);
+        }
+        if ($mobile && is_array($payload['help'] ?? null)) {
+            $this->applyHelp((int) $client['id'], $payload['help']);
         }
         $this->expire((int) $client['id']);
         $client = $this->findById((int) $client['id']) ?? $client;
@@ -132,6 +141,60 @@ final class ClientRepository
         $active = !empty($client['request_action'])
             || in_array($client['remote_access_status'], [self::STATUS_PENDING, self::STATUS_ACCEPTED, self::STATUS_CLOSING], true);
         return $active ? self::ACTIVE_POLL_SECONDS : self::POLL_SECONDS;
+    }
+
+    /**
+     * "Pedir ajuda" no celular: o colaborador ja autorizou no aparelho, entao
+     * a sessao abre sozinha com a senha que o celular mandou (o T.I. ve o
+     * botao Conectar no painel). Ajuda encerrada no celular fecha a sessao.
+     */
+    private function applyHelp(int $id, array $help): void
+    {
+        global $DB;
+
+        $client = $this->findById($id);
+        if ($client === null) {
+            return;
+        }
+        $active = ($help['active'] ?? false) === true;
+        $password = (string) ($help['password'] ?? '');
+        $now = ServerClock::now();
+        $status = $client['remote_access_status'];
+
+        if ($active && preg_match(self::PASSWORD_PATTERN, $password) && !empty($client['rustdesk_id'])) {
+            if ($status === self::STATUS_ACCEPTED && self::decrypt($client['session_password']) === $password) {
+                if (empty($client['help_requested_at'])) {
+                    $DB->update(self::TABLE, ['help_requested_at' => $now], ['id' => $id]);
+                }
+                return;
+            }
+            if ($status === self::STATUS_PENDING || $status === self::STATUS_CLOSING) {
+                return; // pedido do T.I. em andamento: segue o fluxo normal
+            }
+            $DB->update(self::TABLE, [
+                'remote_access_status' => self::STATUS_ACCEPTED,
+                'session_password'     => (new GLPIKey())->encrypt($password),
+                'session_started_at'   => $status === self::STATUS_ACCEPTED ? $client['session_started_at'] : $now,
+                'help_requested_at'    => $client['help_requested_at'] ?: $now,
+                'request_action'       => null,
+                'status_message'       => 'O colaborador pediu ajuda pelo celular.',
+                'updated_at'           => $now,
+            ], ['id' => $id]);
+            return;
+        }
+
+        if (!$active && !empty($client['help_requested_at'])) {
+            $fields = ['help_requested_at' => null, 'updated_at' => $now];
+            if ($status === self::STATUS_ACCEPTED) {
+                $fields += [
+                    'remote_access_status' => null,
+                    'session_password'     => null,
+                    'session_started_at'   => null,
+                    'status_message'       => 'Ajuda encerrada no celular.',
+                ];
+            }
+            $DB->update(self::TABLE, $fields, ['id' => $id]);
+        }
     }
 
     private function applyResult(array $client, array $result): void

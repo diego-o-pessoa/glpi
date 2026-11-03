@@ -36,6 +36,9 @@
 .ar-user{display:flex;align-items:center;gap:5px;font-size:12.5px;color:#3d5078;margin-top:1px}
 .ar-user.is-empty{color:#9aa6bf;font-style:italic}
 .ar-meta{font-size:11.5px;color:var(--ar-muted)}.ar-meta .ar-warn{color:#b86e00}
+.ar-badge-help{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px;border-radius:999px;background:#e3f6ea;color:#1f7a43;font-size:11px;font-weight:700;vertical-align:1px;animation:ar-help-blink 1.4s ease-in-out infinite}
+@keyframes ar-help-blink{50%{opacity:.55}}
+@media(prefers-reduced-motion:reduce){.ar-badge-help{animation:none}}
 .ar-badge-protected{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px;border-radius:999px;background:#efe8fd;color:var(--ar-purple);font-size:11px;font-weight:650;vertical-align:1px}
 .ar-status{display:inline-flex;align-items:center;gap:7px;font-weight:650;font-size:13px}
 .ar-status i{width:9px;height:9px;border-radius:50%;background:#aab4c8}
@@ -362,12 +365,19 @@
         const tdPc = el('td');
         const pc = el('div', 'ar-computer');
         const pcIcon = el('span', 'ar-pc' + (client.online ? ' is-online' : ''));
-        pcIcon.append(icon('ti-device-desktop'));
+        const mobile = client.device === 'mobile';
+        pcIcon.append(icon(mobile ? 'ti-device-mobile' : 'ti-device-desktop'));
         const info = el('div');
         const nameLine = el('div');
         const host = client.computer_url ? el('a', 'ar-host', client.hostname) : el('span', 'ar-host', client.hostname);
         if (client.computer_url) host.href = client.computer_url;
         nameLine.append(host);
+        if (client.help) {
+            const help = el('span', 'ar-badge-help');
+            help.title = 'O colaborador tocou em "Pedir ajuda" no celular: a sessão já está liberada.';
+            help.append(icon('ti-help-circle'), document.createTextNode('Pediu ajuda'));
+            nameLine.append(help);
+        }
         if (client.protected) {
             const badge = el('span', 'ar-badge-protected');
             badge.title = (client.protection_reason || 'Protegido') + ': sempre pede autorização e exige a senha do T.I.';
@@ -375,10 +385,10 @@
             nameLine.append(badge);
         }
         const user = el('div', 'ar-user' + (client.username ? '' : ' is-empty'));
-        user.title = 'Usuário logado (informado pelo Ativa Wallpaper)';
+        user.title = mobile ? 'Nome informado no cadastro do celular' : 'Usuário logado (informado pelo Ativa Wallpaper)';
         user.append(icon('ti-user'), document.createTextNode(client.username || 'Usuário não informado'));
-        const meta = el('div', 'ar-meta', 'Serviço ' + (client.client_version || '—'));
-        if (!client.linked) {
+        const meta = el('div', 'ar-meta', (mobile ? 'Celular · Ativa Suporte ' : 'Serviço ') + (client.client_version || '—'));
+        if (!client.linked && !mobile) {
             const warn = el('span', 'ar-warn', ' · Sem vínculo com o inventário');
             warn.title = 'O nome não corresponde a um único computador do inventário; a proteção por grupo não se aplica.';
             meta.append(warn);
@@ -438,9 +448,10 @@
             button.classList.toggle('is-active', button.dataset.arFilter === state.filter);
         });
 
-        // Online sempre em cima, offline embaixo; dentro de cada grupo, por nome.
+        // Quem pediu ajuda no celular primeiro; depois online em cima, offline
+        // embaixo; dentro de cada grupo, por nome.
         const list = data.clients.filter(matches).sort((a, b) =>
-            (b.online - a.online) || a.hostname.localeCompare(b.hostname, 'pt-BR', { numeric: true }));
+            (b.help - a.help) || (b.online - a.online) || a.hostname.localeCompare(b.hostname, 'pt-BR', { numeric: true }));
         const pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
         state.page = Math.min(state.page, pages);
         const start = (state.page - 1) * PER_PAGE;

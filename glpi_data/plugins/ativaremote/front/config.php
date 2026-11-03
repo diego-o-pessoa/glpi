@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Glpi\Application\View\TemplateRenderer;
 use GlpiPlugin\Ativaremote\ClientRepository;
+use GlpiPlugin\Ativaremote\MobileDevices;
 use GlpiPlugin\Ativaremote\ProtectionPolicy;
 use GlpiPlugin\Ativaremote\Settings;
 use GlpiPlugin\Ativaremote\TiPasswordGate;
@@ -84,6 +85,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 Toolbox::logInFile('ativaremote', sprintf("Senha do T.I. alterada por %s\n", $user));
                 Session::addMessageAfterRedirect('Senha do T.I. alterada.', true, INFO);
             }
+            break;
+
+        case 'rotate_mobile_token':
+            // QR novo: os celulares cadastrados com o anterior param de falar com o GLPI.
+            MobileDevices::rotateToken();
+            Toolbox::logInFile('ativaremote', sprintf("Token dos celulares trocado por %s\n", $user));
+            Session::addMessageAfterRedirect('Novo QR code gerado. Cadastre os celulares de novo com ele.', true, INFO);
             break;
 
         default:
@@ -185,6 +193,9 @@ TemplateRenderer::getInstance()->display('@ativaremote/config.html.twig', [
     'default_password'    => Settings::isDefaultTiPassword(),
     'min_password_length' => Settings::MIN_PASSWORD_LENGTH,
     'unlock_minutes'      => (int) (TiPasswordGate::CONFIG_UNLOCK_SECONDS / 60),
+    // Cadastro dos celulares (app Ativa Suporte): QR com o endereco e o token.
+    'mobile_qr'           => MobileDevices::setupQrSvg(),
+    'mobile_api'          => MobileDevices::apiUrl(),
     'urls'                => [
         'config'    => $base . '/front/config.php',
         'dashboard' => $base . '/front/dashboard.php',

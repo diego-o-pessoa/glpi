@@ -152,4 +152,33 @@
             </form>
         </div>
     </div>
+
+    <div class="col-12">
+        <div class="card mt-3">
+            <div class="card-header">
+                <h3 class="card-title"><i class="ti ti-device-mobile me-2"></i>Celulares (app Ativa Suporte)</h3>
+            </div>
+            <div class="card-body">
+                <div class="row g-4 align-items-center">
+                    <div class="col-auto">
+                        <div class="border rounded p-2 bg-white" style="width:280px">{{ mobile_qr|raw }}</div>
+                    </div>
+                    <div class="col">
+                        <p class="mb-2"><strong>Para cadastrar um celular:</strong> abra o app <strong>Ativa Suporte</strong>, toque em
+                            <em>Cadastrar no GLPI (T.I.)</em> no rodapé, leia este QR code e informe o nome de quem usa o celular.</p>
+                        <p class="mb-2 text-muted small">O celular só fala com o GLPI na rede da empresa ou pela VPN
+                            (<code>{{ mobile_api }}</code>). Fora dela, o app continua funcionando: o colaborador passa o código e a
+                            senha ao T.I. pelo telefone ou WhatsApp.</p>
+                        <p class="mb-3 text-muted small">Este QR code dá acesso à API dos celulares: não o envie por canais públicos.
+                            Se ele vazar, gere um novo (os celulares já cadastrados precisarão ler o novo).</p>
+                        <form method="post" action="{{ urls.config }}" onsubmit="return confirm('Gerar um novo QR code? Os celulares cadastrados com o atual deixarão de aparecer no painel até lerem o novo.');">
+                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="rotate_mobile_token">
+                            <button type="submit" class="btn btn-outline-danger"><i class="ti ti-refresh"></i> Gerar novo QR code</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>

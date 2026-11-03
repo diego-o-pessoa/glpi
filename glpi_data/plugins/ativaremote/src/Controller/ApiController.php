@@ -7,6 +7,7 @@ namespace GlpiPlugin\Ativaremote\Controller;
 use Glpi\Controller\AbstractController;
 use GlpiPlugin\Ativaremote\ApiException;
 use GlpiPlugin\Ativaremote\ClientRepository;
+use GlpiPlugin\Ativaremote\MobileDevices;
 use GlpiPlugin\Ativaupdater\ConfigService as UpdaterConfig;
 use Plugin;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -47,6 +48,43 @@ final class ApiController extends AbstractController
             return $this->error($e->errorCode, $e->getMessage(), $e->status);
         } catch (Throwable $e) {
             Toolbox::logInFile('ativaremote', 'Falha na API: ' . $e->getMessage() . PHP_EOL);
+            return $this->error('SERVER_ERROR', 'Erro interno.', 500);
+        }
+    }
+
+    /**
+     * Celulares com o app Ativa Suporte. Token proprio (QR code de cadastro em
+     * Ativa Remote > Configuracoes), separado do token dos computadores.
+     */
+    #[Route('/api/v1/mobile/report', name: 'ativaremote_api_mobile_report', methods: ['POST'])]
+    public function mobileReport(Request $request): Response
+    {
+        $header = trim((string) $request->headers->get('Authorization', ''));
+        if (!preg_match('/^Bearer\s+([^\s]+)$/D', $header, $matches)) {
+            return $this->error('UNAUTHORIZED', 'Token Bearer ausente ou invalido.', 401);
+        }
+        if (!MobileDevices::verify($matches[1])) {
+            return $this->error('FORBIDDEN', 'Celular nao cadastrado (leia o QR code novo no GLPI).', 403);
+        }
+        if (strlen($request->getContent()) > 16384) {
+            return $this->error('PAYLOAD_TOO_LARGE', 'Relatorio muito grande.', 413);
+        }
+        try {
+            $payload = json_decode($request->getContent(), true, 8, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return $this->error('INVALID_JSON', 'JSON invalido.', 400);
+        }
+        if (!is_array($payload)) {
+            return $this->error('INVALID_PAYLOAD', 'Conteudo invalido.', 400);
+        }
+        try {
+            return new JsonResponse(
+                (new ClientRepository())->report($payload, (string) ($request->getClientIp() ?? ''), true)
+            );
+        } catch (ApiException $e) {
+            return $this->error($e->errorCode, $e->getMessage(), $e->status);
+        } catch (Throwable $e) {
+            Toolbox::logInFile('ativaremote', 'Falha na API (celular): ' . $e->getMessage() . PHP_EOL);
             return $this->error('SERVER_ERROR', 'Erro interno.', 500);
         }
     }

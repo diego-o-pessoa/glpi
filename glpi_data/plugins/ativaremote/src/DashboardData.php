@@ -25,21 +25,28 @@ final class DashboardData
     {
         global $CFG_GLPI;
 
+        MobileDevices::ensureSchema();
         $rows = (new ClientRepository())->listForDashboard(0, self::MAX_ROWS, $canManage);
         $users = self::loggedUsers(array_column($rows, 'machine_guid'));
         $computerUrl = $CFG_GLPI['root_doc'] . '/front/computer.form.php?id=';
 
         $clients = [];
-        $counts = ['total' => 0, 'online' => 0, 'offline' => 0, 'session' => 0, 'protected' => 0];
+        $counts = ['total' => 0, 'online' => 0, 'offline' => 0, 'session' => 0, 'protected' => 0, 'help' => 0];
         foreach ($rows as $row) {
             $status = $row['remote_access_status'] ?? null;
             $lastCheck = ServerClock::toTimestamp($row['last_check'] ?? null);
+            $mobile = ($row['device_type'] ?? 'computer') === 'mobile';
             $client = [
+                // Celular do app Ativa Suporte (Android).
+                'device'            => $mobile ? 'mobile' : 'computer',
+                'help'              => $mobile && !empty($row['help_requested_at']) && $status === ClientRepository::STATUS_ACCEPTED,
                 'id'                => (int) $row['id'],
                 'hostname'          => (string) $row['hostname'],
                 'computer_url'      => (int) $row['computers_id'] > 0 ? $computerUrl . (int) $row['computers_id'] : '',
                 // Nome da pessoa pela regra de todos os plugins Ativa (Ativa Rede).
-                'username'          => self::personName($row, $users[strtolower((string) $row['machine_guid'])] ?? ''),
+                'username'          => $mobile
+                    ? trim((string) ($row['device_owner'] ?? ''))
+                    : self::personName($row, $users[strtolower((string) $row['machine_guid'])] ?? ''),
                 'client_version'    => (string) ($row['client_version'] ?? ''),
                 'online'            => (bool) $row['online'],
                 'last_check_ts'     => $lastCheck,
@@ -67,6 +74,9 @@ final class DashboardData
             }
             if ($client['protected']) {
                 $counts['protected']++;
+            }
+            if ($client['help']) {
+                $counts['help']++;
             }
         }
 
