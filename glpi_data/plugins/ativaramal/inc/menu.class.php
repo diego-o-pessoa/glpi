@@ -42,6 +42,12 @@ class PluginAtivaramalMenu extends CommonGLPI
             'page'  => $CFG_GLPI['root_doc'] . '/plugins/ativaramal/front/dashboard.php',
             'icon'  => 'ti ti-chart-bar',
         ];
+        // Todos os ramais de todas as filiais e setores (so consulta).
+        $menu['lista'] = [
+            'title' => 'Lista de ramais',
+            'page'  => $CFG_GLPI['root_doc'] . '/plugins/ativaramal/front/lista.php',
+            'icon'  => 'ti ti-address-book',
+        ];
         $menu['desempenho'] = [
             'title' => 'Desempenho',
             'page'  => $CFG_GLPI['root_doc'] . '/plugins/ativaramal/front/desempenho.php',

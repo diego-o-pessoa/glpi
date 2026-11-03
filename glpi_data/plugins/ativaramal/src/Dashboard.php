@@ -328,6 +328,19 @@ final class Dashboard
         return $live;
     }
 
+    /**
+     * So marca em $rows quem esta em ligacao / tocando (lista de ramais), sem
+     * montar o resto do dashboard.
+     *
+     * @param list<array<string, mixed>> $channels
+     * @param array<string, array<string, mixed>> $rows
+     * @param array<string, string> $byNumber
+     */
+    public static function markLive(array $channels, array &$rows, array $byNumber): void
+    {
+        self::liveCalls($channels, $rows, $byNumber);
+    }
+
     /** "00:01:05" ou "65" -> segundos. */
     private static function seconds(string $value): int
     {

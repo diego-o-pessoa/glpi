@@ -1,0 +1,234 @@
+<style>
+.rl{--rl-ink:#142a5b;--rl-muted:#6d7da7;--rl-border:#dfe5f1;--rl-soft:#f5f8fd;--rl-blue:#356fd1;--rl-green:#2fb35a;--rl-red:#dd3f4a;color:var(--rl-ink);padding:4px 2px 24px}
+.rl-hero{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.rl-brand{display:flex;align-items:center;gap:13px}.rl-brand-icon{width:50px;height:50px;border-radius:13px;background:#e1ecff;color:var(--rl-blue);display:grid;place-items:center;font-size:26px}
+.rl-brand h1{font-size:23px;margin:0;font-weight:750}.rl-brand p{margin:2px 0 0;color:var(--rl-muted);font-size:13px}
+.rl-live{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;background:#e8f7ee;color:#1f7a43;font-size:12px;font-weight:650}
+.rl-live i{width:8px;height:8px;border-radius:50%;background:var(--rl-green);animation:rl-pulse 1.8s infinite}
+.rl-live.is-off{background:#fdecee;color:#a8232d}.rl-live.is-off i{background:var(--rl-red);animation:none}
+@keyframes rl-pulse{0%{box-shadow:0 0 0 0 #2fb35a80}70%{box-shadow:0 0 0 7px #2fb35a00}100%{box-shadow:0 0 0 0 #2fb35a00}}
+.rl-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-bottom:14px}
+.rl-kpi{background:#fff;border:1px solid var(--rl-border);border-radius:10px;padding:12px 13px;box-shadow:0 2px 7px #20335c0a}
+.rl-kpi span{display:block;color:var(--rl-muted);font-size:12px}.rl-kpi strong{display:block;font-size:24px;line-height:1.15;font-weight:750}
+.rl-kpi.is-green strong{color:#1f7a43}.rl-kpi.is-blue strong{color:var(--rl-blue)}
+.rl-card{background:#fff;border:1px solid var(--rl-border);border-radius:10px;box-shadow:0 2px 7px #20335c0a;overflow:hidden}
+.rl-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 15px;border-bottom:1px solid var(--rl-border);flex-wrap:wrap}
+.rl-card-head h2{font-size:16px;font-weight:700;margin:0;display:flex;align-items:center;gap:8px}
+.rl-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.rl-filters .form-select,.rl-filters .form-control{min-width:160px}
+.rl-search{position:relative}.rl-search i{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--rl-muted)}.rl-search input{padding-left:32px}
+.rl-table{margin:0}.rl-table th{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--rl-muted);font-weight:650;background:#fff;border-bottom:1px solid var(--rl-border);white-space:nowrap;position:sticky;top:0}
+.rl-table td{vertical-align:middle;border-color:#eef1f7;font-size:13px}
+.rl-group td{background:var(--rl-soft);font-weight:700;font-size:13px;color:#3d5078}
+.rl-group small{font-weight:600;color:var(--rl-muted);margin-left:8px}
+.rl-number{font-weight:750;font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rl-person{display:block;font-size:11.5px;color:var(--rl-muted)}
+.rl-status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:650;white-space:nowrap}
+.rl-dot{width:9px;height:9px;border-radius:50%;background:#b9c3d8}.rl-status.is-on .rl-dot{background:var(--rl-green);box-shadow:0 0 0 3px #2fb35a26}
+.rl-status.is-on{color:#1f7a43}.rl-status.is-off{color:var(--rl-muted)}
+.rl-status.is-busy{color:#9a6200}.rl-status.is-busy .rl-dot{background:#e89a0c}
+.rl-status.is-ring{color:#a35d00;animation:rl-blink 1.2s ease-in-out infinite}.rl-status.is-ring .rl-dot{background:#e89a0c}
+.rl-empty{padding:26px 15px;text-align:center;color:var(--rl-muted)}
+.rl-errors{margin-bottom:12px}
+@keyframes rl-blink{50%{opacity:.55}}
+@media(prefers-reduced-motion:reduce){.rl-live i,.rl-status.is-ring{animation:none}}
+@media(max-width:800px){.rl-kpis{grid-template-columns:repeat(2,1fr)}.rl-hide-sm{display:none}}
+</style>
+
+<div class="rl" data-rl data-url="{{ data_url }}">
+    <header class="rl-hero">
+        <div class="rl-brand">
+            <span class="rl-brand-icon"><i class="ti ti-address-book"></i></span>
+            <span>
+                <h1>Lista de ramais</h1>
+                <p>Todas as filiais e setores · atualizado às <span data-rl-updated>—</span></p>
+            </span>
+        </div>
+        <span class="rl-live" data-rl-live><i></i><span>Ao vivo</span></span>
+    </header>
+
+    <div class="rl-errors" data-rl-errors></div>
+
+    <div class="rl-kpis">
+        <div class="rl-kpi"><span>Ramais</span><strong data-rl-k="total">—</strong></div>
+        <div class="rl-kpi is-green"><span>Online</span><strong data-rl-k="online">—</strong></div>
+        <div class="rl-kpi is-blue"><span>Em ligação agora</span><strong data-rl-k="em_ligacao">—</strong></div>
+        <div class="rl-kpi"><span>Filiais</span><strong data-rl-k="filiais">—</strong></div>
+    </div>
+
+    <section class="rl-card">
+        <div class="rl-card-head">
+            <h2><i class="ti ti-list-search"></i>Ramais <small class="text-muted fw-normal" data-rl-count></small></h2>
+            <div class="rl-filters">
+                <span class="rl-search">
+                    <i class="ti ti-search"></i>
+                    <input type="search" class="form-control form-control-sm" placeholder="Nome, pessoa ou número" data-rl-filter="busca" aria-label="Buscar ramal">
+                </span>
+                <select class="form-select form-select-sm" data-rl-filter="filial" aria-label="Filial"><option value="">Todas as filiais</option></select>
+                <select class="form-select form-select-sm" data-rl-filter="setor" aria-label="Setor"><option value="">Todos os setores</option></select>
+                <select class="form-select form-select-sm" data-rl-filter="status" aria-label="Situação">
+                    <option value="">Todas as situações</option>
+                    <option value="online">Só online</option>
+                    <option value="livre">Livres (online e fora de ligação)</option>
+                    <option value="ocupado">Em ligação</option>
+                </select>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table rl-table">
+                <thead><tr><th>Ramal</th><th>Nome</th><th class="rl-hide-sm">Setor</th><th>Situação</th></tr></thead>
+                <tbody data-rl-body></tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<script type="application/json" data-rl-initial>{{ initial|json_encode|raw }}</script>
+<script>
+(function () {
+    'use strict';
+    var root = document.querySelector('[data-rl]');
+    if (!root) { return; }
+    var POLL_MS = 5000;
+    var state = { data: null, busca: '', filial: '', setor: '', status: '' };
+
+    function el(tag, cls, text) {
+        var node = document.createElement(tag);
+        if (cls) { node.className = cls; }
+        if (text !== undefined && text !== null) { node.textContent = String(text); }
+        return node;
+    }
+    function norm(text) {
+        return String(text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    }
+    function fillSelect(select, values, current, label) {
+        var keep = values.indexOf(current) >= 0 ? current : '';
+        select.textContent = '';
+        select.appendChild(el('option', '', label)).value = '';
+        values.forEach(function (v) { var o = el('option', '', v || 'Sem definição'); o.value = v; select.appendChild(o); });
+        select.value = keep;
+        return keep;
+    }
+    function matches(r) {
+        if (state.filial && r.filial !== state.filial) { return false; }
+        if (state.setor && r.setor !== state.setor) { return false; }
+        if (state.status === 'online' && !r.online) { return false; }
+        if (state.status === 'livre' && (!r.online || r.em_ligacao)) { return false; }
+        if (state.status === 'ocupado' && !r.em_ligacao) { return false; }
+        if (state.busca && norm(r.ramal + ' ' + r.nome + ' ' + r.pessoa + ' ' + r.setor + ' ' + r.filial).indexOf(state.busca) < 0) { return false; }
+        return true;
+    }
+    function statusCell(r) {
+        var cls, text;
+        if (r.tocando) { cls = 'is-ring'; text = 'Tocando'; }
+        else if (r.em_ligacao) { cls = 'is-busy'; text = 'Em ligação'; }
+        else if (r.online) { cls = 'is-on'; text = 'Online'; }
+        else { cls = 'is-off'; text = 'Offline'; }
+        var s = el('span', 'rl-status ' + cls);
+        s.appendChild(el('span', 'rl-dot'));
+        s.appendChild(document.createTextNode(text));
+        s.title = r.online ? 'Telefone registrado' : 'Telefone não registrado (desligado ou sem rede)';
+        return s;
+    }
+
+    function render() {
+        var d = state.data;
+        if (!d) { return; }
+        root.querySelector('[data-rl-updated]').textContent = d.updated || '—';
+        Object.keys(d.kpis || {}).forEach(function (k) {
+            var node = root.querySelector('[data-rl-k="' + k + '"]');
+            if (node) { node.textContent = k === 'online' ? d.kpis.online + '/' + d.kpis.total : d.kpis[k]; }
+        });
+        var errors = root.querySelector('[data-rl-errors]');
+        errors.textContent = '';
+        (d.errors || []).forEach(function (msg) { errors.appendChild(el('div', 'alert alert-warning py-2 mb-2', msg)); });
+
+        state.filial = fillSelect(root.querySelector('[data-rl-filter="filial"]'), d.filiais || [], state.filial, 'Todas as filiais');
+        // Setores da filial escolhida (ou de todas).
+        var sectors = [];
+        (d.ramais || []).forEach(function (r) {
+            if ((!state.filial || r.filial === state.filial) && sectors.indexOf(r.setor) < 0) { sectors.push(r.setor); }
+        });
+        sectors.sort(function (a, b) { return a.localeCompare(b, 'pt-BR', { numeric: true }); });
+        state.setor = fillSelect(root.querySelector('[data-rl-filter="setor"]'), sectors, state.setor, 'Todos os setores');
+
+        var body = root.querySelector('[data-rl-body]');
+        body.textContent = '';
+        var shown = (d.ramais || []).filter(matches);
+        var lastGroup = null;
+        shown.forEach(function (r) {
+            var group = (r.filial || 'Filial não definida');
+            if (group !== lastGroup) {
+                lastGroup = group;
+                var count = shown.filter(function (x) { return (x.filial || 'Filial não definida') === group; }).length;
+                var gtr = el('tr', 'rl-group');
+                var gtd = el('td', '', group);
+                gtd.colSpan = 4;
+                gtd.appendChild(el('small', '', count + ' ramal(is)'));
+                gtr.appendChild(gtd);
+                body.appendChild(gtr);
+            }
+            var tr = el('tr');
+            tr.appendChild(el('td', 'rl-number', r.ramal));
+            var name = el('td');
+            name.appendChild(el('strong', '', r.nome));
+            if (r.pessoa && norm(r.pessoa) !== norm(r.nome)) { name.appendChild(el('span', 'rl-person', r.pessoa)); }
+            tr.appendChild(name);
+            tr.appendChild(el('td', 'rl-hide-sm', r.setor || '—'));
+            var st = el('td');
+            st.appendChild(statusCell(r));
+            tr.appendChild(st);
+            body.appendChild(tr);
+        });
+        if (!shown.length) {
+            var etr = el('tr');
+            var etd = el('td', 'rl-empty', (d.ramais || []).length ? 'Nenhum ramal com esses filtros.' : 'Nenhum ramal recebido da TW.');
+            etd.colSpan = 4;
+            etr.appendChild(etd);
+            body.appendChild(etr);
+        }
+        root.querySelector('[data-rl-count]').textContent = shown.length === (d.ramais || []).length
+            ? '' : '(' + shown.length + ' de ' + d.ramais.length + ')';
+    }
+
+    // ---------------------------------------------------------- ao vivo
+    var timer = 0, busy = false;
+    var liveEl = root.querySelector('[data-rl-live]');
+    function setLive(ok) {
+        liveEl.classList.toggle('is-off', !ok);
+        liveEl.querySelector('span').textContent = ok ? 'Ao vivo' : 'Reconectando…';
+    }
+    function poll() {
+        clearTimeout(timer);
+        if (!busy && document.visibilityState === 'visible') {
+            busy = true;
+            var url = root.dataset.url + '?signature=' + encodeURIComponent((state.data && state.data.signature) || '');
+            fetch(url, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } })
+                .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.json(); })
+                .then(function (data) {
+                    setLive(true);
+                    if (data.unchanged) { root.querySelector('[data-rl-updated]').textContent = data.updated; return; }
+                    state.data = data;
+                    render();
+                })
+                .catch(function () { setLive(false); })
+                .then(function () { busy = false; });
+        }
+        // Aba em segundo plano: nao consulta (volta ao ficar visivel).
+        timer = setTimeout(poll, POLL_MS);
+    }
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { poll(); } });
+
+    root.querySelectorAll('[data-rl-filter]').forEach(function (input) {
+        var key = input.dataset.rlFilter;
+        input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', function () {
+            if (key === 'busca') { state.busca = norm(input.value.trim()); }
+            else { state[key] = input.value; if (key === 'filial') { state.setor = ''; } }
+            render();
+        });
+    });
+
+    try { state.data = JSON.parse(document.querySelector('[data-rl-initial]').textContent); } catch (e) { state.data = null; }
+    render();
+    timer = setTimeout(poll, POLL_MS);
+})();
+</script>
