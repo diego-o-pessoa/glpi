@@ -18,6 +18,9 @@ namespace GlpiPlugin\Ativarede;
  *
  * Conta generica = de uso comum, nao de uma pessoa: "Ativa", "Ativa
  * Locacao", "Ativa - Comercial", "User", "Usuario", "Admin", "Suporte"...
+ * e nomes de setor/funcao: comecam com uma palavra de setor ("Marketing
+ * Video", "TI Suporte 2", "Recepcao Loja") ou so tem palavras assim/numeros.
+ * "Ana Souza Financeiro" continua sendo de pessoa.
  * O computador no GLPI nao e alterado: o nome so vale nestes dois plugins.
  */
 final class PersonName
@@ -29,6 +32,30 @@ final class PersonName
         'tecnico', 'guest', 'convidado', 'default', 'defaultuser', 'defaultuser0', 'public', 'publico',
         'teste', 'test', 'local', 'pc', 'computador', 'notebook', 'desktop', 'laptop', 'windows',
         'owner', 'proprietario', 'cliente', 'recepcao', 'comercial', 'financeiro', 'estoque',
+    ];
+
+    /**
+     * Palavras de setor, funcao, local ou equipamento: nome que comeca com uma
+     * delas, ou so tem palavras assim, nao e de uma pessoa. Sem sobrenomes
+     * comuns (ex.: "Frota", "Costa") para nao confundir com pessoas.
+     */
+    private const GENERIC_WORDS = [
+        'ativa', 'atv', 'locacao', 'user', 'users', 'usuario', 'usuarios', 'usr', 'admin', 'adm',
+        'administrador', 'administrator', 'administrativo', 'adminstrativo', 'suporte', 'ti', 'it', 'tecnico', 'tecnica',
+        'informatica', 'infra', 'infraestrutura', 'sistemas', 'helpdesk', 'servicedesk',
+        'marketing', 'mkt', 'video', 'videos', 'midia', 'midias', 'design', 'designer', 'criacao', 'social',
+        'comunicacao', 'eventos', 'rh', 'dp', 'recursos', 'pessoal', 'financeiro', 'financas', 'fiscal',
+        'contabil', 'contabilidade', 'faturamento', 'cobranca', 'tesouraria', 'caixa', 'comercial',
+        'vendas', 'vendedor', 'compras', 'suprimentos', 'estoque', 'almoxarifado', 'logistica',
+        'expedicao', 'recebimento', 'transporte', 'recepcao', 'atendimento', 'sac', 'portaria',
+        'juridico', 'diretoria', 'diretor', 'gerencia', 'gerente', 'coordenacao', 'supervisao',
+        'operacao', 'operacional', 'operacoes', 'manutencao', 'oficina', 'producao', 'qualidade',
+        'engenharia', 'projetos', 'planejamento', 'treinamento', 'reuniao', 'sala', 'loja', 'filial',
+        'matriz', 'setor', 'equipe', 'geral', 'compartilhado', 'compartilhada', 'publico', 'public',
+        'guest', 'convidado', 'teste', 'test', 'temp', 'temporario', 'estagio', 'estagiario',
+        'backup', 'servidor', 'server', 'servico', 'service', 'impressao', 'scanner', 'totem',
+        'kiosk', 'quiosque', 'tv', 'monitor', 'camera', 'pc', 'computador', 'notebook', 'desktop',
+        'laptop', 'windows', 'maquina', 'estacao', 'local', 'default', 'defaultuser', 'owner', 'proprietario',
     ];
 
     /** Prefixos antes do nome no usuario da VPN ("atv.ana.csouza"). */
@@ -49,6 +76,8 @@ final class PersonName
 
     public static function isGeneric(string $name): bool
     {
+        // Conta escrita junta: "MarketingVideo" -> "Marketing Video".
+        $name = (string) preg_replace('/(?<=\p{Ll})(?=\p{Lu})/u', ' ', $name);
         $plain = self::plain($name);
         if ($plain === '') {
             return true;
@@ -58,6 +87,16 @@ final class PersonName
         }
         // "Ativa - Comercial", "Ativa Locacao 2", "ativa.ti"...
         if (str_starts_with($plain, 'ativa ')) {
+            return true;
+        }
+        // Nome de setor/funcao: "Marketing Video", "TI Suporte 2", "Financeiro 3",
+        // "Sala Reuniao". Numeros nao contam como palavra.
+        $words = array_values(array_filter(explode(' ', (string) preg_replace('/\d+/', ' ', $plain)), 'strlen'));
+        if ($words === []) {
+            return true;
+        }
+        if (in_array($words[0], self::GENERIC_WORDS, true)
+            || array_diff($words, self::GENERIC_WORDS) === []) {
             return true;
         }
         // Nome de maquina no lugar do usuario ("DESKTOP-7QJ63DJ").
