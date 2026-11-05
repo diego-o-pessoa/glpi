@@ -133,6 +133,8 @@ final class ClientRepository
             'require_consent'    => self::requiresConsent($client),
             'request'            => $request,
             'poll_after_seconds' => self::pollSeconds($client),
+            // Servidor RustDesk proprio (null = publico). Celulares ficam no publico.
+            'rendezvous'         => $mobile ? null : RendezvousConfig::forClients(),
         ];
     }
 

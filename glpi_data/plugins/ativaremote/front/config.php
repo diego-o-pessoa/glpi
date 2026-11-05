@@ -6,6 +6,7 @@ use Glpi\Application\View\TemplateRenderer;
 use GlpiPlugin\Ativaremote\ClientRepository;
 use GlpiPlugin\Ativaremote\MobileDevices;
 use GlpiPlugin\Ativaremote\ProtectionPolicy;
+use GlpiPlugin\Ativaremote\RendezvousConfig;
 use GlpiPlugin\Ativaremote\Settings;
 use GlpiPlugin\Ativaremote\TiPasswordGate;
 
@@ -84,6 +85,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 Settings::setTiPassword($password);
                 Toolbox::logInFile('ativaremote', sprintf("Senha do T.I. alterada por %s\n", $user));
                 Session::addMessageAfterRedirect('Senha do T.I. alterada.', true, INFO);
+            }
+            break;
+
+        case 'save_rendezvous':
+            // Servidor RustDesk proprio (hbbs/hbbr): vai para os computadores
+            // e para o app Ativa Remote T.I. Vazio = servidor publico.
+            try {
+                RendezvousConfig::save((string) ($_POST['rendezvous_host'] ?? ''), (string) ($_POST['rendezvous_key'] ?? ''));
+                $saved = RendezvousConfig::current();
+                Toolbox::logInFile('ativaremote', sprintf(
+                    "Servidor RustDesk alterado por %s: %s\n",
+                    $user,
+                    $saved['host'] !== '' ? $saved['host'] : 'servidor publico'
+                ));
+                Session::addMessageAfterRedirect(
+                    $saved['host'] !== ''
+                        ? 'Servidor próprio salvo. Os computadores passam a usá-lo no próximo contato (até 30 s).'
+                        : 'Servidor próprio removido: os computadores voltam ao servidor público.',
+                    true,
+                    INFO
+                );
+            } catch (InvalidArgumentException $e) {
+                Session::addMessageAfterRedirect($e->getMessage(), false, ERROR);
             }
             break;
 
@@ -196,6 +220,7 @@ TemplateRenderer::getInstance()->display('@ativaremote/config.html.twig', [
     // Cadastro dos celulares (app Ativa Suporte): QR com o endereco e o token.
     'mobile_qr'           => MobileDevices::setupQrSvg(),
     'mobile_api'          => MobileDevices::apiUrl(),
+    'rendezvous'          => RendezvousConfig::current(),
     'urls'                => [
         'config'    => $base . '/front/config.php',
         'dashboard' => $base . '/front/dashboard.php',

@@ -65,6 +65,59 @@ final class TiPasswordGate
             && ($_SESSION[self::VERIFIED_KEY][(int) $client['id']] ?? -1) === (int) $client['request_seq'];
     }
 
+    /**
+     * Mesma regra para o app Ativa Remote T.I. (sem sessao PHP): as tentativas
+     * erradas contam por usuario do GLPI no cache.
+     *
+     * @param array{id: int, users_id: int} $tech
+     * @throws RuntimeException
+     */
+    public static function checkForTech(string $password, array $client, string $purpose, array $tech, string $ip): void
+    {
+        global $GLPI_CACHE;
+        $key = 'ativaremote_ti_fail_u' . (int) $tech['users_id'];
+        $failures = $GLPI_CACHE?->get($key);
+        $failures = is_array($failures) ? $failures : ['count' => 0, 'locked_until' => 0];
+        $wait = (int) $failures['locked_until'] - time();
+        if ($wait > 0) {
+            throw new RuntimeException(
+                sprintf('Muitas tentativas incorretas. Tente novamente em %d minuto(s).', (int) ceil($wait / 60)),
+                429
+            );
+        }
+        if (!Settings::verifyTiPassword($password)) {
+            $failures['count'] = (int) $failures['count'] + 1;
+            $message = 'Senha do T.I. incorreta.';
+            if ($failures['count'] >= self::MAX_FAILURES) {
+                $failures = ['count' => 0, 'locked_until' => time() + self::LOCK_SECONDS];
+                $message = 'Senha do T.I. incorreta. Novas tentativas bloqueadas por 5 minutos.';
+            }
+            $GLPI_CACHE?->set($key, $failures, self::LOCK_SECONDS);
+            TechSessions::audit("Senha do T.I. incorreta no app ($purpose)", (int) $tech['users_id'], $ip, (string) ($client['hostname'] ?? '?'));
+            throw new RuntimeException($message, 403);
+        }
+        $GLPI_CACHE?->delete($key);
+    }
+
+    /** O tecnico do app digitou a senha do T.I. para o pedido aberto agora. */
+    public static function markVerifiedForTech(array $client, int $techSessionId): void
+    {
+        global $GLPI_CACHE;
+        $GLPI_CACHE?->set(self::techKey($client, $techSessionId), (int) $client['request_seq'], 6 * 3600);
+    }
+
+    public static function isVerifiedForTech(array $client, int $techSessionId): bool
+    {
+        global $GLPI_CACHE;
+        return ($client['request_action'] ?? null) === ClientRepository::ACTION_OPEN
+            && $GLPI_CACHE?->get(self::techKey($client, $techSessionId)) === (int) $client['request_seq'];
+    }
+
+    private static function techKey(array $client, int $techSessionId): string
+    {
+        return 'ativaremote_ti_ok_s' . $techSessionId . '_c' . (int) $client['id'];
+    }
+
     public static function unlockConfig(): void
     {
         $_SESSION[self::CONFIG_KEY] = time();
