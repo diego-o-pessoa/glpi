@@ -52,7 +52,11 @@ $CacheDirectory = Join-Path $ScriptRoot ".cache"
 $AgentMsi = Join-Path $CacheDirectory "GLPI-Agent-$AgentVersion-x64.msi"
 $ClientBuildScript = Join-Path $PluginRoot "client\build-client.ps1"
 $ClientExe = Join-Path $PluginRoot "client\dist\AtivaWallpaperClient.exe"
-$RustDeskExe = Join-Path $CacheDirectory "rustdesk.exe"
+# Versao do RustDesk dos computadores. Ao trocar, atualize tambem o SHA-256
+# abaixo e RUSTDESK_BUNDLED_VERSION no servico (unified_updater_service.py).
+$RustDeskVersion = "1.5.0"
+$RustDeskSha256 = "8555777215510d83d2d61c9dc984e4fcc838bd7e79f9d18a42585431f5e8bb47"
+$RustDeskExe = Join-Path $CacheDirectory "rustdesk-$RustDeskVersion-x86_64.exe"
 $UnifiedUpdaterBuildScript = Join-Path $UpdaterPluginRoot "client\build-service.ps1"
 $UnifiedUpdaterExe = Join-Path $UpdaterPluginRoot "client\dist\AtivaUnifiedUpdater.exe"
 $GuardianBuildScript = Join-Path $GuardianPluginRoot "client\build-guardian.ps1"
@@ -357,12 +361,12 @@ if (-not (Test-Path -LiteralPath $AgentMsi)) {
 Assert-Sha256 -Path $AgentMsi -Expected $AgentSha256
 
 if (-not (Test-Path -LiteralPath $RustDeskExe)) {
-    $RustDeskUrl = "https://github.com/rustdesk/rustdesk/releases/download/1.3.1/rustdesk-1.3.1-x86_64.exe"
-    Write-Host "Baixando RustDesk portable (1.3.1)..."
+    $RustDeskUrl = "https://github.com/rustdesk/rustdesk/releases/download/$RustDeskVersion/rustdesk-$RustDeskVersion-x86_64.exe"
+    Write-Host "Baixando RustDesk portable ($RustDeskVersion)..."
     Invoke-WebRequest -UseBasicParsing -Uri $RustDeskUrl -OutFile $RustDeskExe
 }
 # O servico Ativa Updater instala este executavel como SYSTEM: so aceita a release oficial conferida.
-Assert-Sha256 -Path $RustDeskExe -Expected "fc20fd159eea217fa8ba30309aef177ec00913007f42b325e6b7dd1f21a2f245"
+Assert-Sha256 -Path $RustDeskExe -Expected $RustDeskSha256
 
 $AgentSignature = Get-AuthenticodeSignature -LiteralPath $AgentMsi
 if ($AgentSignature.Status -eq 'NotSigned') {

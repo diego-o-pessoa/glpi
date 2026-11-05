@@ -50,8 +50,8 @@ class GuardianMaintenanceTests(unittest.TestCase):
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.7.17")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 17))
+        self.assertEqual(updater.UPDATER_VERSION, "1.7.18")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 18))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -1397,6 +1397,7 @@ class RemoteAccessTests(unittest.TestCase):
             "require_consent": False,
             "request": {"seq": 3, "action": "open", "requested_by": "Ana"},
             "poll_after_seconds": 5,
+            "rendezvous": updater.RENDEZVOUS_UNCHANGED,
         })
         parsed = updater.parse_remote_response({"request": {"seq": "3", "action": "run"}})
         self.assertTrue(parsed["require_consent"])
@@ -1493,6 +1494,91 @@ class RemoteAccessTests(unittest.TestCase):
         self.agent.poll_once(api)
         self.assertEqual(len(self.passwords), 1)
         self.assertEqual(api.sent[1][1]["result"]["password"], self.passwords[0])
+
+    KEY = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw="
+
+    def test_rendezvous_parsing(self) -> None:
+        parse = updater.parse_rendezvous
+        self.assertIs(parse({}), updater.RENDEZVOUS_UNCHANGED)
+        self.assertIsNone(parse({"rendezvous": None}))
+        self.assertEqual(parse({"rendezvous": {"host": "10.0.0.5", "key": self.KEY}}), {"host": "10.0.0.5", "key": self.KEY})
+        self.assertEqual(parse({"rendezvous": {"host": "rd.ativa.local:21116", "key": self.KEY}})["host"], "rd.ativa.local:21116")
+        # Valores estranhos nao derrubam o acesso remoto.
+        self.assertIs(parse({"rendezvous": {"host": "10.0.0.5; calc", "key": self.KEY}}), updater.RENDEZVOUS_UNCHANGED)
+        self.assertIs(parse({"rendezvous": {"host": "10.0.0.5", "key": "x"}}), updater.RENDEZVOUS_UNCHANGED)
+        self.assertIs(parse({"rendezvous": "10.0.0.5"}), updater.RENDEZVOUS_UNCHANGED)
+
+    def _options_agent(self, options):
+        calls = []
+
+        def fake_run(executable, *arguments, timeout=30):
+            calls.append(arguments)
+            if arguments[0] == "--option" and len(arguments) == 3:
+                options[arguments[1]] = arguments[2]
+                return ""
+            if arguments[0] == "--option":
+                return options.get(arguments[1], "") + "\r\n"
+            return ""
+
+        return calls, mock.patch.object(updater, "run_rustdesk", side_effect=fake_run)
+
+    def test_own_server_is_applied_and_then_left_alone(self) -> None:
+        options = {"custom-rendezvous-server": "", "key": "", "relay-server": "", "api-server": ""}
+        calls, patch = self._options_agent(options)
+        self.agent.password_rotated = True
+        target = {"host": "10.0.0.5", "key": self.KEY}
+        with patch:
+            self.agent.poll_once(FakeRemoteApi([{"request": None, "rendezvous": target}]))
+            self.assertEqual(options["custom-rendezvous-server"], "10.0.0.5")
+            self.assertEqual(options["key"], self.KEY)
+            writes = [c for c in calls if len(c) == 3]
+            self.assertEqual(len(writes), 2)
+            # Trocou o servidor: le o ID de novo no proximo contato.
+            self.assertIsNone(self.agent.id_checked_at)
+            self.agent.id_checked_at = time.monotonic()
+            calls.clear()
+            # Mesmo servidor no proximo contato: nem roda o RustDesk.
+            self.agent.poll_once(FakeRemoteApi([{"request": None, "rendezvous": target}]))
+            self.assertEqual(calls, [])
+
+    def test_back_to_public_server_and_old_glpi_does_not_touch_it(self) -> None:
+        options = {"custom-rendezvous-server": "10.0.0.5", "key": self.KEY, "relay-server": "", "api-server": ""}
+        calls, patch = self._options_agent(options)
+        self.agent.password_rotated = True
+        with patch:
+            # GLPI sem o campo: nada muda.
+            self.agent.poll_once(FakeRemoteApi([{"request": None}]))
+            self.assertEqual(calls, [])
+            self.agent.poll_once(FakeRemoteApi([{"request": None, "rendezvous": None}]))
+        self.assertEqual(options["custom-rendezvous-server"], "")
+        self.assertEqual(options["key"], "")
+
+    def test_server_is_not_changed_during_an_open_session(self) -> None:
+        options = {}
+        calls, patch = self._options_agent(options)
+        self.agent.password_rotated = True
+        self.agent.session_open = True
+        with patch:
+            self.agent.poll_once(FakeRemoteApi([{"request": None, "rendezvous": {"host": "10.0.0.5", "key": self.KEY}}]))
+        self.assertEqual(calls, [])
+
+    def test_rustdesk_upgrade_only_when_older_and_no_session(self) -> None:
+        bundled = Path(self.temp.name) / "bundled.exe"
+        bundled.write_bytes(b"x")
+        with mock.patch.object(updater, "RUSTDESK_BUNDLED_EXE", bundled):
+            for installed, session_open, expected in [
+                ("1.3.1", False, True), ("1.5.0", False, False), ("1.5.1", False, False),
+                ("1.3.1", True, False), ("1.4.9-2", False, True), ("", False, False),
+            ]:
+                with mock.patch.object(updater, "rustdesk_installed_version", return_value=installed):
+                    self.agent.session_open = session_open
+                    self.agent.upgrade_attempted_at = None
+                    self.assertEqual(self.agent.upgrade_due(), expected, (installed, session_open))
+            # Tentou ha pouco: espera 30 minutos.
+            with mock.patch.object(updater, "rustdesk_installed_version", return_value="1.3.1"):
+                self.agent.session_open = False
+                self.agent.upgrade_attempted_at = self.agent.clock()
+                self.assertFalse(self.agent.upgrade_due())
 
     def test_missing_rustdesk_is_reported_with_the_reason(self) -> None:
         self.agent.rustdesk_id = ""

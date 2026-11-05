@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.17"
+UPDATER_VERSION = "1.7.18"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -2519,6 +2519,20 @@ REMOTE_ACTION_CLOSE = "close"
 REMOTE_API_SUFFIX = "/plugins/ativaremote/api/v1"
 RUSTDESK_SERVICE_NAME = "RustDesk"
 RUSTDESK_BUNDLED_EXE = PRODUCT_DIR / "rustdesk.exe"
+# Versao do rustdesk.exe que vai no pacote (build-unified-installer.ps1). Um
+# RustDesk mais antigo no computador e atualizado sozinho, fora de sessao.
+RUSTDESK_BUNDLED_VERSION = "1.5.0"
+# Servidor RustDesk proprio (Ativa Remote > Configuracoes). Sem servidor
+# configurado, volta ao publico (opcoes vazias).
+RUSTDESK_RENDEZVOUS_OPTION = "custom-rendezvous-server"
+RUSTDESK_KEY_OPTION = "key"
+RUSTDESK_RELAY_OPTION = "relay-server"
+RUSTDESK_API_OPTION = "api-server"
+REMOTE_RENDEZVOUS_RECHECK_SECONDS = 600
+RENDEZVOUS_HOST_RE = re.compile(r"^[A-Za-z0-9.-]{1,253}(:\d{1,5})?$")
+RENDEZVOUS_KEY_RE = re.compile(r"^[A-Za-z0-9+/]{43}=$")
+# "rendezvous" ausente na resposta (GLPI antigo): nao mexe no servidor.
+RENDEZVOUS_UNCHANGED = object()
 RUSTDESK_INSTALLED_EXE = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "RustDesk" / "rustdesk.exe"
 RUSTDESK_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,32}$")
 REMOTE_STATE_PATH = PRODUCT_DIR / "remote-state.json"
@@ -2656,7 +2670,24 @@ def parse_remote_response(payload: Any) -> dict[str, Any]:
         "require_consent": payload.get("require_consent") is not False,
         "request": parsed_request,
         "poll_after_seconds": max(5, min(300, delay)),
+        "rendezvous": parse_rendezvous(payload),
     }
+
+
+def parse_rendezvous(payload: dict[str, Any]) -> Any:
+    """{"host", "key"} do servidor proprio, None = publico, ou RENDEZVOUS_UNCHANGED."""
+    if "rendezvous" not in payload:
+        return RENDEZVOUS_UNCHANGED
+    value = payload.get("rendezvous")
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        host = str(value.get("host") or "").strip()
+        key = str(value.get("key") or "").strip()
+        if RENDEZVOUS_HOST_RE.fullmatch(host) and RENDEZVOUS_KEY_RE.fullmatch(key):
+            return {"host": host, "key": key}
+    # Valor estranho: melhor nao mexer do que desligar o acesso remoto.
+    return RENDEZVOUS_UNCHANGED
 
 
 class RemoteAgent:
@@ -2688,6 +2719,9 @@ class RemoteAgent:
         self.install_attempted_at: float | None = None
         self.password_rotated = False
         self.last_problem = ""
+        self.upgrade_attempted_at: float | None = None
+        self.rendezvous_applied: Any = RENDEZVOUS_UNCHANGED
+        self.rendezvous_checked_at: float | None = None
 
     # -- state ------------------------------------------------------------------------------
     def _load_state(self) -> dict[str, Any]:
@@ -2725,6 +2759,20 @@ class RemoteAgent:
                 self.logger.warning("Ativa Remote: %s", self.message)
                 return False
             self.logger.info("Ativa Remote: RustDesk instalado.")
+        elif self.upgrade_due():
+            self.upgrade_attempted_at = self.clock()
+            installed = rustdesk_installed_version()
+            self.logger.info("Ativa Remote: atualizando o RustDesk %s -> %s.", installed, RUSTDESK_BUNDLED_VERSION)
+            try:
+                run_rustdesk(RUSTDESK_BUNDLED_EXE, "--silent-install", timeout=REMOTE_INSTALL_TIMEOUT_SECONDS)
+            except (OSError, subprocess.SubprocessError) as exc:
+                self.logger.warning("Ativa Remote: falha ao atualizar o RustDesk: %s", exc)
+            else:
+                # O servico reinicia: le o ID de novo e confere o servidor.
+                self.id_checked_at = None
+                self.rendezvous_checked_at = None
+                self.password_rotated = False
+                self.logger.info("Ativa Remote: RustDesk agora na versao %s.", rustdesk_installed_version() or "?")
         service = query_service(RUSTDESK_SERVICE_NAME)
         if service is None:
             self.message = "Servico do RustDesk nao encontrado."
@@ -2735,6 +2783,68 @@ class RemoteAgent:
             self.message = "Servico do RustDesk iniciando."
             return False
         return True
+
+    def upgrade_due(self) -> bool:
+        """RustDesk mais antigo que o do pacote, sem sessao aberta (a atualizacao derruba a conexao)."""
+        if self.session_open or not RUSTDESK_BUNDLED_EXE.is_file():
+            return False
+        if self.upgrade_attempted_at is not None and self.clock() - self.upgrade_attempted_at < REMOTE_INSTALL_RETRY_SECONDS:
+            return False
+        installed = rustdesk_installed_version()
+        try:
+            return version_tuple(installed) < version_tuple(RUSTDESK_BUNDLED_VERSION)
+        except UpdaterError:
+            # Versao ilegivel (ex.: "1.3.1-2"): compara so os numeros iniciais.
+            match = re.match(r"^(\d+)\.(\d+)\.(\d+)", installed)
+            return bool(match) and tuple(int(part) for part in match.groups()) < version_tuple(RUSTDESK_BUNDLED_VERSION)
+
+    def apply_rendezvous(self, target: Any, ready: bool) -> None:
+        """Aponta o RustDesk para o servidor proprio (ou de volta ao publico).
+
+        Nao troca com sessao aberta: a conexao do T.I. cairia. Confere de novo a
+        cada 10 minutos (alguem pode ter mudado nas configuracoes do RustDesk).
+        """
+        if target is RENDEZVOUS_UNCHANGED or not ready or self.session_open:
+            return
+        now = self.clock()
+        if (target == self.rendezvous_applied and self.rendezvous_checked_at is not None
+                and now - self.rendezvous_checked_at < REMOTE_RENDEZVOUS_RECHECK_SECONDS):
+            return
+        self.rendezvous_checked_at = now
+        wanted = {
+            RUSTDESK_RENDEZVOUS_OPTION: target["host"] if target else "",
+            RUSTDESK_KEY_OPTION: target["key"] if target else "",
+            # Relay e API vazios: o RustDesk usa o mesmo servidor (hbbr na porta 21117).
+            RUSTDESK_RELAY_OPTION: "",
+            RUSTDESK_API_OPTION: "",
+        }
+        try:
+            current = {name: self.read_option(name) for name in wanted}
+            changed = [name for name, value in wanted.items() if current[name] != value]
+            for name in changed:
+                run_rustdesk(RUSTDESK_INSTALLED_EXE, "--option", name, wanted[name])
+            if changed:
+                after = {name: self.read_option(name) for name in changed}
+                if any(after[name] != wanted[name] for name in changed):
+                    self.logger.warning("Ativa Remote: o RustDesk nao aceitou o servidor %s.", wanted[RUSTDESK_RENDEZVOUS_OPTION] or "publico")
+                    self.rendezvous_checked_at = None
+                    return
+                self.logger.info("Ativa Remote: RustDesk usando o servidor %s.", wanted[RUSTDESK_RENDEZVOUS_OPTION] or "publico")
+                # O ID e o mesmo, mas o registro muda de servidor.
+                self.id_checked_at = None
+        except (OSError, subprocess.SubprocessError) as exc:
+            self.logger.warning("Ativa Remote: falha ao configurar o servidor do RustDesk: %s", exc)
+            self.rendezvous_checked_at = None
+            return
+        self.rendezvous_applied = target
+
+    def read_option(self, name: str) -> str:
+        output = run_rustdesk(RUSTDESK_INSTALLED_EXE, "--option", name)
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        value = lines[-1] if lines else ""
+        if "privileges required" in value or "disabled" in value.lower():
+            raise OSError(value)
+        return value
 
     def refresh_id(self, force: bool = False) -> None:
         now = self.clock()
@@ -2845,6 +2955,7 @@ class RemoteAgent:
         response = parse_remote_response(api.post_json("/report", self.build_report(ready)))
         # The server has the result now; the password only lived in memory for this report.
         self.pending_result = None
+        self.apply_rendezvous(response["rendezvous"], ready)
         self.handle_request(response["request"], response["require_consent"], ready)
         if self.pending_result is not None:
             response = parse_remote_response(api.post_json("/report", self.build_report(ready)))
