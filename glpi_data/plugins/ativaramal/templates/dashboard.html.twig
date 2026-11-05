@@ -43,6 +43,7 @@
 .rd-item.is-tocando{background:#fffaf0}.rd-item.is-tocando .rd-item-icon{background:#fff1d6;color:#a35d00;animation:rd-shake 1s ease-in-out infinite}
 .rd-timer{font-size:15px;font-weight:750;color:var(--rd-ink);font-variant-numeric:tabular-nums}
 .rd-item.is-tocando .rd-timer{color:#a35d00}
+.rd-timer-total{display:block;font-size:11px;color:var(--rd-muted);font-variant-numeric:tabular-nums;text-align:right}
 @keyframes rd-blink{50%{opacity:.55}}
 @keyframes rd-shake{0%,100%{transform:rotate(0)}20%{transform:rotate(-12deg)}40%{transform:rotate(10deg)}60%{transform:rotate(-6deg)}80%{transform:rotate(4deg)}}
 @media(prefers-reduced-motion:reduce){.rd-ring-badge,.rd-item.is-tocando .rd-item-icon,.rd-live i{animation:none}}
@@ -335,6 +336,15 @@
             var timer = el('div', 'rd-timer', clock(c.segundos || 0));
             timer.setAttribute('data-rd-timer', String(c.segundos || 0));
             side.appendChild(timer);
+            // Na linha ha mais tempo que a conversa (URA, fila, transferencia).
+            var total = c.segundos_total || 0;
+            if (total - (c.segundos || 0) >= 60) {
+                var whole = el('small', 'rd-timer-total', 'na linha ' + clock(total));
+                whole.setAttribute('data-rd-timer', String(total));
+                whole.setAttribute('data-rd-prefix', 'na linha ');
+                whole.title = 'Tempo desde que a ligação entrou (inclui URA, fila e transferências).';
+                side.appendChild(whole);
+            }
             item.appendChild(side);
             list.appendChild(item);
         });
@@ -362,7 +372,7 @@
     setInterval(function () {
         var elapsed = (Date.now() - receivedAt) / 1000;
         root.querySelectorAll('[data-rd-timer]').forEach(function (n) {
-            n.textContent = clock(Number(n.getAttribute('data-rd-timer')) + elapsed);
+            n.textContent = (n.getAttribute('data-rd-prefix') || '') + clock(Number(n.getAttribute('data-rd-timer')) + elapsed);
         });
     }, 1000);
 

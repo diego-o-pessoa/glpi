@@ -304,7 +304,13 @@ final class Dashboard
                     break;
                 }
             }
-            $seconds = (int) $list[0]['seconds'];
+            // Canal mais antigo = tempo total na linha (inclui URA, fila e
+            // trechos anteriores de uma transferencia). Em conversa, o
+            // cronometro mostra o tempo do trecho atendido agora (canal "Up"
+            // mais recente), o mesmo que aparece em "Ligacoes recentes".
+            $total = (int) $list[0]['seconds'];
+            $upSeconds = array_column(array_filter($list, static fn (array $c): bool => $c['state'] === 'Up'), 'seconds');
+            $seconds = ($phase === 'conversa' && $upSeconds !== []) ? (int) min($upSeconds) : $total;
             $live[] = [
                 // Identificador da ligacao inteira (todos os trechos).
                 'linkedid'   => $linkedId,
@@ -313,6 +319,7 @@ final class Dashboard
                 'de'         => $from,
                 'para'       => $phase === 'tocando' ? $ringing : $to,
                 'segundos'   => $seconds,
+                'segundos_total' => $total,
                 'visivel'    => $visible,
                 // Campos anteriores (mantidos para quem ja usa o payload).
                 'externo'      => $external['numero'] ?? '',
