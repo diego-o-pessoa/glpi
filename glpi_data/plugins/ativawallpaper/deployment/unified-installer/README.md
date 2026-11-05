@@ -93,6 +93,7 @@ Durante a instalação (normalmente 1 a 3 minutos) o serviço fica parado: coman
 
 O dashboard atualiza a seção **Computadores** sozinho, a cada 3 s, sem recarregar a página.
 
+- **Fila de download**: o GLPI deixa só alguns computadores baixarem ao mesmo tempo (padrão: 4). Quem não tem vaga aparece como **Na fila para baixar**, não como erro. No serviço 1.7.19+ (pacote 1.9.8) ele tenta de novo sozinho a cada 15–75 s (aleatório, para não voltarem todos juntos), sem gastar tentativas, por até 3 horas: na prática entram de 4 em 4 até todos terminarem. Serviços anteriores tentam de novo a cada 5 minutos.
 - **Verificar agora** (todos): o serviço 1.5.0+ recebe o comando em até 15 s mesmo durante downloads, **cancela o que estiver fazendo** (inclusive um instalador em andamento) e recomeça a verificação. No serviço 1.6.0+, durante os minutos em que o executor instala o pacote, o serviço está parado e atende o comando ao voltar. Serviços 1.2.0 a 1.4.x só verificam depois de terminar a instalação atual; anteriores a 1.2.0 não recebem comandos.
 - **Logs** (por computador): coleta `service.log`, `watchdog.log`, a última falha de instalação, o log do instalador e o do Wallpaper Client e mostra tudo em **Ver logs enviados**.
 - **Reinstalar**: cancela o que estiver em andamento e instala de novo o pacote publicado, mesmo que a versão já esteja instalada. Não faz downgrade sem rollback autorizado.

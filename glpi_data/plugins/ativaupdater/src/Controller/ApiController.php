@@ -22,7 +22,7 @@ final class ApiController extends AbstractController
 {
     private const STATUS_VALUES = [
         'checking', 'waiting_release', 'current', 'downloading', 'installing', 'updated', 'error',
-        InstallStatus::STATUS_RETRYING, InstallStatus::STATUS_INSTALL_FAILED,
+        InstallStatus::STATUS_RETRYING, InstallStatus::STATUS_INSTALL_FAILED, InstallStatus::STATUS_QUEUED,
     ];
 
     private function checkAuth(Request $request): ?JsonResponse
@@ -244,6 +244,11 @@ final class ApiController extends AbstractController
             return $this->error('INVALID_PAYLOAD', 'Nota de recuperacao invalida.', 422);
         }
 
+        [$status, $message] = InstallStatus::normalizeReport(
+            $status,
+            mb_substr(trim((string) ($payload['message'] ?? '')), 0, 1000)
+        );
+
         $data = [
             'hostname'          => $hostname,
             'updater_version'   => $versions['updater_version'],
@@ -253,7 +258,7 @@ final class ApiController extends AbstractController
             'workspace_version' => $versions['workspace_version'],
             'glpi_agent_version' => $agentVersion,
             'status'            => $status,
-            'message'           => mb_substr(trim((string) ($payload['message'] ?? '')), 0, 1000),
+            'message'           => $message,
             'last_ip'           => mb_substr((string) ($request->getClientIp() ?? ''), 0, 64),
             'last_check'        => ServerClock::now(),
         ];

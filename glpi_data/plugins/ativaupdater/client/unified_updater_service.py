@@ -29,7 +29,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler, HTTPSHand
 
 SERVICE_NAME = "AtivaUnifiedUpdater"
 SERVICE_DISPLAY_NAME = "Ativa Unified Updater"
-UPDATER_VERSION = "1.7.18"
+UPDATER_VERSION = "1.7.19"
 DEFAULT_INTERVAL = 3600
 COMMAND_POLL_SECONDS = 15
 
@@ -49,6 +49,13 @@ COMMANDS = (COMMAND_CHECK, COMMAND_REINSTALL, COMMAND_RESTART_SERVICE, COMMAND_S
 # Transient network failures (timeouts, resets) are retried before a check fails.
 API_RETRY_DELAYS_SECONDS = (5, 15)
 DOWNLOAD_RETRY_DELAYS_SECONDS = (10, 30)
+# Sem vaga no GLPI (DownloadSlots, HTTP 503 DOWNLOAD_BUSY): espera a vez na
+# fila, sem contar como falha, tentando de novo a cada 15-75 s (aleatorio, para
+# os computadores nao voltarem todos juntos). Desiste depois de 3 h.
+DOWNLOAD_QUEUE_MAX_SECONDS = 3 * 3600
+DOWNLOAD_QUEUE_WAIT_SECONDS = (15, 75)
+DOWNLOAD_QUEUE_REPORT_SECONDS = 300
+STATUS_QUEUED = "queued"
 DIAGNOSTICS_MAX_CHARS = 60000
 
 # Watchdog: a scheduled task that runs a separate copy of this executable.
@@ -141,6 +148,14 @@ class NoReleaseError(UpdaterError):
 
 class OperationCancelled(UpdaterError):
     """The dashboard asked to cancel the current work and start over."""
+
+
+class DownloadBusy(UpdaterError):
+    """O GLPI esta com todas as vagas de download ocupadas: esperar a vez."""
+
+    def __init__(self, message: str, retry_after: int = 60):
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class SingleInstance:
@@ -1214,6 +1229,14 @@ class ApiClient:
                 body = exc.read(4096).decode("utf-8", errors="replace")
                 if exc.code == 404 and '"NO_RELEASE"' in body:
                     raise NoReleaseError("Nenhuma versao foi publicada.") from exc
+                if exc.code == 503 and '"DOWNLOAD_BUSY"' in body:
+                    try:
+                        retry_after = int(exc.headers.get("Retry-After", "60"))
+                    except (TypeError, ValueError, AttributeError):
+                        retry_after = 60
+                    raise DownloadBusy(
+                        "Muitos computadores baixando agora; aguardando vaga.", max(5, min(600, retry_after))
+                    ) from exc
                 if attempt < len(retry_delays) and is_transient_network_error(exc):
                     self.retry_sleep(retry_delays[attempt])
                     continue
@@ -1400,14 +1423,40 @@ def download_with_retries(
     logger: logging.Logger,
     cancel_requested: Callable[[], bool] = lambda: False,
     sleep: Callable[[float], None] = time.sleep,
+    on_queued: Callable[[int, int], None] | None = None,
+    stop_requested: Callable[[], bool] = lambda: False,
+    clock: Callable[[], float] = time.monotonic,
 ) -> None:
+    """Baixa o instalador. Sem vaga no GLPI, espera a vez (fila) sem gastar
+    as tentativas de erro; [on_queued] recebe (segundos na fila, proxima espera)."""
     delays = DOWNLOAD_RETRY_DELAYS_SECONDS
-    for attempt in range(len(delays) + 1):
+    attempt = 0
+    queued_since: float | None = None
+    while True:
         try:
             api.download(release, destination, cancel_requested)
             return
         except OperationCancelled:
             raise
+        except DownloadBusy:
+            now = clock()
+            if queued_since is None:
+                queued_since = now
+            waited = int(now - queued_since)
+            if waited >= DOWNLOAD_QUEUE_MAX_SECONDS:
+                raise UpdaterError(
+                    f"Sem vaga para baixar o instalador depois de {waited // 60} minutos na fila; "
+                    "nova tentativa na proxima verificacao."
+                )
+            low, high = DOWNLOAD_QUEUE_WAIT_SECONDS
+            wait = secrets.randbelow(high - low + 1) + low
+            logger.info("Sem vaga para baixar (fila ha %s s); nova tentativa em %s s.", waited, wait)
+            if on_queued is not None:
+                on_queued(waited, wait)
+            for _ in range(wait):
+                if cancel_requested() or stop_requested():
+                    raise OperationCancelled("Download cancelado enquanto aguardava vaga.")
+                sleep(1)
         except (UpdaterError, OSError, http.client.HTTPException) as exc:
             if attempt >= len(delays):
                 if isinstance(exc, UpdaterError):
@@ -1415,6 +1464,7 @@ def download_with_retries(
                 raise UpdaterError(f"Falha no download do instalador: {exc}") from exc
             logger.warning("Download interrompido (%s); retomando em %s segundos.", exc, delays[attempt])
             sleep(delays[attempt])
+            attempt += 1
             if cancel_requested():
                 raise OperationCancelled("Download cancelado pelo dashboard.") from exc
 
@@ -1894,7 +1944,27 @@ def check_once(
         destination = DOWNLOAD_DIR / f"Ativa-Unified-Agent-Setup-{available}.exe"
         cleanup_downloads(keep=destination)
         api.report("downloading", installed, available, download_message)
-        download_with_retries(api, release, destination, logger, cancel_requested)
+        last_queue_report = [0.0]
+
+        def report_queued(waited: int, wait: int) -> None:
+            # Mostra "Na fila" no painel: ao entrar e a cada 5 minutos.
+            now = time.monotonic()
+            if last_queue_report[0] and now - last_queue_report[0] < DOWNLOAD_QUEUE_REPORT_SECONDS:
+                return
+            last_queue_report[0] = now
+            try:
+                api.report(
+                    STATUS_QUEUED, installed, available,
+                    f"Na fila para baixar (muitos computadores baixando agora); "
+                    f"tentando de novo sozinho a cada poucos segundos ({waited // 60} min na fila).",
+                )
+            except Exception as exc:  # o painel e so informativo: a fila continua
+                logger.warning("Nao foi possivel avisar o painel da fila: %s", exc)
+
+        download_with_retries(
+            api, release, destination, logger, cancel_requested,
+            on_queued=report_queued, stop_requested=stop_requested,
+        )
         if cancel_requested():
             raise OperationCancelled("Verificacao cancelada pelo dashboard.")
         state["last_result"] = "installing"

@@ -16,8 +16,28 @@ final class InstallStatus
 {
     public const STATUS_RETRYING = 'retrying';
     public const STATUS_INSTALL_FAILED = 'install_failed';
+    /** Sem vaga para baixar (DownloadSlots): o computador espera a vez e tenta sozinho. */
+    public const STATUS_QUEUED = 'queued';
 
-    public const IN_PROGRESS = ['downloading', 'installing', 'retrying'];
+    public const IN_PROGRESS = ['downloading', 'installing', 'retrying', 'queued'];
+
+    /**
+     * Servicos ate 1.7.18 avisam "sem vaga" como erro ("API respondeu HTTP
+     * 503 ... DOWNLOAD_BUSY") e tentam de novo sozinhos na verificacao
+     * seguinte (5 min). Nao e erro: vira "na fila".
+     *
+     * @return array{0: string, 1: string} status e mensagem
+     */
+    public static function normalizeReport(string $status, string $message): array
+    {
+        if ($status === 'error' && str_contains($message, 'DOWNLOAD_BUSY')) {
+            return [
+                self::STATUS_QUEUED,
+                'Na fila para baixar: muitos computadores baixando agora. Nova tentativa automática em até 5 minutos.',
+            ];
+        }
+        return [$status, $message];
+    }
     public const FINISHED = ['current', 'updated', 'waiting_release'];
 
     /** A supervised attempt reports again within the 20 min installer timeout plus the download. */

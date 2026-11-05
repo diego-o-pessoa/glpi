@@ -140,6 +140,16 @@ $tests['remote actions require service 1.5.0'] = static function (): void {
     check(ManualCheck::state($installing + ['updater_version' => '1.4.0', 'command' => 'send_logs'], $now) === ManualCheck::STATE_UNSUPPORTED);
 };
 
+$tests['download queue is not an error'] = static function (): void {
+    $old = 'API respondeu HTTP 503: {"error":{"code":"DOWNLOAD_BUSY","message":"Muitos computadores baixando agora; tente novamente em instantes."}}';
+    [$status, $message] = InstallStatus::normalizeReport('error', $old);
+    check($status === InstallStatus::STATUS_QUEUED, $status);
+    check(str_contains($message, 'Na fila'), $message);
+    check(InstallStatus::normalizeReport('error', 'Falha no download') === ['error', 'Falha no download']);
+    check(InstallStatus::normalizeReport('queued', 'x') === ['queued', 'x']);
+    check(in_array(InstallStatus::STATUS_QUEUED, InstallStatus::IN_PROGRESS, true));
+};
+
 $tests['manual check states'] = static function (): void {
     $now = time();
     $pending = [

@@ -50,8 +50,8 @@ class GuardianMaintenanceTests(unittest.TestCase):
 
 class VersionTests(unittest.TestCase):
     def test_updater_version_is_valid(self) -> None:
-        self.assertEqual(updater.UPDATER_VERSION, "1.7.18")
-        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 18))
+        self.assertEqual(updater.UPDATER_VERSION, "1.7.19")
+        self.assertEqual(updater.version_tuple(updater.UPDATER_VERSION), (1, 7, 19))
         self.assertEqual(updater.COMMAND_POLL_SECONDS, 15)
 
     def test_semantic_version_comparison(self) -> None:
@@ -1117,6 +1117,59 @@ class NetworkResilienceTests(unittest.TestCase):
         sleeps: list = []
         updater.download_with_retries(api, {}, Path("x.exe"), quiet_logger("dl"), sleep=sleeps.append)
         self.assertEqual((api.download.call_count, sleeps), (3, [10, 30]))
+
+    def test_busy_server_is_a_queue_not_a_failure(self) -> None:
+        busy = updater.DownloadBusy("sem vaga", 60)
+        api = mock.Mock()
+        api.download.side_effect = [busy, busy, updater.UpdaterError("reset"), busy, None]
+        sleeps: list = []
+        queued: list = []
+        updater.download_with_retries(
+            api, {}, Path("x.exe"), quiet_logger("dl"), sleep=sleeps.append,
+            on_queued=lambda waited, wait: queued.append(wait),
+        )
+        self.assertEqual(api.download.call_count, 5)
+        # Fila: 3 esperas de 15-75 s (de 1 em 1 s), sem gastar as tentativas de erro.
+        self.assertEqual(len(queued), 3)
+        self.assertTrue(all(15 <= wait <= 75 for wait in queued))
+        self.assertEqual(sleeps.count(10), 1)
+        self.assertEqual(len(sleeps), sum(queued) + 1)
+
+    def test_queue_gives_up_after_three_hours(self) -> None:
+        api = mock.Mock()
+        api.download.side_effect = updater.DownloadBusy("sem vaga")
+        now = [0.0]
+
+        def sleep(seconds):
+            now[0] += seconds
+
+        with self.assertRaises(updater.UpdaterError) as caught:
+            updater.download_with_retries(api, {}, Path("x.exe"), quiet_logger("dl"), sleep=sleep, clock=lambda: now[0])
+        self.assertNotIsInstance(caught.exception, updater.DownloadBusy)
+        self.assertIn("na fila", str(caught.exception))
+        self.assertGreaterEqual(now[0], updater.DOWNLOAD_QUEUE_MAX_SECONDS)
+
+    def test_queue_wait_stops_on_cancel_or_service_stop(self) -> None:
+        api = mock.Mock()
+        api.download.side_effect = updater.DownloadBusy("sem vaga")
+        with self.assertRaises(updater.OperationCancelled):
+            updater.download_with_retries(api, {}, Path("x.exe"), quiet_logger("dl"), sleep=lambda _s: None,
+                                          stop_requested=lambda: True)
+
+    def test_busy_http_503_becomes_download_busy(self) -> None:
+        body = json.dumps({"error": {"code": "DOWNLOAD_BUSY", "message": "Muitos computadores"}}).encode()
+        busy = updater.HTTPError(API_URL + "/download/1.9.8", 503, "Service Unavailable",
+                                 {"Retry-After": "60"}, io.BytesIO(body))
+        api, _, _ = self.api([busy])
+        with self.assertRaises(updater.DownloadBusy) as caught:
+            api._request(API_URL + "/download/1.9.8")
+        self.assertEqual(caught.exception.retry_after, 60)
+        # Outro 503 continua sendo erro comum.
+        other = updater.HTTPError(API_URL + "/latest", 503, "x", {}, io.BytesIO(b'{"error":{"code":"API_DISABLED"}}'))
+        api, _, _ = self.api([other])
+        with self.assertRaises(updater.UpdaterError) as caught:
+            api._request(API_URL + "/latest")
+        self.assertNotIsInstance(caught.exception, updater.DownloadBusy)
 
     def test_report_sends_command_seq_and_clears_recovery_marker(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

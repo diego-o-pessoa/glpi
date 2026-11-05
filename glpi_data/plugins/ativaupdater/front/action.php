@@ -35,7 +35,7 @@ $markClientsAwaiting = static function (string $version, bool $allowDowngrade = 
             continue;
         }
         $status = (string) $client['status'];
-        if (in_array($status, ['downloading', 'installing'], true)) {
+        if (in_array($status, ['downloading', 'installing', 'queued'], true)) {
             continue;
         }
         if ($status === 'error' && !str_contains((string) ($client['message'] ?? ''), 'NO_RELEASE')) {

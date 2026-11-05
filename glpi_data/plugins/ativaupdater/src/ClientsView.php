@@ -57,6 +57,7 @@ final class ClientsView
         'service_down'       => ['Serviço parado', 'bg-danger'],
         'current'            => ['Atualizado', 'bg-success'],
         'downloading'        => ['Baixando', 'bg-primary'],
+        InstallStatus::STATUS_QUEUED         => ['Na fila para baixar', 'bg-info'],
         'installing'         => ['Instalando', 'bg-warning text-dark'],
         InstallStatus::STATUS_RETRYING       => ['Nova tentativa', 'bg-warning text-dark'],
         InstallStatus::STATUS_INSTALL_FAILED => ['Falha na Instalação', 'bg-danger'],
@@ -72,6 +73,11 @@ final class ClientsView
         if ($DB->tableExists(self::TABLE)) {
             $columns = $withLogs ? array_merge(self::SUMMARY_COLUMNS, ['install_log', 'diagnostics_log']) : self::SUMMARY_COLUMNS;
             foreach ($DB->request(['SELECT' => $columns, 'FROM' => self::TABLE, 'ORDER' => ['last_check DESC', 'id ASC']]) as $row) {
+                // "Sem vaga para baixar" gravado antes como erro: e fila.
+                [$row['status'], $row['message']] = InstallStatus::normalizeReport(
+                    (string) $row['status'],
+                    (string) ($row['message'] ?? '')
+                );
                 $clients[] = $row;
             }
             $wallpaper = self::wallpaperClients(array_column($clients, 'machine_guid'));
