@@ -60,6 +60,39 @@ services:
     depends_on:
       - glpi # (Coloque aqui o nome exato do seu container do GLPI)
 
+  # Ativa Remote: servidor RustDesk proprio (hbbs = rendezvous/ID, hbbr =
+  # relay). Usado pelos computadores e pelo app Ativa Remote T.I., pela rede
+  # da empresa e pela VPN (nao abra estas portas para a internet). Sobe sem
+  # mexer no GLPI:  docker compose up -d rustdesk_hbbs rustdesk_hbbr
+  # A chave publica (para Ativa Remote > Configuracoes) fica em
+  # ./rustdesk_data/id_ed25519.pub. A chave privada nunca sai deste servidor.
+  # RUSTDESK_BIND_IP (no .env): IP da rede interna/VPN deste servidor, para as
+  # portas so escutarem ali.
+  rustdesk_hbbs:
+    image: rustdesk/rustdesk-server:1.1.15
+    container_name: rustdesk_hbbs
+    # -k _ : so aceita clientes com a chave deste servidor.
+    command: hbbs -k _
+    ports:
+      - "${RUSTDESK_BIND_IP:-0.0.0.0}:21115:21115"
+      - "${RUSTDESK_BIND_IP:-0.0.0.0}:21116:21116"
+      - "${RUSTDESK_BIND_IP:-0.0.0.0}:21116:21116/udp"
+    volumes:
+      - ./rustdesk_data:/root
+    depends_on:
+      - rustdesk_hbbr
+    restart: unless-stopped
+
+  rustdesk_hbbr:
+    image: rustdesk/rustdesk-server:1.1.15
+    container_name: rustdesk_hbbr
+    command: hbbr -k _
+    ports:
+      - "${RUSTDESK_BIND_IP:-0.0.0.0}:21117:21117"
+    volumes:
+      - ./rustdesk_data:/root
+    restart: unless-stopped
+
 volumes:
   glpi_mysql_data:
     name: glpi_mysql_data

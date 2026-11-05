@@ -39,3 +39,6 @@ glpi_data/plugins/meshcentral
 # de fato neste repositorio. Contem patches locais de compatibilidade (GLPI 11)
 # que existem somente na copia de trabalho.
 /glpi_data/plugins/meshcentral/
+
+# Ativa Remote: chaves do servidor RustDesk proprio (a privada nunca vai pro Git).
+/rustdesk_data/
