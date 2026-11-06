@@ -604,7 +604,11 @@ body.central .btn-primary:hover {
 /* Entrada suave do conteudo a cada pagina (so opacidade: transform aqui
    tiraria do lugar as janelas e menus fixos que o GLPI abre dentro dela). */
 body.central main#page {
-    animation: ac-page-in 0.4s ease both;
+    /* "backwards", nao "both": terminada a animacao, a area principal nao
+       pode continuar como camada propria. Com "both" ela prendia as janelas
+       do GLPI (ex.: "Alterar senha" na ficha do usuario) abaixo da cortina
+       cinza, e nao dava para clicar nos campos. */
+    animation: ac-page-in 0.4s ease backwards;
 }
 
 @keyframes ac-page-in {
