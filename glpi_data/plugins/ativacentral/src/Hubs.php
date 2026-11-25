@@ -55,9 +55,9 @@ final class Hubs
             ],
         ],
         'tools' => [
-            'subtitle' => 'Projetos, base de conhecimento, reservas, relatórios e pesquisas salvas.',
+            'subtitle' => 'Base de conhecimento, reservas, relatórios e pesquisas salvas.',
             'groups'   => [
-                'Trabalho em equipe'   => ['project', 'knowbaseitem', 'reservationitem', 'reminder', 'rssfeed'],
+                'Trabalho em equipe'   => ['knowbaseitem', 'reservationitem', 'reminder', 'rssfeed'],
                 'Relatórios e análise' => ['report', 'savedsearch', 'impact'],
             ],
         ],
@@ -237,8 +237,8 @@ final class Hubs
 
         $cards = [];
         foreach (Nav::pages($sector) as $itemKey => $entry) {
-            // Solucoes Ativa tem lugar proprio na barra lateral.
-            if (Nav::isEmbeddedSolution($itemKey)) {
+            // Solucoes Ativa e Projetos tem lugar proprio na barra lateral.
+            if (Nav::isEmbeddedSolution($itemKey) || ($key === 'tools' && $itemKey === 'project')) {
                 continue;
             }
             $short = self::shortKey($itemKey);

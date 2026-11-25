@@ -9,10 +9,10 @@ plugin não cria tabelas. Desligado, o GLPI volta exatamente ao visual original.
 
 ## O que muda
 
-- **Barra lateral**: Workspace (Visão geral, Chamados, Ativos, Computadores),
-  Soluções Ativa (os plugins Ativa instalados) e Gestão e sistema. Cada item
-  abre uma tela; não há mais listas suspensas. O selo em "Chamados" é a
-  quantidade de chamados novos.
+- **Barra lateral**: Visão geral (principal, acima das seções), Workspace
+  (Chamados, Ativos, Computadores, Projetos), Soluções Ativa (os plugins Ativa
+  instalados) e Gestão e sistema. Cada item abre uma tela; não há mais listas
+  suspensas. O selo em "Chamados" é a quantidade de chamados novos.
 - **Visão geral**: chamados em aberto, aguardando e resolvidos, computadores,
   gráfico do período, fila, categorias, desempenho pessoal e da equipe.
   Substitui a página inicial do GLPI (os painéis nativos continuam em

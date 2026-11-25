@@ -220,8 +220,11 @@
                     && (url.searchParams.get('s') || '') === (hereQuery.get('s') || '')) {
                     score = 100;
                 }
-            } else if (!herePlugin && !plugin && hereFront && frontBase(url.pathname) === hereFront) {
-                score = 90;
+            } else if (!herePlugin && !plugin && hereFront) {
+                var linkFront = frontBase(url.pathname);
+                if (linkFront === hereFront || (/^project/.test(hereFront) && /^project/.test(linkFront))) {
+                    score = 90;
+                }
             }
             if (score > bestScore) {
                 best = entry;

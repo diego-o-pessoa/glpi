@@ -52,26 +52,26 @@ final class Nav
     public static function build(array $menu): array
     {
         $out = [];
-        $out['ac_sec_workspace'] = self::label('Workspace');
-        // Quem so tem paineis (ex.: Ativa - Gestor) nao ve o painel da T.I.
+        // Item principal, acima das secoes: quem so tem paineis (ex.: Ativa - Gestor) nao ve.
         if (!Shell::panelOnly()) {
             $out['ac_home'] = self::link('Visão geral', 'ti ti-layout-dashboard', self::homeUrl());
         }
 
+        $workspace = [];
         if (self::hasOwnPages($menu['helpdesk'] ?? null)) {
             // Mesmo titulo na secao original: e por ele que o GLPI marca o
             // item ativo e monta a trilha de navegacao.
             $menu['helpdesk']['title'] = 'Chamados';
             $menu['helpdesk']['default'] = self::hubUrl('helpdesk');
-            $out['ac_helpdesk'] = self::link('Chamados', 'ti ti-ticket', self::hubUrl('helpdesk'));
+            $workspace['ac_helpdesk'] = self::link('Chamados', 'ti ti-ticket', self::hubUrl('helpdesk'));
         }
 
         if (self::hasOwnPages($menu['assets'] ?? null)) {
             $title = (string) ($menu['assets']['title'] ?? 'Ativos');
-            $out['ac_assets'] = self::link($title, 'ti ti-package', self::hubUrl('assets'));
+            $workspace['ac_assets'] = self::link($title, 'ti ti-package', self::hubUrl('assets'));
             $menu['assets']['default'] = self::hubUrl('assets');
             if (isset($menu['assets']['content']['computer']['page'])) {
-                $out['ac_computers'] = self::link('Computadores', 'ti ti-device-desktop', self::hubUrl('computers'));
+                $workspace['ac_computers'] = self::link('Computadores', 'ti ti-device-desktop', self::hubUrl('computers'));
                 // Nas telas de computador, o item ativo e "Computadores".
                 if (self::onComputerPages()) {
                     $menu['assets']['title'] = 'Computadores';
@@ -80,9 +80,18 @@ final class Nav
             }
         }
 
-        // Secao sem nenhum item (perfil so com paineis): sai o titulo tambem.
-        if (count($out) === 1) {
-            unset($out['ac_sec_workspace']);
+        if (isset($menu['tools']['content']['project']['page'])) {
+            $project = $menu['tools']['content']['project'];
+            $workspace['ac_project'] = self::link(
+                'Projetos',
+                (string) ($project['icon'] ?? '') ?: 'ti ti-layout-kanban',
+                (string) $project['page']
+            );
+        }
+
+        if ($workspace !== []) {
+            $out['ac_sec_workspace'] = self::label('Workspace');
+            $out += $workspace;
         }
 
         // --- Solucoes Ativa: plugins com secao propria e os que entram em
@@ -129,7 +138,7 @@ final class Nav
             $menu['management']['default'] = self::hubUrl('management');
             $system['ac_management'] = self::link((string) ($menu['management']['title'] ?? 'Gerência'), 'ti ti-wallet', self::hubUrl('management'));
         }
-        if (self::hasOwnPages($menu['tools'] ?? null)) {
+        if (self::hasOwnPages($menu['tools'] ?? null, ['project'])) {
             // Titulo do proprio GLPI ("Ferramentas"): cabe na barra; a tela
             // do modulo explica que os relatorios ficam ali.
             $menu['tools']['default'] = self::hubUrl('tools');
@@ -214,18 +223,20 @@ final class Nav
 
     /**
      * Secao nativa com alguma funcao propria. Uma secao em que o perfil so
-     * enxerga uma solucao Ativa nao vira item da barra: a solucao ja tem o
-     * dela e a tela do modulo ficaria vazia.
+     * enxerga uma solucao Ativa (ou item movido para outra secao) nao vira
+     * item da barra: a tela do modulo ficaria vazia.
      *
      * @param mixed $sector
+     * @param list<string> $exclude
      */
-    public static function hasOwnPages($sector): bool
+    public static function hasOwnPages($sector, array $exclude = []): bool
     {
         if (!is_array($sector)) {
             return false;
         }
         foreach (array_keys(self::pages($sector)) as $itemKey) {
-            if (!self::isEmbeddedSolution((string) $itemKey)) {
+            $key = (string) $itemKey;
+            if (!self::isEmbeddedSolution($key) && !in_array($key, $exclude, true)) {
                 return true;
             }
         }
