@@ -40,6 +40,11 @@ final class Nav
         return '/plugins/ativacentral/front/home.php';
     }
 
+    public static function projectsUrl(): string
+    {
+        return '/plugins/ativacentral/front/projects.php';
+    }
+
     public static function hubUrl(string $key): string
     {
         return '/plugins/ativacentral/front/hub.php?s=' . rawurlencode($key);
@@ -85,8 +90,16 @@ final class Nav
             $workspace['ac_project'] = self::link(
                 'Projetos',
                 (string) ($project['icon'] ?? '') ?: 'ti ti-layout-kanban',
-                (string) $project['page']
+                self::projectsUrl()
             );
+            // Remove "Projetos" de "Ferramentas" na navegacao e na busca interna.
+            unset($menu['tools']['content']['project']);
+            $menu['ac_project_native'] = [
+                'title'   => 'Projetos',
+                'default' => self::projectsUrl(),
+                'icon'    => (string) ($project['icon'] ?? '') ?: 'ti ti-layout-kanban',
+                'content' => ['project' => $project],
+            ];
         }
 
         if ($workspace !== []) {

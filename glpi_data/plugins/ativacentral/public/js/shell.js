@@ -45,15 +45,23 @@
     }
 
     // ------------------------------------------------------------------
-    // Pagina inicial nativa: segue para a "Visao geral" (o servidor ja pede
-    // isso numa tag <meta>; aqui e a garantia caso o navegador ignore).
+    // Pagina inicial e projetos nativos: seguem para as telas novas
+    // (o servidor ja pede isso numa tag <meta>; aqui e a garantia caso o
+    // navegador ignore).
     // ------------------------------------------------------------------
     function redirectHome() {
-        if (!/\/(front\/central\.php|Central)$/.test(location.pathname)) {
+        var query = new URLSearchParams(location.search);
+        if (query.has('embed') || query.has('ac_native')) {
             return false;
         }
-        var query = new URLSearchParams(location.search);
-        if (query.has('embed') || query.has('redirect') || query.has('ac_native')) {
+        if (/\/front\/project\.php$/i.test(location.pathname) && data.projects) {
+            if (data.projects !== location.pathname + location.search) {
+                location.replace(data.projects);
+                return true;
+            }
+            return false;
+        }
+        if (!/\/(front\/central\.php|Central)$/.test(location.pathname) || query.has('redirect')) {
             return false;
         }
         // Perfil so com paineis (ex.: Ativa - Gestor): a pagina inicial do GLPI
@@ -220,6 +228,8 @@
                     && (url.searchParams.get('s') || '') === (hereQuery.get('s') || '')) {
                     score = 100;
                 }
+            } else if (!herePlugin && /^project/.test(hereFront) && plugin === 'ativacentral' && fileOf(url.pathname) === 'projects.php') {
+                score = 90;
             } else if (!herePlugin && !plugin && hereFront) {
                 var linkFront = frontBase(url.pathname);
                 if (linkFront === hereFront || (/^project/.test(hereFront) && /^project/.test(linkFront))) {
@@ -257,6 +267,29 @@
             first.href = data.home;
             first.textContent = 'Ativa Central';
             first.title = 'Visão geral';
+        }
+
+        // Em qualquer tela de projeto/tarefa, tira "Ferramentas" da trilha para
+        // ninguem clicar ali e cair em Ferramentas.
+        var isProjectPage = (pluginOf(location.pathname) === 'ativacentral' && fileOf(location.pathname) === 'projects.php')
+            || (!pluginOf(location.pathname) && /^project/.test(frontBase(location.pathname)));
+        if (isProjectPage && data.projects) {
+            Array.prototype.forEach.call(bar.querySelectorAll('.breadcrumb .breadcrumb-item'), function (item, index) {
+                if (index === 0) {
+                    return;
+                }
+                var link = item.querySelector('a');
+                if (!link) {
+                    return;
+                }
+                var href = link.getAttribute('href') || '';
+                var text = link.textContent.trim().toLowerCase();
+                if (href.indexOf('hub.php?s=tools') !== -1 || text === 'ferramentas' || text === 'tools') {
+                    item.remove();
+                } else if (/\/front\/project\.php/i.test(href) || text === 'projetos') {
+                    link.href = data.projects;
+                }
+            });
         }
 
         var search = bar.querySelector('#global-search');

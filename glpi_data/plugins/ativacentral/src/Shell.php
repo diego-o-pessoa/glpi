@@ -61,7 +61,7 @@ final class Shell
             return;
         }
         $tags = [self::meta(self::clientData())];
-        if (!self::isNativeHome() && empty($_SESSION[self::SESSION_BRAND])) {
+        if (!self::isNativeHome() && !self::isNativeProjects() && empty($_SESSION[self::SESSION_BRAND])) {
             // Animacao de entrada da marca: so na primeira pagina da sessao.
             $_SESSION[self::SESSION_BRAND] = 1;
             $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::assetUrl('css/brand-intro.css')]];
@@ -71,6 +71,9 @@ final class Shell
             // consegue redirecionar no servidor nesta fase, entao a propria
             // pagina manda o navegador para la antes de desenhar qualquer coisa.
             $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::url('/front/home.php')]];
+            $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
+        } elseif (self::isNativeProjects()) {
+            $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::url('/front/projects.php')]];
             $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
         }
         $PLUGIN_HOOKS[Hooks::ADD_HEADER_TAG]['ativacentral'] = $tags;
@@ -171,6 +174,7 @@ final class Shell
         return [
             // Quem so tem paineis nao tem "Visao geral": o shell.js leva ao painel dele.
             'home'      => self::panelOnly() ? '' : self::url('/front/home.php'),
+            'projects'  => (\Project::canView() || \ProjectTask::canView()) ? self::url('/front/projects.php') : '',
             'panelOnly' => self::panelOnly(),
             'helpdesk'  => self::glpiUrl(Nav::hubUrl('helpdesk')),
             'classic'   => self::url('/front/toggle.php?mode=classic'),
@@ -217,6 +221,19 @@ final class Shell
         // embed: painel incorporado; redirect: link direto apos o login;
         // ac_native: a pessoa pediu os paineis nativos do GLPI.
         return !isset($_GET['embed']) && !isset($_GET['redirect']) && !isset($_GET['ac_native']);
+    }
+
+    /** Lista nativa de projetos do GLPI, redirecionada para a nova tela do Ativa Central. */
+    private static function isNativeProjects(): bool
+    {
+        if (!\Project::canView() && !\ProjectTask::canView()) {
+            return false;
+        }
+        $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+        if (preg_match('#/front/project\.php$#i', $path) !== 1) {
+            return false;
+        }
+        return !isset($_GET['embed']) && !isset($_GET['ac_native']);
     }
 
     private static function forceVerticalLayout(): void

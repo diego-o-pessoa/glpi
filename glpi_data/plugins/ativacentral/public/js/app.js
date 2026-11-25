@@ -747,11 +747,289 @@
         return node;
     }
 
+    // ------------------------------------------------------------------
+    // Projetos (Etapa 1)
+    // ------------------------------------------------------------------
+    var projectsBody = null;
+    var projectsState = { filter: 'all', query: '' };
+
+    function projectsView() {
+        var urls = data.urls || {};
+
+        var actions = el('div', 'ac-actions');
+        if (data.can && data.can.tasks && urls.my_tasks) {
+            var myTasks = anchor(urls.my_tasks, 'ac-btn');
+            myTasks.appendChild(icon('ti-checklist'));
+            myTasks.appendChild(document.createTextNode('Minhas tarefas'));
+            actions.appendChild(myTasks);
+        }
+
+        refreshButton = el('button', 'ac-btn');
+        refreshButton.type = 'button';
+        refreshButton.appendChild(icon('ti-refresh'));
+        refreshButton.appendChild(document.createTextNode('Atualizar'));
+        refreshButton.addEventListener('click', function () { refreshProjects(); });
+        actions.appendChild(refreshButton);
+
+        if (data.can && data.can.create && urls['new']) {
+            var create = anchor(urls['new'], 'ac-btn is-primary');
+            create.appendChild(icon('ti-plus'));
+            create.appendChild(document.createTextNode('Novo projeto'));
+            actions.appendChild(create);
+        }
+
+        root.innerHTML = '';
+        root.appendChild(pageHead('Ativa Central · Workspace', heading(1, 'ac-title', 'Projetos'),
+            'Acompanhe entregas, prazos e tarefas da equipe.', actions));
+
+        projectsBody = el('div');
+        root.appendChild(projectsBody);
+        drawProjects(false);
+    }
+
+    function refreshProjects() {
+        var urls = data.urls || {};
+        if (!urls.data) {
+            return;
+        }
+        if (refreshButton) { refreshButton.classList.add('is-loading'); }
+        fetch(urls.data, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (response) {
+            return response.json();
+        }).then(function (fresh) {
+            if (!fresh || !fresh.ok) {
+                throw new Error((fresh && fresh.message) || 'resposta inválida');
+            }
+            fresh.urls = urls;
+            data = fresh;
+            drawProjects(true);
+        }).catch(function (error) {
+            if (window.glpi_toast_error) {
+                window.glpi_toast_error('Não foi possível atualizar os projetos: ' + error.message);
+            }
+        }).then(function () {
+            if (refreshButton) { refreshButton.classList.remove('is-loading'); }
+        });
+    }
+
+    function projectsKpiRow(quiet) {
+        var k = data.kpis || {};
+        var urls = data.urls || {};
+        var row = el('div', 'ac-grid is-kpis');
+
+        var active = k.active || {};
+        var activeNote = el('div', 'ac-kpi-note', num(active.total) + (active.total === 1 ? ' projeto cadastrado' : ' projetos cadastrados'));
+        row.appendChild(kpi(0, 'is-blue', 'Projetos ativos', 'ti-layout-kanban', active.value, activeNote, active.progress, '', quiet));
+
+        var running = k.running || {};
+        var runningNote = el('div', 'ac-kpi-note', running.value > 0 ? 'com andamento ativo' : 'nenhum em execução');
+        row.appendChild(kpi(1, 'is-orange', 'Em execução', 'ti-player-play', running.value, runningNote, running.progress, '', quiet));
+
+        var myTasks = k.my_tasks || {};
+        var myTasksNote = el('div', 'ac-kpi-note', num(myTasks.total) + ' atribuídas no total');
+        row.appendChild(kpi(2, 'is-violet', 'Minhas tarefas', 'ti-checklist',
+            (data.can && data.can.tasks) ? myTasks.value : null, myTasksNote, myTasks.progress,
+            (data.can && data.can.tasks) ? urls.my_tasks : '', quiet));
+
+        var done = k.done || {};
+        var doneNote = el('div', 'ac-kpi-note', done.value > 0 ? 'entregas finalizadas' : 'nenhum finalizado ainda');
+        row.appendChild(kpi(3, 'is-green', 'Concluídos', 'ti-circle-check', done.value, doneNote, done.progress, '', quiet));
+
+        return row;
+    }
+
+    function drawProjects(quiet) {
+        root.classList.toggle('is-quiet', !!quiet);
+        projectsBody.innerHTML = '';
+        projectsBody.appendChild(projectsKpiRow(quiet));
+
+        var list = data.projects || [];
+        var counts = {
+            all:      list.length,
+            running:  list.filter(function (p) { return p.bucket === 'running'; }).length,
+            planning: list.filter(function (p) { return p.bucket === 'planning'; }).length,
+            done:     list.filter(function (p) { return p.bucket === 'done'; }).length,
+            mine:     list.filter(function (p) { return !!p.mine; }).length
+        };
+
+        var toolbar = rise(el('div', 'ac-proj-toolbar'), 6);
+        var pills = el('div', 'ac-pills');
+        [
+            ['all', 'Todos'],
+            ['running', 'Em execução'],
+            ['planning', 'Planejamento'],
+            ['done', 'Concluídos'],
+            ['mine', 'Meus projetos']
+        ].forEach(function (spec) {
+            var btn = el('button', 'ac-pill' + (projectsState.filter === spec[0] ? ' is-active' : ''));
+            btn.type = 'button';
+            btn.setAttribute('data-filter', spec[0]);
+            btn.appendChild(document.createTextNode(spec[1]));
+            btn.appendChild(el('span', '', ' (' + num(counts[spec[0]]) + ')'));
+            btn.addEventListener('click', function () {
+                projectsState.filter = spec[0];
+                Array.prototype.forEach.call(pills.querySelectorAll('.ac-pill'), function (node) {
+                    node.classList.toggle('is-active', node.getAttribute('data-filter') === projectsState.filter);
+                });
+                filterProjectCards();
+            });
+            pills.appendChild(btn);
+        });
+        toolbar.appendChild(pills);
+
+        var wrap = el('label', 'ac-filter');
+        wrap.appendChild(icon('ti-search'));
+        var search = el('input');
+        search.type = 'search';
+        search.value = projectsState.query;
+        search.placeholder = 'Filtrar projetos…';
+        search.setAttribute('aria-label', 'Filtrar projetos');
+        search.addEventListener('input', function () {
+            projectsState.query = search.value;
+            filterProjectCards();
+        });
+        wrap.appendChild(search);
+        toolbar.appendChild(wrap);
+        projectsBody.appendChild(toolbar);
+
+        var grid = el('div', 'ac-grid is-projects');
+        var cards = [];
+        list.forEach(function (project, index) {
+            var card = projectCard(project);
+            grid.appendChild(rise(card, Math.min(index + 7, 18)));
+            cards.push({
+                node: card,
+                project: project,
+                text: (project.name + ' ' + (project.desc || '') + ' ' + (project.code || '') + ' ' + (project.state || '')).toLowerCase()
+            });
+        });
+        projectsBody.appendChild(grid);
+
+        var nomatch = el('div', 'ac-panel');
+        nomatch.style.display = 'none';
+        var nomatchBody = el('div', 'ac-panel-body');
+        nomatchBody.appendChild(empty('Nenhum projeto encontrado para este filtro.', 'ti-folder-off'));
+        nomatch.appendChild(nomatchBody);
+        projectsBody.appendChild(nomatch);
+
+        function filterProjectCards() {
+            var term = projectsState.query.trim().toLowerCase();
+            var shown = 0;
+            cards.forEach(function (entry) {
+                var p = entry.project;
+                var byTab = projectsState.filter === 'all'
+                    || (projectsState.filter === 'mine' ? !!p.mine : p.bucket === projectsState.filter);
+                var byTerm = term === '' || entry.text.indexOf(term) !== -1;
+                var visible = byTab && byTerm;
+                entry.node.classList.toggle('is-hidden', !visible);
+                if (visible) { shown++; }
+            });
+            grid.style.display = shown === 0 ? 'none' : '';
+            nomatch.style.display = shown === 0 ? '' : 'none';
+        }
+        filterProjectCards();
+
+        var foot = el('div', 'ac-foot');
+        foot.appendChild(el('span', '', 'Atualizado às ' + (data.updated || '--:--') + ' · clique em um projeto para acompanhar e gerenciar'));
+        if (data.urls && data.urls['native']) {
+            var native = anchor(data.urls['native'], '', 'Lista clássica do GLPI ');
+            native.appendChild(icon('ti-arrow-narrow-right'));
+            foot.appendChild(native);
+        }
+        projectsBody.appendChild(foot);
+    }
+
+    function projectCard(project) {
+        var isDone = project.bucket === 'done';
+        var node = panel('ac-card ac-proj-card' + (isDone ? ' is-done' : ''));
+        var cover = anchor(project.url, 'ac-card-link');
+        cover.setAttribute('aria-label', project.name);
+        node.appendChild(cover);
+
+        var badges = el('div', 'ac-proj-badges');
+        var tags = el('div', 'ac-proj-tags');
+
+        if (project.priority_label) {
+            tags.appendChild(el('span', 'ac-tag ' + (project.priority_tone || 'is-muted'), project.priority_label));
+        }
+        var stateTag = el('span', 'ac-tag ' + (isDone ? 'is-green' : (project.bucket === 'planning' ? 'is-blue' : 'is-orange')), project.state);
+        if (project.state_color) {
+            stateTag.style.borderLeft = '3px solid ' + project.state_color;
+        }
+        tags.appendChild(stateTag);
+        badges.appendChild(tags);
+
+        if (project.entity) {
+            badges.appendChild(el('span', 'ac-proj-entity', project.entity));
+        }
+        node.appendChild(badges);
+
+        node.appendChild(heading(3, 'ac-proj-title', project.name));
+        node.appendChild(el('div', 'ac-proj-desc', project.desc || 'Sem descrição cadastrada para este projeto.'));
+
+        var progress = el('div', 'ac-proj-progress');
+        var taskText = num(project.tasks_done) + ' de ' + num(project.tasks_total) + ' ' + (project.tasks_total === 1 ? 'tarefa' : 'tarefas');
+        var label = el('div', 'ac-proj-progress-label');
+        label.appendChild(el('b', '', project.percent + '% concluído'));
+        label.appendChild(document.createTextNode(' (' + taskText + ')'));
+        progress.appendChild(label);
+
+        var bar = el('div', 'ac-bar');
+        var fill = el('span');
+        fill.style.setProperty('--ac-w', Math.max(0, Math.min(100, Number(project.percent) || 0)) + '%');
+        bar.appendChild(fill);
+        progress.appendChild(bar);
+        node.appendChild(progress);
+
+        var foot = el('div', 'ac-proj-foot');
+        var meta = el('div', 'ac-proj-meta');
+
+        var dateLabel = 'Sem prazo';
+        if (project.start_date && project.end_date) {
+            dateLabel = project.start_date + ' → ' + project.end_date;
+        } else if (project.start_date) {
+            dateLabel = project.start_date;
+        } else if (project.end_date) {
+            dateLabel = 'Até ' + project.end_date;
+        }
+        var dateChip = el('span', 'ac-proj-date');
+        dateChip.appendChild(icon('ti-calendar'));
+        dateChip.appendChild(document.createTextNode(dateLabel));
+        meta.appendChild(dateChip);
+
+        if (project.team && project.team.length) {
+            var avatars = el('div', 'ac-avatars');
+            project.team.slice(0, 4).forEach(function (member, idx) {
+                var chip = el('span', 'ac-avatar-mini ' + TONES[idx % TONES.length], initials(member.name));
+                chip.title = member.name;
+                avatars.appendChild(chip);
+            });
+            if (project.team.length > 4) {
+                var more = el('span', 'ac-avatar-mini is-more', '+' + (project.team.length - 4));
+                more.title = project.team.slice(4).map(function (m) { return m.name; }).join(', ');
+                avatars.appendChild(more);
+            }
+            meta.appendChild(avatars);
+        }
+        foot.appendChild(meta);
+
+        var cta = el('span', 'ac-cta', 'Abrir projeto');
+        cta.appendChild(icon('ti-arrow-narrow-right'));
+        foot.appendChild(cta);
+        node.appendChild(foot);
+
+        return node;
+    }
+
     try {
         if (view === 'home') {
             home();
         } else if (view === 'hub') {
             hub();
+        } else if (view === 'projects') {
+            projectsView();
         }
     } catch (error) {
         root.textContent = 'Não foi possível montar esta tela. Recarregue a página.';
