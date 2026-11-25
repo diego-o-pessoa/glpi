@@ -84,6 +84,7 @@ sort($departments);
         .topbar { display: flex; justify-content: space-between; align-items: center; background-color: #FFFFFF; padding: 0 40px; height: 70px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
         .topbar-left { display: flex; align-items: center; }
         .logo { display: flex; align-items: center; font-weight: 800; font-size: 20px; color: #0b457e; margin-right: 40px; }
+        .nav-links { display: flex; gap: 30px; }
         .nav-links a { display: flex; align-items: center; padding: 25px 0; color: #555; font-weight: 600; font-size: 14px; border-bottom: 2px solid transparent; }
         .nav-links a.active { color: #333; border-bottom: 2px solid #333; }
         .nav-links a i { margin-right: 8px; }
@@ -145,7 +146,8 @@ sort($departments);
                 <img src="<?=$CFG_GLPI['root_doc']?>/plugins/painel/front/logo.php" alt="Ativa Locação" style="height: 45px;">
             </div>
             <nav class="nav-links">
-                <a href="<?=$CFG_GLPI['root_doc']?>/plugins/painel/front/painel.php"><i class="fa-regular fa-window-maximize"></i> Chamados</a>
+                <a href="<?=$CFG_GLPI['root_doc']?>/"><i class="fa-regular fa-window-maximize"></i> Chamados</a>
+                <a href="<?=$CFG_GLPI['root_doc']?>/front/helpdesk.public.php?projects=1"><i class="fa-solid fa-diagram-project"></i> Projetos</a>
             </nav>
         </div>
         <div class="topbar-right">

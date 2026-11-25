@@ -32,7 +32,7 @@ function plugin_painel_post_init() {
             strpos($uri, '/Helpdesk') !== false ||
             strpos($uri, '/ServiceCatalog') !== false ||
             (strpos($uri, 'front/ticket.php') !== false && strpos($uri, 'id=') === false) ||
-            (strpos($uri, 'front/helpdesk.public.php') !== false && strpos($uri, 'create_ticket') === false && strpos($uri, 'show_form') === false && strpos($uri, 'custom_profile') === false)) {
+            (strpos($uri, 'front/helpdesk.public.php') !== false && strpos($uri, 'create_ticket') === false && strpos($uri, 'show_form') === false && strpos($uri, 'custom_profile') === false && strpos($uri, 'projects') === false && strpos($uri, 'project_id') === false)) {
             
             if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 header("Location: " . $CFG_GLPI['root_doc'] . "/");
@@ -40,8 +40,18 @@ function plugin_painel_post_init() {
             }
         }
 
-        // Se a requisição já for na raiz limpa do GLPI (/Helpdesk/ ou /Helpdesk/index.php)
+        // Redireciona telas nativas de projeto no Self-Service para o portal simplificado
         $clean_uri = strtok($uri, '?'); // Remove query strings para a verificação
+        if (preg_match('#/front/project\.php$#i', $clean_uri) === 1) {
+            if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+                header("Location: " . $CFG_GLPI['root_doc'] . "/front/helpdesk.public.php?projects=1");
+                exit();
+            }
+        }
+        if (preg_match('#/front/project\.form\.php$#i', $clean_uri) === 1 && isset($_GET['id'])) {
+            include GLPI_ROOT . "/plugins/painel/front/project_view.php";
+            exit();
+        }
         
         if (strpos($clean_uri, 'front/ticket.form.php') !== false) {
             // Renderiza a visualização do chamado internamente mantendo a URL original
@@ -70,6 +80,16 @@ function plugin_painel_post_init() {
                 exit;
             }
             include GLPI_ROOT . "/plugins/painel/front/profile.php";
+            exit();
+        }
+
+        if (strpos($uri, 'front/helpdesk.public.php') !== false && isset($_GET['projects'])) {
+            include GLPI_ROOT . "/plugins/painel/front/projects.php";
+            exit();
+        }
+
+        if (strpos($uri, 'front/helpdesk.public.php') !== false && isset($_GET['project_id'])) {
+            include GLPI_ROOT . "/plugins/painel/front/project_view.php";
             exit();
         }
         

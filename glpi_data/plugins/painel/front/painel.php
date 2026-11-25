@@ -1,28 +1,19 @@
 <?php
 if (!defined('GLPI_ROOT')) {
-    include ("../../../inc/includes.php");
+    include("../../../inc/includes.php");
 }
 
+require_once __DIR__ . '/_common.php';
 
-
-// Verificação de segurança nativa do GLPI
-Session::checkLoginUser();
-
-$user = new User();
-$user->getFromDB(Session::getLoginUserID());
-$firstname = $user->fields['firstname'];
-$realname = $user->fields['realname'];
-$display_name = trim($firstname) ? trim($firstname) : (trim($realname) ? trim($realname) : $user->fields['name']);
-
-// Pega apenas o primeiro nome e remove " - Ativa Locação" caso venha junto
-$primeiro_nome = explode(' ', $display_name)[0];
-$primeiro_nome = explode('-', $primeiro_nome)[0];
+$ctx = painel_user_context();
+$uid = $ctx['uid'];
 
 global $DB;
-$uid = Session::getLoginUserID();
 
 $tickets_abertos = [];
 $tickets_fechados = [];
+$waiting_first_count = 0;
+$answered_count = 0;
 
 $iterator = $DB->request([
     'SELECT' => ['t.id', 't.name', 't.status', 't.date', 't.date_mod', 't.is_deleted'],
@@ -31,89 +22,69 @@ $iterator = $DB->request([
         'glpi_tickets_users AS tu' => [
             'ON' => [
                 'tu' => 'tickets_id',
-                't'  => 'id'
-            ]
-        ]
+                't'  => 'id',
+            ],
+        ],
     ],
     'WHERE'  => [
         'tu.users_id' => $uid,
-        'tu.type'     => 1
+        'tu.type'     => 1,
     ],
-    'ORDER'  => 't.date DESC'
+    'ORDER'  => 't.date DESC',
 ]);
 
 foreach ($iterator as $row) {
-    if ($row['is_deleted'] == 1) {
+    if ((int) $row['is_deleted'] === 1) {
         $row['status_display'] = 'Excluído';
         $row['status_class'] = 'status-deleted';
         $tickets_fechados[] = $row;
+        continue;
+    }
+
+    $status = (int) $row['status'];
+    $row['status_display'] = Ticket::getStatus($status);
+    $row['status_class'] = 'status-' . $status;
+
+    if ($status < 5) {
+        if ($status === 1) {
+            $waiting_first_count++;
+        }
+        $last_followup = $DB->request([
+            'SELECT' => ['users_id'],
+            'FROM'   => 'glpi_itilfollowups',
+            'WHERE'  => [
+                'itemtype' => 'Ticket',
+                'items_id' => $row['id'],
+            ],
+            'ORDER'  => 'date DESC',
+            'LIMIT'  => 1,
+        ])->current();
+
+        if ($last_followup && (int) $last_followup['users_id'] !== $uid) {
+            $row['status_display'] = 'Respondida';
+            $row['status_class'] = 'status-answered';
+            $answered_count++;
+        }
+
+        $tickets_abertos[] = $row;
     } else {
-        $row['status_display'] = Ticket::getStatus($row['status']);
-        $row['status_class'] = 'status-' . intval($row['status']);
-        
-        if ($row['status'] < 5) {
-            // Verifica quem enviou a última mensagem
-            $last_followup = $DB->request([
-                'SELECT' => ['users_id'],
-                'FROM'   => 'glpi_itilfollowups',
-                'WHERE'  => [
-                    'itemtype' => 'Ticket',
-                    'items_id' => $row['id']
-                ],
-                'ORDER'  => 'date DESC',
-                'LIMIT'  => 1
-            ])->current();
-            
-            if ($last_followup && $last_followup['users_id'] != $uid) {
-                $row['status_display'] = 'Respondida';
-                $row['status_class'] = 'status-answered';
-            }
-            
-            $tickets_abertos[] = $row;
-        } else {
-            $tickets_fechados[] = $row;
-        }
-    }
-    $firstname = $user->fields['firstname'];
-    $realname = $user->fields['realname'];
-    $display_name = trim($firstname) ? trim($firstname) : (trim($realname) ? trim($realname) : $user->fields['name']);
-    $primeiro_nome = explode(' ', $display_name)[0];
-    $primeiro_nome = explode('-', $primeiro_nome)[0];
-    
-    $picture = $user->fields['picture'] ?? '';
-    $avatar_url = $picture ? $CFG_GLPI['root_doc'] . '/front/document.send.php?file=_pictures/' . $picture : '';
-}
-
-// Verifica se o usuário tem perfil de Admin na sessão
-$has_super_admin = false;
-$super_admin_prof_id = 0;
-if (isset($_SESSION['glpiprofiles'])) {
-    foreach ($_SESSION['glpiprofiles'] as $id => $prof) {
-        if (stripos($prof['name'], 'admin') !== false) {
-            $has_super_admin = true;
-            $super_admin_prof_id = $id;
-            break;
-        }
-    }
-    if (!$has_super_admin) {
-        foreach ($_SESSION['glpiprofiles'] as $id => $prof) {
-            if (strcasecmp(trim((string) $prof['name']), 'Ativa - Gestor') === 0) {
-                $has_super_admin = true;
-                $super_admin_prof_id = $id;
-                break;
-            }
-        }
+        $tickets_fechados[] = $row;
     }
 }
 
-if (isset($_GET['switch_to_admin']) && $has_super_admin) {
-    Session::changeProfile($super_admin_prof_id);
-    header("Location: " . $CFG_GLPI['root_doc'] . "/front/central.php");
-    exit();
-}
+$open_count = count($tickets_abertos);
+$closed_count = count($tickets_fechados);
+$total_tickets = $open_count + $closed_count;
 
-// Verifica se os tickets não estão vazios
-$total_tickets = count($tickets_abertos) + count($tickets_fechados);
+$projects_data = painel_user_projects_data($uid, $ctx['my_groups']);
+$projects_total = count($projects_data['projects']);
+$projects_active = (int) ($projects_data['kpis']['active']['value'] ?? 0);
+$my_pending_tasks = (int) ($projects_data['kpis']['my_tasks']['value'] ?? 0);
+
+$open_progress = $total_tickets > 0 ? (int) round(100 * $open_count / $total_tickets) : 0;
+$answered_progress = $open_count > 0 ? (int) round(100 * $answered_count / $open_count) : 0;
+$closed_progress = $total_tickets > 0 ? (int) round(100 * $closed_count / $total_tickets) : 0;
+$projects_progress = $projects_total > 0 ? (int) round(100 * $projects_active / $projects_total) : 0;
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -127,76 +98,57 @@ $total_tickets = count($tickets_abertos) + count($tickets_fechados);
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { background-color: #F7F8FA; color: #333; }
         a { text-decoration: none; color: inherit; }
-        
+
         .topbar { display: flex; justify-content: space-between; align-items: center; background-color: #FFFFFF; padding: 0 40px; height: 70px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
         .topbar-left { display: flex; align-items: center; }
         .logo { display: flex; align-items: center; font-weight: 800; font-size: 20px; color: #0b457e; margin-right: 40px; }
-        
+
         .nav-links { display: flex; gap: 30px; }
-        .nav-links a { display: flex; align-items: center; padding: 25px 0; color: #555; font-weight: 600; font-size: 14px; border-bottom: 2px solid transparent; }
-        .nav-links a.active { color: #333; border-bottom: 2px solid #333; }
+        .nav-links a { display: flex; align-items: center; padding: 24px 0; color: #555; font-weight: 600; font-size: 14px; border-bottom: 2px solid transparent; transition: color 0.2s; }
+        .nav-links a:hover { color: #0b457e; }
+        .nav-links a.active { color: #1A1F36; border-bottom: 2px solid #1A1F36; }
         .nav-links a i { margin-right: 8px; }
-        
+
         .topbar-right { display: flex; align-items: center; }
         .btn-new-ticket { background-color: #0b457e; color: #FFF; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; transition: background 0.2s; margin-right: 20px; }
         .btn-new-ticket:hover { background-color: #08335e; }
-        
+
         .user-profile { display: flex; align-items: center; position: relative; cursor: pointer; }
         .avatar { width: 36px; height: 36px; border-radius: 50%; background-color: #E2E4E8; display: flex; align-items: center; justify-content: center; color: #666; margin-right: 12px; font-size: 14px; background-size: cover; background-position: center; overflow: hidden; }
         .user-name { font-size: 14px; color: #333; }
-        
+
         .dropdown-menu { display: none; position: absolute; top: 45px; right: 0; background-color: #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.08); border-radius: 8px; padding: 10px 0; min-width: 220px; z-index: 100; border: 1px solid #EEE; }
         .dropdown-menu::before { content: ''; position: absolute; top: -20px; left: 0; width: 100%; height: 20px; }
         .user-profile:hover .dropdown-menu { display: block; }
         .dropdown-menu a { display: block; padding: 12px 20px; font-size: 14px; color: #444; font-weight: 500; }
         .dropdown-menu a:hover { background-color: #F7F8FA; color: #0b457e; }
         .dropdown-menu i { margin-right: 12px; width: 16px; text-align: center; color: #888; }
-        
-        .container { max-width: 1300px; margin: 40px auto; padding: 0 30px; }
-        .header-action { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+
+        .container { max-width: 1300px; margin: 36px auto; padding: 0 30px; }
+        .header-action { margin-bottom: 24px; }
         .header-action h1 { font-size: 28px; font-weight: 800; color: #1A1F36; letter-spacing: -0.5px; }
-        
-        .btn-novo-chamado { background-color: #555A6B; color: #FFF; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .btn-novo-chamado:hover { background-color: #3E4352; transform: translateY(-1px); box-shadow: 0 6px 8px rgba(0,0,0,0.08); }
+        .header-subtitle { margin-top: 6px; color: #7a85a3; font-size: 14px; }
+
+        <?= painel_kpi_styles() ?>
+
         .btn-novo-chamado-small { background-color: #555A6B; color: #FFF; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; transition: background 0.2s; display: inline-block; margin-top: 20px; }
         .btn-novo-chamado-small:hover { background-color: #3E4352; }
-        
-        .tickets-list { display: flex; flex-direction: column; gap: 15px; }
-        .ticket-card { display: flex; align-items: center; justify-content: space-between; background-color: #FFFFFF; padding: 20px 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); transition: transform 0.2s, box-shadow 0.2s; border: 1px solid #F0F0F0; }
-        .ticket-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.08); border-color: #E2E8F0; }
-        
-        .ticket-main { flex: 1; }
-        .ticket-id { font-size: 12px; font-weight: 700; color: #888; margin-bottom: 5px; }
-        .ticket-title { font-size: 16px; font-weight: 700; color: #1A1F36; margin-bottom: 8px; }
-        .ticket-meta { display: flex; gap: 20px; font-size: 13px; color: #666; font-weight: 500; }
-        .ticket-meta span { display: flex; align-items: center; }
-        .ticket-meta i { margin-right: 6px; color: #A0AEC0; }
-        
-        .ticket-status { font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .status-new { background-color: #FEF3C7; color: #D97706; }
-        .status-processing { background-color: #E0E7FF; color: #4338CA; }
-        .status-solved { background-color: #D1FAE5; color: #059669; }
-        .status-closed { background-color: #F3F4F6; color: #4B5563; }
-        .status-answered { background-color: #059669; color: #FFF; }
-        
-        .empty-state { text-align: center; padding: 60px 20px; background: #FFF; border-radius: 12px; border: 1px dashed #D1D5DB; }
-        .empty-state i { font-size: 48px; color: #D1D5DB; margin-bottom: 20px; }
-        .empty-state h3 { font-size: 18px; color: #374151; margin-bottom: 10px; }
-        .empty-state p { color: #6B7280; font-size: 14px; }
 
-        .tabs { display: flex; margin-bottom: 20px; }
-        .tab { padding: 12px 20px; font-size: 13px; font-weight: 700; color: #888; cursor: pointer; border-radius: 6px; transition: all 0.2s; }
-        .tab.active { background-color: #FFFFFF; color: #333; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
-        .tab-content { display: none; background-color: #FFFFFF; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); padding: 40px; min-height: 600px; border: 1px solid #F0F0F0; }
+        .tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+        .tab { padding: 11px 20px; font-size: 13px; font-weight: 700; color: #7a85a3; cursor: pointer; border-radius: 10px; transition: all 0.2s; }
+        .tab:hover { color: #1a2340; background: rgba(74, 108, 247, 0.06); }
+        .tab.active { background-color: #FFFFFF; color: #1a2340; box-shadow: 0 2px 10px rgba(0,0,0,0.04); border: 1px solid #e9ecf4; }
+        .tab-content { display: none; background-color: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 12px 30px -20px rgba(16, 24, 40, 0.22); padding: 32px; min-height: 440px; border: 1px solid #e9ecf4; }
         .tab-content.active { display: block; }
-        .empty-state { text-align: center; padding: 60px 0; }
-        .empty-state .illustration { margin-bottom: 30px; }
+        .empty-state { text-align: center; padding: 50px 0; }
+        .empty-state .illustration { margin-bottom: 24px; }
         .empty-state h3 { font-size: 20px; font-weight: 700; color: #1A1F36; margin-bottom: 12px; }
         .empty-state p { font-size: 15px; color: #666; line-height: 1.6; }
+
         .tickets-list { width: 100%; }
-        .ticket-header { display: flex; padding: 15px 25px; border-bottom: 2px solid #F4F5F7; text-transform: uppercase; letter-spacing: 0.5px; }
-        .ticket-header > div { font-size: 13px !important; font-weight: 700 !important; color: #6B7280 !important; }
-        .ticket-card { display: flex; align-items: center; padding: 20px 25px; border-bottom: 1px solid #F4F5F7; transition: all 0.2s; text-decoration: none; }
+        .ticket-header { display: flex; padding: 12px 20px; border-bottom: 2px solid #F4F5F7; text-transform: uppercase; letter-spacing: 0.5px; }
+        .ticket-header > div { font-size: 12px !important; font-weight: 700 !important; color: #6B7280 !important; }
+        .ticket-card { display: flex; align-items: center; padding: 18px 20px; border-bottom: 1px solid #F4F5F7; transition: all 0.2s; text-decoration: none; }
         .ticket-card:hover { background-color: #FAFBFC; transform: translateX(2px); }
         .ticket-card:last-child { border-bottom: none; }
         .t-id { width: 90px; font-weight: 700; color: #555A6B; font-size: 14px; }
@@ -213,51 +165,90 @@ $total_tickets = count($tickets_abertos) + count($tickets_fechados);
     </style>
 </head>
 <body>
-    <div class="topbar">
-        <div class="topbar-left">
-            <div class="logo">
-                <img src="<?=$CFG_GLPI['root_doc']?>/plugins/painel/front/logo.php" alt="Ativa Locação" style="height: 45px;">
-            </div>
-            <nav class="nav-links">
-                <a href="<?=$CFG_GLPI['root_doc']?>/plugins/painel/front/painel.php" class="active"><i class="fa-regular fa-window-maximize"></i> Chamados</a>
-            </nav>
-        </div>
-        <div class="topbar-right">
-            <a href="<?=$CFG_GLPI['root_doc']?>/front/helpdesk.public.php?create_ticket=1" class="btn-new-ticket">Abrir Chamado</a>
-            <div class="user-profile">
-                <div class="avatar" style="<?= isset($avatar_url) && $avatar_url ? 'background-image: url('.$avatar_url.');' : '' ?>"><?= isset($avatar_url) && $avatar_url ? '' : '<i class="fa-solid fa-user"></i>' ?></div>
-                <span class="user-name">Olá, <strong><?= htmlspecialchars($primeiro_nome) ?></strong> <i class="fa-solid fa-caret-down" style="font-size: 10px; margin-left: 5px; color: #888;"></i></span>
-                
-                <div class="dropdown-menu">
-                    <?php if ($has_super_admin): ?>
-                        <a href="?switch_to_admin=1"><i class="fa-solid fa-user-shield"></i> Trocar para Admin</a>
-                    <?php endif; ?>
-                    <a href="<?=$CFG_GLPI['root_doc']?>/plugins/painel/front/profile.php"><i class="fa-solid fa-gear"></i> Minhas configurações</a>
-                    <a href="<?=$CFG_GLPI['root_doc']?>/front/logout.php"><i class="fa-solid fa-arrow-right-from-bracket"></i> Sair</a>
-                </div>
-            </div>
-        </div>
-    </div>
+    <?php painel_render_topbar('chamados', $ctx, true, '?switch_to_admin=1'); ?>
 
     <div class="container">
         <div class="header-action">
             <h1>Chamados</h1>
+            <p class="header-subtitle">Acompanhe seus chamados e projetos em um só lugar.</p>
         </div>
 
-        <div class="content-box">
+        <div class="ac-kpi-grid">
+            <button type="button" class="ac-kpi-card is-blue" data-jump-tab="abertos">
+                <div class="ac-kpi-top">
+                    <span class="ac-kpi-label">Chamados em aberto</span>
+                    <span class="ac-kpi-tile"><i class="fa-solid fa-ticket"></i></span>
+                </div>
+                <div class="ac-kpi-value"><?= $open_count ?></div>
+                <div class="ac-kpi-note">
+                    <?php if ($waiting_first_count > 0): ?>
+                        <b><?= $waiting_first_count ?></b> aguardando atendimento
+                    <?php elseif ($open_count > 0): ?>
+                        todos em atendimento
+                    <?php else: ?>
+                        nenhum chamado aberto
+                    <?php endif; ?>
+                </div>
+                <div class="ac-kpi-bar"><span style="width: <?= $open_progress ?>%"></span></div>
+            </button>
+
+            <button type="button" class="ac-kpi-card is-orange" data-jump-tab="abertos">
+                <div class="ac-kpi-top">
+                    <span class="ac-kpi-label">Respondidos pela T.I.</span>
+                    <span class="ac-kpi-tile"><i class="fa-regular fa-comment-dots"></i></span>
+                </div>
+                <div class="ac-kpi-value"><?= $answered_count ?></div>
+                <div class="ac-kpi-note">
+                    <?= $answered_count > 0 ? 'aguardando sua resposta' : 'nenhum aguardando resposta' ?>
+                </div>
+                <div class="ac-kpi-bar"><span style="width: <?= $answered_progress ?>%"></span></div>
+            </button>
+
+            <button type="button" class="ac-kpi-card is-green" data-jump-tab="fechados">
+                <div class="ac-kpi-top">
+                    <span class="ac-kpi-label">Chamados concluídos</span>
+                    <span class="ac-kpi-tile"><i class="fa-regular fa-circle-check"></i></span>
+                </div>
+                <div class="ac-kpi-value"><?= $closed_count ?></div>
+                <div class="ac-kpi-note">
+                    <?= $total_tickets > 0 ? 'de ' . $total_tickets . ' registrados' : 'finalizados até hoje' ?>
+                </div>
+                <div class="ac-kpi-bar"><span style="width: <?= $closed_progress ?>%"></span></div>
+            </button>
+
+            <a href="<?= htmlspecialchars(painel_projects_url()) ?>" class="ac-kpi-card is-violet">
+                <div class="ac-kpi-top">
+                    <span class="ac-kpi-label">Seus projetos</span>
+                    <span class="ac-kpi-tile"><i class="fa-solid fa-diagram-project"></i></span>
+                </div>
+                <div class="ac-kpi-value"><?= $projects_total ?></div>
+                <div class="ac-kpi-note">
+                    <?php if ($my_pending_tasks > 0): ?>
+                        <b><?= $my_pending_tasks ?></b> <?= $my_pending_tasks === 1 ? 'tarefa pendente' : 'tarefas pendentes' ?>
+                    <?php elseif ($projects_active > 0): ?>
+                        <?= $projects_active ?> em execução
+                    <?php else: ?>
+                        nenhum projeto vinculado
+                    <?php endif; ?>
+                </div>
+                <div class="ac-kpi-bar"><span style="width: <?= $projects_progress ?>%"></span></div>
+            </a>
+        </div>
+
+        <div class="content-box" id="chamados-box">
             <div class="tabs">
-                <div class="tab active" data-target="abertos">ABERTOS</div>
-                <div class="tab" data-target="fechados">FECHADOS</div>
+                <div class="tab active" data-target="abertos">ABERTOS (<?= $open_count ?>)</div>
+                <div class="tab" data-target="fechados">FECHADOS (<?= $closed_count ?>)</div>
             </div>
 
             <div class="tab-content active" id="tab-abertos">
-                <?php if (count($tickets_abertos) == 0): ?>
+                <?php if ($open_count === 0): ?>
                     <div class="empty-state">
                         <div class="illustration">
-                            <img src="<?=$CFG_GLPI['root_doc']?>/plugins/painel/front/logo.php" alt="Ativa Locação" style="max-width: 250px; height: auto; opacity: 0.8; margin-bottom: 20px;">
+                            <img src="<?=$CFG_GLPI['root_doc']?>/plugins/painel/front/logo.php" alt="Ativa Locação" style="max-width: 230px; height: auto; opacity: 0.85; margin-bottom: 16px;">
                         </div>
                         <h3>Nenhum chamado encontrado...</h3>
-                        <p>Você ainda não cadastrou nenhum chamado.<br>Cadastre um novo chamado para começar.</p>
+                        <p>Você ainda não cadastrou nenhum chamado aberto.<br>Cadastre um novo chamado para começar.</p>
                         <a href="<?=$CFG_GLPI['root_doc']?>/front/helpdesk.public.php?create_ticket=1" class="btn-novo-chamado-small">Criar Chamado Agora</a>
                     </div>
                 <?php else: ?>
@@ -268,7 +259,7 @@ $total_tickets = count($tickets_abertos) + count($tickets_fechados);
                             <div class="t-date">Data de Abertura</div>
                             <div class="t-status">Status</div>
                         </div>
-                        <?php foreach($tickets_abertos as $t): ?>
+                        <?php foreach ($tickets_abertos as $t): ?>
                             <a href="<?=$CFG_GLPI['root_doc']?>/front/ticket.form.php?id=<?=$t['id']?>" class="ticket-card">
                                 <div class="t-id">#<?=$t['id']?></div>
                                 <div class="t-title"><?=htmlspecialchars($t['name'])?></div>
@@ -281,10 +272,10 @@ $total_tickets = count($tickets_abertos) + count($tickets_fechados);
             </div>
 
             <div class="tab-content" id="tab-fechados">
-                <?php if (count($tickets_fechados) == 0): ?>
+                <?php if ($closed_count === 0): ?>
                     <div class="empty-state">
                         <div class="illustration">
-                            <img src="<?=$CFG_GLPI['root_doc']?>/plugins/painel/front/logo.php" alt="Ativa Locação" style="max-width: 250px; height: auto; opacity: 0.8; margin-bottom: 20px;">
+                            <img src="<?=$CFG_GLPI['root_doc']?>/plugins/painel/front/logo.php" alt="Ativa Locação" style="max-width: 230px; height: auto; opacity: 0.85; margin-bottom: 16px;">
                         </div>
                         <h3>Nenhum chamado fechado...</h3>
                         <p>Você não possui chamados finalizados ainda.</p>
@@ -297,7 +288,7 @@ $total_tickets = count($tickets_abertos) + count($tickets_fechados);
                             <div class="t-date">Data de Abertura</div>
                             <div class="t-status">Status</div>
                         </div>
-                        <?php foreach($tickets_fechados as $t): ?>
+                        <?php foreach ($tickets_fechados as $t): ?>
                             <a href="<?=$CFG_GLPI['root_doc']?>/front/ticket.form.php?id=<?=$t['id']?>" class="ticket-card">
                                 <div class="t-id">#<?=$t['id']?></div>
                                 <div class="t-title"><?=htmlspecialchars($t['name'])?></div>
@@ -308,10 +299,6 @@ $total_tickets = count($tickets_abertos) + count($tickets_fechados);
                     </div>
                 <?php endif; ?>
             </div>
-
-        </div>
-    </div>
-
         </div>
     </div>
 
@@ -320,13 +307,24 @@ $total_tickets = count($tickets_abertos) + count($tickets_fechados);
         const tabs = document.querySelectorAll('.tab');
         const tabContents = document.querySelectorAll('.tab-content');
 
+        function activateTab(target) {
+            tabs.forEach(t => t.classList.toggle('active', t.getAttribute('data-target') === target));
+            tabContents.forEach(c => c.classList.toggle('active', c.id === 'tab-' + target));
+        }
+
         tabs.forEach(tab => {
             tab.addEventListener('click', function() {
-                tabs.forEach(t => t.classList.remove('active'));
-                tabContents.forEach(c => c.classList.remove('active'));
-                this.classList.add('active');
-                const target = this.getAttribute('data-target');
-                document.getElementById('tab-' + target).classList.add('active');
+                activateTab(this.getAttribute('data-target'));
+            });
+        });
+
+        document.querySelectorAll('[data-jump-tab]').forEach(card => {
+            card.addEventListener('click', function() {
+                activateTab(this.getAttribute('data-jump-tab'));
+                const box = document.getElementById('chamados-box');
+                if (box) {
+                    box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
             });
         });
     });
