@@ -21,7 +21,6 @@ $data['urls'] = [
     'data'     => Shell::url('/front/projects.data.php'),
     'new'      => Session::haveRight(Project::$rightname, CREATE) ? Shell::glpiUrl('/front/project.form.php') : '',
     'my_tasks' => ProjectTask::canView() ? Shell::glpiUrl(ProjectTask::getMyTasksURL(false)) : '',
-    'native'   => Project::canView() ? Shell::glpiUrl('/front/project.php?ac_native=1') : '',
 ];
 
 Page::render('Projetos', 'ac_project', 'projects', 'projects', $data);

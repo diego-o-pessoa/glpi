@@ -44,9 +44,13 @@ final class Shell
             if (Settings::enabled() && self::isFullPageRequest()) {
                 // Visual classico so nesta sessao: atalho no menu do usuario para voltar.
                 $PLUGIN_HOOKS[Hooks::ADD_JAVASCRIPT]['ativacentral'] = [self::asset('js/classic.js')];
-                $PLUGIN_HOOKS[Hooks::ADD_HEADER_TAG]['ativacentral'] = [
-                    self::meta(['toggle' => self::url('/front/toggle.php?mode=new')]),
-                ];
+                $tags = [self::meta(['toggle' => self::url('/front/toggle.php?mode=new')])];
+                if (self::isNativeProjects()) {
+                    // Mesmo no visual classico, bloqueia acesso direto a lista antiga de projetos.
+                    $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::url('/front/projects.php')]];
+                    $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
+                }
+                $PLUGIN_HOOKS[Hooks::ADD_HEADER_TAG]['ativacentral'] = $tags;
             }
             return;
         }
@@ -223,7 +227,7 @@ final class Shell
         return !isset($_GET['embed']) && !isset($_GET['redirect']) && !isset($_GET['ac_native']);
     }
 
-    /** Lista nativa de projetos do GLPI, redirecionada para a nova tela do Ativa Central. */
+    /** Lista nativa de projetos do GLPI, bloqueada e redirecionada para a nova tela do Ativa Central. */
     private static function isNativeProjects(): bool
     {
         if (!\Project::canView() && !\ProjectTask::canView()) {
@@ -233,7 +237,7 @@ final class Shell
         if (preg_match('#/front/project\.php$#i', $path) !== 1) {
             return false;
         }
-        return !isset($_GET['embed']) && !isset($_GET['ac_native']);
+        return !isset($_GET['embed']);
     }
 
     private static function forceVerticalLayout(): void

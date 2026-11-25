@@ -51,7 +51,7 @@
     // ------------------------------------------------------------------
     function redirectHome() {
         var query = new URLSearchParams(location.search);
-        if (query.has('embed') || query.has('ac_native')) {
+        if (query.has('embed')) {
             return false;
         }
         if (/\/front\/project\.php$/i.test(location.pathname) && data.projects) {
@@ -61,7 +61,7 @@
             }
             return false;
         }
-        if (!/\/(front\/central\.php|Central)$/.test(location.pathname) || query.has('redirect')) {
+        if (query.has('ac_native') || !/\/(front\/central\.php|Central)$/.test(location.pathname) || query.has('redirect')) {
             return false;
         }
         // Perfil so com paineis (ex.: Ativa - Gestor): a pagina inicial do GLPI

@@ -17,8 +17,8 @@ namespace GlpiPlugin\Ativacentral;
  */
 final class Nav
 {
-    /** Secoes nativas do GLPI. */
-    private const CORE = ['assets', 'helpdesk', 'management', 'tools', 'plugins', 'admin', 'config', 'preference'];
+    /** Secoes nativas do GLPI (e chaves internas que nao viram item extra). */
+    private const CORE = ['assets', 'helpdesk', 'management', 'tools', 'plugins', 'admin', 'config', 'preference', 'ac_project_native'];
 
     /** Marcador (classe do icone) das linhas que sao titulo de secao. */
     public const SECTION_ICON = 'ac-section';
@@ -94,6 +94,7 @@ final class Nav
             );
             // Remove "Projetos" de "Ferramentas" na navegacao e na busca interna.
             unset($menu['tools']['content']['project']);
+            $project['page'] = self::projectsUrl();
             $menu['ac_project_native'] = [
                 'title'   => 'Projetos',
                 'default' => self::projectsUrl(),

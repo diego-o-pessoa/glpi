@@ -933,11 +933,6 @@
 
         var foot = el('div', 'ac-foot');
         foot.appendChild(el('span', '', 'Atualizado às ' + (data.updated || '--:--') + ' · clique em um projeto para acompanhar e gerenciar'));
-        if (data.urls && data.urls['native']) {
-            var native = anchor(data.urls['native'], '', 'Lista clássica do GLPI ');
-            native.appendChild(icon('ti-arrow-narrow-right'));
-            foot.appendChild(native);
-        }
         projectsBody.appendChild(foot);
     }
 
