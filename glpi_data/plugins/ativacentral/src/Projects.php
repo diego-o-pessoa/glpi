@@ -451,7 +451,9 @@ final class Projects
         $names = [];
         foreach ($DB->request(['SELECT' => ['id', 'firstname', 'realname', 'name'], 'FROM' => 'glpi_users', 'WHERE' => ['id' => $ids]]) as $row) {
             $full = trim((string) ($row['firstname'] ?? '') . ' ' . (string) ($row['realname'] ?? ''));
-            $names[(int) $row['id']] = $full !== '' ? $full : (string) ($row['name'] ?? '');
+            $raw = $full !== '' ? $full : (string) ($row['name'] ?? '');
+            $clean = trim((string) preg_replace('/\s*-\s*Ativa\s+Loca[cç][aã]o\b.*$/iu', '', $raw));
+            $names[(int) $row['id']] = $clean !== '' ? $clean : $raw;
         }
         return $names;
     }

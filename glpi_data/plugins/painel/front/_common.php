@@ -302,11 +302,24 @@ if (!function_exists('painel_is_planning_state')) {
     }
 }
 
+if (!function_exists('painel_full_text')) {
+    function painel_full_text(string $html): string
+    {
+        $text = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace('/<(?:br|\/p|\/div|\/li|\/h[1-6]|\/tr)\b[^>]*>/i', "\n", $text);
+        $text = preg_replace('/<li\b[^>]*>/i', '• ', (string) $text);
+        $text = strip_tags((string) $text);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace("/[ \t]+\n/u", "\n", $text);
+        $text = preg_replace("/\n{3,}/u", "\n\n", (string) $text);
+        return trim((string) $text);
+    }
+}
+
 if (!function_exists('painel_excerpt')) {
     function painel_excerpt(string $html, int $limit = 135): string
     {
-        $text = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $text = strip_tags($text);
+        $text = painel_full_text($html);
         $text = trim((string) preg_replace('/\s+/u', ' ', $text));
         if ($text === '') {
             return '';
@@ -330,6 +343,26 @@ if (!function_exists('painel_format_date')) {
     }
 }
 
+if (!function_exists('painel_format_datetime')) {
+    function painel_format_datetime(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '' || str_starts_with($value, '0000-00-00')) {
+            return '';
+        }
+        $ts = strtotime($value);
+        return $ts === false ? '' : date('d/m/Y H:i', $ts);
+    }
+}
+
+if (!function_exists('painel_clean_person_name')) {
+    function painel_clean_person_name(string $name): string
+    {
+        $clean = trim((string) preg_replace('/\s*-\s*Ativa\s+Loca[cç][aã]o\b.*$/iu', '', $name));
+        return $clean !== '' ? $clean : trim($name);
+    }
+}
+
 if (!function_exists('painel_user_names_map')) {
     /**
      * @param list<int> $ids
@@ -345,7 +378,8 @@ if (!function_exists('painel_user_names_map')) {
         $out = [];
         foreach ($DB->request(['SELECT' => ['id', 'firstname', 'realname', 'name'], 'FROM' => 'glpi_users', 'WHERE' => ['id' => $ids]]) as $row) {
             $full = trim((string) ($row['firstname'] ?? '') . ' ' . (string) ($row['realname'] ?? ''));
-            $out[(int) $row['id']] = $full !== '' ? $full : (string) ($row['name'] ?? '');
+            $raw = $full !== '' ? $full : (string) ($row['name'] ?? '');
+            $out[(int) $row['id']] = painel_clean_person_name($raw);
         }
         return $out;
     }
@@ -724,6 +758,18 @@ if (!function_exists('painel_project_detail')) {
         }
 
         $states = painel_project_states();
+        $projRow = $DB->request([
+            'SELECT' => ['content', 'comment', 'users_id', 'real_start_date', 'real_end_date'],
+            'FROM'   => 'glpi_projects',
+            'WHERE'  => ['id' => $projectId],
+            'LIMIT'  => 1,
+        ])->current();
+        $project['full_desc'] = painel_full_text((string) ($projRow['content'] ?? ''));
+        $project['comment'] = painel_full_text((string) ($projRow['comment'] ?? ''));
+        $project['real_start_date'] = painel_format_date((string) ($projRow['real_start_date'] ?? ''));
+        $project['real_end_date'] = painel_format_date((string) ($projRow['real_end_date'] ?? ''));
+        $ownerId = (int) ($projRow['users_id'] ?? 0);
+
         $taskTypes = [];
         try {
             foreach ($DB->request(['SELECT' => ['id', 'name'], 'FROM' => 'glpi_projecttasktypes']) as $row) {
@@ -735,14 +781,14 @@ if (!function_exists('painel_project_detail')) {
 
         $tasksRaw = [];
         $taskIds = [];
-        $userIds = [];
+        $userIds = $ownerId > 0 ? [$ownerId => $ownerId] : [];
         $groupIds = [];
 
         foreach ($DB->request([
             'SELECT' => [
-                'id', 'name', 'content', 'projecttasks_id', 'projectstates_id',
-                'projecttasktypes_id', 'users_id', 'percent_done',
-                'plan_start_date', 'plan_end_date',
+                'id', 'name', 'content', 'comment', 'projecttasks_id', 'projectstates_id',
+                'projecttasktypes_id', 'users_id', 'percent_done', 'auto_percent_done',
+                'plan_start_date', 'plan_end_date', 'real_start_date', 'real_end_date',
             ],
             'FROM'   => 'glpi_projecttasks',
             'WHERE'  => [
@@ -761,6 +807,7 @@ if (!function_exists('painel_project_detail')) {
         }
 
         $taskTeams = [];
+        $notesRaw = [];
         if ($taskIds !== []) {
             foreach ($DB->request([
                 'SELECT' => ['projecttasks_id', 'itemtype', 'items_id'],
@@ -781,10 +828,28 @@ if (!function_exists('painel_project_detail')) {
                     $taskTeams[$tid][] = ['type' => 'Group', 'id' => $iid];
                 }
             }
+
+            foreach ($DB->request([
+                'SELECT' => ['id', 'items_id', 'users_id', 'date_creation', 'content'],
+                'FROM'   => 'glpi_notepads',
+                'WHERE'  => [
+                    'itemtype' => 'ProjectTask',
+                    'items_id' => $taskIds,
+                ],
+                'ORDER'  => ['date_creation DESC', 'id DESC'],
+            ]) as $n) {
+                $tid = (int) $n['items_id'];
+                $uidAuthor = (int) ($n['users_id'] ?? 0);
+                if ($uidAuthor > 0) {
+                    $userIds[$uidAuthor] = $uidAuthor;
+                }
+                $notesRaw[$tid][] = $n;
+            }
         }
 
         $uNames = painel_user_names_map(array_values($userIds));
         $gNames = painel_group_names_map(array_values($groupIds));
+        $project['owner_name'] = $ownerId > 0 ? ($uNames[$ownerId] ?? '') : '';
 
         $nodes = [];
         foreach ($tasksRaw as $tid => $t) {
@@ -818,23 +883,62 @@ if (!function_exists('painel_project_detail')) {
                 }
             }
 
+            $notes = [];
+            foreach ($notesRaw[$tid] ?? [] as $n) {
+                $authorId = (int) ($n['users_id'] ?? 0);
+                $authorName = $authorId > 0 ? ($uNames[$authorId] ?? 'Usuário #' . $authorId) : 'Sistema';
+                $text = painel_full_text((string) ($n['content'] ?? ''));
+                if ($text === '') {
+                    continue;
+                }
+                $notes[] = [
+                    'id'              => (int) $n['id'],
+                    'author'          => $authorName,
+                    'author_initials' => painel_initials($authorName),
+                    'date'            => painel_format_datetime((string) ($n['date_creation'] ?? '')),
+                    'content'         => $text,
+                ];
+            }
+
             $nodes[$tid] = [
-                'id'         => $tid,
-                'parent_id'  => (int) $t['projecttasks_id'],
-                'name'       => (string) ($t['name'] ?: 'Tarefa #' . $tid),
-                'desc'       => painel_excerpt((string) ($t['content'] ?? ''), 180),
-                'type'       => $taskTypes[(int) $t['projecttasktypes_id']] ?? '',
-                'state'      => $st['name'],
-                'state_color'=> $st['color'],
-                'done'       => $done,
-                'percent'    => $pct,
-                'start_date' => painel_format_date((string) ($t['plan_start_date'] ?? '')),
-                'end_date'   => painel_format_date((string) ($t['plan_end_date'] ?? '')),
-                'assignees'  => $assignees,
-                'mine'       => $isMine,
-                'children'   => [],
+                'id'           => $tid,
+                'parent_id'    => (int) $t['projecttasks_id'],
+                'name'         => (string) ($t['name'] ?: 'Tarefa #' . $tid),
+                'desc'         => painel_excerpt((string) ($t['content'] ?? ''), 180),
+                'full_desc'    => painel_full_text((string) ($t['content'] ?? '')),
+                'comment'      => painel_full_text((string) ($t['comment'] ?? '')),
+                'type'         => $taskTypes[(int) $t['projecttasktypes_id']] ?? '',
+                'state_id'     => $sid,
+                'state'        => $st['name'],
+                'state_color'  => $st['color'],
+                'done'         => $done,
+                'percent'      => $pct,
+                'auto_percent' => (int) ($t['auto_percent_done'] ?? 0) === 1,
+                'start_date'   => painel_format_date((string) ($t['plan_start_date'] ?? '')),
+                'end_date'     => painel_format_date((string) ($t['plan_end_date'] ?? '')),
+                'real_start'   => painel_format_date((string) ($t['real_start_date'] ?? '')),
+                'real_end'     => painel_format_date((string) ($t['real_end_date'] ?? '')),
+                'assignees'    => $assignees,
+                'mine'         => $isMine,
+                'notes'        => $notes,
+                'notes_count'  => count($notes),
+                'children'     => [],
             ];
         }
+
+        // Calcula trilha hierarquica de cada tarefa (Pai > Subtarefa)
+        foreach ($nodes as $tid => &$node) {
+            $trail = [$node['name']];
+            $cur = $node['parent_id'];
+            $guard = 0;
+            while ($cur > 0 && isset($nodes[$cur]) && $guard < 10) {
+                array_unshift($trail, $nodes[$cur]['name']);
+                $cur = $nodes[$cur]['parent_id'];
+                $guard++;
+            }
+            $node['path'] = implode(' › ', $trail);
+        }
+        unset($node);
 
         // Monta arvore hierarquica respeitando projecttasks_id
         $roots = [];
@@ -848,7 +952,48 @@ if (!function_exists('painel_project_detail')) {
         }
         unset($node);
 
+        $stateOptions = [];
+        foreach ($states as $sid => $st) {
+            $stateOptions[] = [
+                'id'          => $sid,
+                'name'        => $st['name'],
+                'color'       => $st['color'],
+                'is_finished' => $st['is_finished'],
+            ];
+        }
+
+        $project['states'] = $stateOptions;
+        $project['tasks_map'] = $nodes;
         $project['tree'] = $roots;
         return $project;
+    }
+}
+
+if (!function_exists('painel_project_client_payload')) {
+    /**
+     * Monta payload leve de projeto para JSON do frontend (substitui tasks_map por tasks com child_ids).
+     *
+     * @param array<string, mixed>|null $project
+     * @return array<string, mixed>|null
+     */
+    function painel_project_client_payload(?array $project): ?array
+    {
+        if ($project === null) {
+            return null;
+        }
+        $tasks = [];
+        foreach (($project['tasks_map'] ?? []) as $tid => $t) {
+            $childIds = [];
+            foreach (($t['children'] ?? []) as $ch) {
+                $childIds[] = (int) $ch['id'];
+            }
+            unset($t['children']);
+            $t['child_ids'] = $childIds;
+            $tasks[(string) $tid] = $t;
+        }
+        $out = $project;
+        unset($out['tasks_map']);
+        $out['tasks'] = $tasks;
+        return $out;
     }
 }
