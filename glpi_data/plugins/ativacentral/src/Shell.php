@@ -76,6 +76,10 @@ final class Shell
             // pagina manda o navegador para la antes de desenhar qualquer coisa.
             $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::url('/front/home.php')]];
             $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
+        } elseif (self::nativeSupplierUrl() !== '') {
+            // Fornecedores nativos (lista e formulario): telas novas.
+            $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::nativeSupplierUrl()]];
+            $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
         } elseif (self::nativeTaskUrl() !== '') {
             // Formulario nativo da tarefa: vai para a tela simplificada.
             $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::nativeTaskUrl()]];
@@ -256,6 +260,23 @@ final class Shell
             return 0;
         }
         return max(0, (int) ($_GET['id'] ?? 0));
+    }
+
+    /** Tela nova para front/supplier.php e supplier.form.php (classic=1 mantem o GLPI). */
+    private static function nativeSupplierUrl(): string
+    {
+        $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+        if (isset($_GET['classic']) || isset($_GET['embed']) || !\Supplier::canView()) {
+            return '';
+        }
+        if (preg_match('#/front/supplier\.php$#i', $path) === 1) {
+            return SupplierPage::listUrl();
+        }
+        if (preg_match('#/front/supplier\.form\.php$#i', $path) === 1) {
+            $id = (int) ($_GET['id'] ?? 0);
+            return $id > 0 ? SupplierPage::url($id) : SupplierPage::newUrl();
+        }
+        return '';
     }
 
     /** Tela nova para project task.form.php?id=N ou ?projects_id=N (classic=1 mantem o GLPI). */

@@ -1,0 +1,108 @@
+{# Lista de fornecedores no estilo do Ativa Central. #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div class="ac-app ac-sup">
+    <div class="ac-head">
+        <div>
+            <div class="ac-eyebrow">Ativa Central · Gerência</div>
+            <h1 class="ac-title">Fornecedores</h1>
+            <div class="ac-subtitle">Empresas parceiras, seus contatos e contratos.</div>
+        </div>
+        <div class="ac-actions">
+            {% if new_url %}
+                <a class="ac-btn is-primary" href="{{ new_url }}"><i class="ti ti-plus"></i> Adicionar fornecedor</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="ac-sup-kpis">
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-blue"><i class="ti ti-building-store"></i></span><div><b>{{ kpis.total }}</b><small>fornecedores</small></div></div>
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-green"><i class="ti ti-circle-check"></i></span><div><b>{{ kpis.active }}</b><small>ativos</small></div></div>
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-violet"><i class="ti ti-file-certificate"></i></span><div><b>{{ kpis.contracts }}</b><small>com contrato</small></div></div>
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-orange"><i class="ti ti-alarm"></i></span><div><b>{{ kpis.expiring }}</b><small>contrato vence em 30 dias</small></div></div>
+    </div>
+
+    <div class="ac-panel ac-sup-list">
+        <div class="ac-sup-toolbar">
+            <div class="ac-sup-filters">
+                <button type="button" class="ac-sup-filter is-active" data-filter="all">Todos</button>
+                <button type="button" class="ac-sup-filter" data-filter="active">Ativos</button>
+                <button type="button" class="ac-sup-filter" data-filter="inactive">Inativos</button>
+                {% for c in categories %}
+                    <button type="button" class="ac-sup-filter" data-filter="cat:{{ c }}">{{ c }}</button>
+                {% endfor %}
+            </div>
+            <label class="ac-sup-search">
+                <i class="ti ti-search"></i>
+                <input type="search" id="ac-sup-search" placeholder="Buscar por nome, CNPJ, e-mail…">
+            </label>
+        </div>
+
+        {% if suppliers is empty %}
+            <div class="ac-ptasks-empty">
+                <i class="ti ti-building-store"></i>
+                <b>Nenhum fornecedor cadastrado</b>
+                <span>Use "Adicionar fornecedor" para cadastrar o primeiro.</span>
+            </div>
+        {% else %}
+            <div class="ac-sup-rows" id="ac-sup-rows">
+                {% for s in suppliers %}
+                    <a class="ac-sup-row {{ s.active ? '' : 'is-inactive' }}" href="{{ s.url }}"
+                       data-active="{{ s.active ? 1 : 0 }}" data-cat="{{ s.category }}"
+                       data-search="{{ (s.name ~ ' ' ~ s.cnpj ~ ' ' ~ s.email ~ ' ' ~ s.phone ~ ' ' ~ s.category)|lower }}">
+                        <span class="ac-sup-avatar">{{ s.initials }}</span>
+                        <div class="ac-sup-main">
+                            <b>{{ s.name }}</b>
+                            <small>
+                                {% if s.category %}<span class="ac-ptask-type">{{ s.category }}</span>{% endif %}
+                                {% if s.cnpj %}<span>CNPJ {{ s.cnpj }}</span>{% endif %}
+                                {% if s.city %}<span>{{ s.city }}</span>{% endif %}
+                                {% if not s.active %}<span class="ac-sup-off">Inativo</span>{% endif %}
+                            </small>
+                        </div>
+                        <div class="ac-sup-contact">
+                            {% if s.phone %}<span><i class="ti ti-phone"></i> {{ s.phone }}</span>{% endif %}
+                            {% if s.email %}<span><i class="ti ti-mail"></i> {{ s.email }}</span>{% endif %}
+                            {% if not s.phone and not s.email %}<span class="ac-ptask-none">Sem telefone/e-mail</span>{% endif %}
+                        </div>
+                        <div class="ac-sup-counts">
+                            <span title="Contatos"><i class="ti ti-address-book"></i> {{ s.contacts }}</span>
+                            <span title="Contratos" class="{{ s.expiring ? 'is-alert' : '' }}"><i class="ti ti-file-certificate"></i> {{ s.contracts }}{% if s.expiring %} · vence em breve{% endif %}</span>
+                        </div>
+                        <i class="ti ti-chevron-right ac-sup-go"></i>
+                    </a>
+                {% endfor %}
+            </div>
+            <div class="ac-ptasks-empty" id="ac-sup-none" hidden><i class="ti ti-search"></i><b>Nada encontrado</b><span>Tente outro termo ou filtro.</span></div>
+        {% endif %}
+    </div>
+</div>
+<script>
+    (function () {
+        var rows = Array.prototype.slice.call(document.querySelectorAll('.ac-sup-row'));
+        var search = document.getElementById('ac-sup-search');
+        var none = document.getElementById('ac-sup-none');
+        var filter = 'all';
+        function apply() {
+            var q = (search.value || '').trim().toLowerCase();
+            var shown = 0;
+            rows.forEach(function (r) {
+                var ok = (!q || r.getAttribute('data-search').indexOf(q) !== -1)
+                    && (filter === 'all'
+                        || (filter === 'active' && r.getAttribute('data-active') === '1')
+                        || (filter === 'inactive' && r.getAttribute('data-active') === '0')
+                        || (filter.indexOf('cat:') === 0 && r.getAttribute('data-cat') === filter.slice(4)));
+                r.hidden = !ok;
+                shown += ok ? 1 : 0;
+            });
+            if (none) { none.hidden = shown > 0; }
+        }
+        document.querySelectorAll('.ac-sup-filter').forEach(function (b) {
+            b.addEventListener('click', function () {
+                document.querySelectorAll('.ac-sup-filter').forEach(function (x) { x.classList.toggle('is-active', x === b); });
+                filter = b.getAttribute('data-filter');
+                apply();
+            });
+        });
+        if (search) { search.addEventListener('input', apply); }
+    })();
+</script>

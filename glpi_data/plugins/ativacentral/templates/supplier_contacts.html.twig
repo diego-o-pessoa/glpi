@@ -1,0 +1,196 @@
+{# Aba Contatos do fornecedor: cartoes + gaveta para criar/editar. #}
+<div class="ac-panel ac-ptasks">
+    <div class="ac-ptasks-head">
+        <div>
+            <h2 class="ac-pnew-title"><i class="ti ti-address-book"></i> Contatos</h2>
+            <div class="ac-pnew-hint">{{ contacts|length }} {{ contacts|length == 1 ? 'contato' : 'contatos' }} · clique num contato para editar</div>
+        </div>
+        {% if can_update %}
+            <div class="ac-actions">
+                {% if existing is not empty %}
+                    <button type="button" class="ac-btn" id="ac-ct-link-open"><i class="ti ti-link"></i> Vincular existente</button>
+                {% endif %}
+                {% if can_contacts %}
+                    <button type="button" class="ac-btn is-primary" id="ac-ct-new"><i class="ti ti-plus"></i> Novo contato</button>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    {% if can_update and existing is not empty %}
+        <form method="post" action="{{ action }}" class="ac-ct-link" id="ac-ct-link" hidden>
+            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+            <input type="hidden" name="contact_action" value="link">
+            <select name="contacts_id" class="ac-pnew-input" required>
+                <option value="">Escolha um contato já cadastrado…</option>
+                {% for e in existing %}<option value="{{ e.id }}">{{ e.label }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="ac-btn is-primary"><i class="ti ti-link"></i> Vincular</button>
+        </form>
+    {% endif %}
+
+    {% if contacts is empty %}
+        <div class="ac-ptasks-empty">
+            <i class="ti ti-address-book"></i>
+            <b>Nenhum contato ainda</b>
+            <span>Cadastre quem você procura nessa empresa (comercial, suporte, financeiro…).</span>
+        </div>
+    {% else %}
+        <div class="ac-ct-grid">
+            {% for c in contacts %}
+                <div class="ac-ct-card" data-contact="{{ c.id }}" role="button" tabindex="0">
+                    <div class="ac-ct-top">
+                        <span class="ac-sup-avatar">{{ c.initials }}</span>
+                        <div>
+                            <b>{{ c.full_name }}</b>
+                            <small>{{ [c.title, c.type]|filter(v => v)|join(' · ') ?: 'Contato' }}</small>
+                        </div>
+                        <i class="ti ti-pencil ac-ct-edit"></i>
+                    </div>
+                    <div class="ac-ct-lines">
+                        {% if c.phone %}<a href="tel:{{ c.phone }}" onclick="event.stopPropagation()"><i class="ti ti-phone"></i> {{ c.phone }}</a>{% endif %}
+                        {% if c.mobile %}<a href="tel:{{ c.mobile }}" onclick="event.stopPropagation()"><i class="ti ti-device-mobile"></i> {{ c.mobile }}</a>{% endif %}
+                        {% if c.email %}<a href="mailto:{{ c.email }}" onclick="event.stopPropagation()"><i class="ti ti-mail"></i> {{ c.email }}</a>{% endif %}
+                        {% if not c.phone and not c.mobile and not c.email %}<span class="ac-ptask-none">Sem telefone ou e-mail</span>{% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+{% if can_update %}
+<div class="ac-drawer" id="ac-ct-drawer" hidden>
+    <div class="ac-drawer-panel" role="dialog" aria-modal="true" aria-label="Contato">
+        <form method="post" action="{{ action }}" enctype="multipart/form-data" autocomplete="off" id="ac-ct-form">
+            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+            <input type="hidden" name="contact_action" value="save" id="ac-ct-action">
+            <input type="hidden" name="contacts_id" value="0" id="ac-ct-id">
+            <input type="hidden" name="link_id" value="0" id="ac-ct-link-id">
+            <div class="ac-drawer-head">
+                <div>
+                    <div class="ac-eyebrow">{{ title }}</div>
+                    <h2 class="ac-pnew-title" id="ac-ct-title">Novo contato</h2>
+                </div>
+                <button type="button" class="ac-btn is-small" id="ac-ct-close" aria-label="Fechar"><i class="ti ti-x"></i></button>
+            </div>
+            <div class="ac-drawer-body">
+                <label class="ac-pnew-field">
+                    <span class="ac-pnew-label">Nome <b>*</b></span>
+                    <input type="text" name="name" class="ac-pnew-input" required maxlength="255" placeholder="Ex.: Maria Sanches">
+                </label>
+                <div class="ac-pnew-dates">
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Tipo</span>
+                        <select name="contacttypes_id" class="ac-pnew-input">
+                            <option value="0">—</option>
+                            {% for tid, tname in contact_types %}<option value="{{ tid }}">{{ tname }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Cargo / título</span>
+                        <select name="usertitles_id" class="ac-pnew-input">
+                            <option value="0">—</option>
+                            {% for tid, tname in contact_titles %}<option value="{{ tid }}">{{ tname }}</option>{% endfor %}
+                        </select>
+                    </label>
+                </div>
+                <label class="ac-pnew-field">
+                    <span class="ac-pnew-label">Número administrativo</span>
+                    <input type="text" name="registration_number" class="ac-pnew-input">
+                </label>
+                <div class="ac-pnew-dates">
+                    <label class="ac-pnew-field"><span class="ac-pnew-label">Telefone</span><input type="text" name="phone" class="ac-pnew-input"></label>
+                    <label class="ac-pnew-field"><span class="ac-pnew-label">Telefone 2</span><input type="text" name="phone2" class="ac-pnew-input"></label>
+                    <label class="ac-pnew-field"><span class="ac-pnew-label">Celular</span><input type="text" name="mobile" class="ac-pnew-input"></label>
+                    <label class="ac-pnew-field"><span class="ac-pnew-label">E-mail</span><input type="email" name="email" class="ac-pnew-input"></label>
+                </div>
+                <label class="ac-pnew-field">
+                    <span class="ac-pnew-label">Endereço</span>
+                    <input type="text" name="address" class="ac-pnew-input">
+                </label>
+                <div class="ac-pnew-dates">
+                    <label class="ac-pnew-field"><span class="ac-pnew-label">Cidade</span><input type="text" name="town" class="ac-pnew-input"></label>
+                    <label class="ac-pnew-field"><span class="ac-pnew-label">Estado</span><input type="text" name="state" class="ac-pnew-input"></label>
+                    <label class="ac-pnew-field"><span class="ac-pnew-label">CEP</span><input type="text" name="postcode" class="ac-pnew-input"></label>
+                    <label class="ac-pnew-field"><span class="ac-pnew-label">País</span><input type="text" name="country" class="ac-pnew-input"></label>
+                </div>
+                <label class="ac-pnew-field">
+                    <span class="ac-pnew-label">Comentários</span>
+                    <textarea name="comment" class="ac-pnew-input ac-ct-textarea" rows="3"></textarea>
+                </label>
+                <div class="ac-pnew-field">
+                    <span class="ac-pnew-label">Imagens</span>
+                    <div class="ac-pnew-glpi">{{ contact_pictures_html|raw }}</div>
+                </div>
+            </div>
+            <div class="ac-drawer-foot">
+                <button type="submit" class="ac-btn ac-btn-danger" id="ac-ct-unlink" hidden formnovalidate><i class="ti ti-unlink"></i> Desvincular</button>
+                <button type="submit" class="ac-btn ac-btn-danger" id="ac-ct-delete" hidden formnovalidate style="margin-right: 0;"><i class="ti ti-trash"></i> Excluir</button>
+                <span style="flex: 1;"></span>
+                <button type="submit" class="ac-btn is-primary"><i class="ti ti-check"></i> <span id="ac-ct-save-label">Criar contato</span></button>
+            </div>
+        </form>
+    </div>
+</div>
+<script type="application/json" id="ac-ct-data">{{ contacts_json|json_encode|raw }}</script>
+<script>
+    (function () {
+        var drawer = document.getElementById('ac-ct-drawer');
+        // A gaveta vai para o body: dentro da pagina ela herda larguras e passa da borda.
+        var app = document.createElement('div');
+        app.className = 'ac-app ac-pnew';
+        document.body.appendChild(app);
+        app.appendChild(drawer);
+        var form = document.getElementById('ac-ct-form');
+        var contacts = {};
+        JSON.parse(document.getElementById('ac-ct-data').textContent || '[]').forEach(function (c) { contacts[c.id] = c; });
+        var fields = ['name', 'registration_number', 'phone', 'phone2', 'mobile', 'email', 'address', 'town', 'postcode', 'state', 'country', 'comment', 'contacttypes_id', 'usertitles_id'];
+
+        function open(c) {
+            document.getElementById('ac-ct-action').value = 'save';
+            document.getElementById('ac-ct-id').value = c ? c.id : 0;
+            document.getElementById('ac-ct-link-id').value = c ? c.link_id : 0;
+            document.getElementById('ac-ct-title').textContent = c ? c.full_name : 'Novo contato';
+            document.getElementById('ac-ct-save-label').textContent = c ? 'Salvar contato' : 'Criar contato';
+            document.getElementById('ac-ct-unlink').hidden = !c;
+            document.getElementById('ac-ct-delete').hidden = !c;
+            fields.forEach(function (f) {
+                var el = form.elements[f];
+                if (el) { el.value = c ? (c[f] == null ? '' : c[f]) : (f.slice(-3) === '_id' ? '0' : ''); }
+            });
+            drawer.hidden = false;
+            form.elements.name.focus();
+        }
+        function close() { drawer.hidden = true; }
+
+        var btnNew = document.getElementById('ac-ct-new');
+        if (btnNew) { btnNew.addEventListener('click', function () { open(null); }); }
+        document.querySelectorAll('.ac-ct-card').forEach(function (card) {
+            var go = function () { open(contacts[card.getAttribute('data-contact')]); };
+            card.addEventListener('click', go);
+            card.addEventListener('keydown', function (e) { if (e.key === 'Enter') { go(); } });
+        });
+        document.getElementById('ac-ct-close').addEventListener('click', close);
+        drawer.addEventListener('click', function (e) { if (e.target === drawer) { close(); } });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
+
+        document.getElementById('ac-ct-unlink').addEventListener('click', function (e) {
+            if (!confirm('Desvincular este contato do fornecedor? O contato continua cadastrado.')) { e.preventDefault(); return; }
+            document.getElementById('ac-ct-action').value = 'unlink';
+        });
+        document.getElementById('ac-ct-delete').addEventListener('click', function (e) {
+            if (!confirm('Excluir este contato? Ele sai de todos os fornecedores.')) { e.preventDefault(); return; }
+            document.getElementById('ac-ct-action').value = 'delete';
+        });
+
+        var linkOpen = document.getElementById('ac-ct-link-open');
+        if (linkOpen) {
+            linkOpen.addEventListener('click', function () {
+                var f = document.getElementById('ac-ct-link');
+                f.hidden = !f.hidden;
+            });
+        }
+    })();
+</script>
+{% endif %}
