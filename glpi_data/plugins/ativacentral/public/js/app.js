@@ -996,13 +996,9 @@
 
         if (project.team && project.team.length) {
             var avatars = el('div', 'ac-avatars');
-            // Pessoa: iniciais que se abrem com o nome no hover. Grupo: nome inteiro.
+            // Iniciais que se abrem com o nome no hover, empurrando as outras bolinhas.
             project.team.slice(0, 4).forEach(function (member, idx) {
                 var tone = TONES[idx % TONES.length];
-                if (member.kind === 'group') {
-                    avatars.appendChild(el('span', 'ac-avatar-mini is-group ' + tone, member.name));
-                    return;
-                }
                 var chip = el('span', 'ac-avatar-mini is-person ' + tone);
                 chip.appendChild(el('span', 'ac-av-short', initials(member.name)));
                 chip.appendChild(el('span', 'ac-av-full', member.name));

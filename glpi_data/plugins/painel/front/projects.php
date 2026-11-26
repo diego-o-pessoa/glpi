@@ -118,13 +118,17 @@ $done_prog = (int) ($kpis['done']['progress'] ?? 0);
         .proj-avatar.tone-3 { background: rgba(139, 108, 246, 0.14); color: #8b6cf6; }
         .proj-avatar.is-more { background: #eef1f8; color: #7a85a3; position: relative; cursor: default; }
         /* Equipe: grupo com nome inteiro, pessoa abre o nome no hover, "+N" com balao */
-        .proj-avatar.is-group { width: auto; padding: 0 10px; white-space: nowrap; }
-        .proj-avatar.is-person { position: relative; }
-        .proj-avatar .av-full { position: absolute; top: 0; left: 0; z-index: 3; display: flex; align-items: center; height: 100%; max-width: 28px; padding: 0 12px; overflow: hidden; border-radius: 999px; background: #eef2ff; color: #4a6cf7; box-shadow: 0 8px 18px -10px rgba(16, 24, 40, 0.4); opacity: 0; pointer-events: none; white-space: nowrap; transition: max-width 0.3s, opacity 0.15s; }
-        .proj-avatar.tone-1 .av-full { background: #e6f6ef; color: #2fb67c; }
-        .proj-avatar.tone-2 .av-full { background: #fef3e6; color: #d98a1c; }
-        .proj-avatar.tone-3 .av-full { background: #f1edfe; color: #8b6cf6; }
-        .proj-avatar.is-person:hover .av-full { max-width: 260px; opacity: 1; }
+        /* Equipe: a bolinha cresce para o lado com o nome e empurra as outras; "+N" com balao */
+        .proj-foot, .proj-meta, .proj-avatars { flex-wrap: nowrap; }
+        .proj-meta { min-width: 0; }
+        .proj-foot .proj-date, .proj-foot .proj-cta { flex-shrink: 0; white-space: nowrap; }
+        .proj-foot .proj-cta { transition: opacity 0.2s; }
+        .proj-foot:has(.proj-avatar.is-person:hover) .proj-cta { opacity: 0; }
+        .proj-avatar.is-person { display: inline-flex; align-items: center; width: auto; min-width: 28px; white-space: nowrap; }
+        .proj-avatar .av-short { min-width: 28px; text-align: center; }
+        .proj-avatar .av-full { max-width: 0; overflow: hidden; opacity: 0; transition: max-width 0.3s, opacity 0.2s, padding 0.3s; }
+        .proj-avatar.is-person:hover .av-short { display: none; }
+        .proj-avatar.is-person:hover .av-full { max-width: 160px; text-overflow: ellipsis; padding: 0 12px; opacity: 1; }
         .proj-avatar .av-pop { position: absolute; bottom: calc(100% + 8px); left: 50%; z-index: 30; display: flex; flex-direction: column; gap: 6px; min-width: 180px; padding: 10px 12px; border: 1px solid #e9ecf4; border-radius: 12px; background: #fff; box-shadow: 0 16px 34px -14px rgba(16, 24, 40, 0.35); color: #1a2340; font-size: 12.5px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transform: translate(-50%, 4px); transition: opacity 0.18s, transform 0.18s; }
         .proj-avatar .av-pop::after { content: ''; position: absolute; top: 100%; left: 50%; border: 6px solid transparent; border-top-color: #fff; transform: translateX(-50%); }
         .proj-avatar.is-more:hover .av-pop { opacity: 1; transform: translate(-50%, 0); }
@@ -259,14 +263,10 @@ $done_prog = (int) ($kpis['done']['progress'] ?? 0);
                             <?php if (!empty($p['team'])): ?>
                                 <div class="proj-avatars">
                                     <?php foreach (array_slice($p['team'], 0, 4) as $idx => $member): ?>
-                                        <?php if (($member['kind'] ?? 'user') === 'group'): ?>
-                                            <span class="proj-avatar is-group tone-<?= $idx % 4 ?>"><?= htmlspecialchars($member['name']) ?></span>
-                                        <?php else: ?>
-                                            <span class="proj-avatar is-person tone-<?= $idx % 4 ?>">
-                                                <span class="av-short"><?= htmlspecialchars(painel_initials($member['name'])) ?></span>
-                                                <span class="av-full"><?= htmlspecialchars($member['name']) ?></span>
-                                            </span>
-                                        <?php endif; ?>
+<span class="proj-avatar is-person tone-<?= $idx % 4 ?>">
+                                            <span class="av-short"><?= htmlspecialchars(painel_initials($member['name'])) ?></span>
+                                            <span class="av-full"><?= htmlspecialchars($member['name']) ?></span>
+                                        </span>
                                     <?php endforeach; ?>
                                     <?php if (count($p['team']) > 4): ?>
                                         <span class="proj-avatar is-more">+<?= count($p['team']) - 4 ?>

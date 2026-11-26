@@ -2045,41 +2045,61 @@ html[data-glpi-theme-dark="1"] .ac-tag.is-green { color: #67dfa9; }
     z-index: 2; /* acima do link do cartao, para o hover funcionar */
 }
 
-.ac-avatar-mini.is-group {
-    display: inline-flex;
-    width: auto;
-    padding: 0 10px;
+/* A bolinha cresce para o lado com o nome e empurra as outras. */
+.ac-proj-foot,
+.ac-proj-meta,
+.ac-proj-card .ac-avatars {
+    flex-wrap: nowrap;
+}
+
+.ac-proj-meta {
+    min-width: 0;
+}
+
+/* Data e "Abrir projeto" nao encolhem (senao a bolinha anda e o hover pisca). */
+.ac-proj-foot .ac-proj-date,
+.ac-proj-foot .ac-cta {
+    flex-shrink: 0;
     white-space: nowrap;
 }
 
-/* O nome abre por cima das outras bolinhas (sem empurrar o layout). */
+/* Com o nome aberto, o "Abrir projeto" some e da espaco (o cartao todo abre o projeto). */
+.ac-proj-foot .ac-cta {
+    transition: opacity 0.2s;
+}
+
+.ac-proj-foot:has(.ac-avatar-mini.is-person:hover) .ac-cta {
+    opacity: 0;
+}
+
 .ac-avatar-mini.is-person {
-    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: auto;
+    min-width: 28px;
+    white-space: nowrap;
+}
+
+.ac-av-short {
+    min-width: 28px;
+    text-align: center;
 }
 
 .ac-av-full {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 3;
-    display: flex;
-    align-items: center;
-    height: 100%;
-    max-width: 28px;
-    padding: 0 12px;
+    max-width: 0;
     overflow: hidden;
-    border-radius: 999px;
-    background: linear-gradient(rgba(var(--ac-tone-rgb), 0.14), rgba(var(--ac-tone-rgb), 0.14)), var(--ac-surface);
-    box-shadow: 0 8px 18px -10px rgba(16, 24, 40, 0.4);
-    color: var(--ac-tone);
     opacity: 0;
-    pointer-events: none;
-    white-space: nowrap;
-    transition: max-width 0.3s var(--ac-ease, ease), opacity 0.15s;
+    transition: max-width 0.3s var(--ac-ease, ease), opacity 0.2s, padding 0.3s;
+}
+
+.ac-avatar-mini.is-person:hover .ac-av-short {
+    display: none;
 }
 
 .ac-avatar-mini.is-person:hover .ac-av-full {
-    max-width: 260px;
+    max-width: 160px;
+    text-overflow: ellipsis;
+    padding: 0 12px;
     opacity: 1;
 }
 
