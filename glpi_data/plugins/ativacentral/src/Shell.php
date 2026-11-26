@@ -279,6 +279,19 @@ final class Shell
             $id = (int) ($_GET['id'] ?? 0);
             return DocumentsLibrary::url() . ($id > 0 ? '?edit=' . $id : '?new=1');
         }
+        // Contatos e contratos: listas novas (formulario abre a gaveta).
+        foreach (['contact' => [\Contact::class, PartnersLists::contactsUrl()], 'contract' => [\Contract::class, PartnersLists::contractsUrl()]] as $name => [$class, $list]) {
+            if (!$class::canView()) {
+                continue;
+            }
+            if (preg_match('#/front/' . $name . '\.php$#i', $path) === 1) {
+                return $list;
+            }
+            if (preg_match('#/front/' . $name . '\.form\.php$#i', $path) === 1) {
+                $id = (int) ($_GET['id'] ?? 0);
+                return $list . ($id > 0 ? '?edit=' . $id : '?new=1');
+            }
+        }
         if (!\Supplier::canView()) {
             return '';
         }

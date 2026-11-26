@@ -18,7 +18,7 @@ namespace GlpiPlugin\Ativacentral;
 final class Nav
 {
     /** Secoes nativas do GLPI (e chaves internas que nao viram item extra). */
-    private const CORE = ['assets', 'helpdesk', 'management', 'tools', 'plugins', 'admin', 'config', 'preference', 'ac_project_native', 'ac_supplier_native'];
+    private const CORE = ['assets', 'helpdesk', 'management', 'tools', 'plugins', 'admin', 'config', 'preference', 'ac_project_native', 'ac_supplier_native', 'ac_contact_native', 'ac_contract_native'];
 
     /** Marcador (classe do icone) das linhas que sao titulo de secao. */
     public const SECTION_ICON = 'ac-section';
@@ -121,6 +121,16 @@ final class Nav
                 'icon'    => 'ti ti-building-store',
                 'content' => ['supplier' => $supplier],
             ];
+        }
+        foreach (['contact' => ['ac_contact', 'Contatos', 'ti ti-address-book', PartnersLists::contactsUrl()], 'contract' => ['ac_contract', 'Contratos', 'ti ti-file-certificate', PartnersLists::contractsUrl()]] as $item => [$key, $title, $icon, $url]) {
+            if (!isset($menu['management']['content'][$item]['page'])) {
+                continue;
+            }
+            $native = $menu['management']['content'][$item];
+            $partners[$key] = self::link($title, $icon, $url);
+            unset($menu['management']['content'][$item]);
+            $native['page'] = $url;
+            $menu[$key . '_native'] = ['title' => $title, 'default' => $url, 'icon' => $icon, 'content' => [$item => $native]];
         }
         if ($partners !== []) {
             $out['ac_sec_partners'] = self::label('Parceiros');

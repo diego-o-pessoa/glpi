@@ -75,41 +75,7 @@
                 <button type="button" class="ac-btn is-small" id="ac-ct-close" aria-label="Fechar"><i class="ti ti-x"></i></button>
             </div>
             <div class="ac-drawer-body">
-                <label class="ac-pnew-field">
-                    <span class="ac-pnew-label">Nome <b>*</b></span>
-                    <input type="text" name="name" class="ac-pnew-input" required maxlength="255" placeholder="Ex.: Maria Sanches">
-                </label>
-                <div class="ac-pnew-dates">
-                    <label class="ac-pnew-field">
-                        <span class="ac-pnew-label">Tipo</span>
-                        <select name="contacttypes_id" class="ac-pnew-input">
-                            <option value="0">—</option>
-                            {% for tid, tname in contact_types %}<option value="{{ tid }}">{{ tname }}</option>{% endfor %}
-                        </select>
-                    </label>
-                    <label class="ac-pnew-field">
-                        <span class="ac-pnew-label">Cargo / título</span>
-                        <select name="usertitles_id" class="ac-pnew-input">
-                            <option value="0">—</option>
-                            {% for tid, tname in contact_titles %}<option value="{{ tid }}">{{ tname }}</option>{% endfor %}
-                        </select>
-                    </label>
-                </div>
-                <div class="ac-pnew-dates">
-                    <label class="ac-pnew-field"><span class="ac-pnew-label">Telefone</span><input type="text" name="phone" class="ac-pnew-input"></label>
-                    <label class="ac-pnew-field"><span class="ac-pnew-label">Celular</span><input type="text" name="mobile" class="ac-pnew-input"></label>
-                    <label class="ac-pnew-field"><span class="ac-pnew-label">E-mail</span><input type="email" name="email" class="ac-pnew-input"></label>
-                </div>
-                <label class="ac-pnew-field">
-                    <span class="ac-pnew-label">Endereço</span>
-                    <input type="text" name="address" class="ac-pnew-input">
-                </label>
-                <div class="ac-pnew-dates">
-                    <label class="ac-pnew-field"><span class="ac-pnew-label">Cidade</span><input type="text" name="town" class="ac-pnew-input"></label>
-                    <label class="ac-pnew-field"><span class="ac-pnew-label">Estado</span><input type="text" name="state" class="ac-pnew-input"></label>
-                    <label class="ac-pnew-field"><span class="ac-pnew-label">CEP</span><input type="text" name="postcode" class="ac-pnew-input"></label>
-                    <label class="ac-pnew-field"><span class="ac-pnew-label">País</span><input type="text" name="country" class="ac-pnew-input"></label>
-                </div>
+                {% include '@ativacentral/_contact_fields.html.twig' %}
             </div>
             <div class="ac-drawer-foot">
                 <button type="submit" class="ac-btn ac-btn-danger" id="ac-ct-unlink" hidden formnovalidate><i class="ti ti-unlink"></i> Desvincular</button>

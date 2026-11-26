@@ -3384,3 +3384,29 @@ html[data-glpi-theme-dark="1"] .ac-tag.is-green { color: #67dfa9; }
     justify-content: flex-end;
     gap: 8px;
 }
+
+/* Listas de contatos e contratos */
+.ac-sup-kpi-icon.is-red { background: rgba(239, 77, 90, 0.13); color: #ef4d5a; }
+
+.ac-sup-main small a,
+.ac-cr-main small a {
+    color: var(--ac-blue);
+    font-weight: 600;
+}
+
+.ac-sup-counts a,
+.ac-sup-contact a {
+    overflow: hidden;
+    color: #475569;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ac-sup-counts a:hover,
+.ac-sup-contact a:hover {
+    color: var(--ac-blue);
+}
+
+.ac-list-row {
+    cursor: pointer;
+}

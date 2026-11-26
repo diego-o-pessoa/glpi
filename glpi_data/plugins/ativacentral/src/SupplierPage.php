@@ -339,6 +339,23 @@ final class SupplierPage
             throw new \InvalidArgumentException('Ação inválida.');
         }
 
+        [$contactId, $created] = self::saveContact($input, (int) $supplier->fields['entities_id']);
+        if (!$created) {
+            return 'Contato salvo.';
+        }
+        $link->add(['suppliers_id' => $supplierId, 'contacts_id' => $contactId]);
+        return 'Contato criado e vinculado ao fornecedor.';
+    }
+
+    /**
+     * Cria ou atualiza um contato (campos da gaveta). Usado no fornecedor e
+     * na tela de Contatos.
+     *
+     * @return array{0: int, 1: bool} id e se foi criado agora
+     * @throws \InvalidArgumentException
+     */
+    public static function saveContact(array $input, int $entity): array
+    {
         $name = trim((string) ($input['name'] ?? ''));
         if ($name === '') {
             throw new \InvalidArgumentException('Dê um nome ao contato.');
@@ -364,14 +381,13 @@ final class SupplierPage
             if (!$contact->can($contactId, UPDATE) || !$contact->update(['id' => $contactId] + $fields)) {
                 throw new \InvalidArgumentException('Não foi possível salvar o contato.');
             }
-            return 'Contato salvo.';
+            return [$contactId, false];
         }
-        $contactId = (int) $contact->add($fields + ['entities_id' => (int) $supplier->fields['entities_id'], 'is_recursive' => 1]);
+        $contactId = (int) $contact->add($fields + ['entities_id' => $entity, 'is_recursive' => 1]);
         if ($contactId <= 0) {
             throw new \InvalidArgumentException('Não foi possível criar o contato.');
         }
-        $link->add(['suppliers_id' => $supplierId, 'contacts_id' => $contactId]);
-        return 'Contato criado e vinculado ao fornecedor.';
+        return [$contactId, true];
     }
 
     // ------------------------------------------------------------------
@@ -407,35 +423,7 @@ final class SupplierPage
             'WHERE'      => ['glpi_contracts_suppliers.suppliers_id' => (int) $supplier->getID(), 'glpi_contracts.is_deleted' => 0],
             'ORDER'      => 'glpi_contracts.begin_date DESC',
         ]) as $row) {
-            $begin = (string) ($row['begin_date'] ?? '');
-            $duration = (int) $row['duration'];
-            $end = $begin !== '' && $duration > 0 ? date('Y-m-d', strtotime($begin . ' +' . $duration . ' months')) : '';
-            $situation = ['label' => 'Sem prazo definido', 'tone' => 'muted'];
-            if ($end !== '') {
-                $days = (int) floor((strtotime($end) - strtotime($today)) / 86400);
-                if ($days < 0) {
-                    $situation = ['label' => 'Vencido em ' . date('d/m/Y', strtotime($end)), 'tone' => 'red'];
-                } elseif ($days <= 30) {
-                    $situation = ['label' => $days === 0 ? 'Vence hoje' : 'Vence em ' . $days . ($days === 1 ? ' dia' : ' dias'), 'tone' => 'orange'];
-                } else {
-                    $situation = ['label' => 'Vigente até ' . date('d/m/Y', strtotime($end)), 'tone' => 'green'];
-                }
-            }
-            $item = [
-                'id'          => (int) $row['id'],
-                'link_id'     => (int) $row['link_id'],
-                'type_label'  => $types[(int) $row['contracttypes_id']] ?? '',
-                'state_label' => $states[(int) $row['states_id']] ?? '',
-                'location_label' => $locations[(int) $row['locations_id']] ?? '',
-                'begin_text'  => $begin !== '' ? date('d/m/Y', strtotime($begin)) : '',
-                'end_text'    => $end !== '' ? date('d/m/Y', strtotime($end)) : '',
-                'renewal_label' => $renewals[(int) $row['renewal']] ?? '',
-                'situation'   => $situation,
-            ];
-            foreach (self::CONTRACT_FIELDS as $key) {
-                $item[$key] = in_array($key, ['name', 'num', 'begin_date'], true) ? (string) ($row[$key] ?? '') : (int) ($row[$key] ?? 0);
-            }
-            $item['begin_date'] = substr($begin, 0, 10);
+            $item = self::contractRow($row, $types, $states, $locations, $renewals) + ['link_id' => (int) $row['link_id']];
             $contracts[] = $item;
         }
 
@@ -459,6 +447,67 @@ final class SupplierPage
             'contract_renewals' => $renewals,
             'contract_alerts'   => $alerts,
             'can_contracts'     => \Contract::canCreate(),
+        ];
+    }
+
+    /**
+     * Linha de contrato para as telas: vigencia (inicio -> fim), situacao
+     * (vigente, vence em N dias, vencido) e os campos da gaveta.
+     *
+     * @return array<string, mixed>
+     */
+    public static function contractRow(array $row, array $types, array $states, array $locations, array $renewals): array
+    {
+        $today = date('Y-m-d');
+        $begin = (string) ($row['begin_date'] ?? '');
+        $duration = (int) $row['duration'];
+        $end = $begin !== '' && $duration > 0 ? date('Y-m-d', strtotime($begin . ' +' . $duration . ' months')) : '';
+        $situation = ['label' => 'Sem prazo definido', 'tone' => 'muted'];
+        if ($end !== '') {
+            $days = (int) floor((strtotime($end) - strtotime($today)) / 86400);
+            if ($days < 0) {
+                $situation = ['label' => 'Vencido em ' . date('d/m/Y', strtotime($end)), 'tone' => 'red'];
+            } elseif ($days <= 30) {
+                $situation = ['label' => $days === 0 ? 'Vence hoje' : 'Vence em ' . $days . ($days === 1 ? ' dia' : ' dias'), 'tone' => 'orange'];
+            } else {
+                $situation = ['label' => 'Vigente até ' . date('d/m/Y', strtotime($end)), 'tone' => 'green'];
+            }
+        }
+        $item = [
+            'id'          => (int) $row['id'],
+            'type_label'  => $types[(int) $row['contracttypes_id']] ?? '',
+            'state_label' => $states[(int) $row['states_id']] ?? '',
+            'location_label' => $locations[(int) $row['locations_id']] ?? '',
+            'begin_text'  => $begin !== '' ? date('d/m/Y', strtotime($begin)) : '',
+            'end_text'    => $end !== '' ? date('d/m/Y', strtotime($end)) : '',
+            'renewal_label' => $renewals[(int) $row['renewal']] ?? '',
+            'situation'   => $situation,
+        ];
+        foreach (self::CONTRACT_FIELDS as $key) {
+            $item[$key] = in_array($key, ['name', 'num', 'begin_date'], true) ? (string) ($row[$key] ?? '') : (int) ($row[$key] ?? 0);
+        }
+        $item['begin_date'] = substr($begin, 0, 10);
+        return $item;
+    }
+
+    /** @return array{types: array, states: array, locations: array, renewals: array, alerts: array} */
+    public static function contractOptions(): array
+    {
+        global $DB;
+        $locations = [];
+        foreach ($DB->request(['SELECT' => ['id', 'completename'], 'FROM' => 'glpi_locations', 'ORDER' => 'completename ASC']) as $row) {
+            $locations[(int) $row['id']] = (string) $row['completename'];
+        }
+        $alerts = [];
+        foreach (\Contract::getAlertName() as $value => $label) {
+            $alerts[(int) $value] = (int) $value === 0 ? 'Sem aviso' : (string) $label;
+        }
+        return [
+            'types'     => self::options('glpi_contracttypes'),
+            'states'    => self::options('glpi_states'),
+            'locations' => $locations,
+            'renewals'  => [0 => 'Nunca', 1 => 'Tácita (automática)', 2 => 'Expressa (precisa confirmar)'],
+            'alerts'    => $alerts,
         ];
     }
 
@@ -500,6 +549,25 @@ final class SupplierPage
             throw new \InvalidArgumentException('Ação inválida.');
         }
 
+        [$contractId, $created] = self::saveContract($input, (int) $supplier->fields['entities_id']);
+        if (!$created) {
+            return 'Contrato salvo.';
+        }
+        $link->add(['suppliers_id' => $supplierId, 'contracts_id' => $contractId]);
+        return 'Contrato criado e vinculado ao fornecedor.';
+    }
+
+    /**
+     * Cria ou atualiza um contrato (campos da gaveta). Usado no fornecedor e
+     * na tela de Contratos.
+     *
+     * @return array{0: int, 1: bool} id e se foi criado agora
+     * @throws \InvalidArgumentException
+     */
+    public static function saveContract(array $input, int $entity): array
+    {
+        $contract = new \Contract();
+        $contractId = (int) ($input['contracts_id'] ?? 0);
         $name = trim((string) ($input['name'] ?? ''));
         if ($name === '') {
             throw new \InvalidArgumentException('Dê um nome ao contrato.');
@@ -515,22 +583,21 @@ final class SupplierPage
             if (!$contract->can($contractId, UPDATE) || !$contract->update(['id' => $contractId] + $fields)) {
                 throw new \InvalidArgumentException('Não foi possível salvar o contrato.');
             }
-            return 'Contrato salvo.';
+            return [$contractId, false];
         }
         if ($fields['begin_date'] === null) {
             unset($fields['begin_date']);
         }
         // Campos que sairam da tela ficam nos padroes (sem limite de itens).
         $contractId = (int) $contract->add($fields + [
-            'entities_id'       => (int) $supplier->fields['entities_id'],
+            'entities_id'       => $entity,
             'is_recursive'      => 1,
             'max_links_allowed' => 0,
         ]);
         if ($contractId <= 0) {
             throw new \InvalidArgumentException('Não foi possível criar o contrato.');
         }
-        $link->add(['suppliers_id' => $supplierId, 'contracts_id' => $contractId]);
-        return 'Contrato criado e vinculado ao fornecedor.';
+        return [$contractId, true];
     }
 
     // ------------------------------------------------------------------
@@ -550,7 +617,7 @@ final class SupplierPage
     }
 
     /** @return array<int, string> */
-    private static function options(string $table): array
+    public static function options(string $table): array
     {
         global $DB;
         $out = [];

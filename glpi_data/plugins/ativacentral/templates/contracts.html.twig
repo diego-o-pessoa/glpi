@@ -1,0 +1,112 @@
+{# Lista de contratos no estilo do Ativa Central. #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div class="ac-app ac-sup">
+    <div class="ac-head">
+        <div>
+            <div class="ac-eyebrow">Ativa Central · Parceiros</div>
+            <h1 class="ac-title">Contratos</h1>
+            <div class="ac-subtitle">Vigência, renovação e avisos dos contratos com fornecedores.</div>
+        </div>
+        <div class="ac-actions">
+            {% if can_create %}
+                <button type="button" class="ac-btn is-primary" id="ac-cr-new"><i class="ti ti-plus"></i> Adicionar contrato</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="ac-sup-kpis">
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-blue"><i class="ti ti-file-certificate"></i></span><div><b>{{ kpis.total }}</b><small>contratos</small></div></div>
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-green"><i class="ti ti-circle-check"></i></span><div><b>{{ kpis.active }}</b><small>vigentes</small></div></div>
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-orange"><i class="ti ti-alarm"></i></span><div><b>{{ kpis.expiring }}</b><small>vencem em 30 dias</small></div></div>
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-red"><i class="ti ti-alert-triangle"></i></span><div><b>{{ kpis.expired }}</b><small>vencidos</small></div></div>
+    </div>
+
+    <div class="ac-panel ac-sup-list">
+        <div class="ac-sup-toolbar">
+            <div class="ac-sup-filters">
+                <button type="button" class="ac-sup-filter is-active" data-filter="all">Todos</button>
+                <button type="button" class="ac-sup-filter" data-filter="tone:green">Vigentes</button>
+                <button type="button" class="ac-sup-filter" data-filter="tone:orange">Vencendo</button>
+                <button type="button" class="ac-sup-filter" data-filter="tone:red">Vencidos</button>
+                <button type="button" class="ac-sup-filter" data-filter="tone:muted">Sem prazo</button>
+            </div>
+            <label class="ac-sup-search">
+                <i class="ti ti-search"></i>
+                <input type="search" id="ac-list-search" placeholder="Buscar por nome, número, fornecedor…">
+            </label>
+        </div>
+
+        {% if contracts is empty %}
+            <div class="ac-ptasks-empty"><i class="ti ti-file-certificate"></i><b>Nenhum contrato ainda</b><span>Use "Adicionar contrato" para cadastrar o primeiro.</span></div>
+        {% else %}
+            <div class="ac-cr-list">
+                {% for c in contracts %}
+                    <div class="ac-cr-row ac-list-row" data-id="{{ c.id }}" data-tone="{{ c.situation.tone }}" role="button" tabindex="0"
+                         data-search="{{ (c.name ~ ' ' ~ c.num ~ ' ' ~ c.type_label ~ ' ' ~ c.suppliers|map(s => s.name)|join(' '))|lower }}">
+                        <span class="ac-sup-kpi-icon is-violet"><i class="ti ti-file-certificate"></i></span>
+                        <div class="ac-cr-main">
+                            <b>{{ c.name }}</b>
+                            <small>
+                                {% if c.num %}<span>Nº {{ c.num }}</span>{% endif %}
+                                {% if c.type_label %}<span class="ac-ptask-type">{{ c.type_label }}</span>{% endif %}
+                                {% for s in c.suppliers %}<a href="{{ s.url }}" onclick="event.stopPropagation()"><i class="ti ti-building-store"></i> {{ s.name }}</a>{% else %}<span>Sem fornecedor</span>{% endfor %}
+                            </small>
+                        </div>
+                        <div class="ac-cr-period">
+                            <span><i class="ti ti-calendar"></i> {{ c.begin_text ?: '—' }} → {{ c.end_text ?: '—' }}</span>
+                            <small>{{ c.duration > 0 ? c.duration ~ (c.duration == 1 ? ' mês' : ' meses') : 'Sem duração' }}{{ c.renewal_label ? ' · Renovação ' ~ c.renewal_label|lower : '' }}</small>
+                        </div>
+                        <span class="ac-cr-sit is-{{ c.situation.tone }}">{{ c.situation.label }}</span>
+                        <i class="ti ti-pencil ac-ct-edit"></i>
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="ac-ptasks-empty" id="ac-list-none" hidden><i class="ti ti-search"></i><b>Nada encontrado</b><span>Tente outro termo ou filtro.</span></div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="ac-drawer" id="ac-cr-drawer" hidden>
+    <div class="ac-drawer-panel" role="dialog" aria-modal="true" aria-label="Contrato">
+        <form method="post" action="{{ action }}" autocomplete="off" id="ac-cr-form">
+            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+            <input type="hidden" name="contract_action" value="save" id="ac-cr-action">
+            <input type="hidden" name="contracts_id" value="0" id="ac-cr-id">
+            <div class="ac-drawer-head">
+                <div>
+                    <div class="ac-eyebrow">Contratos</div>
+                    <h2 class="ac-pnew-title" id="ac-cr-title">Novo contrato</h2>
+                </div>
+                <button type="button" class="ac-btn is-small" id="ac-cr-close" aria-label="Fechar"><i class="ti ti-x"></i></button>
+            </div>
+            <div class="ac-drawer-body">
+                {% include '@ativacentral/_contract_fields.html.twig' %}
+                <h3 class="ac-cr-sub"><i class="ti ti-building-store"></i> Fornecedor</h3>
+                <select name="suppliers_id" class="ac-pnew-input">
+                    <option value="0">— nenhum / manter como está —</option>
+                    {% for k, v in suppliers %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+                </select>
+                <div class="ac-dl-linked" id="ac-cr-suppliers"></div>
+            </div>
+            <div class="ac-drawer-foot">
+                <button type="submit" class="ac-btn ac-btn-danger" id="ac-cr-delete" hidden formnovalidate style="margin-right: 0;"><i class="ti ti-trash"></i> Excluir</button>
+                <span style="flex: 1;"></span>
+                <button type="submit" class="ac-btn is-primary"><i class="ti ti-check"></i> <span id="ac-cr-save-label">Criar contrato</span></button>
+            </div>
+        </form>
+    </div>
+</div>
+<script type="application/json" id="ac-list-data">{{ contracts|json_encode|raw }}</script>
+<script>
+    (function () {
+        var cfg = {
+            prefix: 'ac-cr', newTitle: 'Novo contrato', newLabel: 'Criar contrato', editLabel: 'Salvar contrato',
+            fields: ['name', 'num', 'contracttypes_id', 'states_id', 'locations_id', 'begin_date', 'duration', 'notice', 'periodicity', 'renewal', 'alert'],
+            defaults: { duration: '12', periodicity: '12', notice: '0', contracttypes_id: '0', states_id: '0', locations_id: '0', renewal: '0', alert: '0' },
+            deleteText: 'Mover este contrato para a lixeira? Ele sai de todos os fornecedores.',
+            title: function (c) { return c.name; },
+            editId: {{ edit_id }}, openNew: {{ open_new and can_create ? 'true' : 'false' }}
+        };
+        {% include '@ativacentral/_list_drawer.js.twig' %}
+    })();
+</script>

@@ -1,0 +1,100 @@
+{# JS comum das listas com gaveta (Contatos, Contratos). Espera "cfg". #}
+var p = cfg.prefix;
+var drawer = document.getElementById(p + '-drawer');
+var holder = document.createElement('div');
+holder.className = 'ac-app ac-pnew';
+document.body.appendChild(holder);
+holder.appendChild(drawer);
+
+var form = document.getElementById(p + '-form');
+var items = {};
+JSON.parse(document.getElementById('ac-list-data').textContent || '[]').forEach(function (i) { items[i.id] = i; });
+
+var endHint = document.getElementById(p + '-end');
+function updateEnd() {
+    if (!endHint) { return; }
+    var begin = form.elements.begin_date.value;
+    var months = parseInt(form.elements.duration.value, 10) || 0;
+    if (!begin || months <= 0) { endHint.textContent = ''; return; }
+    var d = new Date(begin + 'T00:00:00');
+    d.setMonth(d.getMonth() + months);
+    endHint.textContent = 'Vigente até ' + d.toLocaleDateString('pt-BR') + '.';
+}
+if (endHint) {
+    form.elements.begin_date.addEventListener('change', updateEnd);
+    form.elements.duration.addEventListener('input', updateEnd);
+}
+
+function open(item) {
+    document.getElementById(p + '-action').value = 'save';
+    document.getElementById(p + '-id').value = item ? item.id : 0;
+    document.getElementById(p + '-title').textContent = item ? cfg.title(item) : cfg.newTitle;
+    document.getElementById(p + '-save-label').textContent = item ? cfg.editLabel : cfg.newLabel;
+    document.getElementById(p + '-delete').hidden = !item;
+    cfg.fields.forEach(function (f) {
+        var el = form.elements[f];
+        if (!el) { return; }
+        if (item) { el.value = item[f] == null ? '' : item[f]; }
+        else { el.value = (cfg.defaults && f in cfg.defaults) ? cfg.defaults[f] : (el.tagName === 'SELECT' ? (el.options[0] ? el.options[0].value : '') : ''); }
+    });
+    if (form.elements.suppliers_id) { form.elements.suppliers_id.value = '0'; }
+    var linked = document.getElementById(p + '-suppliers');
+    if (linked) {
+        linked.innerHTML = '';
+        (item ? item.suppliers : []).forEach(function (s) {
+            var a = document.createElement('a');
+            a.className = 'ac-dl-link';
+            a.href = s.url;
+            a.textContent = 'Fornecedor: ' + s.name;
+            linked.appendChild(a);
+        });
+    }
+    updateEnd();
+    drawer.hidden = false;
+    form.elements.name.focus();
+}
+function close() { drawer.hidden = true; }
+
+var btnNew = document.getElementById(p + '-new');
+if (btnNew) { btnNew.addEventListener('click', function () { open(null); }); }
+document.querySelectorAll('.ac-list-row').forEach(function (row) {
+    var go = function () { open(items[row.getAttribute('data-id')]); };
+    row.addEventListener('click', go);
+    row.addEventListener('keydown', function (e) { if (e.key === 'Enter') { go(); } });
+});
+document.getElementById(p + '-close').addEventListener('click', close);
+drawer.addEventListener('click', function (e) { if (e.target === drawer) { close(); } });
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
+document.getElementById(p + '-delete').addEventListener('click', function (e) {
+    if (!confirm(cfg.deleteText)) { e.preventDefault(); return; }
+    document.getElementById(p + '-action').value = 'delete';
+});
+
+// Busca e filtros.
+var rows = Array.prototype.slice.call(document.querySelectorAll('.ac-list-row'));
+var search = document.getElementById('ac-list-search');
+var none = document.getElementById('ac-list-none');
+var filter = 'all';
+function apply() {
+    var q = (search.value || '').trim().toLowerCase();
+    var shown = 0;
+    rows.forEach(function (r) {
+        var ok = (!q || r.getAttribute('data-search').indexOf(q) !== -1)
+            && (filter === 'all' || (filter.indexOf('cat:') === 0 && r.getAttribute('data-cat') === filter.slice(4))
+                || (filter.indexOf('tone:') === 0 && r.getAttribute('data-tone') === filter.slice(5)));
+        r.hidden = !ok;
+        shown += ok ? 1 : 0;
+    });
+    if (none) { none.hidden = shown > 0; }
+}
+document.querySelectorAll('.ac-sup-filter').forEach(function (b) {
+    b.addEventListener('click', function () {
+        document.querySelectorAll('.ac-sup-filter').forEach(function (x) { x.classList.toggle('is-active', x === b); });
+        filter = b.getAttribute('data-filter');
+        apply();
+    });
+});
+if (search) { search.addEventListener('input', apply); }
+
+if (cfg.openNew) { open(null); }
+if (cfg.editId && items[cfg.editId]) { open(items[cfg.editId]); }

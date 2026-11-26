@@ -48,7 +48,7 @@ final class Hubs
             ],
         ],
         'management' => [
-            'subtitle' => 'Licenças, contratos, documentos e infraestrutura.',
+            'subtitle' => 'Licenças, orçamentos, documentos e infraestrutura.',
             'groups'   => [
                 'Contratos e financeiro' => ['softwarelicense', 'budget', 'contact', 'contract', 'document'],
                 'Infraestrutura'         => ['line', 'certificate', 'datacenter', 'cluster', 'domain', 'appliance', 'database'],
@@ -278,8 +278,8 @@ final class Hubs
             // Secoes de plugin nao tem texto proprio: uma frase generica.
             'subtitle' => (string) $definition['subtitle'] !== '' ? (string) $definition['subtitle'] : 'Escolha o que deseja abrir em ' . $title . '.',
             'actions'  => [],
-            // Fornecedores tem secao propria ("Parceiros") no menu lateral.
-            'groups'   => self::group(array_filter($cards, static fn (array $c): bool => $c['key'] !== 'supplier'), $definition['groups']),
+            // Fornecedores, contatos e contratos tem secao propria ("Parceiros") no menu lateral.
+            'groups'   => self::group(array_filter($cards, static fn (array $c): bool => !in_array($c['key'], ['supplier', 'contact', 'contract'], true)), $definition['groups']),
         ];
     }
 

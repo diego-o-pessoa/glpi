@@ -1,0 +1,114 @@
+{# Lista de contatos no estilo do Ativa Central. #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div class="ac-app ac-sup">
+    <div class="ac-head">
+        <div>
+            <div class="ac-eyebrow">Ativa Central · Parceiros</div>
+            <h1 class="ac-title">Contatos</h1>
+            <div class="ac-subtitle">Pessoas dos fornecedores e parceiros: comercial, suporte, financeiro…</div>
+        </div>
+        <div class="ac-actions">
+            {% if can_create %}
+                <button type="button" class="ac-btn is-primary" id="ac-ct-new"><i class="ti ti-plus"></i> Adicionar contato</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="ac-sup-kpis">
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-blue"><i class="ti ti-address-book"></i></span><div><b>{{ kpis.total }}</b><small>contatos</small></div></div>
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-green"><i class="ti ti-phone"></i></span><div><b>{{ kpis.with_phone }}</b><small>com telefone</small></div></div>
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-violet"><i class="ti ti-mail"></i></span><div><b>{{ kpis.with_email }}</b><small>com e-mail</small></div></div>
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-orange"><i class="ti ti-building-off"></i></span><div><b>{{ kpis.no_supplier }}</b><small>sem fornecedor</small></div></div>
+    </div>
+
+    <div class="ac-panel ac-sup-list">
+        <div class="ac-sup-toolbar">
+            <div class="ac-sup-filters">
+                <button type="button" class="ac-sup-filter is-active" data-filter="all">Todos</button>
+                {% for f in filters %}<button type="button" class="ac-sup-filter" data-filter="cat:{{ f }}">{{ f }}</button>{% endfor %}
+            </div>
+            <label class="ac-sup-search">
+                <i class="ti ti-search"></i>
+                <input type="search" id="ac-list-search" placeholder="Buscar por nome, e-mail, telefone, fornecedor…">
+            </label>
+        </div>
+
+        {% if contacts is empty %}
+            <div class="ac-ptasks-empty"><i class="ti ti-address-book"></i><b>Nenhum contato ainda</b><span>Use "Adicionar contato" para cadastrar o primeiro.</span></div>
+        {% else %}
+            <div>
+                {% for c in contacts %}
+                    <div class="ac-sup-row ac-list-row" data-id="{{ c.id }}" data-cat="{{ c.type }}" role="button" tabindex="0"
+                         data-search="{{ (c.full_name ~ ' ' ~ c.email ~ ' ' ~ c.phone ~ ' ' ~ c.mobile ~ ' ' ~ c.suppliers|map(s => s.name)|join(' '))|lower }}">
+                        <span class="ac-sup-avatar">{{ c.initials }}</span>
+                        <div class="ac-sup-main">
+                            <b>{{ c.full_name }}</b>
+                            <small>
+                                {% if c.type %}<span class="ac-ptask-type">{{ c.type }}</span>{% endif %}
+                                {% if c.title %}<span>{{ c.title }}</span>{% endif %}
+                                {% for s in c.suppliers %}<a href="{{ s.url }}" onclick="event.stopPropagation()"><i class="ti ti-building-store"></i> {{ s.name }}</a>{% endfor %}
+                            </small>
+                        </div>
+                        <div class="ac-sup-contact">
+                            {% if c.phone %}<a href="tel:{{ c.phone }}" onclick="event.stopPropagation()"><i class="ti ti-phone"></i> {{ c.phone }}</a>{% endif %}
+                            {% if c.mobile %}<a href="tel:{{ c.mobile }}" onclick="event.stopPropagation()"><i class="ti ti-device-mobile"></i> {{ c.mobile }}</a>{% endif %}
+                            {% if not c.phone and not c.mobile %}<span class="ac-ptask-none">Sem telefone</span>{% endif %}
+                        </div>
+                        <div class="ac-sup-counts">
+                            {% if c.email %}<a href="mailto:{{ c.email }}" onclick="event.stopPropagation()"><i class="ti ti-mail"></i> {{ c.email }}</a>{% else %}<span class="ac-ptask-none">Sem e-mail</span>{% endif %}
+                        </div>
+                        <i class="ti ti-pencil ac-sup-go"></i>
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="ac-ptasks-empty" id="ac-list-none" hidden><i class="ti ti-search"></i><b>Nada encontrado</b><span>Tente outro termo ou filtro.</span></div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="ac-drawer" id="ac-ct-drawer" hidden>
+    <div class="ac-drawer-panel" role="dialog" aria-modal="true" aria-label="Contato">
+        <form method="post" action="{{ action }}" autocomplete="off" id="ac-ct-form">
+            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+            <input type="hidden" name="contact_action" value="save" id="ac-ct-action">
+            <input type="hidden" name="contacts_id" value="0" id="ac-ct-id">
+            <div class="ac-drawer-head">
+                <div>
+                    <div class="ac-eyebrow">Contatos</div>
+                    <h2 class="ac-pnew-title" id="ac-ct-title">Novo contato</h2>
+                </div>
+                <button type="button" class="ac-btn is-small" id="ac-ct-close" aria-label="Fechar"><i class="ti ti-x"></i></button>
+            </div>
+            <div class="ac-drawer-body">
+                {% include '@ativacentral/_contact_fields.html.twig' %}
+                <label class="ac-pnew-field">
+                    <span class="ac-pnew-label">Fornecedor</span>
+                    <select name="suppliers_id" class="ac-pnew-input">
+                        <option value="0">— nenhum / manter como está —</option>
+                        {% for k, v in suppliers %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+                    </select>
+                </label>
+                <div class="ac-dl-linked" id="ac-ct-suppliers"></div>
+            </div>
+            <div class="ac-drawer-foot">
+                <button type="submit" class="ac-btn ac-btn-danger" id="ac-ct-delete" hidden formnovalidate style="margin-right: 0;"><i class="ti ti-trash"></i> Excluir</button>
+                <span style="flex: 1;"></span>
+                <button type="submit" class="ac-btn is-primary"><i class="ti ti-check"></i> <span id="ac-ct-save-label">Criar contato</span></button>
+            </div>
+        </form>
+    </div>
+</div>
+<script type="application/json" id="ac-list-data">{{ contacts|json_encode|raw }}</script>
+<script>
+    (function () {
+        var cfg = {
+            prefix: 'ac-ct', actionField: 'contact_action', idField: 'contacts_id', newTitle: 'Novo contato',
+            newLabel: 'Criar contato', editLabel: 'Salvar contato',
+            fields: ['name', 'phone', 'mobile', 'email', 'address', 'town', 'postcode', 'state', 'country', 'contacttypes_id', 'usertitles_id'],
+            deleteText: 'Mover este contato para a lixeira? Ele sai de todos os fornecedores.',
+            title: function (c) { return c.full_name; },
+            editId: {{ edit_id }}, openNew: {{ open_new and can_create ? 'true' : 'false' }}
+        };
+        {% include '@ativacentral/_list_drawer.js.twig' %}
+    })();
+</script>
