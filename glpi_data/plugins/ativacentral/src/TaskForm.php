@@ -137,6 +137,9 @@ final class TaskForm
             }
         }
 
+        // Aviso nativo "usuario ocupado" e confuso: troca pelo nosso no fim.
+        $warningsBefore = count($_SESSION['MESSAGE_AFTER_REDIRECT'][WARNING] ?? []);
+
         $status = $task === null ? 'todo' : (string) ($input['status'] ?? self::statusOf($task));
         if (!isset(self::STATUSES[$status])) {
             $status = 'todo';
@@ -192,6 +195,7 @@ final class TaskForm
         }
 
         self::saveTeam($id, $input);
+        self::replaceBusyWarnings($id, $warningsBefore);
         return $id;
     }
 
@@ -300,6 +304,124 @@ final class TaskForm
         }
         foreach ($wanted as [$type, $id]) {
             $link->add(['projecttasks_id' => $taskId, 'itemtype' => $type, 'items_id' => $id]);
+        }
+    }
+
+    /**
+     * Troca os avisos nativos "O usuario X esta ocupado..." (texto corrido,
+     * horas sem sentido e que listam ate a tarefa principal do proprio
+     * projeto) por um resumo: por pessoa, as outras tarefas no mesmo periodo.
+     */
+    private static function replaceBusyWarnings(int $taskId, int $warningsBefore): void
+    {
+        global $DB;
+
+        $list = &$_SESSION['MESSAGE_AFTER_REDIRECT'][WARNING];
+        if (is_array($list)) {
+            foreach (array_keys($list) as $i) {
+                if ($i >= $warningsBefore && str_contains((string) $list[$i], 'user.form.php')) {
+                    unset($list[$i]);
+                }
+            }
+            $list = array_values($list);
+            if ($list === []) {
+                unset($_SESSION['MESSAGE_AFTER_REDIRECT'][WARNING]);
+            }
+        }
+        unset($list);
+
+        $task = new ProjectTask();
+        if (!$task->getFromDB($taskId) || empty($task->fields['plan_start_date']) || empty($task->fields['plan_end_date'])) {
+            return;
+        }
+        $start = substr((string) $task->fields['plan_start_date'], 0, 10);
+        $end = substr((string) $task->fields['plan_end_date'], 0, 10);
+
+        // Pessoas da tarefa (diretas e de grupos).
+        $users = [];
+        foreach ($DB->request(['SELECT' => ['itemtype', 'items_id'], 'FROM' => 'glpi_projecttaskteams', 'WHERE' => ['projecttasks_id' => $taskId]]) as $row) {
+            if ($row['itemtype'] === 'User') {
+                $users[(int) $row['items_id']] = true;
+            } elseif ($row['itemtype'] === 'Group') {
+                foreach ($DB->request(['SELECT' => ['users_id'], 'FROM' => 'glpi_groups_users', 'WHERE' => ['groups_id' => (int) $row['items_id']]]) as $gu) {
+                    $users[(int) $gu['users_id']] = true;
+                }
+            }
+        }
+        if ($users === []) {
+            return;
+        }
+
+        $closed = [];
+        foreach ($DB->request(['SELECT' => ['id', 'name', 'is_finished'], 'FROM' => 'glpi_projectstates']) as $st) {
+            if ((int) $st['is_finished'] === 1 || str_contains(mb_strtolower((string) $st['name']), 'cancel')) {
+                $closed[] = (int) $st['id'];
+            }
+        }
+
+        $lines = [];
+        foreach (array_keys($users) as $userId) {
+            $groups = array_map(static fn ($r) => (int) $r['groups_id'], iterator_to_array($DB->request(['SELECT' => ['groups_id'], 'FROM' => 'glpi_groups_users', 'WHERE' => ['users_id' => $userId]])));
+            $memberOf = [['glpi_projecttaskteams.itemtype' => 'User', 'glpi_projecttaskteams.items_id' => $userId]];
+            if ($groups !== []) {
+                $memberOf[] = ['glpi_projecttaskteams.itemtype' => 'Group', 'glpi_projecttaskteams.items_id' => $groups];
+            }
+            $where = [
+                'glpi_projecttasks.id'              => ['<>', $taskId],
+                'glpi_projecttasks.is_deleted'      => 0,
+                'glpi_projecttasks.is_template'     => 0,
+                'glpi_projecttasks.plan_start_date' => ['<=', $end . ' 23:59:59'],
+                'glpi_projecttasks.plan_end_date'   => ['>=', $start . ' 00:00:00'],
+                // Tarefa principal (tem subtarefas) nao conta: ela so agrupa.
+                'NOT' => ['glpi_projecttasks.id' => new \QuerySubQuery([
+                    'SELECT' => 'projecttasks_id', 'DISTINCT' => true, 'FROM' => 'glpi_projecttasks',
+                    'WHERE'  => ['is_deleted' => 0, 'projecttasks_id' => ['>', 0]],
+                ])],
+                'OR' => $memberOf,
+            ];
+            if ($closed !== []) {
+                $where[] = ['NOT' => ['glpi_projecttasks.projectstates_id' => $closed]];
+            }
+            $tasks = [];
+            foreach ($DB->request([
+                'SELECT'    => ['glpi_projecttasks.id', 'glpi_projecttasks.name', 'glpi_projecttasks.plan_start_date', 'glpi_projecttasks.plan_end_date', 'glpi_projects.name AS project'],
+                'DISTINCT'  => true,
+                'FROM'      => 'glpi_projecttasks',
+                'INNER JOIN' => [
+                    'glpi_projecttaskteams' => ['ON' => ['glpi_projecttaskteams' => 'projecttasks_id', 'glpi_projecttasks' => 'id']],
+                    'glpi_projects'         => ['ON' => ['glpi_projects' => 'id', 'glpi_projecttasks' => 'projects_id']],
+                ],
+                'WHERE'     => $where,
+                'ORDER'     => 'glpi_projecttasks.plan_start_date ASC',
+            ]) as $row) {
+                $tasks[(int) $row['id']] = sprintf(
+                    '<li><a href="%s">%s</a> <span style="opacity:.7">· %s · %s a %s</span></li>',
+                    htmlescape(self::editUrl((int) $row['id'])),
+                    htmlescape((string) $row['name']),
+                    htmlescape((string) $row['project']),
+                    date('d/m', strtotime((string) $row['plan_start_date'])),
+                    date('d/m', strtotime((string) $row['plan_end_date']))
+                );
+            }
+            if ($tasks === []) {
+                continue;
+            }
+            $member = self::member('User', $userId);
+            $shown = array_slice($tasks, 0, 3);
+            $more = count($tasks) - count($shown);
+            $lines[] = '<b>' . htmlescape($member['name']) . '</b> — '
+                . count($tasks) . (count($tasks) === 1 ? ' outra tarefa' : ' outras tarefas')
+                . '<ul style="margin:4px 0 10px;padding-left:18px">' . implode('', $shown)
+                . ($more > 0 ? '<li style="opacity:.7">e mais ' . $more . '</li>' : '') . '</ul>';
+        }
+        if ($lines !== []) {
+            Session::addMessageAfterRedirect(
+                '<b>Agenda cheia de ' . date('d/m', strtotime($start)) . ' a ' . date('d/m', strtotime($end)) . '</b><br>'
+                . '<span style="opacity:.8">A tarefa foi salva. Só um aviso: estas pessoas já têm tarefas nesse período.</span><br><br>'
+                . implode('', $lines),
+                false,
+                WARNING
+            );
         }
     }
 
