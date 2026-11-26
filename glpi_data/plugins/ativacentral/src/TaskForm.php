@@ -67,11 +67,9 @@ final class TaskForm
             'csrf'         => Session::getNewCSRFToken(),
             'name'         => (string) $value('name', $f['name'] ?? ''),
             'kind'         => (string) $value('task_kind', $task === null || $parent > 0 || !self::isPhase($task) ? 'task' : 'phase'),
-            // Nova tarefa entra por padrao dentro da tarefa principal (se houver).
-            'parent'       => $task === null && !isset($old['projecttasks_id']) && $phases !== [] ? (int) array_key_first($phases) : $parent,
+            // Nova tarefa: se o projeto tem uma unica principal, ja vem dentro dela.
+            'parent'       => $task === null && !isset($old['projecttasks_id']) && count($phases) === 1 ? (int) array_key_first($phases) : $parent,
             'phases'       => $phases,
-            // Ja existe outra principal: a opcao "Principal" fica bloqueada.
-            'main_task'    => $phases !== [] ? (string) reset($phases) : '',
             'start'        => (string) $value('plan_start_date', self::dateOnly((string) ($f['plan_start_date'] ?? ''))),
             'end'          => (string) $value('plan_end_date', self::dateOnly((string) ($f['plan_end_date'] ?? ''))),
             'status'       => (string) $value('status', $task !== null ? self::statusOf($task) : 'todo'),
@@ -122,13 +120,6 @@ final class TaskForm
         }
 
         $parent = 0;
-        if (($input['task_kind'] ?? 'task') === 'phase') {
-            // So uma tarefa principal por projeto.
-            $others = self::phases($projectId, $task !== null ? (int) $task->getID() : 0);
-            if ($others !== []) {
-                throw new \InvalidArgumentException('Este projeto já tem uma tarefa principal: "' . reset($others) . '".');
-            }
-        }
         if (($input['task_kind'] ?? 'task') === 'task') {
             $parent = (int) ($input['projecttasks_id'] ?? 0);
             // 0 = tarefa solta no projeto (sem fase).
