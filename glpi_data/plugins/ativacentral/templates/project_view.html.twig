@@ -1,4 +1,61 @@
 {# Tela do projeto no estilo do Ativa Central. #}
+{% macro task_rows(nodes, depth) %}
+    {% import _self as m %}
+    {% for t in nodes %}
+        {% set phase = t.children is not empty %}
+        <div class="ac-ptask-node" data-node>
+            <a href="{{ t.url }}" class="ac-ptask-row {{ phase ? 'is-phase' : '' }} kind-{{ t.kind }}" style="--depth: {{ depth }}">
+                <div class="ac-ptask-name">
+                    {% if phase %}
+                        <button type="button" class="ac-ptask-toggle" data-toggle title="Recolher/expandir"><i class="ti ti-chevron-down"></i></button>
+                        <i class="ti {{ t.leaf_total > 0 and t.leaf_done == t.leaf_total ? 'ti-circle-check-filled is-done' : 'ti-folder' }} ac-ptask-icon"></i>
+                    {% else %}
+                        <i class="ti {{ {'done': 'ti-circle-check-filled', 'running': 'ti-circle-half-2', 'cancelled': 'ti-circle-x'}[t.kind] ?? 'ti-circle' }} ac-ptask-icon"></i>
+                    {% endif %}
+                    <div class="ac-ptask-title">
+                        <span class="ac-ptask-label" title="{{ t.name }}">{{ t.name }}</span>
+                        <span class="ac-ptask-sub">
+                            {% if t.type %}<span class="ac-ptask-type">{{ t.type }}</span>{% endif %}
+                            {% if phase %}<span>{{ t.leaf_done }} de {{ t.leaf_total }} concluídas</span>{% endif %}
+                        </span>
+                    </div>
+                </div>
+                <div class="ac-ptask-col ac-ptask-status">
+                    {% if phase %}
+                        <span class="ac-ptask-state is-phase">Fase</span>
+                    {% else %}
+                        <span class="ac-ptask-state kind-{{ t.kind }}">{{ t.state }}</span>
+                    {% endif %}
+                </div>
+                <div class="ac-ptask-col ac-ptask-progress">
+                    <div class="ac-ptask-bar"><span class="{{ t.percent >= 100 ? 'is-done' : '' }}" style="width: {{ t.percent }}%"></span></div>
+                    <b>{{ t.percent }}%</b>
+                </div>
+                <div class="ac-ptask-col ac-ptask-dates">
+                    <span>{{ t.start ?: '—' }} → {{ t.end ?: '—' }}</span>
+                    {% if t.due == 'late' %}<small class="is-late">Atrasada</small>{% elseif t.due == 'soon' %}<small class="is-soon">Vence em breve</small>{% endif %}
+                </div>
+                <div class="ac-ptask-col ac-ptask-duration" title="Duração planejada / efetiva">
+                    <span>{{ t.planned }}</span><small>efetiva: {{ t.effective }}</small>
+                </div>
+                <div class="ac-ptask-col ac-ptask-team">
+                    {% for mbr in t.members|slice(0, 3) %}
+                        <span class="ac-ptask-av" title="{{ mbr.name }}">{{ mbr.initials }}</span>
+                    {% else %}
+                        <span class="ac-ptask-none">—</span>
+                    {% endfor %}
+                    {% if t.members|length > 3 %}
+                        <span class="ac-ptask-av is-more" title="{{ t.members|slice(3)|map(x => x.name)|join(', ') }}">+{{ t.members|length - 3 }}</span>
+                    {% endif %}
+                </div>
+            </a>
+            {% if phase %}
+                <div class="ac-ptask-children">{{ m.task_rows(t.children, depth + 1) }}</div>
+            {% endif %}
+        </div>
+    {% endfor %}
+{% endmacro %}
+{% import _self as macros %}
 <link rel="stylesheet" type="text/css" href="{{ css_url }}">
 <div class="ac-app ac-pnew ac-pview">
     <a class="ac-pview-back" href="{{ back }}"><i class="ti ti-arrow-left"></i> Voltar para Projetos</a>
@@ -31,13 +88,59 @@
                     {% if t.count > 0 %}<b>{{ t.count }}</b>{% endif %}
                 </a>
             {% endfor %}
-            <a href="{{ classic }}" class="ac-pview-nav-classic" title="Abrir a tela completa do GLPI">
-                <i class="ti ti-external-link"></i> Tela completa do GLPI
-            </a>
         </nav>
 
         <div class="ac-pview-content">
-            {% if tab_url is defined %}
+            {% if tab == 'tasks' %}
+                <div class="ac-panel ac-ptasks">
+                    <div class="ac-ptasks-head">
+                        <div>
+                            <h2 class="ac-pnew-title"><i class="ti ti-list-check"></i> Tarefas do projeto</h2>
+                            <div class="ac-pnew-hint">{{ tasks_done }} de {{ tasks_total }} tarefas concluídas · clique numa tarefa para abrir</div>
+                        </div>
+                        <div class="ac-actions">
+                            {% if tasks is not empty %}
+                                <button type="button" class="ac-btn is-small" id="ac-ptask-collapse"><i class="ti ti-fold"></i> Recolher fases</button>
+                            {% endif %}
+                            {% if add_task_url %}
+                                <a href="{{ add_task_url }}" class="ac-btn is-primary"><i class="ti ti-plus"></i> Adicionar tarefa</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if tasks is empty %}
+                        <div class="ac-ptasks-empty">
+                            <i class="ti ti-list-details"></i>
+                            <b>Nenhuma tarefa ainda</b>
+                            <span>Comece criando as fases (ex.: Planejamento) e as tarefas dentro delas.</span>
+                        </div>
+                    {% else %}
+                        <div class="ac-ptask-headrow">
+                            <span>Tarefa</span><span>Status</span><span>Andamento</span><span>Prazo planejado</span><span>Duração</span><span>Equipe</span>
+                        </div>
+                        <div class="ac-ptask-list">{{ macros.task_rows(tasks, 0) }}</div>
+                    {% endif %}
+                </div>
+                <script>
+                    (function () {
+                        document.querySelectorAll('.ac-ptask-toggle').forEach(function (btn) {
+                            btn.addEventListener('click', function (e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                btn.closest('[data-node]').classList.toggle('is-collapsed');
+                            });
+                        });
+                        var all = document.getElementById('ac-ptask-collapse');
+                        if (all) {
+                            all.addEventListener('click', function () {
+                                var nodes = document.querySelectorAll('.ac-ptask-list > [data-node]');
+                                var collapse = !Array.prototype.every.call(nodes, function (n) { return n.classList.contains('is-collapsed'); });
+                                nodes.forEach(function (n) { if (n.querySelector('.ac-ptask-children')) { n.classList.toggle('is-collapsed', collapse); } });
+                                all.lastChild.textContent = collapse ? ' Expandir fases' : ' Recolher fases';
+                            });
+                        }
+                    })();
+                </script>
+            {% elseif tab_url is defined %}
                 <div class="ac-panel ac-pview-glpi" id="ac-pview-tab" data-url="{{ tab_url }}">
                     <div class="ac-pview-loading"><span class="spinner-border spinner-border-sm"></span> Carregando…</div>
                 </div>

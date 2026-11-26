@@ -22,7 +22,7 @@ final class ProjectPage
     /** Abas: chave => [rotulo, icone, aba do GLPI (null = formulario nosso)]. */
     public const TABS = [
         'main'      => ['Projeto', 'ti-clipboard-text', null],
-        'tasks'     => ['Tarefas do projeto', 'ti-list-check', 'ProjectTask$1'],
+        'tasks'     => ['Tarefas do projeto', 'ti-list-check', null],
         'team'      => ['Equipe', 'ti-users', 'ProjectTeam$1'],
         'kanban'    => ['Kanban', 'ti-layout-kanban', 'Project$3'],
         'children'  => ['Subprojetos', 'ti-sitemap', 'Project$1'],
@@ -68,7 +68,6 @@ final class ProjectPage
             'message'        => $message,
             'error'          => $error,
             'back'           => Shell::url('/front/projects.php'),
-            'classic'        => Shell::glpiUrl('/front/project.form.php?id=' . $id . '&classic=1'),
             'priority_label' => ProjectForm::priorityLabel($priority),
             'priority_tone'  => ProjectForm::priorityTone($priority),
             'state_name'     => $stateName,
@@ -89,6 +88,10 @@ final class ProjectPage
                 'id'        => $id,
             ]);
             return $data;
+        }
+
+        if ($tab === 'tasks') {
+            return $data + ProjectTasksView::data($project);
         }
 
         $value = static fn (string $key, mixed $default) => $old[$key] ?? $default;
