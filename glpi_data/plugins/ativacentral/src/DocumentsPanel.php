@@ -174,50 +174,71 @@ final class DocumentsPanel
         if ($uploads === []) {
             throw new \InvalidArgumentException('Escolha pelo menos um arquivo.');
         }
-        $maxBytes = (int) ($CFG_GLPI['document_max_size'] ?? 2) * 1024 * 1024;
         $category = self::category($post);
         $added = 0;
         // O GLPI avisa "Criar uma pasta PDF/xx", "Documento copiado..." a cada
         // arquivo: guarda o que ja havia e tira esses avisos tecnicos no fim.
         $infoBefore = count($_SESSION['MESSAGE_AFTER_REDIRECT'][INFO] ?? []);
         foreach ($uploads as $upload) {
-            if ((int) $upload['error'] !== UPLOAD_ERR_OK || !is_uploaded_file((string) $upload['tmp_name'])) {
-                throw new \InvalidArgumentException('Falha ao enviar "' . $upload['name'] . '".');
-            }
-            if ((int) $upload['size'] > $maxBytes) {
-                throw new \InvalidArgumentException('"' . $upload['name'] . '" passa do limite de ' . ($maxBytes / 1024 / 1024) . ' MB.');
-            }
-            // O GLPI pega o arquivo na pasta temporaria (prefixo + nome).
-            $name = basename(str_replace(['/', '\\'], '_', (string) $upload['name']));
-            $prefix = uniqid('acdoc', true) . '_';
-            if (!move_uploaded_file((string) $upload['tmp_name'], GLPI_TMP_DIR . '/' . $prefix . $name)) {
-                throw new \InvalidArgumentException('Não foi possível receber "' . $name . '".');
-            }
-            $doc = new Document();
-            $docId = $doc->add([
-                'name'                  => $name,
+            $docId = self::storeUpload($upload, [
                 'documentcategories_id' => $category,
                 'entities_id'           => $item->getEntityID(),
                 'is_recursive'          => $item->isRecursive() ? 1 : 0,
                 'itemtype'              => $itemtype,
                 'items_id'              => $id,
-                '_filename'             => [$prefix . $name],
-                '_prefix_filename'      => [$prefix],
             ]);
-            if ($docId) {
+            if ($docId > 0) {
                 $added++;
             }
         }
+        self::dropInfoAfter($infoBefore);
+        if ($added === 0) {
+            throw new \InvalidArgumentException('Nenhum arquivo foi aceito (confira o tipo do arquivo).');
+        }
+        return $added === 1 ? 'Documento adicionado.' : $added . ' documentos adicionados.';
+    }
+
+    /**
+     * Grava um arquivo enviado como documento do GLPI (o GLPI pega o arquivo
+     * na pasta temporaria: prefixo + nome).
+     *
+     * @param array{name: string, tmp_name: string, error: int, size: int} $upload
+     * @throws \InvalidArgumentException
+     */
+    public static function storeUpload(array $upload, array $fields): int
+    {
+        global $CFG_GLPI;
+        $maxBytes = (int) ($CFG_GLPI['document_max_size'] ?? 2) * 1024 * 1024;
+        if ((int) $upload['error'] !== UPLOAD_ERR_OK || !is_uploaded_file((string) $upload['tmp_name'])) {
+            throw new \InvalidArgumentException('Falha ao enviar "' . $upload['name'] . '".');
+        }
+        if ((int) $upload['size'] > $maxBytes) {
+            throw new \InvalidArgumentException('"' . $upload['name'] . '" passa do limite de ' . ($maxBytes / 1024 / 1024) . ' MB.');
+        }
+        $name = basename(str_replace(['/', '\\'], '_', (string) $upload['name']));
+        $prefix = uniqid('acdoc', true) . '_';
+        if (!move_uploaded_file((string) $upload['tmp_name'], GLPI_TMP_DIR . '/' . $prefix . $name)) {
+            throw new \InvalidArgumentException('Não foi possível receber "' . $name . '".');
+        }
+        $fields += ['name' => $name];
+        if (trim((string) $fields['name']) === '') {
+            $fields['name'] = $name;
+        }
+        return (int) (new Document())->add($fields + [
+            '_filename'        => [$prefix . $name],
+            '_prefix_filename' => [$prefix],
+        ]);
+    }
+
+    /** Tira os avisos tecnicos do GLPI ("Criar uma pasta PDF/xx"...) gerados depois de $infoBefore. */
+    public static function dropInfoAfter(int $infoBefore): void
+    {
         if (isset($_SESSION['MESSAGE_AFTER_REDIRECT'][INFO]) && is_array($_SESSION['MESSAGE_AFTER_REDIRECT'][INFO])) {
             $_SESSION['MESSAGE_AFTER_REDIRECT'][INFO] = array_slice($_SESSION['MESSAGE_AFTER_REDIRECT'][INFO], 0, $infoBefore);
             if ($_SESSION['MESSAGE_AFTER_REDIRECT'][INFO] === []) {
                 unset($_SESSION['MESSAGE_AFTER_REDIRECT'][INFO]);
             }
         }
-        if ($added === 0) {
-            throw new \InvalidArgumentException('Nenhum arquivo foi aceito (confira o tipo do arquivo).');
-        }
-        return $added === 1 ? 'Documento adicionado.' : $added . ' documentos adicionados.';
     }
 
     /**
@@ -226,7 +247,7 @@ final class DocumentsPanel
      *
      * @throws \InvalidArgumentException
      */
-    private static function category(array $post): int
+    public static function category(array $post): int
     {
         global $DB;
         if ((string) ($post['documentcategories_id'] ?? '') !== 'new') {
@@ -251,7 +272,7 @@ final class DocumentsPanel
     }
 
     /** @return list<array{name: string, tmp_name: string, error: int, size: int}> */
-    private static function normalizeFiles(array $files): array
+    public static function normalizeFiles(array $files): array
     {
         if (!isset($files['name'])) {
             return [];
@@ -271,7 +292,7 @@ final class DocumentsPanel
         return $out;
     }
 
-    private static function icon(string $mime, string $file, string $link): string
+    public static function icon(string $mime, string $file, string $link): string
     {
         $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         return match (true) {
@@ -285,13 +306,13 @@ final class DocumentsPanel
         };
     }
 
-    private static function size(int $bytes): string
+    public static function size(int $bytes): string
     {
         return $bytes >= 1048576 ? number_format($bytes / 1048576, 1, ',', '.') . ' MB' : max(1, (int) round($bytes / 1024)) . ' KB';
     }
 
     /** "Nome Sobrenome" (sem " - Ativa Locacao"). */
-    private static function userName(int $id): string
+    public static function userName(int $id): string
     {
         $user = new \User();
         if ($id <= 0 || !$user->getFromDB($id)) {

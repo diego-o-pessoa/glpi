@@ -1,0 +1,272 @@
+{# Biblioteca de documentos no estilo do Ativa Central. #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div class="ac-app ac-sup ac-doclib">
+    <div class="ac-head">
+        <div>
+            <div class="ac-eyebrow">Ativa Central · Gerência</div>
+            <h1 class="ac-title">Documentos</h1>
+            <div class="ac-subtitle">Arquivos do GLPI: contratos, propostas, notas, assinaturas e anexos.</div>
+        </div>
+        <div class="ac-actions">
+            {% if can_create %}
+                <button type="button" class="ac-btn is-primary" id="ac-dl-new"><i class="ti ti-plus"></i> Adicionar documento</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="ac-sup-kpis">
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-blue"><i class="ti ti-files"></i></span><div><b>{{ kpis.total }}</b><small>documentos</small></div></div>
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-green"><i class="ti ti-calendar-plus"></i></span><div><b>{{ kpis.month }}</b><small>adicionados este mês</small></div></div>
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-violet"><i class="ti ti-tags"></i></span><div><b>{{ kpis.categories }}</b><small>categorias</small></div></div>
+        <div class="ac-panel ac-sup-kpi"><span class="ac-sup-kpi-icon is-orange"><i class="ti ti-unlink"></i></span><div><b>{{ kpis.unlinked }}</b><small>sem item vinculado</small></div></div>
+    </div>
+
+    <div class="ac-panel ac-sup-list">
+        <div class="ac-sup-toolbar">
+            <div class="ac-sup-filters">
+                <button type="button" class="ac-sup-filter is-active" data-filter="all">Todos</button>
+                <button type="button" class="ac-sup-filter" data-filter="none">Sem categoria</button>
+                {% for c in filters %}
+                    <button type="button" class="ac-sup-filter" data-filter="cat:{{ c }}">{{ c }}</button>
+                {% endfor %}
+            </div>
+            <label class="ac-sup-search">
+                <i class="ti ti-search"></i>
+                <input type="search" id="ac-dl-search" placeholder="Buscar por nome ou arquivo…">
+            </label>
+        </div>
+
+        {% if docs is empty %}
+            <div class="ac-ptasks-empty">
+                <i class="ti ti-files"></i>
+                <b>Nenhum documento ainda</b>
+                <span>Use "Adicionar documento" para enviar o primeiro.</span>
+            </div>
+        {% else %}
+            <div id="ac-dl-rows">
+                {% for d in docs %}
+                    <div class="ac-dl-row" data-doc="{{ d.id }}" data-cat="{{ d.category }}" role="button" tabindex="0"
+                         data-search="{{ (d.name ~ ' ' ~ d.file ~ ' ' ~ d.category)|lower }}">
+                        <span class="ac-docs-icon"><i class="ti {{ d.icon }}"></i></span>
+                        <div class="ac-sup-main">
+                            <b>{{ d.name }}</b>
+                            <small>
+                                {% if d.category %}<span class="ac-ptask-type">{{ d.category }}</span>{% endif %}
+                                {% if d.file and d.file != d.name %}<span>{{ d.file }}</span>{% endif %}
+                                {% if d.size %}<span>{{ d.size }}</span>{% endif %}
+                            </small>
+                        </div>
+                        <div class="ac-sup-contact">
+                            {% if d.linked is not empty %}
+                                <span><i class="ti ti-link"></i> {{ d.linked[0].label }}</span>
+                                {% if d.linked_count > 1 %}<span class="ac-ptask-none">e mais {{ d.linked_count - 1 }}</span>{% endif %}
+                            {% else %}
+                                <span class="ac-ptask-none">Sem item vinculado</span>
+                            {% endif %}
+                        </div>
+                        <div class="ac-sup-counts">
+                            <span>{{ d.date }}</span>
+                            {% if d.author %}<span class="ac-ptask-none">{{ d.author }}</span>{% endif %}
+                        </div>
+                        <div class="ac-docs-actions">
+                            {% if d.download %}
+                                <a class="ac-docs-btn" href="{{ d.download }}" target="_blank" rel="noopener" title="Baixar / abrir" onclick="event.stopPropagation()"><i class="ti ti-download"></i></a>
+                            {% endif %}
+                            <span class="ac-docs-btn" title="Editar"><i class="ti ti-pencil"></i></span>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="ac-ptasks-empty" id="ac-dl-none" hidden><i class="ti ti-search"></i><b>Nada encontrado</b><span>Tente outro termo ou filtro.</span></div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="ac-drawer" id="ac-dl-drawer" hidden>
+    <div class="ac-drawer-panel" role="dialog" aria-modal="true" aria-label="Documento">
+        <form method="post" action="{{ action }}" enctype="multipart/form-data" autocomplete="off" id="ac-dl-form">
+            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+            <input type="hidden" name="doc_action" value="upload" id="ac-dl-action">
+            <input type="hidden" name="documents_id" value="0" id="ac-dl-id">
+            <div class="ac-drawer-head">
+                <div>
+                    <div class="ac-eyebrow">Documentos</div>
+                    <h2 class="ac-pnew-title" id="ac-dl-title">Adicionar documento</h2>
+                </div>
+                <button type="button" class="ac-btn is-small" id="ac-dl-close" aria-label="Fechar"><i class="ti ti-x"></i></button>
+            </div>
+            <div class="ac-drawer-body">
+                <div class="ac-pnew-field" id="ac-dl-file-field">
+                    <span class="ac-pnew-label">Arquivo <b>*</b></span>
+                    <label class="ac-docs-drop ac-dl-drop" id="ac-dl-drop">
+                        <input type="file" name="files[]" multiple hidden id="ac-dl-file">
+                        <span class="ac-docs-drop-empty">
+                            <i class="ti ti-cloud-upload"></i>
+                            <b id="ac-dl-file-label">Clique ou arraste o arquivo aqui</b>
+                            <span>até {{ max_mb }} MB por arquivo</span>
+                        </span>
+                    </label>
+                </div>
+                <div class="ac-dl-current" id="ac-dl-current" hidden>
+                    <span class="ac-docs-icon"><i class="ti ti-file" id="ac-dl-current-icon"></i></span>
+                    <div><b id="ac-dl-current-file"></b><small id="ac-dl-current-meta"></small></div>
+                    <a class="ac-docs-btn" id="ac-dl-current-dl" target="_blank" rel="noopener" title="Baixar"><i class="ti ti-download"></i></a>
+                </div>
+                <label class="ac-pnew-field">
+                    <span class="ac-pnew-label">Nome</span>
+                    <input type="text" name="name" class="ac-pnew-input" maxlength="255" placeholder="Se deixar vazio, usa o nome do arquivo">
+                </label>
+                <label class="ac-pnew-field">
+                    <span class="ac-pnew-label">Categoria</span>
+                    <select name="documentcategories_id" class="ac-pnew-input" id="ac-dl-cat">
+                        <option value="0">Sem categoria</option>
+                        {% for k, v in categories %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+                        {% if can_new_category %}<option value="new">+ Nova categoria…</option>{% endif %}
+                    </select>
+                </label>
+                {% if can_new_category %}
+                    <label class="ac-pnew-field" id="ac-dl-newcat" hidden>
+                        <span class="ac-pnew-label">Nome da nova categoria</span>
+                        <input type="text" name="new_category" class="ac-pnew-input" maxlength="255" placeholder="Ex.: Contratos assinados">
+                    </label>
+                {% endif %}
+                <div class="ac-pnew-field" id="ac-dl-linked-wrap" hidden>
+                    <span class="ac-pnew-label">Anexado em</span>
+                    <div class="ac-dl-linked" id="ac-dl-linked"></div>
+                </div>
+            </div>
+            <div class="ac-drawer-foot">
+                <button type="submit" class="ac-btn ac-btn-danger" id="ac-dl-delete" hidden formnovalidate style="margin-right: 0;"><i class="ti ti-trash"></i> Excluir</button>
+                <span style="flex: 1;"></span>
+                <button type="submit" class="ac-btn is-primary"><i class="ti ti-check"></i> <span id="ac-dl-save">Adicionar</span></button>
+            </div>
+        </form>
+    </div>
+</div>
+<script type="application/json" id="ac-dl-data">{{ docs|json_encode|raw }}</script>
+<script>
+    (function () {
+        var drawer = document.getElementById('ac-dl-drawer');
+        var app = document.createElement('div');
+        app.className = 'ac-app ac-pnew';
+        document.body.appendChild(app);
+        app.appendChild(drawer);
+
+        var form = document.getElementById('ac-dl-form');
+        var fileInput = document.getElementById('ac-dl-file');
+        var fileLabel = document.getElementById('ac-dl-file-label');
+        var docs = {};
+        JSON.parse(document.getElementById('ac-dl-data').textContent || '[]').forEach(function (d) { docs[d.id] = d; });
+
+        function fileText() {
+            var n = fileInput.files.length;
+            fileLabel.textContent = n === 0 ? 'Clique ou arraste o arquivo aqui' : (n === 1 ? fileInput.files[0].name : n + ' arquivos escolhidos');
+        }
+        fileInput.addEventListener('change', fileText);
+        var drop = document.getElementById('ac-dl-drop');
+        ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('is-over'); }); });
+        ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('is-over'); }); });
+        drop.addEventListener('drop', function (e) { if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; fileText(); } });
+
+        var cat = document.getElementById('ac-dl-cat');
+        var newCat = document.getElementById('ac-dl-newcat');
+        function syncCat() { if (newCat) { newCat.hidden = cat.value !== 'new'; } }
+        cat.addEventListener('change', function () { syncCat(); if (newCat && !newCat.hidden) { newCat.querySelector('input').focus(); } });
+
+        function open(d) {
+            var edit = !!d;
+            document.getElementById('ac-dl-action').value = edit ? 'save' : 'upload';
+            document.getElementById('ac-dl-id').value = edit ? d.id : 0;
+            document.getElementById('ac-dl-title').textContent = edit ? 'Editar documento' : 'Adicionar documento';
+            document.getElementById('ac-dl-save').textContent = edit ? 'Salvar' : 'Adicionar';
+            document.getElementById('ac-dl-delete').hidden = !edit;
+            document.getElementById('ac-dl-file-field').hidden = edit;
+            fileInput.required = !edit;
+            fileInput.value = '';
+            fileText();
+            var cur = document.getElementById('ac-dl-current');
+            cur.hidden = !edit;
+            form.elements.name.value = edit ? d.name : '';
+            cat.value = edit ? String(d.category_id) : '0';
+            if (newCat) { newCat.querySelector('input').value = ''; }
+            syncCat();
+            var linkedWrap = document.getElementById('ac-dl-linked-wrap');
+            var linked = document.getElementById('ac-dl-linked');
+            linked.innerHTML = '';
+            linkedWrap.hidden = !edit;
+            if (edit) {
+                document.getElementById('ac-dl-current-icon').className = 'ti ' + d.icon;
+                document.getElementById('ac-dl-current-file').textContent = d.file || d.name;
+                document.getElementById('ac-dl-current-meta').textContent = [d.size, d.date, d.author].filter(Boolean).join(' · ');
+                var dl = document.getElementById('ac-dl-current-dl');
+                dl.hidden = !d.download;
+                dl.href = d.download || '#';
+                if (!d.linked.length) {
+                    var none = document.createElement('span');
+                    none.className = 'ac-ptask-none';
+                    none.textContent = 'Nenhum item. Anexe pela aba Documentos de um fornecedor, projeto, computador…';
+                    linked.appendChild(none);
+                }
+                d.linked.forEach(function (l) {
+                    var a = document.createElement('a');
+                    a.href = l.url;
+                    a.className = 'ac-dl-link';
+                    a.textContent = l.type + ': ' + l.label;
+                    linked.appendChild(a);
+                });
+                if (d.linked_count > d.linked.length) {
+                    var more = document.createElement('span');
+                    more.className = 'ac-ptask-none';
+                    more.textContent = 'e mais ' + (d.linked_count - d.linked.length);
+                    linked.appendChild(more);
+                }
+            }
+            drawer.hidden = false;
+        }
+        function close() { drawer.hidden = true; }
+
+        var btnNew = document.getElementById('ac-dl-new');
+        if (btnNew) { btnNew.addEventListener('click', function () { open(null); }); }
+        document.querySelectorAll('.ac-dl-row').forEach(function (row) {
+            var go = function () { open(docs[row.getAttribute('data-doc')]); };
+            row.addEventListener('click', go);
+            row.addEventListener('keydown', function (e) { if (e.key === 'Enter') { go(); } });
+        });
+        document.getElementById('ac-dl-close').addEventListener('click', close);
+        drawer.addEventListener('click', function (e) { if (e.target === drawer) { close(); } });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
+        document.getElementById('ac-dl-delete').addEventListener('click', function (e) {
+            if (!confirm('Mover este documento para a lixeira? Ele sai de todos os itens em que está anexado.')) { e.preventDefault(); return; }
+            document.getElementById('ac-dl-action').value = 'delete';
+        });
+
+        // Busca e filtros.
+        var rows = Array.prototype.slice.call(document.querySelectorAll('.ac-dl-row'));
+        var search = document.getElementById('ac-dl-search');
+        var none = document.getElementById('ac-dl-none');
+        var filter = 'all';
+        function apply() {
+            var q = (search.value || '').trim().toLowerCase();
+            var shown = 0;
+            rows.forEach(function (r) {
+                var c = r.getAttribute('data-cat');
+                var ok = (!q || r.getAttribute('data-search').indexOf(q) !== -1)
+                    && (filter === 'all' || (filter === 'none' && !c) || (filter.indexOf('cat:') === 0 && c === filter.slice(4)));
+                r.hidden = !ok;
+                shown += ok ? 1 : 0;
+            });
+            if (none) { none.hidden = shown > 0; }
+        }
+        document.querySelectorAll('.ac-sup-filter').forEach(function (b) {
+            b.addEventListener('click', function () {
+                document.querySelectorAll('.ac-sup-filter').forEach(function (x) { x.classList.toggle('is-active', x === b); });
+                filter = b.getAttribute('data-filter');
+                apply();
+            });
+        });
+        if (search) { search.addEventListener('input', apply); }
+
+        {% if open_new and can_create %}open(null);{% endif %}
+        {% if edit_id %}if (docs[{{ edit_id }}]) { open(docs[{{ edit_id }}]); }{% endif %}
+    })();
+</script>

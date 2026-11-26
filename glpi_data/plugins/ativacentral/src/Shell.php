@@ -269,7 +269,17 @@ final class Shell
     private static function nativeSupplierUrl(): string
     {
         $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
-        if (isset($_GET['classic']) || isset($_GET['embed']) || !\Supplier::canView()) {
+        if (isset($_GET['classic']) || isset($_GET['embed'])) {
+            return '';
+        }
+        if (preg_match('#/front/document\.php$#i', $path) === 1 && \Document::canView()) {
+            return DocumentsLibrary::url();
+        }
+        if (preg_match('#/front/document\.form\.php$#i', $path) === 1 && \Document::canView()) {
+            $id = (int) ($_GET['id'] ?? 0);
+            return DocumentsLibrary::url() . ($id > 0 ? '?edit=' . $id : '?new=1');
+        }
+        if (!\Supplier::canView()) {
             return '';
         }
         if (preg_match('#/front/supplier\.php$#i', $path) === 1) {
