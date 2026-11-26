@@ -279,7 +279,7 @@ final class Hubs
             'subtitle' => (string) $definition['subtitle'] !== '' ? (string) $definition['subtitle'] : 'Escolha o que deseja abrir em ' . $title . '.',
             'actions'  => [],
             // Fornecedores, contatos e contratos tem secao propria ("Parceiros") no menu lateral.
-            'groups'   => self::group(array_filter($cards, static fn (array $c): bool => !in_array($c['key'], ['supplier', 'contact', 'contract'], true)), $definition['groups']),
+            'groups'   => self::group(array_filter($cards, static fn (array $c): bool => !in_array($c['key'], ['supplier', 'contact', 'contract', 'document'], true)), $definition['groups']),
         ];
     }
 

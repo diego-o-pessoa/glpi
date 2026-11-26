@@ -18,7 +18,7 @@ namespace GlpiPlugin\Ativacentral;
 final class Nav
 {
     /** Secoes nativas do GLPI (e chaves internas que nao viram item extra). */
-    private const CORE = ['assets', 'helpdesk', 'management', 'tools', 'plugins', 'admin', 'config', 'preference', 'ac_project_native', 'ac_supplier_native', 'ac_contact_native', 'ac_contract_native'];
+    private const CORE = ['assets', 'helpdesk', 'management', 'tools', 'plugins', 'admin', 'config', 'preference', 'ac_project_native', 'ac_supplier_native', 'ac_contact_native', 'ac_contract_native', 'ac_document_native'];
 
     /** Marcador (classe do icone) das linhas que sao titulo de secao. */
     public const SECTION_ICON = 'ac-section';
@@ -122,7 +122,7 @@ final class Nav
                 'content' => ['supplier' => $supplier],
             ];
         }
-        foreach (['contact' => ['ac_contact', 'Contatos', 'ti ti-address-book', PartnersLists::contactsUrl()], 'contract' => ['ac_contract', 'Contratos', 'ti ti-file-certificate', PartnersLists::contractsUrl()]] as $item => [$key, $title, $icon, $url]) {
+        foreach (['contact' => ['ac_contact', 'Contatos', 'ti ti-address-book', PartnersLists::contactsUrl()], 'contract' => ['ac_contract', 'Contratos', 'ti ti-file-certificate', PartnersLists::contractsUrl()], 'document' => ['ac_document', 'Documentos', 'ti ti-files', DocumentsLibrary::url()]] as $item => [$key, $title, $icon, $url]) {
             if (!isset($menu['management']['content'][$item]['page'])) {
                 continue;
             }

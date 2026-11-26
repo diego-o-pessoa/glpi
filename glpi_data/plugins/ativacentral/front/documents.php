@@ -25,6 +25,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 }
 
 $GLOBALS['ATIVACENTRAL_SECTION'] = 'documents';
-Html::header('Documentos', '', 'management', 'document');
+Html::header('Documentos', '', 'ac_document');
 TemplateRenderer::getInstance()->display('@ativacentral/documents.html.twig', DocumentsLibrary::data((int) ($_GET['edit'] ?? 0), isset($_GET['new'])));
 Html::footer();
