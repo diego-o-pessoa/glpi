@@ -110,8 +110,8 @@ final class ProjectPage
             'can_delete'  => $project->can($id, DELETE),
             // Data real: preenchida sozinha (inicio da 1a tarefa / fim ao concluir tudo); so o gerente ajusta.
             'is_manager'  => (int) $f['users_id'] > 0 && (int) $f['users_id'] === (int) Session::getLoginUserID(),
-            'f_real_start' => (string) $value('real_start_date', self::dateTimeLocal((string) ($f['real_start_date'] ?? ''))),
-            'f_real_end'   => (string) $value('real_end_date', self::dateTimeLocal((string) ($f['real_end_date'] ?? ''))),
+            'f_real_start' => (string) $value('real_start_date', self::dateOnly((string) ($f['real_start_date'] ?? ''))),
+            'f_real_end'   => (string) $value('real_end_date', self::dateOnly((string) ($f['real_end_date'] ?? ''))),
             'real_start_text' => self::dateTimeText((string) ($f['real_start_date'] ?? '')),
             'real_end_text'   => self::dateTimeText((string) ($f['real_end_date'] ?? '')),
             'type_html'   => ProjectType::dropdown([
@@ -162,8 +162,12 @@ final class ProjectPage
         if ((int) $project->fields['users_id'] > 0 && (int) $project->fields['users_id'] === (int) Session::getLoginUserID()) {
             foreach (['real_start_date', 'real_end_date'] as $key) {
                 $raw = trim((string) ($input[$key] ?? ''));
-                if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/D', $raw) === 1) {
-                    $fields[$key] = str_replace('T', ' ', $raw) . ':00';
+                $current = (string) ($project->fields[$key] ?? '');
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/D', $raw) === 1) {
+                    // So data: se nao mudou o dia, mantem a hora real gravada.
+                    if (substr($current, 0, 10) !== $raw) {
+                        $fields[$key] = $raw . ' 00:00:00';
+                    }
                 } elseif ($raw === '' && !empty($project->fields[$key])) {
                     // null (nao o texto 'NULL', que o GLPI compara como data e descarta as duas).
                     $fields[$key] = null;
@@ -212,11 +216,6 @@ final class ProjectPage
     private static function dateOnly(string $value): string
     {
         return preg_match('/^\d{4}-\d{2}-\d{2}/', $value) === 1 ? substr($value, 0, 10) : '';
-    }
-
-    private static function dateTimeLocal(string $value): string
-    {
-        return preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/', $value) === 1 ? substr($value, 0, 10) . 'T' . substr($value, 11, 5) : '';
     }
 
     private static function dateTimeText(string $value): string

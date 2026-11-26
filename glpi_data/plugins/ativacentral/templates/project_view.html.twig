@@ -215,14 +215,14 @@
                             </div>
                             <span class="ac-pnew-label">Real</span>
                             {% if is_manager and can_update %}
-                                <div class="ac-pnew-dates is-stacked">
+                                <div class="ac-pnew-dates">
                                     <label class="ac-pnew-field">
-                                        <span class="ac-pnew-hint">Início</span>
-                                        <input type="datetime-local" name="real_start_date" value="{{ f_real_start }}" class="ac-pnew-input">
+                                        <span class="ac-pnew-label">Início</span>
+                                        <input type="date" name="real_start_date" value="{{ f_real_start }}" class="ac-pnew-input">
                                     </label>
                                     <label class="ac-pnew-field">
-                                        <span class="ac-pnew-hint">Fim</span>
-                                        <input type="datetime-local" name="real_end_date" value="{{ f_real_end }}" class="ac-pnew-input">
+                                        <span class="ac-pnew-label">Fim</span>
+                                        <input type="date" name="real_end_date" value="{{ f_real_end }}" class="ac-pnew-input">
                                     </label>
                                 </div>
                                 <div class="ac-pnew-hint">Preenchidas sozinhas: início quando a primeira tarefa começa e fim quando todas terminam. Como gerente, você pode ajustar.</div>
