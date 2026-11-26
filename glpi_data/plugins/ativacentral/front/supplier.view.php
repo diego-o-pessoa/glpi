@@ -63,6 +63,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 }
 
 $GLOBALS['ATIVACENTRAL_SECTION'] = 'suppliers';
-Html::header($supplier !== null ? (string) $supplier->fields['name'] : 'Novo fornecedor', '', 'management', 'supplier');
+Html::header($supplier !== null ? (string) $supplier->fields['name'] : 'Novo fornecedor', '', 'ac_supplier');
 TemplateRenderer::getInstance()->display('@ativacentral/supplier_view.html.twig', SupplierPage::viewData($supplier, $tab, $old, $error));
 Html::footer();

@@ -15,6 +15,6 @@ if (!Supplier::canView()) {
 }
 
 $GLOBALS['ATIVACENTRAL_SECTION'] = 'suppliers';
-Html::header('Fornecedores', '', 'management', 'supplier');
+Html::header('Fornecedores', '', 'ac_supplier');
 TemplateRenderer::getInstance()->display('@ativacentral/suppliers.html.twig', SupplierPage::listData());
 Html::footer();

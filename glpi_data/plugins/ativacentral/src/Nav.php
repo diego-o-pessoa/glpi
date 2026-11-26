@@ -18,7 +18,7 @@ namespace GlpiPlugin\Ativacentral;
 final class Nav
 {
     /** Secoes nativas do GLPI (e chaves internas que nao viram item extra). */
-    private const CORE = ['assets', 'helpdesk', 'management', 'tools', 'plugins', 'admin', 'config', 'preference', 'ac_project_native'];
+    private const CORE = ['assets', 'helpdesk', 'management', 'tools', 'plugins', 'admin', 'config', 'preference', 'ac_project_native', 'ac_supplier_native'];
 
     /** Marcador (classe do icone) das linhas que sao titulo de secao. */
     public const SECTION_ICON = 'ac-section';
@@ -106,6 +106,25 @@ final class Nav
         if ($workspace !== []) {
             $out['ac_sec_workspace'] = self::label('Workspace');
             $out += $workspace;
+        }
+
+        // --- Parceiros: fornecedores (sai de "Gerencia" para nao duplicar).
+        $partners = [];
+        if (isset($menu['management']['content']['supplier']['page'])) {
+            $supplier = $menu['management']['content']['supplier'];
+            $partners['ac_supplier'] = self::link('Fornecedores', 'ti ti-building-store', SupplierPage::listUrl());
+            unset($menu['management']['content']['supplier']);
+            $supplier['page'] = SupplierPage::listUrl();
+            $menu['ac_supplier_native'] = [
+                'title'   => 'Fornecedores',
+                'default' => SupplierPage::listUrl(),
+                'icon'    => 'ti ti-building-store',
+                'content' => ['supplier' => $supplier],
+            ];
+        }
+        if ($partners !== []) {
+            $out['ac_sec_partners'] = self::label('Parceiros');
+            $out += $partners;
         }
 
         // --- Solucoes Ativa: plugins com secao propria e os que entram em
