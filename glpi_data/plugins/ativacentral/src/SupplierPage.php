@@ -22,7 +22,7 @@ final class SupplierPage
     public const TABS = [
         'main'      => ['Fornecedor', 'ti-building-store', null],
         'contacts'  => ['Contatos', 'ti-address-book', null],
-        'contracts' => ['Contratos', 'ti-file-certificate', 'Contract_Supplier$1'],
+        'contracts' => ['Contratos', 'ti-file-certificate', null],
         'items'     => ['Itens', 'ti-package', 'Infocom$1'],
         'documents' => ['Documentos', 'ti-files', 'Document_Item$1'],
         'changes'   => ['Mudanças', 'ti-clipboard-check', 'Change_Item$1'],
@@ -187,6 +187,9 @@ final class SupplierPage
         }
         if ($id > 0 && $tab === 'contacts') {
             return $data + self::contactsData($supplier);
+        }
+        if ($id > 0 && $tab === 'contracts') {
+            return $data + self::contractsData($supplier);
         }
 
         foreach (['name', 'registration_number', 'phonenumber', 'email', 'website', 'address', 'town', 'state', 'postcode', 'country'] as $key) {
@@ -369,6 +372,165 @@ final class SupplierPage
         }
         $link->add(['suppliers_id' => $supplierId, 'contacts_id' => $contactId]);
         return 'Contato criado e vinculado ao fornecedor.';
+    }
+
+    // ------------------------------------------------------------------
+    // Contratos
+    // ------------------------------------------------------------------
+
+    /** Campos do contrato (sem numero contabil, nota fiscal, max. itens, horas de suporte e comentarios). */
+    private const CONTRACT_FIELDS = ['name', 'num', 'contracttypes_id', 'states_id', 'locations_id', 'begin_date', 'duration', 'notice', 'periodicity', 'renewal', 'alert'];
+
+    /** @return array<string, mixed> */
+    private static function contractsData(Supplier $supplier): array
+    {
+        global $DB;
+
+        $types = self::options('glpi_contracttypes');
+        $states = self::options('glpi_states');
+        $locations = [];
+        foreach ($DB->request(['SELECT' => ['id', 'completename'], 'FROM' => 'glpi_locations', 'ORDER' => 'completename ASC']) as $row) {
+            $locations[(int) $row['id']] = (string) $row['completename'];
+        }
+        $renewals = [0 => 'Nunca', 1 => 'Tácita (automática)', 2 => 'Expressa (precisa confirmar)'];
+        $alerts = [];
+        foreach (\Contract::getAlertName() as $value => $label) {
+            $alerts[(int) $value] = (int) $value === 0 ? 'Sem aviso' : (string) $label;
+        }
+
+        $today = date('Y-m-d');
+        $contracts = [];
+        foreach ($DB->request([
+            'SELECT'     => ['glpi_contracts.*', 'glpi_contracts_suppliers.id AS link_id'],
+            'FROM'       => 'glpi_contracts_suppliers',
+            'INNER JOIN' => ['glpi_contracts' => ['ON' => ['glpi_contracts_suppliers' => 'contracts_id', 'glpi_contracts' => 'id']]],
+            'WHERE'      => ['glpi_contracts_suppliers.suppliers_id' => (int) $supplier->getID(), 'glpi_contracts.is_deleted' => 0],
+            'ORDER'      => 'glpi_contracts.begin_date DESC',
+        ]) as $row) {
+            $begin = (string) ($row['begin_date'] ?? '');
+            $duration = (int) $row['duration'];
+            $end = $begin !== '' && $duration > 0 ? date('Y-m-d', strtotime($begin . ' +' . $duration . ' months')) : '';
+            $situation = ['label' => 'Sem prazo definido', 'tone' => 'muted'];
+            if ($end !== '') {
+                $days = (int) floor((strtotime($end) - strtotime($today)) / 86400);
+                if ($days < 0) {
+                    $situation = ['label' => 'Vencido em ' . date('d/m/Y', strtotime($end)), 'tone' => 'red'];
+                } elseif ($days <= 30) {
+                    $situation = ['label' => $days === 0 ? 'Vence hoje' : 'Vence em ' . $days . ($days === 1 ? ' dia' : ' dias'), 'tone' => 'orange'];
+                } else {
+                    $situation = ['label' => 'Vigente até ' . date('d/m/Y', strtotime($end)), 'tone' => 'green'];
+                }
+            }
+            $item = [
+                'id'          => (int) $row['id'],
+                'link_id'     => (int) $row['link_id'],
+                'type_label'  => $types[(int) $row['contracttypes_id']] ?? '',
+                'state_label' => $states[(int) $row['states_id']] ?? '',
+                'location_label' => $locations[(int) $row['locations_id']] ?? '',
+                'begin_text'  => $begin !== '' ? date('d/m/Y', strtotime($begin)) : '',
+                'end_text'    => $end !== '' ? date('d/m/Y', strtotime($end)) : '',
+                'renewal_label' => $renewals[(int) $row['renewal']] ?? '',
+                'situation'   => $situation,
+            ];
+            foreach (self::CONTRACT_FIELDS as $key) {
+                $item[$key] = in_array($key, ['name', 'num', 'begin_date'], true) ? (string) ($row[$key] ?? '') : (int) ($row[$key] ?? 0);
+            }
+            $item['begin_date'] = substr($begin, 0, 10);
+            $contracts[] = $item;
+        }
+
+        $linked = array_column($contracts, 'id');
+        $existing = [];
+        $where = ['is_deleted' => 0, 'is_template' => 0];
+        if ($linked !== []) {
+            $where[] = ['NOT' => ['id' => $linked]];
+        }
+        $entities = getEntitiesRestrictCriteria('glpi_contracts', '', '', true);
+        foreach ($DB->request(['SELECT' => ['id', 'name', 'num'], 'FROM' => 'glpi_contracts', 'WHERE' => $entities === [] ? $where : [$where, $entities], 'ORDER' => 'name ASC']) as $row) {
+            $existing[] = ['id' => (int) $row['id'], 'label' => (string) $row['name'] . ((string) $row['num'] !== '' ? ' — nº ' . $row['num'] : '')];
+        }
+
+        return [
+            'contracts'         => $contracts,
+            'existing'          => $existing,
+            'contract_types'    => $types,
+            'contract_states'   => $states,
+            'contract_locations' => $locations,
+            'contract_renewals' => $renewals,
+            'contract_alerts'   => $alerts,
+            'can_contracts'     => \Contract::canCreate(),
+        ];
+    }
+
+    /**
+     * Acoes da aba Contratos: salvar (novo ou editar), vincular existente,
+     * desvincular e excluir.
+     *
+     * @throws \InvalidArgumentException
+     */
+    public static function contractAction(Supplier $supplier, array $input): string
+    {
+        $supplierId = (int) $supplier->getID();
+        $action = (string) ($input['contract_action'] ?? '');
+        $link = new \Contract_Supplier();
+        $contract = new \Contract();
+        $contractId = (int) ($input['contracts_id'] ?? 0);
+
+        if ($action === 'link') {
+            if ($contractId <= 0) {
+                throw new \InvalidArgumentException('Escolha um contrato.');
+            }
+            if (countElementsInTable('glpi_contracts_suppliers', ['suppliers_id' => $supplierId, 'contracts_id' => $contractId]) === 0) {
+                $link->add(['suppliers_id' => $supplierId, 'contracts_id' => $contractId]);
+            }
+            return 'Contrato vinculado.';
+        }
+        if ($action === 'unlink') {
+            $link->delete(['id' => (int) ($input['link_id'] ?? 0)], true);
+            return 'Contrato desvinculado deste fornecedor.';
+        }
+        if ($action === 'delete') {
+            if (!$contract->can($contractId, DELETE)) {
+                throw new \InvalidArgumentException('Sem permissão para excluir este contrato.');
+            }
+            $contract->delete(['id' => $contractId]);
+            return 'Contrato movido para a lixeira.';
+        }
+        if ($action !== 'save') {
+            throw new \InvalidArgumentException('Ação inválida.');
+        }
+
+        $name = trim((string) ($input['name'] ?? ''));
+        if ($name === '') {
+            throw new \InvalidArgumentException('Dê um nome ao contrato.');
+        }
+        $fields = ['name' => $name, 'num' => trim((string) ($input['num'] ?? ''))];
+        foreach (['contracttypes_id', 'states_id', 'locations_id', 'duration', 'notice', 'periodicity', 'renewal', 'alert'] as $key) {
+            $fields[$key] = max(0, (int) ($input[$key] ?? 0));
+        }
+        $begin = trim((string) ($input['begin_date'] ?? ''));
+        $fields['begin_date'] = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $begin) === 1 ? $begin : null;
+
+        if ($contractId > 0) {
+            if (!$contract->can($contractId, UPDATE) || !$contract->update(['id' => $contractId] + $fields)) {
+                throw new \InvalidArgumentException('Não foi possível salvar o contrato.');
+            }
+            return 'Contrato salvo.';
+        }
+        if ($fields['begin_date'] === null) {
+            unset($fields['begin_date']);
+        }
+        // Campos que sairam da tela ficam nos padroes (sem limite de itens).
+        $contractId = (int) $contract->add($fields + [
+            'entities_id'       => (int) $supplier->fields['entities_id'],
+            'is_recursive'      => 1,
+            'max_links_allowed' => 0,
+        ]);
+        if ($contractId <= 0) {
+            throw new \InvalidArgumentException('Não foi possível criar o contrato.');
+        }
+        $link->add(['suppliers_id' => $supplierId, 'contracts_id' => $contractId]);
+        return 'Contrato criado e vinculado ao fornecedor.';
     }
 
     // ------------------------------------------------------------------

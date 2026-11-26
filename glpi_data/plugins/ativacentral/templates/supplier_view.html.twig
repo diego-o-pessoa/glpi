@@ -60,6 +60,8 @@
                 </script>
             {% elseif tab == 'contacts' %}
                 {% include '@ativacentral/supplier_contacts.html.twig' %}
+            {% elseif tab == 'contracts' %}
+                {% include '@ativacentral/supplier_contracts.html.twig' %}
             {% else %}
                 <form method="post" action="{{ action }}" class="ac-pnew-form" autocomplete="off" enctype="multipart/form-data">
                     <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">

@@ -2907,3 +2907,89 @@ html[data-glpi-theme-dark="1"] .ac-tag.is-green { color: #67dfa9; }
 .ac-pnew-submit .ac-btn {
     white-space: nowrap;
 }
+
+/* Contratos do fornecedor */
+.ac-cr-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.ac-cr-row {
+    display: grid;
+    grid-template-columns: 44px minmax(200px, 1fr) minmax(220px, 260px) 180px 20px;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--ac-line);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.ac-cr-row:hover {
+    background: rgba(var(--ac-blue-rgb), 0.05);
+}
+
+.ac-cr-row:hover .ac-ct-edit {
+    color: var(--ac-blue);
+}
+
+.ac-cr-main b {
+    display: block;
+    color: var(--ac-ink);
+    font-size: 14.5px;
+}
+
+.ac-cr-main small,
+.ac-cr-period small {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    margin-top: 3px;
+    color: var(--ac-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.ac-cr-period span {
+    color: var(--ac-ink);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.ac-cr-sit {
+    justify-self: start;
+    padding: 4px 11px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.ac-cr-sit.is-green { background: rgba(47, 182, 124, 0.14); color: #167a4d; }
+.ac-cr-sit.is-orange { background: rgba(245, 159, 50, 0.16); color: #a15c07; }
+.ac-cr-sit.is-red { background: rgba(239, 77, 90, 0.13); color: #b91c1c; }
+.ac-cr-sit.is-muted { background: var(--ac-track); color: var(--ac-muted); }
+
+.ac-cr-sub {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0 0;
+    color: var(--ac-muted);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+@media (max-width: 1100px) {
+    .ac-cr-row {
+        grid-template-columns: 44px 1fr auto;
+    }
+
+    .ac-cr-period,
+    .ac-cr-row .ac-ct-edit {
+        display: none;
+    }
+}

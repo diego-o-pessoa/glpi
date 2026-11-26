@@ -1,0 +1,233 @@
+{# Aba Contratos do fornecedor: cartoes + gaveta para criar/editar. #}
+<div class="ac-panel ac-ptasks">
+    <div class="ac-ptasks-head">
+        <div>
+            <h2 class="ac-pnew-title"><i class="ti ti-file-certificate"></i> Contratos</h2>
+            <div class="ac-pnew-hint">{{ contracts|length }} {{ contracts|length == 1 ? 'contrato' : 'contratos' }} · clique num contrato para editar</div>
+        </div>
+        {% if can_update %}
+            <div class="ac-actions">
+                {% if existing is not empty %}
+                    <button type="button" class="ac-btn" id="ac-cr-link-open"><i class="ti ti-link"></i> Vincular existente</button>
+                {% endif %}
+                {% if can_contracts %}
+                    <button type="button" class="ac-btn is-primary" id="ac-cr-new"><i class="ti ti-plus"></i> Novo contrato</button>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    {% if can_update and existing is not empty %}
+        <form method="post" action="{{ action }}" class="ac-ct-link" id="ac-cr-link" hidden>
+            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+            <input type="hidden" name="contract_action" value="link">
+            <select name="contracts_id" class="ac-pnew-input" required>
+                <option value="">Escolha um contrato já cadastrado…</option>
+                {% for e in existing %}<option value="{{ e.id }}">{{ e.label }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="ac-btn is-primary"><i class="ti ti-link"></i> Vincular</button>
+        </form>
+    {% endif %}
+
+    {% if contracts is empty %}
+        <div class="ac-ptasks-empty">
+            <i class="ti ti-file-certificate"></i>
+            <b>Nenhum contrato ainda</b>
+            <span>Cadastre os contratos com esse fornecedor para acompanhar vigência e renovação.</span>
+        </div>
+    {% else %}
+        <div class="ac-cr-list">
+            {% for c in contracts %}
+                <div class="ac-cr-row" data-contract="{{ c.id }}" role="button" tabindex="0">
+                    <span class="ac-sup-kpi-icon is-violet"><i class="ti ti-file-certificate"></i></span>
+                    <div class="ac-cr-main">
+                        <b>{{ c.name }}</b>
+                        <small>
+                            {% if c.num %}<span>Nº {{ c.num }}</span>{% endif %}
+                            {% if c.type_label %}<span class="ac-ptask-type">{{ c.type_label }}</span>{% endif %}
+                            {% if c.state_label %}<span>{{ c.state_label }}</span>{% endif %}
+                        </small>
+                    </div>
+                    <div class="ac-cr-period">
+                        <span><i class="ti ti-calendar"></i> {{ c.begin_text ?: '—' }} → {{ c.end_text ?: '—' }}</span>
+                        <small>{{ c.duration > 0 ? c.duration ~ (c.duration == 1 ? ' mês' : ' meses') : 'Sem duração' }}{{ c.renewal_label ? ' · Renovação ' ~ c.renewal_label|lower : '' }}</small>
+                    </div>
+                    <span class="ac-cr-sit is-{{ c.situation.tone }}">{{ c.situation.label }}</span>
+                    <i class="ti ti-pencil ac-ct-edit"></i>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+{% if can_update %}
+<div class="ac-drawer" id="ac-cr-drawer" hidden>
+    <div class="ac-drawer-panel" role="dialog" aria-modal="true" aria-label="Contrato">
+        <form method="post" action="{{ action }}" autocomplete="off" id="ac-cr-form">
+            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+            <input type="hidden" name="contract_action" value="save" id="ac-cr-action">
+            <input type="hidden" name="contracts_id" value="0" id="ac-cr-id">
+            <input type="hidden" name="link_id" value="0" id="ac-cr-link-id">
+            <div class="ac-drawer-head">
+                <div>
+                    <div class="ac-eyebrow">{{ title }}</div>
+                    <h2 class="ac-pnew-title" id="ac-cr-title">Novo contrato</h2>
+                </div>
+                <button type="button" class="ac-btn is-small" id="ac-cr-close" aria-label="Fechar"><i class="ti ti-x"></i></button>
+            </div>
+            <div class="ac-drawer-body">
+                <label class="ac-pnew-field">
+                    <span class="ac-pnew-label">Nome <b>*</b></span>
+                    <input type="text" name="name" class="ac-pnew-input" required maxlength="255" placeholder="Ex.: TOTVS PIX Cobrança">
+                </label>
+                <div class="ac-pnew-dates">
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Número</span>
+                        <input type="text" name="num" class="ac-pnew-input" maxlength="255">
+                    </label>
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Tipo</span>
+                        <select name="contracttypes_id" class="ac-pnew-input">
+                            <option value="0">—</option>
+                            {% for k, v in contract_types %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Status</span>
+                        <select name="states_id" class="ac-pnew-input">
+                            <option value="0">—</option>
+                            {% for k, v in contract_states %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Localização</span>
+                        <select name="locations_id" class="ac-pnew-input">
+                            <option value="0">—</option>
+                            {% for k, v in contract_locations %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+                        </select>
+                    </label>
+                </div>
+
+                <h3 class="ac-cr-sub"><i class="ti ti-calendar"></i> Vigência</h3>
+                <div class="ac-pnew-dates">
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Data inicial</span>
+                        <input type="date" name="begin_date" class="ac-pnew-input">
+                    </label>
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Duração (meses)</span>
+                        <input type="number" name="duration" class="ac-pnew-input" min="0" max="120" step="1">
+                    </label>
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Periodicidade (meses)</span>
+                        <input type="number" name="periodicity" class="ac-pnew-input" min="0" max="120" step="1">
+                    </label>
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Renovação</span>
+                        <select name="renewal" class="ac-pnew-input">
+                            {% for k, v in contract_renewals %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+                        </select>
+                    </label>
+                </div>
+                <div class="ac-pnew-hint" id="ac-cr-end"></div>
+
+                <h3 class="ac-cr-sub"><i class="ti ti-bell"></i> Avisos</h3>
+                <div class="ac-pnew-dates">
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Aviso prévio (meses)</span>
+                        <input type="number" name="notice" class="ac-pnew-input" min="0" max="120" step="1">
+                    </label>
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Avisos por e-mail</span>
+                        <select name="alert" class="ac-pnew-input">
+                            {% for k, v in contract_alerts %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+                        </select>
+                    </label>
+                </div>
+            </div>
+            <div class="ac-drawer-foot">
+                <button type="submit" class="ac-btn ac-btn-danger" id="ac-cr-unlink" hidden formnovalidate><i class="ti ti-unlink"></i> Desvincular</button>
+                <button type="submit" class="ac-btn ac-btn-danger" id="ac-cr-delete" hidden formnovalidate style="margin-right: 0;"><i class="ti ti-trash"></i> Excluir</button>
+                <span style="flex: 1;"></span>
+                <button type="submit" class="ac-btn is-primary"><i class="ti ti-check"></i> <span id="ac-cr-save-label">Criar contrato</span></button>
+            </div>
+        </form>
+    </div>
+</div>
+<script type="application/json" id="ac-cr-data">{{ contracts|json_encode|raw }}</script>
+<script>
+    (function () {
+        var drawer = document.getElementById('ac-cr-drawer');
+        // A gaveta vai para o body: dentro da pagina ela herda larguras e passa da borda.
+        var app = document.createElement('div');
+        app.className = 'ac-app ac-pnew';
+        document.body.appendChild(app);
+        app.appendChild(drawer);
+
+        var form = document.getElementById('ac-cr-form');
+        var contracts = {};
+        JSON.parse(document.getElementById('ac-cr-data').textContent || '[]').forEach(function (c) { contracts[c.id] = c; });
+        var fields = ['name', 'num', 'contracttypes_id', 'states_id', 'locations_id', 'begin_date', 'duration', 'notice', 'periodicity', 'renewal', 'alert'];
+        var endHint = document.getElementById('ac-cr-end');
+
+        function updateEnd() {
+            var begin = form.elements.begin_date.value;
+            var months = parseInt(form.elements.duration.value, 10) || 0;
+            if (!begin || months <= 0) { endHint.textContent = ''; return; }
+            var d = new Date(begin + 'T00:00:00');
+            d.setMonth(d.getMonth() + months);
+            endHint.textContent = 'Vigente até ' + d.toLocaleDateString('pt-BR') + '.';
+        }
+        form.elements.begin_date.addEventListener('change', updateEnd);
+        form.elements.duration.addEventListener('input', updateEnd);
+
+        function open(c) {
+            document.getElementById('ac-cr-action').value = 'save';
+            document.getElementById('ac-cr-id').value = c ? c.id : 0;
+            document.getElementById('ac-cr-link-id').value = c ? c.link_id : 0;
+            document.getElementById('ac-cr-title').textContent = c ? c.name : 'Novo contrato';
+            document.getElementById('ac-cr-save-label').textContent = c ? 'Salvar contrato' : 'Criar contrato';
+            document.getElementById('ac-cr-unlink').hidden = !c;
+            document.getElementById('ac-cr-delete').hidden = !c;
+            fields.forEach(function (f) {
+                var el = form.elements[f];
+                if (!el) { return; }
+                if (c) { el.value = c[f] == null ? '' : c[f]; }
+                else { el.value = (f === 'name' || f === 'num' || f === 'begin_date') ? '' : (f === 'duration' || f === 'periodicity' ? '12' : '0'); }
+            });
+            updateEnd();
+            drawer.hidden = false;
+            form.elements.name.focus();
+        }
+        function close() { drawer.hidden = true; }
+
+        var btnNew = document.getElementById('ac-cr-new');
+        if (btnNew) { btnNew.addEventListener('click', function () { open(null); }); }
+        document.querySelectorAll('.ac-cr-row').forEach(function (row) {
+            var go = function () { open(contracts[row.getAttribute('data-contract')]); };
+            row.addEventListener('click', go);
+            row.addEventListener('keydown', function (e) { if (e.key === 'Enter') { go(); } });
+        });
+        document.getElementById('ac-cr-close').addEventListener('click', close);
+        drawer.addEventListener('click', function (e) { if (e.target === drawer) { close(); } });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
+
+        document.getElementById('ac-cr-unlink').addEventListener('click', function (e) {
+            if (!confirm('Desvincular este contrato do fornecedor? O contrato continua cadastrado.')) { e.preventDefault(); return; }
+            document.getElementById('ac-cr-action').value = 'unlink';
+        });
+        document.getElementById('ac-cr-delete').addEventListener('click', function (e) {
+            if (!confirm('Mover este contrato para a lixeira? Ele sai de todos os fornecedores.')) { e.preventDefault(); return; }
+            document.getElementById('ac-cr-action').value = 'delete';
+        });
+
+        var linkOpen = document.getElementById('ac-cr-link-open');
+        if (linkOpen) {
+            linkOpen.addEventListener('click', function () {
+                var f = document.getElementById('ac-cr-link');
+                f.hidden = !f.hidden;
+            });
+        }
+    })();
+</script>
+{% endif %}

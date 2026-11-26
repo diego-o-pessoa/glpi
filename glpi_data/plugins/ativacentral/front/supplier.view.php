@@ -42,6 +42,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             Session::addMessageAfterRedirect(SupplierPage::contactAction($supplier, $_POST));
             Html::redirect(SupplierPage::url($id, 'contacts'));
         }
+        if ($supplier !== null && isset($_POST['contract_action'])) {
+            if (!$supplier->can($id, UPDATE)) {
+                throw new AccessDeniedHttpException();
+            }
+            Session::addMessageAfterRedirect(SupplierPage::contractAction($supplier, $_POST));
+            Html::redirect(SupplierPage::url($id, 'contracts'));
+        }
         if ($supplier !== null && isset($_POST['delete'])) {
             if (!$supplier->can($id, DELETE)) {
                 throw new AccessDeniedHttpException();
