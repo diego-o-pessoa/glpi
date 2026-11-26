@@ -38,9 +38,9 @@
                     </button>
                     {% for tpl in templates %}
                         <button type="button" class="ac-tpl-card {{ template_id == tpl.id ? 'is-active' : '' }}" data-tpl="{{ tpl.id }}">
-                            <span class="ac-tpl-icon {{ tpl.is_phase ? 'is-phase' : '' }}"><i class="ti {{ tpl.is_phase ? 'ti-folder' : 'ti-checkbox' }}"></i></span>
+                            <span class="ac-tpl-icon {{ tpl.is_phase ? 'is-phase' : '' }}"><i class="ti {{ tpl.is_phase ? 'ti-star' : 'ti-checkbox' }}"></i></span>
                             <b>{{ tpl.name }}</b>
-                            <small>{{ tpl.is_phase ? 'Fase' : (tpl.type ?: 'Tarefa') }}{{ tpl.summary ? ' · ' ~ tpl.summary : '' }}</small>
+                            <small>{{ tpl.is_phase ? 'Principal' : (tpl.type ?: 'Tarefa') }}{{ tpl.summary ? ' · ' ~ tpl.summary : '' }}</small>
                         </button>
                     {% endfor %}
                 </div>
@@ -53,23 +53,23 @@
                 <h2 class="ac-pnew-title"><i class="ti ti-clipboard-text"></i> Sobre a tarefa</h2>
 
                 <div class="ac-pnew-field">
-                    <span class="ac-pnew-label">Esta tarefa é</span>
+                    <span class="ac-pnew-label">Tipo de tarefa</span>
                     <div class="ac-tkind">
-                        <label class="ac-tkind-opt">
-                            <input type="radio" name="task_kind" value="phase" {{ kind == 'phase' ? 'checked' : '' }}>
-                            <span><i class="ti ti-folder"></i> <b>Uma fase</b><small>Agrupa tarefas (ex.: Planejamento)</small></span>
+                        <label class="ac-tkind-opt {{ main_task ? 'is-disabled' : '' }}">
+                            <input type="radio" name="task_kind" value="phase" {{ kind == 'phase' ? 'checked' : '' }} {{ main_task ? 'disabled' : '' }}>
+                            <span><i class="ti ti-star"></i> <b>Principal</b><small>{{ main_task ? 'Já existe: ' ~ main_task : 'O centro das outras tarefas (opcional)' }}</small></span>
                         </label>
                         <label class="ac-tkind-opt">
                             <input type="radio" name="task_kind" value="task" {{ kind == 'task' ? 'checked' : '' }}>
-                            <span><i class="ti ti-checkbox"></i> <b>Uma tarefa</b><small>Dentro de uma fase ou solta no projeto</small></span>
+                            <span><i class="ti ti-checkbox"></i> <b>Tarefa</b><small>Dentro da principal ou solta no projeto</small></span>
                         </label>
                     </div>
                 </div>
 
                 <label class="ac-pnew-field" id="ac-phase-field" {{ kind != 'task' ? 'hidden' : '' }}>
-                    <span class="ac-pnew-label">Fase</span>
+                    <span class="ac-pnew-label">Fica dentro de</span>
                     <select name="projecttasks_id" class="ac-pnew-input">
-                        <option value="0">Sem fase (tarefa solta no projeto)</option>
+                        <option value="0">Nenhuma (tarefa solta no projeto)</option>
                         {% for pid, pname in phases %}
                             <option value="{{ pid }}" {{ pid == parent ? 'selected' : '' }}>{{ pname }}</option>
                         {% endfor %}

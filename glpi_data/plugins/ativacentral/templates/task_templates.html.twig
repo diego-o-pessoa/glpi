@@ -36,11 +36,11 @@
                     <div class="ac-tkind">
                         <label class="ac-tkind-opt">
                             <input type="radio" name="tpl_kind" value="phase" {{ tpl.is_phase ? 'checked' : '' }}>
-                            <span><i class="ti ti-folder"></i> <b>Uma fase</b><small>Agrupa tarefas</small></span>
+                            <span><i class="ti ti-star"></i> <b>Principal</b><small>O centro das outras tarefas</small></span>
                         </label>
                         <label class="ac-tkind-opt">
                             <input type="radio" name="tpl_kind" value="task" {{ tpl.is_phase ? '' : 'checked' }}>
-                            <span><i class="ti ti-checkbox"></i> <b>Uma tarefa</b><small>Fica dentro de uma fase</small></span>
+                            <span><i class="ti ti-checkbox"></i> <b>Tarefa</b><small>Fica dentro da principal</small></span>
                         </label>
                     </div>
                 </div>
@@ -85,9 +85,9 @@
             <div class="ac-tpl-grid is-page">
                 {% for t in templates %}
                     <a class="ac-tpl-card" href="{{ url }}?edit={{ t.id }}">
-                        <span class="ac-tpl-icon {{ t.is_phase ? 'is-phase' : '' }}"><i class="ti {{ t.is_phase ? 'ti-folder' : 'ti-checkbox' }}"></i></span>
+                        <span class="ac-tpl-icon {{ t.is_phase ? 'is-phase' : '' }}"><i class="ti {{ t.is_phase ? 'ti-star' : 'ti-checkbox' }}"></i></span>
                         <b>{{ t.name }}</b>
-                        <small>{{ t.is_phase ? 'Fase' : (t.type ?: 'Tarefa') }}</small>
+                        <small>{{ t.is_phase ? 'Principal' : (t.type ?: 'Tarefa') }}</small>
                         {% if t.summary %}<small class="ac-tpl-summary">{{ t.summary }}</small>{% endif %}
                         <span class="ac-tpl-edit"><i class="ti ti-pencil"></i> Editar</span>
                     </a>

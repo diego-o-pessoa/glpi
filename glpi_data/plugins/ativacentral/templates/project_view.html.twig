@@ -22,7 +22,7 @@
                 </div>
                 <div class="ac-ptask-col ac-ptask-status">
                     {% if phase %}
-                        <span class="ac-ptask-state is-phase">Fase</span>
+                        <span class="ac-ptask-state is-phase"><i class="ti ti-star-filled"></i> Principal</span>
                     {% else %}
                         <span class="ac-ptask-state kind-{{ t.kind }}">{{ t.state }}</span>
                     {% endif %}
@@ -100,7 +100,7 @@
                         </div>
                         <div class="ac-actions">
                             {% if tasks is not empty %}
-                                <button type="button" class="ac-btn is-small" id="ac-ptask-collapse"><i class="ti ti-fold"></i> Recolher fases</button>
+                                <button type="button" class="ac-btn is-small" id="ac-ptask-collapse"><i class="ti ti-fold"></i> Recolher</button>
                             {% endif %}
                             {% if add_task_url %}
                                 <a href="{{ add_task_url }}" class="ac-btn is-primary"><i class="ti ti-plus"></i> Adicionar tarefa</a>
@@ -111,7 +111,7 @@
                         <div class="ac-ptasks-empty">
                             <i class="ti ti-list-details"></i>
                             <b>Nenhuma tarefa ainda</b>
-                            <span>Comece criando as fases (ex.: Planejamento) e as tarefas dentro delas.</span>
+                            <span>Crie as tarefas do projeto. Se quiser, marque uma como Principal (ex.: Planejamento) e coloque as outras dentro dela.</span>
                         </div>
                     {% else %}
                         <div class="ac-ptask-headrow">
@@ -135,7 +135,7 @@
                                 var nodes = document.querySelectorAll('.ac-ptask-list > [data-node]');
                                 var collapse = !Array.prototype.every.call(nodes, function (n) { return n.classList.contains('is-collapsed'); });
                                 nodes.forEach(function (n) { if (n.querySelector('.ac-ptask-children')) { n.classList.toggle('is-collapsed', collapse); } });
-                                all.lastChild.textContent = collapse ? ' Expandir fases' : ' Recolher fases';
+                                all.lastChild.textContent = collapse ? ' Expandir' : ' Recolher';
                             });
                         }
                     })();
