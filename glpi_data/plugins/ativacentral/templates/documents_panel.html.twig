@@ -1,0 +1,148 @@
+{# Aba "Documentos" no estilo do Ativa Central (vale para qualquer item). #}
+<link rel="stylesheet" type="text/css" href="{{ css_url ?? '' }}">
+<div class="ac-app ac-pnew ac-docs" id="ac-docs-{{ uid }}">
+    <div class="ac-docs-head">
+        <div>
+            <h2 class="ac-pnew-title"><i class="ti ti-files"></i> Documentos</h2>
+            <div class="ac-pnew-hint">{{ docs|length }} {{ docs|length == 1 ? 'documento' : 'documentos' }}{{ can_edit ? ' · arraste arquivos aqui para adicionar' : '' }}</div>
+        </div>
+        {% if can_edit %}
+            <div class="ac-actions">
+                <button type="button" class="ac-btn" data-docs-link><i class="ti ti-link"></i> Vincular existente</button>
+                <button type="button" class="ac-btn is-primary" data-docs-pick><i class="ti ti-upload"></i> Adicionar arquivos</button>
+            </div>
+        {% endif %}
+    </div>
+
+    {% if can_edit %}
+        <form method="post" action="{{ action }}" enctype="multipart/form-data" class="ac-docs-drop" data-docs-drop>
+            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+            <input type="hidden" name="doc_action" value="upload">
+            <input type="hidden" name="itemtype" value="{{ itemtype }}">
+            <input type="hidden" name="items_id" value="{{ items_id }}">
+            <input type="file" name="files[]" multiple hidden data-docs-input>
+            <div class="ac-docs-drop-empty" data-docs-empty>
+                <i class="ti ti-cloud-upload"></i>
+                <b>Arraste os arquivos para cá</b>
+                <span>ou <a href="#" data-docs-pick>escolha no computador</a> · até {{ max_mb }} MB cada</span>
+            </div>
+            <div class="ac-docs-queue" data-docs-queue hidden>
+                <div class="ac-docs-queue-list" data-docs-list></div>
+                <div class="ac-docs-queue-foot">
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Categoria</span>
+                        <select name="documentcategories_id" class="ac-pnew-input">
+                            <option value="0">Sem categoria</option>
+                            {% for k, v in categories %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <div class="ac-docs-queue-actions">
+                        <button type="button" class="ac-btn" data-docs-cancel>Cancelar</button>
+                        <button type="submit" class="ac-btn is-primary"><i class="ti ti-upload"></i> Enviar</button>
+                    </div>
+                </div>
+            </div>
+        </form>
+
+        <form method="post" action="{{ action }}" class="ac-docs-linkform" data-docs-linkform hidden>
+            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+            <input type="hidden" name="doc_action" value="link">
+            <input type="hidden" name="itemtype" value="{{ itemtype }}">
+            <input type="hidden" name="items_id" value="{{ items_id }}">
+            <div class="ac-pnew-glpi" style="flex: 1;">{{ existing_html|raw }}</div>
+            <button type="submit" class="ac-btn is-primary"><i class="ti ti-link"></i> Vincular</button>
+        </form>
+    {% endif %}
+
+    {% if docs is empty %}
+        <div class="ac-ptasks-empty">
+            <i class="ti ti-files"></i>
+            <b>Nenhum documento ainda</b>
+            <span>Contratos assinados, propostas, notas, manuais… tudo que for deste item.</span>
+        </div>
+    {% else %}
+        <div class="ac-docs-grid">
+            {% for d in docs %}
+                <div class="ac-docs-card">
+                    <span class="ac-docs-icon"><i class="ti {{ d.icon }}"></i></span>
+                    <div class="ac-docs-info">
+                        <a href="{{ d.download }}" target="_blank" rel="noopener" title="{{ d.name }}"><b>{{ d.name }}</b></a>
+                        <small>
+                            {% if d.category %}<span class="ac-ptask-type">{{ d.category }}</span>{% endif %}
+                            {% if d.size %}<span>{{ d.size }}</span>{% endif %}
+                            {% if d.date %}<span>{{ d.date }}</span>{% endif %}
+                            {% if d.author %}<span>{{ d.author }}</span>{% endif %}
+                        </small>
+                    </div>
+                    <div class="ac-docs-actions">
+                        <a class="ac-docs-btn" href="{{ d.download }}" target="_blank" rel="noopener" title="Baixar / abrir"><i class="ti ti-download"></i></a>
+                        <a class="ac-docs-btn" href="{{ d.open }}" title="Detalhes do documento"><i class="ti ti-info-circle"></i></a>
+                        {% if can_edit %}
+                            <form method="post" action="{{ action }}" onsubmit="return confirm('Remover este documento deste item? O arquivo continua no GLPI.');">
+                                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                                <input type="hidden" name="doc_action" value="unlink">
+                                <input type="hidden" name="itemtype" value="{{ itemtype }}">
+                                <input type="hidden" name="items_id" value="{{ items_id }}">
+                                <input type="hidden" name="link_id" value="{{ d.link_id }}">
+                                <button type="submit" class="ac-docs-btn is-danger" title="Remover deste item"><i class="ti ti-x"></i></button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+{% if can_edit %}
+<script>
+    (function () {
+        var root = document.getElementById('ac-docs-{{ uid }}');
+        var form = root.querySelector('[data-docs-drop]');
+        var input = root.querySelector('[data-docs-input]');
+        var empty = root.querySelector('[data-docs-empty]');
+        var queue = root.querySelector('[data-docs-queue]');
+        var list = root.querySelector('[data-docs-list]');
+        var maxBytes = {{ max_mb }} * 1024 * 1024;
+
+        function show() {
+            var files = input.files;
+            list.innerHTML = '';
+            queue.hidden = !files.length;
+            empty.hidden = files.length > 0;
+            Array.prototype.forEach.call(files, function (f) {
+                var row = document.createElement('div');
+                row.className = 'ac-docs-qrow' + (f.size > maxBytes ? ' is-big' : '');
+                var i = document.createElement('i'); i.className = 'ti ti-file'; row.appendChild(i);
+                var n = document.createElement('span'); n.textContent = f.name; row.appendChild(n);
+                var s = document.createElement('small');
+                s.textContent = f.size > maxBytes ? 'Grande demais' : (f.size >= 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(f.size / 1024)) + ' KB');
+                row.appendChild(s);
+                list.appendChild(row);
+            });
+        }
+        root.querySelectorAll('[data-docs-pick]').forEach(function (b) {
+            b.addEventListener('click', function (e) { e.preventDefault(); input.click(); });
+        });
+        input.addEventListener('change', show);
+        root.querySelector('[data-docs-cancel]').addEventListener('click', function () { input.value = ''; show(); });
+        ['dragenter', 'dragover'].forEach(function (ev) {
+            root.addEventListener(ev, function (e) { e.preventDefault(); form.classList.add('is-over'); });
+        });
+        ['dragleave', 'drop'].forEach(function (ev) {
+            root.addEventListener(ev, function (e) { e.preventDefault(); if (ev === 'drop' || e.target === root) { form.classList.remove('is-over'); } });
+        });
+        root.addEventListener('drop', function (e) {
+            if (e.dataTransfer && e.dataTransfer.files.length) { input.files = e.dataTransfer.files; show(); }
+        });
+        form.addEventListener('submit', function (e) {
+            if (Array.prototype.some.call(input.files, function (f) { return f.size > maxBytes; })) {
+                e.preventDefault();
+                alert('Algum arquivo passa do limite de {{ max_mb }} MB.');
+            }
+        });
+        var linkBtn = root.querySelector('[data-docs-link]');
+        var linkForm = root.querySelector('[data-docs-linkform]');
+        linkBtn.addEventListener('click', function () { linkForm.hidden = !linkForm.hidden; });
+    })();
+</script>
+{% endif %}

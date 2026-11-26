@@ -60,6 +60,9 @@ final class Shell
         $PLUGIN_HOOKS[Hooks::ADD_CSS]['ativacentral'] = [self::asset('css/shell.css'), self::asset('css/native.css')];
         $PLUGIN_HOOKS[Hooks::ADD_JAVASCRIPT]['ativacentral'] = [self::asset('js/shell.js')];
         $PLUGIN_HOOKS[Hooks::REDEFINE_MENUS]['ativacentral'] = [self::class, 'redefineMenus'];
+        // Aba "Documentos" no estilo novo em qualquer tela (as abas vem por ajax).
+        $PLUGIN_HOOKS[Hooks::PRE_SHOW_TAB]['ativacentral'] = [DocumentsPanel::class, 'preTab'];
+        $PLUGIN_HOOKS[Hooks::POST_SHOW_TAB]['ativacentral'] = [DocumentsPanel::class, 'postTab'];
 
         if (!self::isFullPageRequest()) {
             return;
