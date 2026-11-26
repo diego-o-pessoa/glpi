@@ -100,7 +100,7 @@ final class Projects
                 'priority'       => $priority,
                 'priority_label' => $priorityLabel,
                 'priority_tone'  => ProjectForm::priorityTone($priority),
-                'state'          => $state['name'],
+                'state'          => ProjectForm::stateLabel($state['name'], (bool) $state['is_finished']),
                 'state_color'    => $state['color'],
                 'bucket'         => $bucket,
                 'percent'        => $percent,

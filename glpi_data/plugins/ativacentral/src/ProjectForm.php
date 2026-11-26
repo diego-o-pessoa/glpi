@@ -39,6 +39,19 @@ final class ProjectForm
         };
     }
 
+    /** Nome simples do estado do projeto (Backlog -> Nao iniciado, Em Execucao -> Em andamento). */
+    public static function stateLabel(string $name, bool $finished): string
+    {
+        $lower = mb_strtolower(trim($name));
+        return match (true) {
+            $lower !== '' && str_contains($lower, 'cancel') => 'Cancelado',
+            $finished => 'Concluído',
+            $lower !== '' && preg_match('/execu|andamento|progress/u', $lower) === 1 => 'Em andamento',
+            $lower === '' || preg_match('/backlog|planej|n[aã]o inici|novo|aberto|sem estado/u', $lower) === 1 => 'Não iniciado',
+            default => trim($name),
+        };
+    }
+
     public static function priorityTone(int $priority): string
     {
         return match (true) {

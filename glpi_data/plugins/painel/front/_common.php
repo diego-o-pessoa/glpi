@@ -293,6 +293,20 @@ if (!function_exists('painel_project_states')) {
     }
 }
 
+if (!function_exists('painel_project_state_label')) {
+    function painel_project_state_label(string $name, bool $finished): string
+    {
+        $lower = mb_strtolower(trim($name));
+        return match (true) {
+            $lower !== '' && str_contains($lower, 'cancel') => 'Cancelado',
+            $finished => 'Concluído',
+            $lower !== '' && preg_match('/execu|andamento|progress/u', $lower) === 1 => 'Em andamento',
+            $lower === '' || preg_match('/backlog|planej|n[aã]o inici|novo|aberto|sem estado/u', $lower) === 1 => 'Não iniciado',
+            default => trim($name),
+        };
+    }
+}
+
 if (!function_exists('painel_is_planning_state')) {
     function painel_is_planning_state(string $name): bool
     {
@@ -700,7 +714,8 @@ if (!function_exists('painel_user_projects_data')) {
                 'desc'           => painel_excerpt((string) ($row['content'] ?? '')),
                 'priority_label' => $priorityLabel,
                 'priority_tone'  => $priorityTone,
-                'state'          => $state['name'],
+                // Mesmos nomes do Super-Admin: Nao iniciado, Em andamento, Concluido, Cancelado.
+                'state'          => painel_project_state_label($state['name'], (bool) $state['is_finished']),
                 'state_color'    => $state['color'],
                 'bucket'         => $bucket,
                 'percent'        => $percent,

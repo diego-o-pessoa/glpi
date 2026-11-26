@@ -46,7 +46,11 @@ final class ProjectPage
         $canUpdate = $project->can($id, UPDATE);
         $priority = (int) $f['priority'];
         $state = (int) $f['projectstates_id'];
-        $stateName = $state > 0 ? ProjectState::getFriendlyNameById($state) : 'Sem estado';
+        $stateRow = new ProjectState();
+        $stateName = ProjectForm::stateLabel(
+            $state > 0 && $stateRow->getFromDB($state) ? (string) $stateRow->fields['name'] : '',
+            $state > 0 && (int) ($stateRow->fields['is_finished'] ?? 0) === 1
+        );
 
         $tabs = [];
         foreach (self::TABS as $key => [$label, $icon, $glpiTab]) {
