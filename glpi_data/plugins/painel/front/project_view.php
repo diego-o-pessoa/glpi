@@ -11,6 +11,49 @@ $project = painel_project_detail($project_id, $ctx['uid'], $ctx['my_groups']);
 $csrf_token = Session::getNewCSRFToken();
 $action_url = rtrim((string) ($CFG_GLPI['root_doc'] ?? ''), '/') . '/plugins/painel/front/project_task_action.php';
 
+/** Icone da tarefa conforme o status. */
+function painel_task_icon(array $node): array
+{
+    if (!empty($node['children'])) {
+        return [!empty($node['done']) ? 'is-done' : 'is-phase', !empty($node['done']) ? 'fa-circle-check' : 'fa-folder-open'];
+    }
+    return match ($node['kind'] ?? 'todo') {
+        'done'      => ['is-done', 'fa-circle-check'],
+        'running'   => ['is-running', 'fa-circle-half-stroke'],
+        'cancelled' => ['is-cancelled', 'fa-circle-xmark'],
+        default     => ['', 'fa-circle'],
+    };
+}
+
+/** Texto do prazo da linha ("Até 27/11/2026", "Atrasada · 25/11/2026"). */
+function painel_task_due_text(array $node): string
+{
+    $end = (string) ($node['end_date'] ?? '');
+    if ($end === '') {
+        return $node['start_date'] !== '' ? 'Início ' . $node['start_date'] : 'Sem prazo';
+    }
+    return match ($node['due_tone'] ?? '') {
+        'late'  => 'Atrasada · ' . $end,
+        'soon'  => 'Vence ' . $end,
+        default => 'Até ' . $end,
+    };
+}
+
+/** Bolinhas com as iniciais dos responsaveis (nome completo no title). */
+function painel_render_avatars(array $names, int $max = 3): void
+{
+    if ($names === []) {
+        echo '<span class="av-none">—</span>';
+        return;
+    }
+    foreach (array_slice($names, 0, $max) as $name) {
+        echo '<span class="av" title="' . htmlspecialchars($name) . '">' . htmlspecialchars(painel_initials($name)) . '</span>';
+    }
+    if (count($names) > $max) {
+        echo '<span class="av av-more" title="' . htmlspecialchars(implode(', ', array_slice($names, $max))) . '">+' . (count($names) - $max) . '</span>';
+    }
+}
+
 /**
  * Renderiza recursivamente a arvore de tarefas e subtarefas com linhas clicaveis.
  *
@@ -24,18 +67,10 @@ function painel_render_task_nodes(array $nodes, int $depth = 0): void
         $isMine = !empty($node['mine']);
         $notesCount = (int) ($node['notes_count'] ?? 0);
         $pad = 16 + ($depth * 26);
-
-        $dateStr = '—';
-        if ($node['start_date'] !== '' && $node['end_date'] !== '') {
-            $dateStr = $node['start_date'] . ' → ' . $node['end_date'];
-        } elseif ($node['end_date'] !== '') {
-            $dateStr = 'Até ' . $node['end_date'];
-        } elseif ($node['start_date'] !== '') {
-            $dateStr = $node['start_date'];
-        }
+        [$iconTone, $iconClass] = painel_task_icon($node);
         ?>
-        <div class="tree-node" data-task-id="<?= (int) $node['id'] ?>" data-mine="<?= $isMine ? '1' : '0' ?>" data-done="<?= $isDone ? '1' : '0' ?>">
-            <div class="tree-row <?= $depth === 0 && $hasChildren ? 'is-phase' : '' ?>" style="padding-left: <?= $pad ?>px;" role="button" tabindex="0">
+        <div class="tree-node" data-task-id="<?= (int) $node['id'] ?>" data-mine="<?= $isMine ? '1' : '0' ?>" data-done="<?= $isDone || $node['kind'] === 'cancelled' ? '1' : '0' ?>">
+            <div class="tree-row <?= $hasChildren ? 'is-phase' : '' ?> <?= $isMine && !$hasChildren ? 'is-mine' : '' ?>" style="padding-left: <?= $pad ?>px;" role="button" tabindex="0">
                 <div class="tree-main">
                     <?php if ($hasChildren): ?>
                         <button type="button" class="tree-toggle" aria-expanded="true" title="Expandir/recolher">
@@ -45,44 +80,36 @@ function painel_render_task_nodes(array $nodes, int $depth = 0): void
                         <span class="tree-spacer"></span>
                     <?php endif; ?>
 
-                    <span class="tree-icon <?= $isDone ? 'is-done' : ($hasChildren ? 'is-phase' : '') ?>">
-                        <i class="fa-solid <?= $isDone ? 'fa-circle-check' : ($hasChildren ? 'fa-folder-open' : 'fa-circle-dot') ?>"></i>
-                    </span>
+                    <span class="tree-icon <?= $iconTone ?>" data-row-icon><i class="fa-solid <?= $iconClass ?>"></i></span>
 
                     <div class="tree-text">
                         <div class="tree-name">
-                            <span><?= htmlspecialchars($node['name']) ?></span>
-                            <?php if ($node['type'] !== ''): ?>
-                                <span class="tree-type"><?= htmlspecialchars($node['type']) ?></span>
-                            <?php endif; ?>
-                            <?php if ($isMine): ?>
+                            <span class="<?= $node['kind'] === 'cancelled' ? 'is-struck' : '' ?>"><?= htmlspecialchars($node['name']) ?></span>
+                            <?php if ($isMine && !$hasChildren): ?>
                                 <span class="tree-mine">Minha</span>
                             <?php endif; ?>
-                            <span class="tree-notes-pill <?= $notesCount === 0 ? 'is-empty' : '' ?>" data-notes-badge>
-                                <i class="fa-regular fa-comment-dots"></i>
-                                <span data-notes-count><?= $notesCount ?></span> <?= $notesCount === 1 ? 'atualização' : 'atualizações' ?>
+                            <span class="tree-notes-pill <?= $notesCount === 0 ? 'is-empty' : '' ?>" data-notes-badge title="Atualizações registradas">
+                                <i class="fa-regular fa-comment-dots"></i> <span data-notes-count><?= $notesCount ?></span>
                             </span>
                         </div>
                     </div>
                 </div>
 
                 <div class="tree-cols">
-                    <span class="tree-state <?= $isDone ? 'is-done' : '' ?>" data-row-state
-                          <?= $node['state_color'] !== '' ? 'style="border-left: 3px solid ' . htmlspecialchars($node['state_color']) . ';"' : '' ?>>
-                        <?= htmlspecialchars($node['state']) ?>
-                    </span>
+                    <?php if ($hasChildren): ?>
+                        <div class="tree-phase-prog">
+                            <span class="tree-phase-text" data-phase-text><?= (int) $node['leaf_done'] ?> de <?= (int) $node['leaf_total'] ?> concluídas</span>
+                            <div class="tree-pct-bar"><span data-row-bar class="<?= $isDone ? 'is-done' : '' ?>" style="width: <?= (int) $node['percent'] ?>%"></span></div>
+                            <span class="tree-phase-pct" data-row-pct><?= (int) $node['percent'] ?>%</span>
+                        </div>
+                    <?php else: ?>
+                        <span class="tree-state kind-<?= htmlspecialchars($node['kind']) ?>" data-row-state><?= htmlspecialchars($node['kind_label']) ?></span>
+                    <?php endif; ?>
 
-                    <div class="tree-pct" title="<?= (int) $node['percent'] ?>%">
-                        <div class="tree-pct-bar"><span data-row-bar style="width: <?= (int) $node['percent'] ?>%"></span></div>
-                        <span data-row-pct><?= (int) $node['percent'] ?>%</span>
-                    </div>
+                    <div class="tree-assignees"><?php painel_render_avatars($node['assignees']); ?></div>
 
-                    <div class="tree-assignees" title="<?= htmlspecialchars(implode(', ', $node['assignees'])) ?>">
-                        <?= !empty($node['assignees']) ? htmlspecialchars(implode(', ', array_slice($node['assignees'], 0, 2))) . (count($node['assignees']) > 2 ? ' +' . (count($node['assignees']) - 2) : '') : '—' ?>
-                    </div>
-
-                    <div class="tree-dates"><?= htmlspecialchars($dateStr) ?></div>
-                    <span class="tree-open-cue">Ver detalhes <i class="fa-solid fa-chevron-right"></i></span>
+                    <div class="tree-dates due-<?= htmlspecialchars($node['due_tone'] ?: 'none') ?>" data-row-due><?= htmlspecialchars(painel_task_due_text($node)) ?></div>
+                    <i class="fa-solid fa-chevron-right tree-open-cue"></i>
                 </div>
             </div>
 
@@ -287,6 +314,59 @@ $client_payload = painel_project_client_payload($project);
         .empty-panel h3 { font-size: 19px; color: #1a2340; margin-bottom: 10px; }
         .empty-panel p { font-size: 14px; color: #7a85a3; }
 
+        /* Lista de tarefas: status, avatares e prazos */
+        .tree-row.is-mine { box-shadow: inset 3px 0 0 #8b6cf6; }
+        .tree-icon.is-running { color: #f59f32; }
+        .tree-icon.is-cancelled { color: #c4cbd8; }
+        .is-struck { text-decoration: line-through; color: #9aa6bf; }
+        .tree-state { min-width: 112px; text-align: center; border-left: 0 !important; }
+        .tree-state.kind-todo { background: #eef1f8; color: #64708f; }
+        .tree-state.kind-running { background: rgba(245, 159, 50, 0.16); color: #a15c07; }
+        .tree-state.kind-done { background: rgba(47, 182, 124, 0.14); color: #167a4d; }
+        .tree-state.kind-cancelled { background: #f4f5f8; color: #9aa6bf; }
+        .tree-phase-prog { display: flex; align-items: center; gap: 10px; width: 260px; }
+        .tree-phase-text { font-size: 12.5px; font-weight: 700; color: #475569; white-space: nowrap; min-width: 112px; }
+        .tree-phase-prog .tree-pct-bar { flex: 1; }
+        .tree-pct-bar > span.is-done { background: #2fb67c; }
+        .tree-phase-pct { font-size: 12.5px; font-weight: 800; color: #1a2340; min-width: 36px; text-align: right; }
+        .tree-assignees { width: 96px; display: flex; align-items: center; }
+        .av { width: 28px; height: 28px; border-radius: 50%; background: rgba(74, 108, 247, 0.14); color: #3c5ce8; font-size: 10.5px; font-weight: 800; display: grid; place-items: center; border: 2px solid #fff; margin-left: -6px; cursor: default; }
+        .av:first-child { margin-left: 0; }
+        .av-more { background: #eef1f8; color: #64708f; }
+        .av-none { color: #9aa6bf; }
+        .tree-dates { width: 160px; font-weight: 600; }
+        .tree-dates.due-late { color: #dc2626; }
+        .tree-dates.due-soon { color: #d97706; }
+        .tree-open-cue { font-size: 12px; color: #b4bdd0; opacity: 1; }
+        .tree-row:hover .tree-open-cue { color: #4a6cf7; }
+        .tree-notes-pill { padding: 2px 7px; }
+
+        /* Resumo do usuario no topo */
+        .my-banner { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 10px 14px; border-radius: 12px; background: rgba(139, 108, 246, 0.1); color: #5b3fd1; font-size: 13.5px; font-weight: 600; }
+        .my-banner.is-late { background: rgba(239, 68, 68, 0.1); color: #b91c1c; }
+        .my-banner.is-clear { background: rgba(47, 182, 124, 0.12); color: #167a4d; }
+        .summary-desc.is-clamped { -webkit-line-clamp: 2; }
+
+        /* Gaveta: status em 3 botoes grandes */
+        .drawer-meta-chips.in-head { margin-top: 10px; }
+        .status-big { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .status-big-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 8px; border: 2px solid #e2e8f0; border-radius: 14px; background: #fff; color: #475569; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+        .status-big-btn i { font-size: 20px; color: #9aa6bf; }
+        .status-big-btn:hover { border-color: #b8c4f5; }
+        .status-big-btn:disabled { cursor: wait; opacity: 0.7; }
+        .status-big-btn.is-active[data-status="todo"] { border-color: #64708f; background: #f4f6fb; color: #1a2340; }
+        .status-big-btn.is-active[data-status="todo"] i { color: #64708f; }
+        .status-big-btn.is-active[data-status="running"] { border-color: #f59f32; background: #fff8ee; color: #a15c07; }
+        .status-big-btn.is-active[data-status="running"] i { color: #f59f32; }
+        .status-big-btn.is-active[data-status="done"] { border-color: #2fb67c; background: #ecfdf5; color: #167a4d; }
+        .status-big-btn.is-active[data-status="done"] i { color: #2fb67c; }
+        .drawer-hint { font-size: 12.5px; color: #7a85a3; margin-top: 8px; }
+        .phase-prog-big { display: flex; align-items: center; gap: 12px; }
+        .phase-prog-big .summary-bar { flex: 1; }
+        .phase-prog-big b { font-size: 15px; color: #1a2340; }
+        .note-form.is-highlight textarea { border-color: #2fb67c; box-shadow: 0 0 0 3px rgba(47, 182, 124, 0.15); }
+        .notes-history-title { font-size: 12px; font-weight: 800; color: #7a85a3; text-transform: uppercase; letter-spacing: 0.05em; margin: 16px 0 10px; }
+
         @media (max-width: 960px) {
             .tree-row { flex-direction: column; align-items: flex-start; }
             .tree-cols { width: 100%; flex-wrap: wrap; justify-content: flex-start; padding-left: 32px; }
@@ -319,6 +399,14 @@ $client_payload = painel_project_client_payload($project);
                 $date_text = 'Até ' . $project['end_date'];
             }
             $full_desc = $project['full_desc'] !== '' ? $project['full_desc'] : 'Sem descrição cadastrada para este projeto.';
+            $has_mine = false;
+            foreach ($project['tasks_map'] as $t) {
+                if (!empty($t['mine']) && empty($t['children'])) {
+                    $has_mine = true;
+                    break;
+                }
+            }
+            $default_filter = $project['my_pending'] > 0 ? 'mine' : 'all';
             $needs_read_more = mb_strlen($full_desc) > 170 || substr_count($full_desc, "\n") >= 2 || !empty($project['team']) || $project['owner_name'] !== '';
         ?>
             <div class="summary-card">
@@ -332,6 +420,17 @@ $client_payload = painel_project_client_payload($project);
                     </div>
                     <h1><?= htmlspecialchars($project['name']) ?></h1>
                     <div class="summary-desc <?= mb_strlen($full_desc) > 190 || substr_count($full_desc, "\n") >= 3 ? 'is-clamped' : '' ?>"><?= htmlspecialchars($full_desc) ?></div>
+                    <?php if ($project['my_pending'] > 0): ?>
+                        <div class="my-banner <?= $project['my_next_due_late'] ? 'is-late' : '' ?>" id="my-banner">
+                            <i class="fa-solid fa-list-check"></i>
+                            <span>
+                                Você tem <b><?= (int) $project['my_pending'] ?></b> <?= $project['my_pending'] === 1 ? 'tarefa pendente' : 'tarefas pendentes' ?> neste projeto<?php if ($project['my_next_due'] !== ''): ?>
+                                    · <?= $project['my_next_due_late'] ? 'uma está atrasada desde' : 'a próxima vence em' ?> <?= htmlspecialchars($project['my_next_due']) ?><?php endif; ?>
+                            </span>
+                        </div>
+                    <?php elseif ($has_mine): ?>
+                        <div class="my-banner is-clear" id="my-banner"><i class="fa-solid fa-circle-check"></i> Você concluiu todas as suas tarefas neste projeto.</div>
+                    <?php endif; ?>
                     <?php if ($needs_read_more): ?>
                         <div class="summary-more-row">
                             <button type="button" class="btn-read-more" id="open-project-modal">
@@ -348,7 +447,7 @@ $client_payload = painel_project_client_payload($project);
                     </div>
                     <div class="summary-meta">
                         <span><i class="fa-regular fa-calendar"></i> <?= htmlspecialchars($date_text) ?></span>
-                        <span id="summary-tasks-count">· <?= (int) $project['tasks_done'] ?> de <?= (int) $project['tasks_total'] ?> tarefas</span>
+                        <span id="summary-tasks-count"><i class="fa-solid fa-list-check"></i> <?= (int) $project['tasks_done'] ?> de <?= (int) $project['tasks_total'] ?> tarefas concluídas</span>
                     </div>
                     <?php if (!empty($project['team'])): ?>
                         <div class="summary-team">
@@ -369,12 +468,14 @@ $client_payload = painel_project_client_payload($project);
             <div class="tree-card">
                 <div class="tree-head">
                     <div class="tree-head-left">
-                        <h2>Estrutura de Tarefas (<?= (int) $project['tasks_total'] ?>)</h2>
-                        <div class="tree-head-sub">Clique em qualquer tarefa para ver detalhes, atualizar seu progresso e registrar o que já desenvolveu.</div>
+                        <h2>Tarefas do projeto</h2>
+                        <div class="tree-head-sub">Clique numa tarefa para ver os detalhes. Nas suas tarefas você marca o status e conta o que fez.</div>
                     </div>
-                    <div class="tree-filters">
-                        <button type="button" class="tree-filter is-active" data-tfilter="all">Todas</button>
-                        <button type="button" class="tree-filter" data-tfilter="mine">Minhas tarefas</button>
+                    <div class="tree-filters" data-default-filter="<?= $default_filter ?>">
+                        <button type="button" class="tree-filter <?= $default_filter === 'all' ? 'is-active' : '' ?>" data-tfilter="all">Todas</button>
+                        <?php if ($has_mine): ?>
+                            <button type="button" class="tree-filter <?= $default_filter === 'mine' ? 'is-active' : '' ?>" data-tfilter="mine">Minhas tarefas</button>
+                        <?php endif; ?>
                         <button type="button" class="tree-filter" data-tfilter="pending">Pendentes</button>
                     </div>
                 </div>
@@ -453,57 +554,46 @@ $client_payload = painel_project_client_payload($project);
                     <div class="drawer-trail" id="drawer-trail"></div>
                     <div class="drawer-title" id="drawer-title"></div>
                     <div class="drawer-badges" id="drawer-badges"></div>
+                    <div class="drawer-meta-chips in-head" id="drawer-meta"></div>
                 </div>
                 <button type="button" class="ac-close-btn" id="close-task-drawer" aria-label="Fechar"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
             <div class="drawer-body">
-                <div class="drawer-box">
-                    <div class="drawer-box-title">Detalhes definidos pelo dono do projeto</div>
+                <div class="drawer-readonly-hint" id="drawer-readonly-hint" style="display: none; font-size: 13px; color: #7a85a3; background: #f4f6fb; border-radius: 10px; padding: 10px 12px;">
+                    <i class="fa-solid fa-lock"></i> Esta tarefa é de outra pessoa: você pode acompanhar, mas só quem está atribuído a ela muda o status.
+                </div>
+
+                <div id="drawer-status-wrap">
+                    <div class="drawer-sec-title">Status</div>
+                    <div class="status-big" id="drawer-status-btns">
+                        <button type="button" class="status-big-btn" data-status="todo"><i class="fa-regular fa-circle"></i> Não iniciada</button>
+                        <button type="button" class="status-big-btn" data-status="running"><i class="fa-solid fa-circle-half-stroke"></i> Em andamento</button>
+                        <button type="button" class="status-big-btn" data-status="done"><i class="fa-solid fa-circle-check"></i> Concluída</button>
+                    </div>
+                    <div class="drawer-feedback" id="status-feedback" style="margin-top: 8px;"></div>
+                </div>
+
+                <div id="drawer-phase-wrap" style="display: none;">
+                    <div class="drawer-sec-title">Andamento da fase</div>
+                    <div class="phase-prog-big">
+                        <b id="drawer-phase-text"></b>
+                        <div class="summary-bar"><span id="drawer-phase-bar"></span></div>
+                    </div>
+                    <div class="drawer-hint">Calculado automaticamente: cada tarefa concluída soma a sua parte. Canceladas não contam.</div>
+                    <div class="subtasks-mini" id="drawer-subtasks" style="margin-top: 12px;"></div>
+                </div>
+
+                <div class="drawer-box" id="drawer-about">
+                    <div class="drawer-box-title">Sobre esta tarefa</div>
                     <div class="drawer-box-text" id="drawer-desc"></div>
                     <div class="drawer-box-text" id="drawer-comment" style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #d5dff5; display: none;"></div>
-                    <div class="drawer-meta-chips" id="drawer-meta"></div>
-                </div>
-
-                <div id="drawer-subtasks-wrap" style="display: none;">
-                    <div class="drawer-sec-title">Subtarefas desta etapa</div>
-                    <div class="subtasks-mini" id="drawer-subtasks"></div>
-                </div>
-
-                <div class="drawer-readonly-hint" id="drawer-readonly-hint" style="display: none; font-size: 13px; color: #7a85a3; background: #f4f6fb; border-radius: 10px; padding: 10px 12px;">
-                    <i class="fa-solid fa-lock"></i> Esta tarefa é de outra pessoa: você pode acompanhar, mas só quem está atribuído a ela atualiza o andamento.
-                </div>
-
-                <div id="drawer-progress-wrap">
-                    <div class="drawer-sec-title">Andamento desta etapa</div>
-                    <div class="status-pills" id="drawer-status-pills"></div>
-                    <div class="pct-row">
-                        <input type="range" min="0" max="100" step="5" id="drawer-pct-range">
-                        <span class="pct-badge" id="drawer-pct-label">0%</span>
-                    </div>
-                    <div class="pct-presets-wrap">
-                        <div class="pct-presets" id="drawer-pct-presets">
-                            <button type="button" class="pct-btn" data-pct="0">0%</button>
-                            <button type="button" class="pct-btn" data-pct="25">25%</button>
-                            <button type="button" class="pct-btn" data-pct="50">50%</button>
-                            <button type="button" class="pct-btn" data-pct="75">75%</button>
-                            <button type="button" class="pct-btn" data-pct="100">100%</button>
-                        </div>
-                        <button type="button" class="btn-save-progress" id="btn-save-progress">
-                            <i class="fa-solid fa-check"></i> Salvar andamento
-                        </button>
-                    </div>
-                    <div class="drawer-feedback" id="progress-feedback" style="margin-top: 8px;"></div>
-                    <div id="auto-pct-hint" style="display: none; margin-top: 6px; font-size: 12px; color: #7a85a3;">
-                        O percentual desta fase é calculado automaticamente a partir das subtarefas.
-                    </div>
                 </div>
 
                 <div>
-                    <div class="drawer-sec-title">O que já foi desenvolvido (Atualizações)</div>
-                    <div class="notes-timeline" id="drawer-notes-list"></div>
+                    <div class="drawer-sec-title">Atualizações</div>
                     <form class="note-form" id="drawer-note-form">
-                        <textarea id="drawer-note-input" placeholder="Descreva o que você já desenvolveu nesta etapa para o dono do projeto acompanhar..."></textarea>
+                        <textarea id="drawer-note-input" placeholder="O que você fez nesta tarefa? Conte para o dono do projeto acompanhar."></textarea>
                         <div class="note-form-foot">
                             <span class="drawer-feedback" id="note-feedback"></span>
                             <button type="submit" class="btn-send-note" id="btn-send-note">
@@ -511,6 +601,8 @@ $client_payload = painel_project_client_payload($project);
                             </button>
                         </div>
                     </form>
+                    <div class="notes-history-title" id="drawer-notes-title">Histórico</div>
+                    <div class="notes-timeline" id="drawer-notes-list"></div>
                 </div>
             </div>
         </div>
@@ -559,6 +651,10 @@ $client_payload = painel_project_client_payload($project);
                 applyTaskFilter(mode);
             });
         });
+        const filtersEl = document.querySelector('.tree-filters');
+        if (filtersEl && filtersEl.getAttribute('data-default-filter') !== 'all') {
+            applyTaskFilter(filtersEl.getAttribute('data-default-filter'));
+        }
 
         // Modal Ler Mais
         const infoModal = document.getElementById('project-info-modal');
@@ -581,98 +677,79 @@ $client_payload = painel_project_client_payload($project);
         let csrfToken = <?= json_encode($csrf_token) ?>;
         const actionUrl = <?= json_encode($action_url) ?>;
         let currentTaskId = 0;
-        let selectedStateId = 0;
-        let selectedPercent = 0;
 
-        const trailEl = document.getElementById('drawer-trail');
-        const titleEl = document.getElementById('drawer-title');
-        const badgesEl = document.getElementById('drawer-badges');
-        const descEl = document.getElementById('drawer-desc');
-        const commentEl = document.getElementById('drawer-comment');
-        const metaEl = document.getElementById('drawer-meta');
-        const subWrap = document.getElementById('drawer-subtasks-wrap');
-        const subList = document.getElementById('drawer-subtasks');
-        const statusPillsEl = document.getElementById('drawer-status-pills');
-        const pctRange = document.getElementById('drawer-pct-range');
-        const pctLabel = document.getElementById('drawer-pct-label');
-        const pctPresets = document.getElementById('drawer-pct-presets');
-        const saveProgressBtn = document.getElementById('btn-save-progress');
-        const progressFeedback = document.getElementById('progress-feedback');
-        const autoPctHint = document.getElementById('auto-pct-hint');
-        const notesList = document.getElementById('drawer-notes-list');
-        const noteForm = document.getElementById('drawer-note-form');
-        const noteInput = document.getElementById('drawer-note-input');
-        const sendNoteBtn = document.getElementById('btn-send-note');
-        const noteFeedback = document.getElementById('note-feedback');
+        const $ = (id) => document.getElementById(id);
+        const trailEl = $('drawer-trail');
+        const titleEl = $('drawer-title');
+        const badgesEl = $('drawer-badges');
+        const metaEl = $('drawer-meta');
+        const readonlyHint = $('drawer-readonly-hint');
+        const statusWrap = $('drawer-status-wrap');
+        const statusBtns = $('drawer-status-btns');
+        const statusFeedback = $('status-feedback');
+        const phaseWrap = $('drawer-phase-wrap');
+        const phaseText = $('drawer-phase-text');
+        const phaseBar = $('drawer-phase-bar');
+        const subList = $('drawer-subtasks');
+        const aboutBox = $('drawer-about');
+        const descEl = $('drawer-desc');
+        const commentEl = $('drawer-comment');
+        const notesList = $('drawer-notes-list');
+        const notesTitle = $('drawer-notes-title');
+        const noteForm = $('drawer-note-form');
+        const noteInput = $('drawer-note-input');
+        const sendNoteBtn = $('btn-send-note');
+        const noteFeedback = $('note-feedback');
+        const notePlaceholder = noteInput.getAttribute('placeholder');
 
-        function setPctUI(pct) {
-            selectedPercent = Math.max(0, Math.min(100, Number(pct) || 0));
-            pctRange.value = String(selectedPercent);
-            pctLabel.textContent = selectedPercent + '%';
-            pctPresets.querySelectorAll('.pct-btn').forEach(btn => {
-                btn.classList.toggle('is-active', Number(btn.getAttribute('data-pct')) === selectedPercent);
-            });
+        const ICONS = {
+            todo: ['', 'fa-circle'],
+            running: ['is-running', 'fa-circle-half-stroke'],
+            done: ['is-done', 'fa-circle-check'],
+            cancelled: ['is-cancelled', 'fa-circle-xmark']
+        };
+
+        function isPhase(t) { return (t.child_ids || []).length > 0; }
+
+        function dueText(t) {
+            if (!t.end_date) return t.start_date ? 'Início ' + t.start_date : 'Sem prazo';
+            if (t.due_tone === 'late') return 'Atrasada · ' + t.end_date;
+            if (t.due_tone === 'soon') return 'Vence ' + t.end_date;
+            return 'Até ' + t.end_date;
         }
 
-        function setStateUI(sid) {
-            selectedStateId = Number(sid) || 0;
-            statusPillsEl.querySelectorAll('.status-pill-btn').forEach(btn => {
-                btn.classList.toggle('is-active', Number(btn.getAttribute('data-sid')) === selectedStateId);
-            });
-        }
-
-        function renderStateButtons(task) {
-            statusPillsEl.innerHTML = '';
-            const states = projectData.states || [];
-            if (!states.length) {
-                const none = document.createElement('span');
-                none.style.fontSize = '12.5px';
-                none.style.color = '#7a85a3';
-                none.textContent = 'Nenhum estado cadastrado em projectstates.';
-                statusPillsEl.appendChild(none);
-                return;
-            }
-            states.forEach(st => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'status-pill-btn' + (st.is_finished ? ' is-finished' : '');
-                btn.setAttribute('data-sid', String(st.id));
-                btn.textContent = st.name;
-                btn.addEventListener('click', () => {
-                    setStateUI(st.id);
-                    if (st.is_finished && selectedPercent < 100 && !task.auto_percent) {
-                        setPctUI(100);
-                    }
-                });
-                statusPillsEl.appendChild(btn);
-            });
-            setStateUI(task.state_id);
+        function chip(icon, text) {
+            const el = document.createElement('span');
+            el.className = 'drawer-chip';
+            const i = document.createElement('i');
+            i.className = icon;
+            el.appendChild(i);
+            el.appendChild(document.createTextNode(' ' + text));
+            return el;
         }
 
         function renderNotes(task) {
             notesList.innerHTML = '';
             const notes = task.notes || [];
+            notesTitle.style.display = notes.length ? '' : 'none';
             if (!notes.length) {
                 const empty = document.createElement('div');
                 empty.style.fontSize = '13px';
                 empty.style.color = '#7a85a3';
                 empty.style.padding = '8px 0';
-                empty.textContent = 'Nenhuma atualização registrada ainda nesta etapa.';
+                empty.textContent = 'Ninguém registrou atualizações nesta tarefa ainda.';
                 notesList.appendChild(empty);
                 return;
             }
             notes.forEach(n => {
                 const item = document.createElement('div');
                 item.className = 'note-item';
-
                 const av = document.createElement('span');
                 av.className = 'note-av';
                 av.textContent = n.author_initials || '?';
                 item.appendChild(av);
-
                 const body = document.createElement('div');
                 body.className = 'note-body';
-
                 const meta = document.createElement('div');
                 meta.className = 'note-meta';
                 const strong = document.createElement('strong');
@@ -680,59 +757,80 @@ $client_payload = painel_project_client_payload($project);
                 meta.appendChild(strong);
                 meta.appendChild(document.createTextNode(n.date ? ' · ' + n.date : ''));
                 body.appendChild(meta);
-
                 const text = document.createElement('div');
                 text.className = 'note-text';
                 text.textContent = n.content;
                 body.appendChild(text);
-
                 item.appendChild(body);
                 notesList.appendChild(item);
+            });
+        }
+
+        function setStatusUI(kind) {
+            statusBtns.querySelectorAll('.status-big-btn').forEach(btn => {
+                btn.classList.toggle('is-active', btn.getAttribute('data-status') === kind);
             });
         }
 
         function updateDomFromProject(fresh) {
             if (!fresh) return;
             projectData = fresh;
-            const pctText = document.getElementById('summary-pct-text');
-            const pctBar = document.getElementById('summary-pct-bar');
-            const tasksCount = document.getElementById('summary-tasks-count');
+            const pctText = $('summary-pct-text');
+            const pctBar = $('summary-pct-bar');
+            const tasksCount = $('summary-tasks-count');
             if (pctText) pctText.textContent = fresh.percent + '% concluído';
             if (pctBar) pctBar.style.width = fresh.percent + '%';
-            if (tasksCount) tasksCount.textContent = '· ' + fresh.tasks_done + ' de ' + fresh.tasks_total + ' tarefas';
+            if (tasksCount) tasksCount.textContent = fresh.tasks_done + ' de ' + fresh.tasks_total + ' tarefas concluídas';
 
-            const tasksMap = fresh.tasks || {};
-            Object.keys(tasksMap).forEach(tid => {
-                const t = tasksMap[tid];
+            const banner = $('my-banner');
+            if (banner) {
+                banner.className = 'my-banner' + (fresh.my_pending === 0 ? ' is-clear' : (fresh.my_next_due_late ? ' is-late' : ''));
+                if (fresh.my_pending === 0) {
+                    banner.textContent = 'Você concluiu todas as suas tarefas neste projeto.';
+                } else {
+                    let txt = 'Você tem ' + fresh.my_pending + (fresh.my_pending === 1 ? ' tarefa pendente' : ' tarefas pendentes') + ' neste projeto';
+                    if (fresh.my_next_due) txt += ' · ' + (fresh.my_next_due_late ? 'uma está atrasada desde ' : 'a próxima vence em ') + fresh.my_next_due;
+                    banner.textContent = txt;
+                }
+            }
+
+            Object.keys(fresh.tasks || {}).forEach(tid => {
+                const t = fresh.tasks[tid];
                 const nodeEl = document.querySelector('.tree-node[data-task-id="' + tid + '"]');
                 if (!nodeEl) return;
-                nodeEl.setAttribute('data-done', t.done ? '1' : '0');
+                nodeEl.setAttribute('data-done', (t.done || t.kind === 'cancelled') ? '1' : '0');
+                const row = nodeEl.querySelector(':scope > .tree-row');
 
-                const stateEl = nodeEl.querySelector('[data-row-state]');
-                if (stateEl) {
-                    stateEl.textContent = t.state;
-                    stateEl.classList.toggle('is-done', !!t.done);
-                    if (t.state_color) stateEl.style.borderLeft = '3px solid ' + t.state_color;
-                }
-                const iconWrap = nodeEl.querySelector(':scope > .tree-row .tree-icon');
+                const iconWrap = row.querySelector('[data-row-icon]');
                 if (iconWrap) {
-                    iconWrap.classList.toggle('is-done', !!t.done);
-                    const iconI = iconWrap.querySelector('i');
-                    if (iconI && !iconI.classList.contains('fa-folder-open')) {
-                        iconI.className = 'fa-solid ' + (t.done ? 'fa-circle-check' : 'fa-circle-dot');
-                    }
+                    const ic = isPhase(t) ? (t.done ? ICONS.done : ['is-phase', 'fa-folder-open']) : (ICONS[t.kind] || ICONS.todo);
+                    iconWrap.className = 'tree-icon ' + ic[0];
+                    iconWrap.querySelector('i').className = 'fa-solid ' + ic[1];
                 }
-                const barEl = nodeEl.querySelector('[data-row-bar]');
-                const pctEl = nodeEl.querySelector('[data-row-pct]');
-                if (barEl) barEl.style.width = t.percent + '%';
+                const stateEl = row.querySelector('[data-row-state]');
+                if (stateEl) {
+                    stateEl.textContent = t.kind_label;
+                    stateEl.className = 'tree-state kind-' + t.kind;
+                }
+                const phaseEl = row.querySelector('[data-phase-text]');
+                if (phaseEl) phaseEl.textContent = t.leaf_done + ' de ' + t.leaf_total + ' concluídas';
+                const barEl = row.querySelector('[data-row-bar]');
+                if (barEl) {
+                    barEl.style.width = t.percent + '%';
+                    barEl.classList.toggle('is-done', !!t.done);
+                }
+                const pctEl = row.querySelector('[data-row-pct]');
                 if (pctEl) pctEl.textContent = t.percent + '%';
-
-                const notesPill = nodeEl.querySelector('[data-notes-badge]');
-                if (notesPill) {
-                    const cnt = Number(t.notes_count || 0);
-                    notesPill.classList.toggle('is-empty', cnt === 0);
-                    notesPill.innerHTML = '<i class="fa-regular fa-comment-dots"></i> <span data-notes-count>' + cnt + '</span> ' + (cnt === 1 ? 'atualização' : 'atualizações');
+                const dueEl = row.querySelector('[data-row-due]');
+                if (dueEl) {
+                    dueEl.textContent = dueText(t);
+                    dueEl.className = 'tree-dates due-' + (t.due_tone || 'none');
                 }
+                const cnt = Number(t.notes_count || 0);
+                const notesPill = row.querySelector('[data-notes-badge]');
+                if (notesPill) notesPill.classList.toggle('is-empty', cnt === 0);
+                const notesCount = row.querySelector('[data-notes-count]');
+                if (notesCount) notesCount.textContent = String(cnt);
             });
         }
 
@@ -740,62 +838,59 @@ $client_payload = painel_project_client_payload($project);
             const task = (projectData.tasks || {})[String(tid)];
             if (!task) return;
             currentTaskId = Number(tid);
+            const phase = isPhase(task);
+            const canEdit = !!task.mine;
 
             trailEl.textContent = task.path || task.name;
             titleEl.textContent = task.name;
 
             badgesEl.innerHTML = '';
+            const st = document.createElement('span');
+            st.className = 'tree-state kind-' + (phase ? (task.done ? 'done' : 'todo') : task.kind);
+            st.textContent = phase ? (task.done ? 'Fase concluída' : 'Fase · ' + task.percent + '%') : task.kind_label;
+            badgesEl.appendChild(st);
             if (task.type) {
                 const tp = document.createElement('span');
                 tp.className = 'tree-type';
                 tp.textContent = task.type;
                 badgesEl.appendChild(tp);
             }
-            if (task.mine) {
+            if (canEdit && !phase) {
                 const mn = document.createElement('span');
                 mn.className = 'tree-mine';
                 mn.textContent = 'Minha tarefa';
                 badgesEl.appendChild(mn);
             }
 
-            // Tarefa de outra pessoa: so leitura (o servidor tambem bloqueia).
-            const canEdit = !!task.mine;
-            document.getElementById('drawer-progress-wrap').style.display = canEdit ? '' : 'none';
-            noteForm.style.display = canEdit ? '' : 'none';
-            document.getElementById('drawer-readonly-hint').style.display = canEdit ? 'none' : '';
-
-            descEl.textContent = task.full_desc || 'O dono do projeto não adicionou descrição detalhada nesta tarefa.';
-            if (task.comment) {
-                commentEl.style.display = '';
-                commentEl.textContent = 'Observações: ' + task.comment;
-            } else {
-                commentEl.style.display = 'none';
-                commentEl.textContent = '';
-            }
-
             metaEl.innerHTML = '';
             let dateStr = 'Sem prazo definido';
             if (task.start_date && task.end_date) dateStr = task.start_date + ' → ' + task.end_date;
             else if (task.end_date) dateStr = 'Até ' + task.end_date;
-            else if (task.start_date) dateStr = task.start_date;
-
-            const dChip = document.createElement('span');
-            dChip.className = 'drawer-chip';
-            dChip.innerHTML = '<i class="fa-regular fa-calendar"></i> ';
-            dChip.appendChild(document.createTextNode('Prazo: ' + dateStr));
+            else if (task.start_date) dateStr = 'Início ' + task.start_date;
+            const dChip = chip('fa-regular fa-calendar', 'Prazo: ' + dateStr + (task.due_tone === 'late' ? ' (atrasada)' : ''));
+            if (task.due_tone === 'late') dChip.style.color = '#dc2626';
             metaEl.appendChild(dChip);
+            metaEl.appendChild(chip('fa-regular fa-user', (task.assignees && task.assignees.length) ? task.assignees.join(', ') : 'Sem responsável'));
 
-            const rChip = document.createElement('span');
-            rChip.className = 'drawer-chip';
-            rChip.innerHTML = '<i class="fa-regular fa-user"></i> ';
-            rChip.appendChild(document.createTextNode('Responsável: ' + ((task.assignees && task.assignees.length) ? task.assignees.join(', ') : 'Não definido')));
-            metaEl.appendChild(rChip);
+            // Status: so tarefas (fase e calculada) e so as do proprio usuario.
+            statusWrap.style.display = (!phase && canEdit && task.kind !== 'cancelled') ? '' : 'none';
+            readonlyHint.style.display = (!phase && !canEdit) ? '' : 'none';
+            if (task.kind === 'cancelled' && !phase) {
+                readonlyHint.style.display = '';
+                readonlyHint.textContent = 'Esta tarefa foi cancelada pelo dono do projeto e não conta no andamento.';
+            } else {
+                readonlyHint.innerHTML = '<i class="fa-solid fa-lock"></i> Esta tarefa é de outra pessoa: você pode acompanhar, mas só quem está atribuído a ela muda o status.';
+            }
+            setStatusUI(task.kind);
+            statusFeedback.textContent = '';
 
-            const childIds = task.child_ids || [];
-            if (childIds.length) {
-                subWrap.style.display = '';
-                subList.innerHTML = '';
-                childIds.forEach(cid => {
+            phaseWrap.style.display = phase ? '' : 'none';
+            subList.innerHTML = '';
+            if (phase) {
+                phaseText.textContent = task.leaf_done + ' de ' + task.leaf_total + ' concluídas · ' + task.percent + '%';
+                phaseBar.style.width = task.percent + '%';
+                phaseBar.style.background = task.done ? '#2fb67c' : '';
+                (task.child_ids || []).forEach(cid => {
                     const ch = (projectData.tasks || {})[String(cid)];
                     if (!ch) return;
                     const row = document.createElement('div');
@@ -803,25 +898,24 @@ $client_payload = painel_project_client_payload($project);
                     const left = document.createElement('span');
                     left.textContent = ch.name;
                     const right = document.createElement('span');
-                    right.style.fontSize = '12px';
-                    right.style.color = '#4a6cf7';
-                    right.textContent = ch.percent + '% · ' + ch.state;
+                    right.className = 'tree-state kind-' + (isPhase(ch) ? (ch.done ? 'done' : 'todo') : ch.kind);
+                    right.textContent = isPhase(ch) ? ch.percent + '%' : ch.kind_label;
                     row.appendChild(left);
                     row.appendChild(right);
                     row.addEventListener('click', () => openTask(cid));
                     subList.appendChild(row);
                 });
-            } else {
-                subWrap.style.display = 'none';
-                subList.innerHTML = '';
             }
 
-            renderStateButtons(task);
-            setPctUI(task.percent);
-            pctRange.disabled = !!task.auto_percent;
-            pctPresets.style.display = task.auto_percent ? 'none' : '';
-            autoPctHint.style.display = task.auto_percent ? '' : 'none';
-            progressFeedback.textContent = '';
+            descEl.textContent = task.full_desc || '';
+            descEl.style.display = task.full_desc ? '' : 'none';
+            commentEl.style.display = task.comment ? '' : 'none';
+            commentEl.textContent = task.comment ? 'Observações: ' + task.comment : '';
+            aboutBox.style.display = (task.full_desc || task.comment) ? '' : 'none';
+
+            noteForm.style.display = canEdit ? '' : 'none';
+            noteForm.classList.remove('is-highlight');
+            noteInput.setAttribute('placeholder', notePlaceholder);
             noteFeedback.textContent = '';
             noteInput.value = '';
             renderNotes(task);
@@ -843,7 +937,7 @@ $client_payload = painel_project_client_payload($project);
             });
         });
 
-        document.getElementById('close-task-drawer').addEventListener('click', () => drawer.classList.remove('is-open'));
+        $('close-task-drawer').addEventListener('click', () => drawer.classList.remove('is-open'));
         drawer.addEventListener('click', (e) => {
             if (e.target === drawer) drawer.classList.remove('is-open');
         });
@@ -852,11 +946,6 @@ $client_payload = painel_project_client_payload($project);
                 drawer.classList.remove('is-open');
                 if (infoModal) infoModal.classList.remove('is-open');
             }
-        });
-
-        pctRange.addEventListener('input', () => setPctUI(pctRange.value));
-        pctPresets.querySelectorAll('.pct-btn').forEach(btn => {
-            btn.addEventListener('click', () => setPctUI(btn.getAttribute('data-pct')));
         });
 
         async function postAction(params) {
@@ -874,34 +963,49 @@ $client_payload = painel_project_client_payload($project);
             return data;
         }
 
-        saveProgressBtn.addEventListener('click', async () => {
-            if (!currentTaskId) return;
-            saveProgressBtn.disabled = true;
-            progressFeedback.className = 'drawer-feedback';
-            progressFeedback.textContent = 'Salvando...';
-            try {
-                const res = await postAction({
-                    action: 'update_progress',
-                    project_id: projectData.id,
-                    task_id: currentTaskId,
-                    projectstates_id: selectedStateId,
-                    percent_done: selectedPercent
-                });
-                if (!res || !res.ok) {
-                    progressFeedback.className = 'drawer-feedback is-err';
-                    progressFeedback.textContent = (res && res.message) || 'Não foi possível salvar.';
-                } else {
-                    if (res.project) updateDomFromProject(res.project);
-                    if (res.task) setPctUI(res.task.percent);
-                    progressFeedback.className = 'drawer-feedback is-ok';
-                    progressFeedback.textContent = res.message || 'Andamento salvo.';
+        // Status salva direto no clique.
+        statusBtns.querySelectorAll('.status-big-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const task = (projectData.tasks || {})[String(currentTaskId)];
+                const status = btn.getAttribute('data-status');
+                if (!task || task.kind === status) return;
+                const buttons = statusBtns.querySelectorAll('.status-big-btn');
+                buttons.forEach(b => b.disabled = true);
+                setStatusUI(status);
+                statusFeedback.className = 'drawer-feedback';
+                statusFeedback.textContent = 'Salvando...';
+                try {
+                    const res = await postAction({ action: 'set_status', project_id: projectData.id, task_id: currentTaskId, status: status });
+                    if (!res || !res.ok) {
+                        setStatusUI(task.kind);
+                        statusFeedback.className = 'drawer-feedback is-err';
+                        statusFeedback.textContent = (res && res.message) || 'Não foi possível salvar.';
+                        return;
+                    }
+                    updateDomFromProject(res.project);
+                    const fresh = res.task || task;
+                    setStatusUI(fresh.kind);
+                    const badge = badgesEl.querySelector('.tree-state');
+                    if (badge) {
+                        badge.className = 'tree-state kind-' + fresh.kind;
+                        badge.textContent = fresh.kind_label;
+                    }
+                    statusFeedback.className = 'drawer-feedback is-ok';
+                    statusFeedback.textContent = res.message || 'Status atualizado.';
+                    if (status === 'done') {
+                        // Sugere (sem obrigar) contar o que foi entregue.
+                        noteInput.setAttribute('placeholder', 'O que foi entregue? (opcional) Conte em poucas palavras para o dono do projeto.');
+                        noteForm.classList.add('is-highlight');
+                        noteInput.focus();
+                    }
+                } catch (err) {
+                    setStatusUI(task.kind);
+                    statusFeedback.className = 'drawer-feedback is-err';
+                    statusFeedback.textContent = 'Erro de comunicação ao salvar.';
+                } finally {
+                    buttons.forEach(b => b.disabled = false);
                 }
-            } catch (err) {
-                progressFeedback.className = 'drawer-feedback is-err';
-                progressFeedback.textContent = 'Erro de comunicação ao salvar.';
-            } finally {
-                saveProgressBtn.disabled = false;
-            }
+            });
         });
 
         noteForm.addEventListener('submit', async (e) => {
@@ -910,7 +1014,7 @@ $client_payload = painel_project_client_payload($project);
             const text = noteInput.value.trim();
             if (text.length < 2) {
                 noteFeedback.className = 'drawer-feedback is-err';
-                noteFeedback.textContent = 'Escreva o que já foi desenvolvido.';
+                noteFeedback.textContent = 'Escreva o que você fez antes de enviar.';
                 noteInput.focus();
                 return;
             }
@@ -918,17 +1022,13 @@ $client_payload = painel_project_client_payload($project);
             noteFeedback.className = 'drawer-feedback';
             noteFeedback.textContent = 'Enviando...';
             try {
-                const res = await postAction({
-                    action: 'add_note',
-                    project_id: projectData.id,
-                    task_id: currentTaskId,
-                    content: text
-                });
+                const res = await postAction({ action: 'add_note', project_id: projectData.id, task_id: currentTaskId, content: text });
                 if (!res || !res.ok) {
                     noteFeedback.className = 'drawer-feedback is-err';
                     noteFeedback.textContent = (res && res.message) || 'Não foi possível enviar.';
                 } else {
                     noteInput.value = '';
+                    noteForm.classList.remove('is-highlight');
                     if (res.project) updateDomFromProject(res.project);
                     if (res.task) renderNotes(res.task);
                     noteFeedback.className = 'drawer-feedback is-ok';

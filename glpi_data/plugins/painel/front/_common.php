@@ -10,6 +10,8 @@ declare(strict_types=1);
  * - CSS compartilhado dos 4 cards no estilo "Visao Geral".
  */
 
+require_once dirname(__DIR__) . '/inc/progress.php';
+
 if (!function_exists('painel_user_context')) {
     /**
      * @return array{
@@ -549,7 +551,11 @@ if (!function_exists('painel_user_projects_data')) {
         }
 
         $projectIds = array_map(static fn (array $r): int => (int) $r['id'], $rows);
-        $taskStats = [];
+        // Andamento automatico: recalcula e grava antes de mostrar.
+        $progress = [];
+        foreach ($projectIds as $pid) {
+            $progress[$pid] = painel_project_recalc($pid);
+        }
         $myPendingTasks = 0;
         $myTotalTasks = 0;
 
@@ -578,14 +584,12 @@ if (!function_exists('painel_user_projects_data')) {
             ]) as $t) {
                 $pid = (int) $t['projects_id'];
                 $tid = (int) $t['id'];
-                $sid = (int) $t['projectstates_id'];
-                $finished = !empty($states[$sid]['is_finished']) || (int) $t['percent_done'] >= 100;
-
-                $taskStats[$pid] ??= ['total' => 0, 'done' => 0];
-                $taskStats[$pid]['total']++;
-                if ($finished) {
-                    $taskStats[$pid]['done']++;
+                // Conta so tarefas de verdade: sem fases (que tem subtarefas) e sem canceladas.
+                $node = $progress[$pid]['nodes'][$tid] ?? null;
+                if ($node === null || $node['percent'] === null || isset($progress[$pid]['parents'][$tid])) {
+                    continue;
                 }
+                $finished = $node['kind'] === 'done';
 
                 $isMineTask = ((int) $t['users_id'] === $uid) || isset($myTaskIds[$tid]);
                 if ($isMineTask) {
@@ -658,7 +662,7 @@ if (!function_exists('painel_user_projects_data')) {
             $id = (int) $row['id'];
             $sid = (int) $row['projectstates_id'];
             $state = $states[$sid] ?? ['name' => 'Sem estado', 'color' => '', 'is_finished' => false];
-            $percent = max(0, min(100, (int) $row['percent_done']));
+            $percent = max(0, min(100, (int) ($progress[$id]['percent'] ?? $row['percent_done'])));
 
             $isDone = $state['is_finished'] || $percent >= 100;
             $bucket = $isDone
@@ -683,7 +687,7 @@ if (!function_exists('painel_user_projects_data')) {
                 default => 'is-muted',
             };
 
-            $stats = $taskStats[$id] ?? ['total' => 0, 'done' => 0];
+            $stats = ['total' => $progress[$id]['tasks_total'] ?? 0, 'done' => $progress[$id]['tasks_done'] ?? 0];
             $projects[] = [
                 'id'             => $id,
                 'name'           => (string) ($row['name'] ?: 'Projeto #' . $id),
@@ -700,6 +704,7 @@ if (!function_exists('painel_user_projects_data')) {
                 'end_date'       => painel_format_date((string) ($row['plan_end_date'] ?? '')),
                 'team'           => $teams[$id] ?? [],
                 'url'            => painel_project_detail_url($id),
+                'progress_nodes' => $progress[$id]['nodes'] ?? [],
             ];
         }
 
@@ -851,12 +856,38 @@ if (!function_exists('painel_project_detail')) {
         $gNames = painel_group_names_map(array_values($groupIds));
         $project['owner_name'] = $ownerId > 0 ? ($uNames[$ownerId] ?? '') : '';
 
+        $progressNodes = $project['progress_nodes'] ?? [];
+        unset($project['progress_nodes']);
+        $kindLabels = [
+            'todo'      => 'Não iniciada',
+            'running'   => 'Em andamento',
+            'done'      => 'Concluída',
+            'cancelled' => 'Cancelada',
+        ];
+        $today = date('Y-m-d');
+        $soon = date('Y-m-d', strtotime('+2 days'));
+        $myPending = 0;
+        $myNextDue = '';
+
         $nodes = [];
         foreach ($tasksRaw as $tid => $t) {
             $sid = (int) $t['projectstates_id'];
             $st = $states[$sid] ?? ['name' => 'Sem estado', 'color' => '', 'is_finished' => false];
-            $pct = max(0, min(100, (int) $t['percent_done']));
-            $done = $st['is_finished'] || $pct >= 100;
+            $prog = $progressNodes[$tid] ?? null;
+            $kind = $prog['kind'] ?? painel_state_kind($st['name'], $st['is_finished']);
+            $pct = max(0, min(100, (int) ($prog['percent'] ?? $t['percent_done'])));
+            $done = $kind === 'done' || ($kind !== 'cancelled' && $pct >= 100);
+
+            // Prazo: atrasada (vermelho) ou vence em ate 2 dias (laranja).
+            $endRaw = substr((string) ($t['plan_end_date'] ?? ''), 0, 10);
+            $dueTone = '';
+            if ($endRaw !== '' && !$done && $kind !== 'cancelled') {
+                if ($endRaw < $today) {
+                    $dueTone = 'late';
+                } elseif ($endRaw <= $soon) {
+                    $dueTone = 'soon';
+                }
+            }
 
             $assignees = [];
             $isMine = ((int) $t['users_id'] === $uid);
@@ -909,6 +940,12 @@ if (!function_exists('painel_project_detail')) {
                 'comment'      => painel_full_text((string) ($t['comment'] ?? '')),
                 'type'         => $taskTypes[(int) $t['projecttasktypes_id']] ?? '',
                 'state_id'     => $sid,
+                'kind'         => $kind,
+                'kind_label'   => $kindLabels[$kind] ?? $st['name'],
+                'leaf_total'   => (int) ($prog['leaf_total'] ?? 0),
+                'leaf_done'    => (int) ($prog['leaf_done'] ?? 0),
+                'due_tone'     => $dueTone,
+                'end_raw'      => $endRaw,
                 'state'        => $st['name'],
                 'state_color'  => $st['color'],
                 'done'         => $done,
@@ -951,6 +988,20 @@ if (!function_exists('painel_project_detail')) {
             }
         }
         unset($node);
+
+        // Resumo do usuario: tarefas pendentes dele (sem fases e canceladas) e proximo prazo.
+        foreach ($nodes as $node) {
+            if (!$node['mine'] || !empty($node['children']) || $node['done'] || $node['kind'] === 'cancelled') {
+                continue;
+            }
+            $myPending++;
+            if ($node['end_raw'] !== '' && ($myNextDue === '' || $node['end_raw'] < $myNextDue)) {
+                $myNextDue = $node['end_raw'];
+            }
+        }
+        $project['my_pending'] = $myPending;
+        $project['my_next_due'] = $myNextDue !== '' ? painel_format_date($myNextDue) : '';
+        $project['my_next_due_late'] = $myNextDue !== '' && $myNextDue < $today;
 
         $stateOptions = [];
         foreach ($states as $sid => $st) {

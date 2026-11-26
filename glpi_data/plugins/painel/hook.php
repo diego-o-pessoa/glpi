@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/inc/progress.php';
 function plugin_painel_install() {
     return true;
 }
@@ -103,5 +104,17 @@ function plugin_painel_post_init() {
                 exit();
             }
         }
+    }
+}
+
+function plugin_painel_projecttask_changed(CommonDBTM $task) {
+    $projectId = (int) ($task->fields['projects_id'] ?? 0);
+    if ($projectId <= 0) {
+        return;
+    }
+    try {
+        painel_project_recalc($projectId);
+    } catch (Throwable $e) {
+        Toolbox::logInFile('painel', 'Falha ao recalcular projeto ' . $projectId . ': ' . $e->getMessage() . "\n");
     }
 }

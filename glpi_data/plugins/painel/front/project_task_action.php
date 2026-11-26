@@ -53,31 +53,40 @@ if (
 }
 
 try {
-    if ($action === 'update_progress') {
-        $states = painel_project_states();
-        $stateId = (int) ($_POST['projectstates_id'] ?? $task->fields['projectstates_id']);
-        if ($stateId > 0 && !isset($states[$stateId])) {
-            $respond(['ok' => false, 'message' => 'Estado selecionado não existe.', 'csrf' => Session::getNewCSRFToken()], 400);
+    if ($action === 'set_status') {
+        // O usuario so escolhe o status; o percentual e automatico
+        // (concluida = 100%, senao 0%; fases e projeto pela media).
+        if (!empty($detail['tasks_map'][$taskId]['children'])) {
+            $respond(['ok' => false, 'message' => 'O andamento desta fase é calculado pelas tarefas dela.', 'csrf' => Session::getNewCSRFToken()], 400);
             return;
         }
-        $percent = max(0, min(100, (int) ($_POST['percent_done'] ?? $task->fields['percent_done'])));
+        $status = (string) ($_POST['status'] ?? '');
+        if (!in_array($status, ['todo', 'running', 'done'], true)) {
+            $respond(['ok' => false, 'message' => 'Status inválido.', 'csrf' => Session::getNewCSRFToken()], 400);
+            return;
+        }
+        $stateId = painel_state_for_kind($status);
+        if ($stateId === null) {
+            $respond(['ok' => false, 'message' => 'Este status não está cadastrado nos estados de projeto do GLPI.', 'csrf' => Session::getNewCSRFToken()], 400);
+            return;
+        }
 
         $ok = $task->update([
             'id'               => $taskId,
             'projectstates_id' => $stateId,
-            'percent_done'     => $percent,
+            'percent_done'     => $status === 'done' ? 100 : 0,
         ]);
-
         if (!$ok) {
-            $respond(['ok' => false, 'message' => 'Não foi possível salvar o andamento.', 'csrf' => Session::getNewCSRFToken()], 500);
+            $respond(['ok' => false, 'message' => 'Não foi possível salvar o status.', 'csrf' => Session::getNewCSRFToken()], 500);
             return;
         }
+        painel_project_recalc($projectId);
 
         $fresh = painel_project_detail($projectId, $uid, $myGroups);
         $payload = painel_project_client_payload($fresh);
         $respond([
             'ok'      => true,
-            'message' => 'Andamento atualizado com sucesso.',
+            'message' => $status === 'done' ? 'Tarefa concluída!' : 'Status atualizado.',
             'project' => $payload,
             'task'    => $payload['tasks'][(string) $taskId] ?? null,
             'csrf'    => Session::getNewCSRFToken(),

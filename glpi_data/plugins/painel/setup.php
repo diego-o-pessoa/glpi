@@ -10,6 +10,12 @@ function plugin_init_painel() {
         'ITILFollowup' => 'plugin_painel_pre_item_add_followup'
     ];
     
+    // Andamento automatico dos projetos: recalcula quando uma tarefa muda
+    // (no Self-Service ou na tela do GLPI).
+    foreach (['item_add', 'item_update', 'item_delete', 'item_restore', 'item_purge'] as $hook) {
+        $PLUGIN_HOOKS[$hook]['painel'] = ['ProjectTask' => 'plugin_painel_projecttask_changed'];
+    }
+
     // Roda no post_init para interceptar as URLs e redirecionar
     $PLUGIN_HOOKS['post_init']['painel'] = 'plugin_painel_post_init';
 }

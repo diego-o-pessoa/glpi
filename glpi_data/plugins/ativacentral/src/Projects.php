@@ -261,9 +261,12 @@ final class Projects
         if ($projectIds === []) {
             return [];
         }
-        $stats = [];
+        // Mesma regra do Self-Service (plugin Painel): contam so as tarefas
+        // sem subtarefas e que nao foram canceladas.
+        $tasks = [];
+        $parents = [];
         $iterator = $DB->request([
-            'SELECT' => ['projects_id', 'percent_done', 'projectstates_id'],
+            'SELECT' => ['id', 'projecttasks_id', 'projects_id', 'percent_done', 'projectstates_id'],
             'FROM'   => 'glpi_projecttasks',
             'WHERE'  => [
                 'projects_id' => $projectIds,
@@ -272,10 +275,20 @@ final class Projects
             ],
         ]);
         foreach ($iterator as $row) {
+            $tasks[] = $row;
+            if ((int) $row['projecttasks_id'] > 0) {
+                $parents[(int) $row['projecttasks_id']] = true;
+            }
+        }
+        $stats = [];
+        foreach ($tasks as $row) {
+            $sid = (int) $row['projectstates_id'];
+            if (isset($parents[(int) $row['id']]) || preg_match('/cancel/i', $states[$sid]['name'] ?? '') === 1) {
+                continue;
+            }
             $pid = (int) $row['projects_id'];
             $stats[$pid] ??= ['total' => 0, 'done' => 0];
             $stats[$pid]['total']++;
-            $sid = (int) $row['projectstates_id'];
             $finished = !empty($states[$sid]['is_finished']) || (int) $row['percent_done'] >= 100;
             if ($finished) {
                 $stats[$pid]['done']++;
