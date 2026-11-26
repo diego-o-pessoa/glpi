@@ -13,7 +13,10 @@ global $DB;
 $tickets_abertos = [];
 $tickets_fechados = [];
 $waiting_first_count = 0;
+$in_progress_count = 0;
+$waiting_user_count = 0;
 $answered_count = 0;
+$solved_closed_count = 0;
 
 $iterator = $DB->request([
     'SELECT' => ['t.id', 't.name', 't.status', 't.date', 't.date_mod', 't.is_deleted'],
@@ -48,6 +51,11 @@ foreach ($iterator as $row) {
     if ($status < 5) {
         if ($status === 1) {
             $waiting_first_count++;
+        } else {
+            $in_progress_count++;
+            if ($status === 4) {
+                $waiting_user_count++;
+            }
         }
         $last_followup = $DB->request([
             'SELECT' => ['users_id'],
@@ -68,23 +76,19 @@ foreach ($iterator as $row) {
 
         $tickets_abertos[] = $row;
     } else {
+        $solved_closed_count++;
         $tickets_fechados[] = $row;
     }
 }
 
 $open_count = count($tickets_abertos);
 $closed_count = count($tickets_fechados);
-$total_tickets = $open_count + $closed_count;
+$total_active_tickets = $open_count + $solved_closed_count;
 
-$projects_data = painel_user_projects_data($uid, $ctx['my_groups']);
-$projects_total = count($projects_data['projects']);
-$projects_active = (int) ($projects_data['kpis']['active']['value'] ?? 0);
-$my_pending_tasks = (int) ($projects_data['kpis']['my_tasks']['value'] ?? 0);
-
-$open_progress = $total_tickets > 0 ? (int) round(100 * $open_count / $total_tickets) : 0;
+$open_progress = $total_active_tickets > 0 ? (int) round(100 * $open_count / $total_active_tickets) : 0;
+$in_progress_pct = $open_count > 0 ? (int) round(100 * $in_progress_count / $open_count) : 0;
 $answered_progress = $open_count > 0 ? (int) round(100 * $answered_count / $open_count) : 0;
-$closed_progress = $total_tickets > 0 ? (int) round(100 * $closed_count / $total_tickets) : 0;
-$projects_progress = $projects_total > 0 ? (int) round(100 * $projects_active / $projects_total) : 0;
+$closed_progress = $total_active_tickets > 0 ? (int) round(100 * $solved_closed_count / $total_active_tickets) : 0;
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -170,19 +174,19 @@ $projects_progress = $projects_total > 0 ? (int) round(100 * $projects_active / 
     <div class="container">
         <div class="header-action">
             <h1>Chamados</h1>
-            <p class="header-subtitle">Acompanhe seus chamados e projetos em um só lugar.</p>
+            <p class="header-subtitle">Acompanhe o andamento dos seus chamados em um só lugar.</p>
         </div>
 
         <div class="ac-kpi-grid">
             <button type="button" class="ac-kpi-card is-blue" data-jump-tab="abertos">
                 <div class="ac-kpi-top">
-                    <span class="ac-kpi-label">Chamados em aberto</span>
+                    <span class="ac-kpi-label">Meus chamados abertos</span>
                     <span class="ac-kpi-tile"><i class="fa-solid fa-ticket"></i></span>
                 </div>
                 <div class="ac-kpi-value"><?= $open_count ?></div>
                 <div class="ac-kpi-note">
                     <?php if ($waiting_first_count > 0): ?>
-                        <b><?= $waiting_first_count ?></b> aguardando atendimento
+                        <b><?= $waiting_first_count ?></b> aguardando início
                     <?php elseif ($open_count > 0): ?>
                         todos em atendimento
                     <?php else: ?>
@@ -194,12 +198,30 @@ $projects_progress = $projects_total > 0 ? (int) round(100 * $projects_active / 
 
             <button type="button" class="ac-kpi-card is-orange" data-jump-tab="abertos">
                 <div class="ac-kpi-top">
+                    <span class="ac-kpi-label">Em atendimento</span>
+                    <span class="ac-kpi-tile"><i class="fa-solid fa-headset"></i></span>
+                </div>
+                <div class="ac-kpi-value"><?= $in_progress_count ?></div>
+                <div class="ac-kpi-note">
+                    <?php if ($waiting_user_count > 0): ?>
+                        <b><?= $waiting_user_count ?></b> aguardando retorno
+                    <?php elseif ($in_progress_count > 0): ?>
+                        sendo tratados pela T.I.
+                    <?php else: ?>
+                        nenhum em atendimento
+                    <?php endif; ?>
+                </div>
+                <div class="ac-kpi-bar"><span style="width: <?= $in_progress_pct ?>%"></span></div>
+            </button>
+
+            <button type="button" class="ac-kpi-card is-violet" data-jump-tab="abertos">
+                <div class="ac-kpi-top">
                     <span class="ac-kpi-label">Respondidos pela T.I.</span>
                     <span class="ac-kpi-tile"><i class="fa-regular fa-comment-dots"></i></span>
                 </div>
                 <div class="ac-kpi-value"><?= $answered_count ?></div>
                 <div class="ac-kpi-note">
-                    <?= $answered_count > 0 ? 'aguardando sua resposta' : 'nenhum aguardando resposta' ?>
+                    <?= $answered_count > 0 ? 'aguardando sua resposta' : 'nenhuma nova resposta' ?>
                 </div>
                 <div class="ac-kpi-bar"><span style="width: <?= $answered_progress ?>%"></span></div>
             </button>
@@ -209,30 +231,12 @@ $projects_progress = $projects_total > 0 ? (int) round(100 * $projects_active / 
                     <span class="ac-kpi-label">Chamados concluídos</span>
                     <span class="ac-kpi-tile"><i class="fa-regular fa-circle-check"></i></span>
                 </div>
-                <div class="ac-kpi-value"><?= $closed_count ?></div>
+                <div class="ac-kpi-value"><?= $solved_closed_count ?></div>
                 <div class="ac-kpi-note">
-                    <?= $total_tickets > 0 ? 'de ' . $total_tickets . ' registrados' : 'finalizados até hoje' ?>
+                    <?= $total_active_tickets > 0 ? 'de ' . $total_active_tickets . ' chamados seus' : 'nenhum finalizado ainda' ?>
                 </div>
                 <div class="ac-kpi-bar"><span style="width: <?= $closed_progress ?>%"></span></div>
             </button>
-
-            <a href="<?= htmlspecialchars(painel_projects_url()) ?>" class="ac-kpi-card is-violet">
-                <div class="ac-kpi-top">
-                    <span class="ac-kpi-label">Seus projetos</span>
-                    <span class="ac-kpi-tile"><i class="fa-solid fa-diagram-project"></i></span>
-                </div>
-                <div class="ac-kpi-value"><?= $projects_total ?></div>
-                <div class="ac-kpi-note">
-                    <?php if ($my_pending_tasks > 0): ?>
-                        <b><?= $my_pending_tasks ?></b> <?= $my_pending_tasks === 1 ? 'tarefa pendente' : 'tarefas pendentes' ?>
-                    <?php elseif ($projects_active > 0): ?>
-                        <?= $projects_active ?> em execução
-                    <?php else: ?>
-                        nenhum projeto vinculado
-                    <?php endif; ?>
-                </div>
-                <div class="ac-kpi-bar"><span style="width: <?= $projects_progress ?>%"></span></div>
-            </a>
         </div>
 
         <div class="content-box" id="chamados-box">

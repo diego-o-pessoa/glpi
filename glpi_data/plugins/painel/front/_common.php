@@ -401,53 +401,99 @@ if (!function_exists('painel_user_projects_data')) {
         global $DB;
 
         $states = painel_project_states();
+
+        // Garante que todos os grupos do usuario entrem, mesmo se $_SESSION['glpigroups'] estiver desatualizado.
+        $groupSet = [];
+        foreach ($myGroups as $gid) {
+            if ((int) $gid > 0) {
+                $groupSet[(int) $gid] = (int) $gid;
+            }
+        }
+        foreach ($DB->request(['SELECT' => ['groups_id'], 'FROM' => 'glpi_groups_users', 'WHERE' => ['users_id' => $uid]]) as $gu) {
+            $gid = (int) ($gu['groups_id'] ?? 0);
+            if ($gid > 0) {
+                $groupSet[$gid] = $gid;
+            }
+        }
+        $myGroups = array_values($groupSet);
+
         $where = [
             'glpi_projects.is_deleted'  => 0,
             'glpi_projects.is_template' => 0,
         ];
-        $entities = getEntitiesRestrictCriteria('glpi_projects', '', '', true);
-        $scope = $entities === [] ? [$where] : [$where, $entities];
 
-        // Usuario com permissao global ve todos da entidade; caso contrario, apenas onde participa.
-        if (!Session::haveRight(Project::$rightname, Project::READALL)) {
-            $teamMatch = [['itemtype' => 'User', 'items_id' => $uid]];
-            if ($myGroups !== []) {
-                $teamMatch[] = ['itemtype' => 'Group', 'items_id' => $myGroups];
+        // No Self-Service, projetos vinculados diretamente ao usuario ou aos seus grupos
+        // aparecem mesmo quando criados na entidade raiz sem "Entidades filhas".
+        $linkedIds = [];
+
+        $projOr = [['users_id' => $uid]];
+        if ($myGroups !== []) {
+            $projOr[] = ['groups_id' => $myGroups];
+        }
+        foreach ($DB->request([
+            'SELECT' => ['id'],
+            'FROM'   => 'glpi_projects',
+            'WHERE'  => [$where, ['OR' => $projOr]],
+        ]) as $r) {
+            $linkedIds[(int) $r['id']] = (int) $r['id'];
+        }
+
+        $teamMatch = [['itemtype' => 'User', 'items_id' => $uid]];
+        if ($myGroups !== []) {
+            $teamMatch[] = ['itemtype' => 'Group', 'items_id' => $myGroups];
+        }
+        foreach ($DB->request([
+            'SELECT' => ['projects_id'],
+            'FROM'   => 'glpi_projectteams',
+            'WHERE'  => ['OR' => $teamMatch],
+        ]) as $r) {
+            $pid = (int) ($r['projects_id'] ?? 0);
+            if ($pid > 0) {
+                $linkedIds[$pid] = $pid;
             }
-            $actorWhere = [
-                ['glpi_projects.users_id' => $uid],
-                [
-                    'glpi_projects.id' => new \Glpi\DBAL\QuerySubQuery([
-                        'SELECT' => 'projects_id',
-                        'FROM'   => 'glpi_projectteams',
-                        'WHERE'  => ['OR' => $teamMatch],
-                    ]),
+        }
+
+        $myTeamTaskIds = [];
+        foreach ($DB->request([
+            'SELECT' => ['projecttasks_id'],
+            'FROM'   => 'glpi_projecttaskteams',
+            'WHERE'  => ['OR' => $teamMatch],
+        ]) as $r) {
+            $tid = (int) ($r['projecttasks_id'] ?? 0);
+            if ($tid > 0) {
+                $myTeamTaskIds[$tid] = $tid;
+            }
+        }
+
+        $taskOr = [['users_id' => $uid]];
+        if ($myTeamTaskIds !== []) {
+            $taskOr[] = ['id' => array_values($myTeamTaskIds)];
+        }
+        foreach ($DB->request([
+            'SELECT' => ['projects_id'],
+            'FROM'   => 'glpi_projecttasks',
+            'WHERE'  => [
+                'is_deleted'  => 0,
+                'is_template' => 0,
+                'OR'          => $taskOr,
+            ],
+        ]) as $r) {
+            $pid = (int) ($r['projects_id'] ?? 0);
+            if ($pid > 0) {
+                $linkedIds[$pid] = $pid;
+            }
+        }
+
+        if ($linkedIds === []) {
+            return [
+                'kpis' => [
+                    'active'   => ['value' => 0, 'total' => 0, 'progress' => 0],
+                    'running'  => ['value' => 0, 'progress' => 0],
+                    'my_tasks' => ['value' => 0, 'total' => 0, 'progress' => 0],
+                    'done'     => ['value' => 0, 'progress' => 0],
                 ],
-                [
-                    'glpi_projects.id' => new \Glpi\DBAL\QuerySubQuery([
-                        'SELECT' => 'projects_id',
-                        'FROM'   => 'glpi_projecttasks',
-                        'WHERE'  => [
-                            'is_deleted'  => 0,
-                            'is_template' => 0,
-                            'OR'          => [
-                                ['users_id' => $uid],
-                                [
-                                    'id' => new \Glpi\DBAL\QuerySubQuery([
-                                        'SELECT' => 'projecttasks_id',
-                                        'FROM'   => 'glpi_projecttaskteams',
-                                        'WHERE'  => ['OR' => $teamMatch],
-                                    ]),
-                                ],
-                            ],
-                        ],
-                    ]),
-                ],
+                'projects' => [],
             ];
-            if ($myGroups !== []) {
-                $actorWhere[] = ['glpi_projects.groups_id' => $myGroups];
-            }
-            $scope[] = ['OR' => $actorWhere];
         }
 
         $rows = [];
@@ -458,7 +504,11 @@ if (!function_exists('painel_user_projects_data')) {
                 'percent_done', 'content', 'date_mod',
             ],
             'FROM'   => 'glpi_projects',
-            'WHERE'  => $scope,
+            'WHERE'  => [
+                'glpi_projects.id'          => array_values($linkedIds),
+                'glpi_projects.is_deleted'  => 0,
+                'glpi_projects.is_template' => 0,
+            ],
             'ORDER'  => ['date_mod DESC', 'id DESC'],
         ]) as $row) {
             $rows[] = $row;
