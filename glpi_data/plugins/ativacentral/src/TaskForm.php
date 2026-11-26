@@ -65,7 +65,7 @@ final class TaskForm
             'back'         => ProjectPage::url($projectId, 'tasks'),
             'csrf'         => Session::getNewCSRFToken(),
             'name'         => (string) $value('name', $f['name'] ?? ''),
-            'kind'         => (string) $value('task_kind', $task === null ? 'task' : ($parent > 0 ? 'task' : 'phase')),
+            'kind'         => (string) $value('task_kind', $task === null || $parent > 0 || !self::isPhase($task) ? 'task' : 'phase'),
             'parent'       => $parent,
             'phases'       => self::phases($projectId, $task !== null ? (int) $task->getID() : 0),
             'start'        => (string) $value('plan_start_date', self::dateOnly((string) ($f['plan_start_date'] ?? ''))),
@@ -120,8 +120,9 @@ final class TaskForm
         $parent = 0;
         if (($input['task_kind'] ?? 'task') === 'task') {
             $parent = (int) ($input['projecttasks_id'] ?? 0);
-            if ($parent <= 0 || !isset(self::phases($projectId, $task !== null ? (int) $task->getID() : 0)[$parent])) {
-                throw new \InvalidArgumentException('Escolha em qual fase fica esta tarefa (ou marque como Fase).');
+            // 0 = tarefa solta no projeto (sem fase).
+            if ($parent > 0 && !isset(self::phases($projectId, $task !== null ? (int) $task->getID() : 0)[$parent])) {
+                throw new \InvalidArgumentException('A fase escolhida não existe mais neste projeto.');
             }
         }
 
@@ -134,7 +135,10 @@ final class TaskForm
             'name'                    => $name,
             'projects_id'             => $projectId,
             'projecttasks_id'         => $parent,
-            'projecttasktypes_id'     => max(0, (int) ($input['projecttasktypes_id'] ?? 0)),
+            // Fase sem tipo recebe o tipo "Fase" (assim continua fase mesmo sem tarefas dentro).
+            'projecttasktypes_id'     => ($input['task_kind'] ?? 'task') === 'phase' && (int) ($input['projecttasktypes_id'] ?? 0) <= 0
+                ? TaskTemplates::phaseTypeId(true)
+                : max(0, (int) ($input['projecttasktypes_id'] ?? 0)),
             'content'                 => (string) ($input['content'] ?? ''),
             'plan_start_date'         => $start !== null ? $start . ' 00:00:00' : 'NULL',
             'plan_end_date'           => $end !== null ? $end . ' 00:00:00' : 'NULL',
@@ -185,14 +189,18 @@ final class TaskForm
     {
         global $DB;
         $phases = [];
+        $phaseType = TaskTemplates::phaseTypeId(false);
         foreach ($DB->request([
-            'SELECT' => ['id', 'name'],
+            'SELECT' => ['id', 'name', 'projecttasktypes_id'],
             'FROM'   => 'glpi_projecttasks',
             'WHERE'  => ['projects_id' => $projectId, 'projecttasks_id' => 0, 'is_deleted' => 0, 'is_template' => 0],
             'ORDER'  => ['plan_start_date ASC', 'id ASC'],
         ]) as $row) {
-            if ((int) $row['id'] !== $exceptId) {
-                $phases[(int) $row['id']] = (string) $row['name'];
+            $id = (int) $row['id'];
+            // Fase = tipo "Fase" ou ja tem subtarefas (tarefa solta nao entra).
+            $isPhase = ($phaseType > 0 && (int) $row['projecttasktypes_id'] === $phaseType) || self::hasChildren($id);
+            if ($id !== $exceptId && $isPhase) {
+                $phases[$id] = (string) $row['name'];
             }
         }
         return $phases;
@@ -342,6 +350,14 @@ final class TaskForm
             }
         }
         return $fallback;
+    }
+
+    /** Fase = tem subtarefas ou o tipo e "Fase" (tarefa solta nao e fase). */
+    private static function isPhase(ProjectTask $task): bool
+    {
+        $phaseType = TaskTemplates::phaseTypeId(false);
+        return self::hasChildren((int) $task->getID())
+            || ($phaseType > 0 && (int) $task->fields['projecttasktypes_id'] === $phaseType);
     }
 
     private static function hasChildren(int $taskId): bool
