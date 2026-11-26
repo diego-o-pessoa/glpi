@@ -22,6 +22,16 @@ if (!$project->can($id, READ)) {
     throw new AccessDeniedHttpException();
 }
 
+// Andamento e datas reais atualizados (calculo do plugin Painel, se estiver ativo).
+$progressFile = GLPI_ROOT . '/plugins/painel/inc/progress.php';
+if (!function_exists('painel_project_recalc') && is_file($progressFile) && (new Plugin())->isActivated('painel')) {
+    require_once $progressFile;
+}
+if (function_exists('painel_project_recalc')) {
+    painel_project_recalc($id);
+    $project->getFromDB($id);
+}
+
 $tab = (string) ($_GET['tab'] ?? 'main');
 if (!isset(ProjectPage::TABS[$tab])) {
     $tab = 'main';

@@ -165,12 +165,50 @@ if (!function_exists('painel_project_recalc')) {
         // Sem tarefas validas: mantem o percentual que o dono definiu.
         if ($rootValues !== []) {
             $percent = (int) round(array_sum($rootValues) / count($rootValues));
+            $before = (int) ($DB->request(['SELECT' => ['percent_done'], 'FROM' => 'glpi_projects', 'WHERE' => ['id' => $projectId]])->current()['percent_done'] ?? 0);
             $DB->update('glpi_projects', ['percent_done' => $percent], ['id' => $projectId]);
             $result['percent'] = $percent;
+            painel_project_real_dates($projectId, $before, $percent, array_keys(array_filter($nodes, static fn ($n) => $n['percent'] !== null)));
         }
 
         $result['nodes'] = $nodes;
         $result['parents'] = array_fill_keys(array_keys($children), true);
         return $result;
+    }
+}
+
+if (!function_exists('painel_project_real_dates')) {
+    /**
+     * Datas reais do projeto, sozinhas: inicio = primeira tarefa iniciada;
+     * fim = quando tudo fica concluido (some se alguma tarefa reabrir).
+     * O gerente pode ajustar depois na tela do projeto.
+     *
+     * @param list<int> $taskIds tarefas que contam (sem canceladas)
+     */
+    function painel_project_real_dates(int $projectId, int $before, int $percent, array $taskIds): void
+    {
+        global $DB;
+        $project = $DB->request(['SELECT' => ['real_start_date', 'real_end_date'], 'FROM' => 'glpi_projects', 'WHERE' => ['id' => $projectId]])->current();
+        if ($project === null || $taskIds === []) {
+            return;
+        }
+        $dates = $DB->request([
+            'SELECT' => [new \Glpi\DBAL\QueryExpression('MIN(real_start_date) AS first_start'), new \Glpi\DBAL\QueryExpression('MAX(real_end_date) AS last_end')],
+            'FROM'   => 'glpi_projecttasks',
+            'WHERE'  => ['id' => $taskIds],
+        ])->current();
+        $update = [];
+        if (empty($project['real_start_date']) && !empty($dates['first_start'])) {
+            $update['real_start_date'] = $dates['first_start'];
+        }
+        if ($percent >= 100 && empty($project['real_end_date'])) {
+            $update['real_end_date'] = !empty($dates['last_end']) ? $dates['last_end'] : date('Y-m-d H:i:s');
+        } elseif ($before >= 100 && $percent < 100 && !empty($project['real_end_date'])) {
+            // So quando deixa de estar concluido (tarefa reaberta); ajuste manual do gerente fica.
+            $update['real_end_date'] = null;
+        }
+        if ($update !== []) {
+            $DB->update('glpi_projects', $update, ['id' => $projectId]);
+        }
     }
 }

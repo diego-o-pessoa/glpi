@@ -349,6 +349,17 @@ $client_payload = painel_project_client_payload($project);
 
         /* Gaveta: status em 3 botoes grandes */
         .drawer-meta-chips.in-head { margin-top: 10px; }
+        /* Iniciar / Finalizar tarefa */
+        .step-box { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid #e5ebf9; border-radius: 14px; background: #f8faff; }
+        .step-box.is-running { border-color: rgba(245, 159, 50, 0.4); background: #fffaf2; }
+        .step-box.is-done { border-color: rgba(47, 182, 124, 0.4); background: #f0fbf6; }
+        .step-info { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #52607e; }
+        .step-info b { font-size: 14.5px; color: #1a2340; }
+        .step-info i { width: 16px; text-align: center; margin-right: 4px; }
+        .step-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border: 0; border-radius: 12px; font-size: 14.5px; font-weight: 800; color: #fff; cursor: pointer; background: linear-gradient(95deg, #4a6cf7, #5d7dfb); box-shadow: 0 12px 22px -12px rgba(74, 108, 247, 0.95); }
+        .step-btn.is-finish { background: linear-gradient(95deg, #22a06b, #2fb67c); box-shadow: 0 12px 22px -12px rgba(47, 182, 124, 0.95); }
+        .step-btn:disabled { opacity: 0.6; cursor: wait; }
+        .step-btn[hidden] { display: none; }
         .status-big { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
         .status-big-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 8px; border: 2px solid #e2e8f0; border-radius: 14px; background: #fff; color: #475569; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
         .status-big-btn i { font-size: 20px; color: #9aa6bf; }
@@ -565,11 +576,10 @@ $client_payload = painel_project_client_payload($project);
                 </div>
 
                 <div id="drawer-status-wrap">
-                    <div class="drawer-sec-title">Status</div>
-                    <div class="status-big" id="drawer-status-btns">
-                        <button type="button" class="status-big-btn" data-status="todo"><i class="fa-regular fa-circle"></i> Não iniciada</button>
-                        <button type="button" class="status-big-btn" data-status="running"><i class="fa-solid fa-circle-half-stroke"></i> Em andamento</button>
-                        <button type="button" class="status-big-btn" data-status="done"><i class="fa-solid fa-circle-check"></i> Concluída</button>
+                    <div class="drawer-sec-title">Andamento</div>
+                    <div class="step-box" id="drawer-step-box">
+                        <div class="step-info" id="drawer-step-info"></div>
+                        <button type="button" class="step-btn" id="drawer-step-btn"></button>
                     </div>
                     <div class="drawer-feedback" id="status-feedback" style="margin-top: 8px;"></div>
                 </div>
@@ -685,7 +695,6 @@ $client_payload = painel_project_client_payload($project);
         const metaEl = $('drawer-meta');
         const readonlyHint = $('drawer-readonly-hint');
         const statusWrap = $('drawer-status-wrap');
-        const statusBtns = $('drawer-status-btns');
         const statusFeedback = $('status-feedback');
         const phaseWrap = $('drawer-phase-wrap');
         const phaseText = $('drawer-phase-text');
@@ -766,10 +775,40 @@ $client_payload = painel_project_client_payload($project);
             });
         }
 
-        function setStatusUI(kind) {
-            statusBtns.querySelectorAll('.status-big-btn').forEach(btn => {
-                btn.classList.toggle('is-active', btn.getAttribute('data-status') === kind);
-            });
+        // Tarefa: "Iniciar tarefa" -> "Finalizar tarefa" -> concluida (com data e hora reais).
+        const stepBox = $('drawer-step-box');
+        const stepInfo = $('drawer-step-info');
+        const stepBtn = $('drawer-step-btn');
+        function setStatusUI(kind, task) {
+            task = task || (projectData.tasks || {})[String(currentTaskId)] || {};
+            stepBox.className = 'step-box' + (kind === 'running' ? ' is-running' : (kind === 'done' ? ' is-done' : ''));
+            stepInfo.innerHTML = '';
+            const line = (icon, strong, text) => {
+                const el = document.createElement('div');
+                const i = document.createElement('i'); i.className = icon; el.appendChild(i);
+                if (strong) { const b = document.createElement('b'); b.textContent = strong; el.appendChild(b); }
+                if (text) el.appendChild(document.createTextNode(' ' + text));
+                stepInfo.appendChild(el);
+            };
+            if (kind === 'done') {
+                line('fa-solid fa-circle-check', 'Tarefa concluída', '');
+                if (task.real_start_dt) line('fa-regular fa-clock', '', 'Iniciada em ' + task.real_start_dt);
+                if (task.real_end_dt) line('fa-regular fa-flag', '', 'Finalizada em ' + task.real_end_dt);
+                stepBtn.hidden = true;
+            } else if (kind === 'running') {
+                line('fa-solid fa-circle-half-stroke', 'Em andamento', '');
+                if (task.real_start_dt) line('fa-regular fa-clock', '', 'Iniciada em ' + task.real_start_dt);
+                stepBtn.hidden = false;
+                stepBtn.className = 'step-btn is-finish';
+                stepBtn.innerHTML = '<i class="fa-solid fa-flag-checkered"></i> Finalizar tarefa';
+                stepBtn.setAttribute('data-status', 'done');
+            } else {
+                line('fa-regular fa-circle', 'Ainda não iniciada', '');
+                stepBtn.hidden = false;
+                stepBtn.className = 'step-btn';
+                stepBtn.innerHTML = '<i class="fa-solid fa-play"></i> Iniciar tarefa';
+                stepBtn.setAttribute('data-status', 'running');
+            }
         }
 
         function updateDomFromProject(fresh) {
@@ -881,7 +920,7 @@ $client_payload = painel_project_client_payload($project);
             } else {
                 readonlyHint.innerHTML = '<i class="fa-solid fa-lock"></i> Esta tarefa é de outra pessoa: você pode acompanhar, mas só quem está atribuído a ela muda o status.';
             }
-            setStatusUI(task.kind);
+            setStatusUI(task.kind, task);
             statusFeedback.textContent = '';
 
             phaseWrap.style.display = phase ? '' : 'none';
@@ -963,49 +1002,44 @@ $client_payload = painel_project_client_payload($project);
             return data;
         }
 
-        // Status salva direto no clique.
-        statusBtns.querySelectorAll('.status-big-btn').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const task = (projectData.tasks || {})[String(currentTaskId)];
-                const status = btn.getAttribute('data-status');
-                if (!task || task.kind === status) return;
-                const buttons = statusBtns.querySelectorAll('.status-big-btn');
-                buttons.forEach(b => b.disabled = true);
-                setStatusUI(status);
-                statusFeedback.className = 'drawer-feedback';
-                statusFeedback.textContent = 'Salvando...';
-                try {
-                    const res = await postAction({ action: 'set_status', project_id: projectData.id, task_id: currentTaskId, status: status });
-                    if (!res || !res.ok) {
-                        setStatusUI(task.kind);
-                        statusFeedback.className = 'drawer-feedback is-err';
-                        statusFeedback.textContent = (res && res.message) || 'Não foi possível salvar.';
-                        return;
-                    }
-                    updateDomFromProject(res.project);
-                    const fresh = res.task || task;
-                    setStatusUI(fresh.kind);
-                    const badge = badgesEl.querySelector('.tree-state');
-                    if (badge) {
-                        badge.className = 'tree-state kind-' + fresh.kind;
-                        badge.textContent = fresh.kind_label;
-                    }
-                    statusFeedback.className = 'drawer-feedback is-ok';
-                    statusFeedback.textContent = res.message || 'Status atualizado.';
-                    if (status === 'done') {
-                        // Sugere (sem obrigar) contar o que foi entregue.
-                        noteInput.setAttribute('placeholder', 'O que foi entregue? (opcional) Conte em poucas palavras para o dono do projeto.');
-                        noteForm.classList.add('is-highlight');
-                        noteInput.focus();
-                    }
-                } catch (err) {
-                    setStatusUI(task.kind);
+        // Iniciar / Finalizar salva direto no clique.
+        stepBtn.addEventListener('click', async () => {
+            const task = (projectData.tasks || {})[String(currentTaskId)];
+            const status = stepBtn.getAttribute('data-status');
+            if (!task || !status) return;
+            if (status === 'done' && !confirm('Finalizar esta tarefa? Ela será marcada como concluída agora.')) return;
+            stepBtn.disabled = true;
+            statusFeedback.className = 'drawer-feedback';
+            statusFeedback.textContent = 'Salvando...';
+            try {
+                const res = await postAction({ action: 'set_status', project_id: projectData.id, task_id: currentTaskId, status: status });
+                if (!res || !res.ok) {
                     statusFeedback.className = 'drawer-feedback is-err';
-                    statusFeedback.textContent = 'Erro de comunicação ao salvar.';
-                } finally {
-                    buttons.forEach(b => b.disabled = false);
+                    statusFeedback.textContent = (res && res.message) || 'Não foi possível salvar.';
+                    return;
                 }
-            });
+                updateDomFromProject(res.project);
+                const fresh = res.task || task;
+                setStatusUI(fresh.kind, fresh);
+                const badge = badgesEl.querySelector('.tree-state');
+                if (badge) {
+                    badge.className = 'tree-state kind-' + fresh.kind;
+                    badge.textContent = fresh.kind_label;
+                }
+                statusFeedback.className = 'drawer-feedback is-ok';
+                statusFeedback.textContent = status === 'done' ? 'Tarefa finalizada!' : 'Tarefa iniciada!';
+                if (status === 'done') {
+                    // Sugere (sem obrigar) contar o que foi entregue.
+                    noteInput.setAttribute('placeholder', 'O que foi entregue? (opcional) Conte em poucas palavras para o dono do projeto.');
+                    noteForm.classList.add('is-highlight');
+                    noteInput.focus();
+                }
+            } catch (err) {
+                statusFeedback.className = 'drawer-feedback is-err';
+                statusFeedback.textContent = 'Erro de comunicação ao salvar.';
+            } finally {
+                stepBtn.disabled = false;
+            }
         });
 
         noteForm.addEventListener('submit', async (e) => {

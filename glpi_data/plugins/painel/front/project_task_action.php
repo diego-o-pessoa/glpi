@@ -71,11 +71,20 @@ try {
             return;
         }
 
-        $ok = $task->update([
+        $fields = [
             'id'               => $taskId,
             'projectstates_id' => $stateId,
             'percent_done'     => $status === 'done' ? 100 : 0,
-        ]);
+        ];
+        // "Iniciar" guarda a hora real de inicio; "Finalizar" guarda a de fim.
+        $now = date('Y-m-d H:i:s');
+        if ($status !== 'todo' && empty($task->fields['real_start_date'])) {
+            $fields['real_start_date'] = $now;
+        }
+        if ($status === 'done') {
+            $fields['real_end_date'] = $now;
+        }
+        $ok = $task->update($fields);
         if (!$ok) {
             $respond(['ok' => false, 'message' => 'Não foi possível salvar o status.', 'csrf' => Session::getNewCSRFToken()], 500);
             return;

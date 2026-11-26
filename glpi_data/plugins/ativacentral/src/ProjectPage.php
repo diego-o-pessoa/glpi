@@ -108,6 +108,12 @@ final class ProjectPage
             'f_start'     => (string) $value('plan_start_date', self::dateOnly((string) ($f['plan_start_date'] ?? ''))),
             'f_end'       => (string) $value('plan_end_date', self::dateOnly((string) ($f['plan_end_date'] ?? ''))),
             'can_delete'  => $project->can($id, DELETE),
+            // Data real: preenchida sozinha (inicio da 1a tarefa / fim ao concluir tudo); so o gerente ajusta.
+            'is_manager'  => (int) $f['users_id'] > 0 && (int) $f['users_id'] === (int) Session::getLoginUserID(),
+            'f_real_start' => (string) $value('real_start_date', self::dateTimeLocal((string) ($f['real_start_date'] ?? ''))),
+            'f_real_end'   => (string) $value('real_end_date', self::dateTimeLocal((string) ($f['real_end_date'] ?? ''))),
+            'real_start_text' => self::dateTimeText((string) ($f['real_start_date'] ?? '')),
+            'real_end_text'   => self::dateTimeText((string) ($f['real_end_date'] ?? '')),
             'type_html'   => ProjectType::dropdown([
                 'name' => 'projecttypes_id', 'value' => (int) $value('projecttypes_id', $f['projecttypes_id']),
                 'display' => false, 'width' => '100%',
@@ -151,7 +157,25 @@ final class ProjectPage
             throw new \InvalidArgumentException('A data de fim não pode ser antes da data de início.');
         }
 
-        $ok = $project->update([
+        $fields = [];
+        // Datas reais: so o gerente do projeto pode mudar.
+        if ((int) $project->fields['users_id'] > 0 && (int) $project->fields['users_id'] === (int) Session::getLoginUserID()) {
+            foreach (['real_start_date', 'real_end_date'] as $key) {
+                $raw = trim((string) ($input[$key] ?? ''));
+                if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/D', $raw) === 1) {
+                    $fields[$key] = str_replace('T', ' ', $raw) . ':00';
+                } elseif ($raw === '' && !empty($project->fields[$key])) {
+                    // null (nao o texto 'NULL', que o GLPI compara como data e descarta as duas).
+                    $fields[$key] = null;
+                }
+            }
+            if (!empty($fields['real_start_date']) && !empty($fields['real_end_date'])
+                && $fields['real_end_date'] < $fields['real_start_date']) {
+                throw new \InvalidArgumentException('O fim real não pode ser antes do início real.');
+            }
+        }
+
+        $ok = $project->update($fields + [
             'id'               => $project->getID(),
             'name'             => $name,
             'priority'         => $priority,
@@ -188,6 +212,16 @@ final class ProjectPage
     private static function dateOnly(string $value): string
     {
         return preg_match('/^\d{4}-\d{2}-\d{2}/', $value) === 1 ? substr($value, 0, 10) : '';
+    }
+
+    private static function dateTimeLocal(string $value): string
+    {
+        return preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/', $value) === 1 ? substr($value, 0, 10) . 'T' . substr($value, 11, 5) : '';
+    }
+
+    private static function dateTimeText(string $value): string
+    {
+        return $value !== '' ? date('d/m/Y', strtotime($value)) . ' às ' . date('H:i', strtotime($value)) : '';
     }
 
     private static function dateRange(string $start, string $end): string

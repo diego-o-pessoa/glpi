@@ -2431,3 +2431,39 @@ html[data-glpi-theme-dark="1"] .ac-tag.is-green { color: #67dfa9; }
         grid-template-columns: 1fr;
     }
 }
+
+/* Datas reais do projeto (somente leitura) */
+.ac-preal {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.ac-preal > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px dashed var(--ac-line);
+    border-radius: 12px;
+}
+
+.ac-preal span {
+    color: var(--ac-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.ac-preal b {
+    color: var(--ac-ink);
+    font-size: 13.5px;
+}
+
+.ac-pnew-dates.is-stacked {
+    grid-template-columns: 1fr;
+}
+
+.ac-pnew-dates input,
+.ac-preal > div {
+    min-width: 0;
+}

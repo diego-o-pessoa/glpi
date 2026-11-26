@@ -976,6 +976,8 @@ if (!function_exists('painel_project_detail')) {
                 'end_date'     => painel_format_date((string) ($t['plan_end_date'] ?? '')),
                 'real_start'   => painel_format_date((string) ($t['real_start_date'] ?? '')),
                 'real_end'     => painel_format_date((string) ($t['real_end_date'] ?? '')),
+                'real_start_dt' => !empty($t['real_start_date']) ? date('d/m/Y', strtotime((string) $t['real_start_date'])) . ' às ' . date('H:i', strtotime((string) $t['real_start_date'])) : '',
+                'real_end_dt'   => !empty($t['real_end_date']) ? date('d/m/Y', strtotime((string) $t['real_end_date'])) . ' às ' . date('H:i', strtotime((string) $t['real_end_date'])) : '',
                 'assignees'    => $assignees,
                 'mine'         => $isMine,
                 'notes'        => $notes,
