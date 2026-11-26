@@ -23,6 +23,8 @@
         <form method="post" action="{{ url }}" class="ac-pnew-form" autocomplete="off">
             <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
             <input type="hidden" name="id" value="{{ tpl.id }}">
+            {# Enter salva (o primeiro botao do formulario e o padrao, e o Excluir vem antes do Salvar). #}
+            <button type="submit" name="save" value="1" tabindex="-1" aria-hidden="true" style="position: absolute; left: -9999px; width: 1px; height: 1px;"></button>
             <section class="ac-panel ac-pnew-card">
                 <h2 class="ac-pnew-title"><i class="ti ti-template"></i> {{ tpl.id ? 'Editar modelo' : 'Novo modelo' }}</h2>
                 <label class="ac-pnew-field">

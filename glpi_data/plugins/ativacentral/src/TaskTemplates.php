@@ -79,10 +79,16 @@ final class TaskTemplates
             throw new \InvalidArgumentException('Dê um nome ao modelo.');
         }
         $isPhase = ($input['tpl_kind'] ?? 'task') === 'phase';
+        $typeId = max(0, (int) ($input['projecttasktypes_id'] ?? 0));
+        if (!$isPhase && $typeId > 0 && $typeId === self::phaseTypeId(false)) {
+            // Virou tarefa: o tipo "Fase" (que ficava no campo escondido) sai,
+            // senao o modelo continuava sendo fase.
+            $typeId = 0;
+        }
         $fields = [
             'name'                => $name,
             'description'         => (string) ($input['description'] ?? ''),
-            'projecttasktypes_id' => $isPhase ? self::phaseTypeId(true) : max(0, (int) ($input['projecttasktypes_id'] ?? 0)),
+            'projecttasktypes_id' => $isPhase ? self::phaseTypeId(true) : $typeId,
             'is_milestone'        => 0,
         ];
         $template = new ProjectTaskTemplate();

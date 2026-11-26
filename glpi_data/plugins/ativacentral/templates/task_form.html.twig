@@ -24,6 +24,8 @@
     <form method="post" action="{{ action }}" class="ac-tform-form" autocomplete="off" id="ac-tform">
         <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
         <input type="hidden" name="projecttasktemplates_id" value="{{ template_id }}" id="ac-tpl-id">
+        {# Enter salva (o Excluir vem antes do Salvar no HTML). #}
+        <button type="submit" name="save" value="1" tabindex="-1" aria-hidden="true" style="position: absolute; left: -9999px; width: 1px; height: 1px;"></button>
 
         {% if is_new %}
             <section class="ac-panel ac-pnew-card">
