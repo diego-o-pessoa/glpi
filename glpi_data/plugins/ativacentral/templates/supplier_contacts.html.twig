@@ -95,13 +95,8 @@
                         </select>
                     </label>
                 </div>
-                <label class="ac-pnew-field">
-                    <span class="ac-pnew-label">Número administrativo</span>
-                    <input type="text" name="registration_number" class="ac-pnew-input">
-                </label>
                 <div class="ac-pnew-dates">
                     <label class="ac-pnew-field"><span class="ac-pnew-label">Telefone</span><input type="text" name="phone" class="ac-pnew-input"></label>
-                    <label class="ac-pnew-field"><span class="ac-pnew-label">Telefone 2</span><input type="text" name="phone2" class="ac-pnew-input"></label>
                     <label class="ac-pnew-field"><span class="ac-pnew-label">Celular</span><input type="text" name="mobile" class="ac-pnew-input"></label>
                     <label class="ac-pnew-field"><span class="ac-pnew-label">E-mail</span><input type="email" name="email" class="ac-pnew-input"></label>
                 </div>
@@ -114,14 +109,6 @@
                     <label class="ac-pnew-field"><span class="ac-pnew-label">Estado</span><input type="text" name="state" class="ac-pnew-input"></label>
                     <label class="ac-pnew-field"><span class="ac-pnew-label">CEP</span><input type="text" name="postcode" class="ac-pnew-input"></label>
                     <label class="ac-pnew-field"><span class="ac-pnew-label">País</span><input type="text" name="country" class="ac-pnew-input"></label>
-                </div>
-                <label class="ac-pnew-field">
-                    <span class="ac-pnew-label">Comentários</span>
-                    <textarea name="comment" class="ac-pnew-input ac-ct-textarea" rows="3"></textarea>
-                </label>
-                <div class="ac-pnew-field">
-                    <span class="ac-pnew-label">Imagens</span>
-                    <div class="ac-pnew-glpi">{{ contact_pictures_html|raw }}</div>
                 </div>
             </div>
             <div class="ac-drawer-foot">
@@ -145,7 +132,7 @@
         var form = document.getElementById('ac-ct-form');
         var contacts = {};
         JSON.parse(document.getElementById('ac-ct-data').textContent || '[]').forEach(function (c) { contacts[c.id] = c; });
-        var fields = ['name', 'registration_number', 'phone', 'phone2', 'mobile', 'email', 'address', 'town', 'postcode', 'state', 'country', 'comment', 'contacttypes_id', 'usertitles_id'];
+        var fields = ['name', 'phone', 'mobile', 'email', 'address', 'town', 'postcode', 'state', 'country', 'contacttypes_id', 'usertitles_id'];
 
         function open(c) {
             document.getElementById('ac-ct-action').value = 'save';

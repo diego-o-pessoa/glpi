@@ -31,8 +31,9 @@ final class SupplierPage
 
     /** Campos do contato na gaveta (sem sobrenome e sem fax). */
     private const CONTACT_FIELDS = [
-        'name', 'registration_number', 'phone', 'phone2', 'mobile', 'email',
-        'address', 'town', 'postcode', 'state', 'country', 'comment',
+        // Sem numero administrativo, telefone 2, comentarios e imagens
+        // (campos que ja existem no GLPI ficam como estao).
+        'name', 'phone', 'mobile', 'email', 'address', 'town', 'postcode', 'state', 'country',
     ];
 
     public static function listUrl(): string
@@ -293,7 +294,6 @@ final class SupplierPage
             'contact_types'   => $types,
             'contact_titles'  => $titles,
             'can_contacts'    => Contact::canCreate(),
-            'contact_pictures_html' => Html::file(['name' => 'pictures', 'onlyimages' => true, 'multiple' => true, 'display' => false]),
         ];
     }
 
