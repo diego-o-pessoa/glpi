@@ -81,7 +81,7 @@
                     <input type="text" name="name" id="ac-task-name" value="{{ name }}" class="ac-pnew-input" required maxlength="255" placeholder="Ex.: Liberar acesso ao banco de dados">
                 </label>
 
-                <div class="ac-pnew-field">
+                <div class="ac-pnew-field" id="ac-type-field">
                     <span class="ac-pnew-label">Tipo</span>
                     <div class="ac-pnew-glpi">{{ type_html|raw }}</div>
                 </div>
@@ -178,6 +178,8 @@
         function syncKind() {
             var checked = form.querySelector('input[name="task_kind"]:checked');
             phaseField.hidden = !checked || checked.value !== 'task';
+            // Principal nao tem tipo (fica sempre como principal).
+            document.getElementById('ac-type-field').hidden = !!checked && checked.value === 'phase';
         }
         form.querySelectorAll('input[name="task_kind"]').forEach(function (r) { r.addEventListener('change', syncKind); });
         syncKind();

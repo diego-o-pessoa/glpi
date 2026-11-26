@@ -140,10 +140,12 @@ final class TaskForm
             'name'                    => $name,
             'projects_id'             => $projectId,
             'projecttasks_id'         => $parent,
-            // Fase sem tipo recebe o tipo "Fase" (assim continua fase mesmo sem tarefas dentro).
-            'projecttasktypes_id'     => ($input['task_kind'] ?? 'task') === 'phase' && (int) ($input['projecttasktypes_id'] ?? 0) <= 0
+            // Principal sempre fica com o tipo "Fase": e o que a identifica como
+            // principal mesmo antes de ter tarefas dentro (outro tipo a fazia
+            // voltar a ser tarefa comum).
+            'projecttasktypes_id'     => ($input['task_kind'] ?? 'task') === 'phase'
                 ? TaskTemplates::phaseTypeId(true)
-                : max(0, (int) ($input['projecttasktypes_id'] ?? 0)),
+                : self::nonPhaseType((int) ($input['projecttasktypes_id'] ?? 0)),
             'content'                 => (string) ($input['content'] ?? ''),
             'plan_start_date'         => $start !== null ? $start . ' 00:00:00' : 'NULL',
             'plan_end_date'           => $end !== null ? $end . ' 00:00:00' : 'NULL',
@@ -482,6 +484,13 @@ final class TaskForm
         $phaseType = TaskTemplates::phaseTypeId(false);
         return self::hasChildren((int) $task->getID())
             || ($phaseType > 0 && (int) $task->fields['projecttasktypes_id'] === $phaseType);
+    }
+
+    /** Tarefa comum nao pode ficar com o tipo "Fase" (senao vira principal). */
+    private static function nonPhaseType(int $typeId): int
+    {
+        $phaseType = TaskTemplates::phaseTypeId(false);
+        return $typeId > 0 && $typeId !== $phaseType ? $typeId : 0;
     }
 
     private static function hasChildren(int $taskId): bool
