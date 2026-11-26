@@ -41,7 +41,7 @@ final class ProjectTasksView
         foreach ($DB->request([
             'SELECT' => [
                 'id', 'name', 'projecttasks_id', 'projecttasktypes_id', 'projectstates_id', 'percent_done',
-                'plan_start_date', 'plan_end_date', 'planned_duration', 'effective_duration', 'users_id',
+                'plan_start_date', 'plan_end_date', 'real_start_date', 'real_end_date', 'effective_duration', 'users_id',
             ],
             'FROM'   => 'glpi_projecttasks',
             'WHERE'  => ['projects_id' => $projectId, 'is_deleted' => 0, 'is_template' => 0],
@@ -72,7 +72,7 @@ final class ProjectTasksView
             $state = $states[(int) $row['projectstates_id']] ?? null;
             $kind = self::kind($state);
             $members = $team[$id] ?? [];
-            $owner = (int) $row['users_id'] > 0 ? getUserName((int) $row['users_id']) : '';
+            $owner = (int) $row['users_id'] > 0 ? self::userName((int) $row['users_id']) : '';
             if ($owner !== '' && !in_array($owner, $members, true)) {
                 array_unshift($members, $owner);
             }
@@ -90,8 +90,7 @@ final class ProjectTasksView
                 'start'     => self::date((string) ($row['plan_start_date'] ?? '')),
                 'end'       => self::date((string) ($row['plan_end_date'] ?? '')),
                 'due'       => ($end !== '' && !$done && $kind !== 'cancelled') ? ($end < $today ? 'late' : ($end <= $soon ? 'soon' : '')) : '',
-                'planned'   => (int) $row['planned_duration'] > 0 ? Html::timestampToString((int) $row['planned_duration'], false) : '—',
-                'effective' => (int) $row['effective_duration'] > 0 ? Html::timestampToString((int) $row['effective_duration'], false) : '—',
+                'duration'  => $done ? self::duration($row) : '—',
                 'members'   => array_map(static fn (string $n): array => ['name' => $n, 'initials' => self::initials($n)], $members),
                 'children'  => [],
                 'leaf_total' => 0,
@@ -171,9 +170,35 @@ final class ProjectTasksView
             return '';
         }
         if ($itemtype === 'User') {
-            return getUserName($id);
+            return self::userName($id);
         }
         return (string) $itemtype::getFriendlyNameById($id);
+    }
+
+    /** "Nome Sobrenome" do cadastro (o GLPI pode mostrar o sobrenome primeiro). */
+    private static function userName(int $id): string
+    {
+        static $cache = [];
+        if (!isset($cache[$id])) {
+            $user = new \User();
+            $name = '';
+            if ($user->getFromDB($id)) {
+                $name = trim((string) $user->fields['firstname'] . ' ' . (string) $user->fields['realname']);
+                if ($name === '') {
+                    $name = (string) $user->fields['name'];
+                }
+            }
+            $cache[$id] = self::cleanName($name);
+        }
+        return $cache[$id];
+    }
+
+    /** Tira o sufixo " - empresa" do nome (as iniciais ficam DP, FN...). */
+    private static function cleanName(string $name): string
+    {
+        // Ex.: "Diego Pessoa - Ativa Locacao" -> "Diego Pessoa".
+        $clean = trim((string) preg_replace('/\s+-\s+.*$/u', '', $name));
+        return $clean !== '' ? $clean : trim($name);
     }
 
     private static function initials(string $name): string
@@ -182,6 +207,19 @@ final class ProjectTasksView
         $first = mb_substr($parts[0] ?? '', 0, 1);
         $last = count($parts) > 1 ? mb_substr((string) end($parts), 0, 1) : '';
         return mb_strtoupper($first . $last) ?: '?';
+    }
+
+    /**
+     * Quanto a tarefa levou: o tempo efetivo registrado no GLPI; sem ele,
+     * do inicio real ao fim real.
+     */
+    private static function duration(array $row): string
+    {
+        $seconds = (int) $row['effective_duration'];
+        if ($seconds <= 0 && !empty($row['real_start_date']) && !empty($row['real_end_date'])) {
+            $seconds = max(0, strtotime((string) $row['real_end_date']) - strtotime((string) $row['real_start_date']));
+        }
+        return $seconds > 0 ? Html::timestampToString($seconds, false) : '—';
     }
 
     private static function date(string $value): string

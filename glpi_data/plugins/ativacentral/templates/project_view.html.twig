@@ -35,8 +35,8 @@
                     <span>{{ t.start ?: '—' }} → {{ t.end ?: '—' }}</span>
                     {% if t.due == 'late' %}<small class="is-late">Atrasada</small>{% elseif t.due == 'soon' %}<small class="is-soon">Vence em breve</small>{% endif %}
                 </div>
-                <div class="ac-ptask-col ac-ptask-duration" title="Duração planejada / efetiva">
-                    <span>{{ t.planned }}</span><small>efetiva: {{ t.effective }}</small>
+                <div class="ac-ptask-col ac-ptask-duration" title="Tempo que a tarefa levou até ser concluída">
+                    <span>{{ t.duration }}</span>
                 </div>
                 <div class="ac-ptask-col ac-ptask-team">
                     {% for mbr in t.members|slice(0, 3) %}
