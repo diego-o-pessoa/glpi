@@ -45,7 +45,7 @@ final class ProjectTasksView
             ],
             'FROM'   => 'glpi_projecttasks',
             'WHERE'  => ['projects_id' => $projectId, 'is_deleted' => 0, 'is_template' => 0],
-            'ORDER'  => ['plan_start_date ASC', 'id ASC'],
+            'ORDER'  => ['id ASC'], // ordem de criacao: as novas ficam por ultimo
         ]) as $row) {
             $rows[(int) $row['id']] = $row;
         }

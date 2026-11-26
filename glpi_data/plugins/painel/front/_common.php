@@ -822,7 +822,7 @@ if (!function_exists('painel_project_detail')) {
                 'is_deleted'  => 0,
                 'is_template' => 0,
             ],
-            'ORDER'  => ['plan_start_date ASC', 'id ASC'],
+            'ORDER'  => ['id ASC'], // ordem de criacao: as novas ficam por ultimo
         ]) as $t) {
             $tid = (int) $t['id'];
             $taskIds[] = $tid;

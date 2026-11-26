@@ -202,7 +202,7 @@ final class TaskForm
             'SELECT' => ['id', 'name', 'projecttasktypes_id'],
             'FROM'   => 'glpi_projecttasks',
             'WHERE'  => ['projects_id' => $projectId, 'projecttasks_id' => 0, 'is_deleted' => 0, 'is_template' => 0],
-            'ORDER'  => ['plan_start_date ASC', 'id ASC'],
+            'ORDER'  => ['id ASC'],
         ]) as $row) {
             $id = (int) $row['id'];
             // Fase = tipo "Fase" ou ja tem subtarefas (tarefa solta nao entra).
@@ -309,19 +309,20 @@ final class TaskForm
     {
         global $DB;
 
-        $list = &$_SESSION['MESSAGE_AFTER_REDIRECT'][WARNING];
-        if (is_array($list)) {
+        // So mexe se ja existir: a referencia (&) criaria um aviso vazio na tela.
+        if (isset($_SESSION['MESSAGE_AFTER_REDIRECT'][WARNING]) && is_array($_SESSION['MESSAGE_AFTER_REDIRECT'][WARNING])) {
+            $list = &$_SESSION['MESSAGE_AFTER_REDIRECT'][WARNING];
             foreach (array_keys($list) as $i) {
                 if ($i >= $warningsBefore && str_contains((string) $list[$i], 'user.form.php')) {
                     unset($list[$i]);
                 }
             }
             $list = array_values($list);
-            if ($list === []) {
+            unset($list);
+            if ($_SESSION['MESSAGE_AFTER_REDIRECT'][WARNING] === []) {
                 unset($_SESSION['MESSAGE_AFTER_REDIRECT'][WARNING]);
             }
         }
-        unset($list);
 
         $task = new ProjectTask();
         if (!$task->getFromDB($taskId) || empty($task->fields['plan_start_date']) || empty($task->fields['plan_end_date'])) {
