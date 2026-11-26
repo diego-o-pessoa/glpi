@@ -19,7 +19,7 @@ if (!Project::canView() && !ProjectTask::canView()) {
 $data = Projects::dashboard();
 $data['urls'] = [
     'data'     => Shell::url('/front/projects.data.php'),
-    'new'      => Session::haveRight(Project::$rightname, CREATE) ? Shell::glpiUrl('/front/project.form.php') : '',
+    'new'      => Session::haveRight(Project::$rightname, CREATE) ? Shell::url('/front/project.new.php') : '',
     'my_tasks' => ProjectTask::canView() ? Shell::glpiUrl(ProjectTask::getMyTasksURL(false)) : '',
 ];
 

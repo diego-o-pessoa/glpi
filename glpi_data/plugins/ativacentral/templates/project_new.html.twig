@@ -1,0 +1,94 @@
+{# Tela simplificada "Novo projeto" do Ativa Central. #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div class="ac-app ac-pnew">
+    <div class="ac-head">
+        <div>
+            <div class="ac-eyebrow">Ativa Central · Projetos</div>
+            <h1 class="ac-title">Novo projeto</h1>
+            <div class="ac-subtitle">Preencha o básico. As tarefas você cria depois, dentro do projeto.</div>
+        </div>
+        <div class="ac-actions">
+            <a class="ac-btn" href="{{ back }}"><i class="ti ti-arrow-left"></i> Voltar</a>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="ac-pnew-error"><i class="ti ti-alert-circle"></i> {{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="{{ action }}" class="ac-pnew-form" autocomplete="off">
+        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+
+        <section class="ac-panel ac-pnew-card">
+            <h2 class="ac-pnew-title"><i class="ti ti-clipboard-text"></i> Sobre o projeto</h2>
+
+            <label class="ac-pnew-field">
+                <span class="ac-pnew-label">Nome do projeto <b>*</b></span>
+                <input type="text" name="name" value="{{ name }}" class="ac-pnew-input" required maxlength="255" placeholder="Ex.: Implantação do GLPI" autofocus>
+            </label>
+
+            <div class="ac-pnew-field">
+                <span class="ac-pnew-label">Prioridade</span>
+                <div class="ac-pnew-prio">
+                    {% for value, label in priorities %}
+                        <label class="ac-pnew-prio-opt is-p{{ value }}">
+                            <input type="radio" name="priority" value="{{ value }}" {{ value == priority ? 'checked' : '' }}>
+                            <span><i class="ti ti-flag-filled"></i> {{ label }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="ac-pnew-field">
+                <span class="ac-pnew-label">Tipo</span>
+                <div class="ac-pnew-glpi">{{ type_html|raw }}</div>
+            </div>
+
+            <div class="ac-pnew-field">
+                <span class="ac-pnew-label">Descrição</span>
+                <div class="ac-pnew-glpi ac-pnew-editor">{{ content_html|raw }}</div>
+            </div>
+        </section>
+
+        <div class="ac-pnew-side">
+            <section class="ac-panel ac-pnew-card">
+                <h2 class="ac-pnew-title"><i class="ti ti-calendar"></i> Prazo planejado</h2>
+                <div class="ac-pnew-dates">
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Início</span>
+                        <input type="date" name="plan_start_date" value="{{ start }}" class="ac-pnew-input">
+                    </label>
+                    <label class="ac-pnew-field">
+                        <span class="ac-pnew-label">Fim</span>
+                        <input type="date" name="plan_end_date" value="{{ end }}" class="ac-pnew-input">
+                    </label>
+                </div>
+            </section>
+
+            <section class="ac-panel ac-pnew-card">
+                <h2 class="ac-pnew-title"><i class="ti ti-users"></i> Equipe</h2>
+                <div class="ac-pnew-manager">
+                    <span class="ac-pnew-avatar"><i class="ti ti-user-star"></i></span>
+                    <div>
+                        <div class="ac-pnew-manager-name">{{ manager }}</div>
+                        <div class="ac-pnew-manager-sub">Responsável pelo projeto{{ group ? ' · ' ~ group : '' }}</div>
+                    </div>
+                </div>
+                <div class="ac-pnew-field">
+                    <span class="ac-pnew-label">Pessoas</span>
+                    <div class="ac-pnew-glpi">{{ users_html|raw }}</div>
+                </div>
+                <div class="ac-pnew-field">
+                    <span class="ac-pnew-label">Grupos</span>
+                    <div class="ac-pnew-glpi">{{ groups_html|raw }}</div>
+                </div>
+                <div class="ac-pnew-hint">Opcional. Quem estiver na equipe vê o projeto no portal.</div>
+            </section>
+
+            <div class="ac-pnew-submit">
+                <a class="ac-btn" href="{{ back }}">Cancelar</a>
+                <button type="submit" class="ac-btn is-primary"><i class="ti ti-check"></i> Criar projeto</button>
+            </div>
+        </div>
+    </form>
+</div>

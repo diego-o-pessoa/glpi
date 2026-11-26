@@ -89,7 +89,7 @@ final class Projects
 
             $stats = $taskStats[$id] ?? ['total' => 0, 'done' => 0];
             $priority = (int) $row['priority'];
-            $priorityLabel = CommonITILObject::getPriorityName($priority);
+            $priorityLabel = ProjectForm::priorityLabel($priority);
 
             $projects[] = [
                 'id'             => $id,
@@ -99,7 +99,7 @@ final class Projects
                 'entity'         => $entities[(int) $row['entities_id']] ?? '',
                 'priority'       => $priority,
                 'priority_label' => $priorityLabel,
-                'priority_tone'  => self::priorityTone($priority),
+                'priority_tone'  => ProjectForm::priorityTone($priority),
                 'state'          => $state['name'],
                 'state_color'    => $state['color'],
                 'bucket'         => $bucket,
@@ -515,17 +515,6 @@ final class Projects
             return true;
         }
         return preg_match('/planej|backlog|rascunho|aguard|novo|iniciar|aberto/u', $lower) === 1;
-    }
-
-    private static function priorityTone(int $priority): string
-    {
-        return match (true) {
-            $priority >= 5 => 'is-red',
-            $priority === 4 => 'is-orange',
-            $priority === 3 => 'is-rose',
-            $priority === 2 => 'is-blue',
-            default => 'is-muted',
-        };
     }
 
     private static function safeColor(string $color): string

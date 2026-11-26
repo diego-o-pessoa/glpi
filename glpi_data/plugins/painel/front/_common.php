@@ -679,12 +679,18 @@ if (!function_exists('painel_user_projects_data')) {
             }
 
             $priority = (int) $row['priority'];
+            // 4 prioridades (Baixa, Normal, Alta, Urgente), como no Super-Admin.
             $priorityTone = match (true) {
-                $priority >= 5 => 'is-red',
+                $priority <= 2 => 'is-blue',
+                $priority === 3 => 'is-muted',
                 $priority === 4 => 'is-orange',
-                $priority === 3 => 'is-rose',
-                $priority === 2 => 'is-blue',
-                default => 'is-muted',
+                default => 'is-red',
+            };
+            $priorityLabel = match (true) {
+                $priority <= 2 => 'Baixa',
+                $priority === 3 => 'Normal',
+                $priority === 4 => 'Alta',
+                default => 'Urgente',
             };
 
             $stats = ['total' => $progress[$id]['tasks_total'] ?? 0, 'done' => $progress[$id]['tasks_done'] ?? 0];
@@ -692,7 +698,7 @@ if (!function_exists('painel_user_projects_data')) {
                 'id'             => $id,
                 'name'           => (string) ($row['name'] ?: 'Projeto #' . $id),
                 'desc'           => painel_excerpt((string) ($row['content'] ?? '')),
-                'priority_label' => CommonITILObject::getPriorityName($priority),
+                'priority_label' => $priorityLabel,
                 'priority_tone'  => $priorityTone,
                 'state'          => $state['name'],
                 'state_color'    => $state['color'],
