@@ -28,6 +28,9 @@ function painel_task_icon(array $node): array
 /** Texto do prazo da linha ("Até 27/11/2026", "Atrasada · 25/11/2026"). */
 function painel_task_due_text(array $node): string
 {
+    if (($node['done_date'] ?? '') !== '') {
+        return 'Concluída em ' . $node['done_date'];
+    }
     $end = (string) ($node['end_date'] ?? '');
     if ($end === '') {
         return $node['start_date'] !== '' ? 'Início ' . $node['start_date'] : 'Sem prazo';
@@ -108,7 +111,7 @@ function painel_render_task_nodes(array $nodes, int $depth = 0): void
 
                     <div class="tree-assignees"><?php painel_render_avatars($node['assignees']); ?></div>
 
-                    <div class="tree-dates due-<?= htmlspecialchars($node['due_tone'] ?: 'none') ?>" data-row-due><?= htmlspecialchars(painel_task_due_text($node)) ?></div>
+                    <div class="tree-dates due-<?= ($node['done_date'] ?? '') !== '' ? 'done' : htmlspecialchars($node['due_tone'] ?: 'none') ?>" data-row-due><?= htmlspecialchars(painel_task_due_text($node)) ?></div>
                     <i class="fa-solid fa-chevron-right tree-open-cue"></i>
                 </div>
             </div>
@@ -336,6 +339,9 @@ $client_payload = painel_project_client_payload($project);
         .av-none { color: #9aa6bf; }
         .tree-dates { width: 160px; font-weight: 600; }
         .tree-dates.due-late { color: #dc2626; }
+        .tree-dates.due-done { color: #167a4d; }
+        .phase-status { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: #f4f6fb; color: #52607e; font-size: 13px; font-weight: 600; }
+        .phase-status.is-done { background: #ecfdf5; color: #167a4d; }
         .tree-dates.due-soon { color: #d97706; }
         .tree-open-cue { font-size: 12px; color: #b4bdd0; opacity: 1; }
         .tree-row:hover .tree-open-cue { color: #4a6cf7; }
@@ -585,12 +591,12 @@ $client_payload = painel_project_client_payload($project);
                 </div>
 
                 <div id="drawer-phase-wrap" style="display: none;">
-                    <div class="drawer-sec-title">Andamento da fase</div>
+                    <div class="drawer-sec-title">Andamento da principal</div>
                     <div class="phase-prog-big">
                         <b id="drawer-phase-text"></b>
                         <div class="summary-bar"><span id="drawer-phase-bar"></span></div>
                     </div>
-                    <div class="drawer-hint">Calculado automaticamente: cada tarefa concluída soma a sua parte. Canceladas não contam.</div>
+                    <div class="phase-status" id="drawer-phase-status"></div>
                     <div class="subtasks-mini" id="drawer-subtasks" style="margin-top: 12px;"></div>
                 </div>
 
@@ -721,6 +727,7 @@ $client_payload = painel_project_client_payload($project);
         function isPhase(t) { return (t.child_ids || []).length > 0; }
 
         function dueText(t) {
+            if (t.done_date) return 'Concluída em ' + t.done_date;
             if (!t.end_date) return t.start_date ? 'Início ' + t.start_date : 'Sem prazo';
             if (t.due_tone === 'late') return 'Atrasada · ' + t.end_date;
             if (t.due_tone === 'soon') return 'Vence ' + t.end_date;
@@ -863,7 +870,7 @@ $client_payload = painel_project_client_payload($project);
                 const dueEl = row.querySelector('[data-row-due]');
                 if (dueEl) {
                     dueEl.textContent = dueText(t);
-                    dueEl.className = 'tree-dates due-' + (t.due_tone || 'none');
+                    dueEl.className = 'tree-dates due-' + (t.done_date ? 'done' : (t.due_tone || 'none'));
                 }
                 const cnt = Number(t.notes_count || 0);
                 const notesPill = row.querySelector('[data-notes-badge]');
@@ -886,7 +893,7 @@ $client_payload = painel_project_client_payload($project);
             badgesEl.innerHTML = '';
             const st = document.createElement('span');
             st.className = 'tree-state kind-' + (phase ? (task.done ? 'done' : 'todo') : task.kind);
-            st.textContent = phase ? (task.done ? 'Fase concluída' : 'Fase · ' + task.percent + '%') : task.kind_label;
+            st.textContent = phase ? (task.done ? 'Principal concluída' : 'Principal · ' + task.percent + '%') : task.kind_label;
             badgesEl.appendChild(st);
             if (task.type) {
                 const tp = document.createElement('span');
@@ -929,6 +936,25 @@ $client_payload = painel_project_client_payload($project);
                 phaseText.textContent = task.leaf_done + ' de ' + task.leaf_total + ' concluídas · ' + task.percent + '%';
                 phaseBar.style.width = task.percent + '%';
                 phaseBar.style.background = task.done ? '#2fb67c' : '';
+                // Situacao da principal: concluiu tudo ou quantas faltam.
+                const phaseStatus = $('drawer-phase-status');
+                const missing = Math.max(0, (task.leaf_total || 0) - (task.leaf_done || 0));
+                phaseStatus.className = 'phase-status' + (missing === 0 && task.leaf_total > 0 ? ' is-done' : '');
+                phaseStatus.innerHTML = '';
+                const icon = document.createElement('i');
+                const text = document.createElement('span');
+                if (!task.leaf_total) {
+                    icon.className = 'fa-regular fa-circle';
+                    text.textContent = 'Ainda não há tarefas nesta principal.';
+                } else if (missing === 0) {
+                    icon.className = 'fa-solid fa-circle-check';
+                    text.textContent = 'Todas as tarefas foram concluídas' + (task.done_date ? ' em ' + task.done_date : '') + '.';
+                } else {
+                    icon.className = 'fa-regular fa-hourglass-half';
+                    text.textContent = 'Falta' + (missing === 1 ? '' : 'm') + ' ' + missing + ' de ' + task.leaf_total + (task.leaf_total === 1 ? ' tarefa' : ' tarefas') + ' para concluir.';
+                }
+                phaseStatus.appendChild(icon);
+                phaseStatus.appendChild(text);
                 (task.child_ids || []).forEach(cid => {
                     const ch = (projectData.tasks || {})[String(cid)];
                     if (!ch) return;

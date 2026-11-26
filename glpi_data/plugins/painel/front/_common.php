@@ -952,7 +952,11 @@ if (!function_exists('painel_project_detail')) {
                 ];
             }
 
+            // Data em que a tarefa foi concluida (fim real), se ja terminou.
+            $doneRaw = $done && !empty($t['real_end_date']) ? (string) $t['real_end_date'] : '';
             $nodes[$tid] = [
+                'done_raw'     => $doneRaw,
+                'done_date'    => $doneRaw !== '' ? date('d/m/Y', strtotime($doneRaw)) : '',
                 'id'           => $tid,
                 'parent_id'    => (int) $t['projecttasks_id'],
                 'name'         => (string) ($t['name'] ?: 'Tarefa #' . $tid),
@@ -1011,6 +1015,36 @@ if (!function_exists('painel_project_detail')) {
             }
         }
         unset($node);
+
+        // Principal concluida: data = a ultima tarefa dela a ser finalizada.
+        $phaseDone = static function (array &$node) use (&$phaseDone): string {
+            if (empty($node['children'])) {
+                return $node['kind'] === 'cancelled' ? '-' : (string) $node['done_raw'];
+            }
+            $last = '';
+            $all = true;
+            foreach ($node['children'] as &$child) {
+                $d = $phaseDone($child);
+                if ($d === '-') {
+                    continue;
+                }
+                if ($d === '') {
+                    $all = false;
+                } elseif ($d > $last) {
+                    $last = $d;
+                }
+            }
+            unset($child);
+            if ($all && $last !== '') {
+                $node['done_raw'] = $last;
+                $node['done_date'] = date('d/m/Y', strtotime($last));
+            }
+            return $all ? $last : '';
+        };
+        foreach ($roots as &$root) {
+            $phaseDone($root);
+        }
+        unset($root);
 
         // Resumo do usuario: tarefas pendentes dele (sem fases e canceladas) e proximo prazo.
         foreach ($nodes as $node) {
