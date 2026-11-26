@@ -141,7 +141,11 @@ final class ProjectForm
         if ($end !== null) {
             $fields['plan_end_date'] = $end . ' 00:00:00';
         }
+        // Mede cada etapa: a criacao demorou no servidor de producao.
+        $clock = microtime(true);
+        $steps = [];
         $id = $project->add($fields);
+        $steps[] = sprintf('projeto %.1fs', microtime(true) - $clock);
         if (!$id) {
             throw new \InvalidArgumentException('Não foi possível criar o projeto. Confira os campos e tente de novo.');
         }
@@ -150,9 +154,15 @@ final class ProjectForm
         foreach (['User' => 'team_users', 'Group' => 'team_groups'] as $itemtype => $field) {
             foreach (array_unique(array_map('intval', (array) ($input[$field] ?? []))) as $itemId) {
                 if ($itemId > 0) {
+                    $started = microtime(true);
                     $team->add(['projects_id' => $id, 'itemtype' => $itemtype, 'items_id' => $itemId]);
+                    $steps[] = sprintf('equipe %s#%d %.1fs', $itemtype, $itemId, microtime(true) - $started);
                 }
             }
+        }
+        $total = microtime(true) - $clock;
+        if ($total >= 2.0) {
+            \Toolbox::logInFile('ativacentral', sprintf("Novo projeto %d demorou %.1fs: %s\n", $id, $total, implode(', ', $steps)));
         }
         return (int) $id;
     }
