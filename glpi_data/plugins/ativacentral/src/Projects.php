@@ -110,7 +110,7 @@ final class Projects
                 'end_date'       => self::formatDate((string) ($row['plan_end_date'] ?? '')),
                 'team'           => $team['members'],
                 'mine'           => $mine,
-                'url'            => Shell::glpiUrl('/front/project.form.php?id=' . $id),
+                'url'            => ProjectPage::url($id),
             ];
         }
 

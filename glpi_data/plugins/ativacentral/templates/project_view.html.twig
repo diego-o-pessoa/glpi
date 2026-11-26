@@ -1,0 +1,140 @@
+{# Tela do projeto no estilo do Ativa Central. #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div class="ac-app ac-pnew ac-pview">
+    <a class="ac-pview-back" href="{{ back }}"><i class="ti ti-arrow-left"></i> Voltar para Projetos</a>
+
+    <div class="ac-panel ac-pview-hero">
+        <div class="ac-pview-hero-main">
+            <div class="ac-pview-badges">
+                <span class="ac-pview-tag {{ priority_tone }}"><i class="ti ti-flag-filled"></i> {{ priority_label }}</span>
+                <span class="ac-pview-tag is-state">{{ state_name }}</span>
+            </div>
+            <h1 class="ac-title">{{ name }}</h1>
+            <div class="ac-pview-meta">
+                <span><i class="ti ti-calendar"></i> {{ dates }}</span>
+                {% if created %}<span><i class="ti ti-clock"></i> Criado em {{ created }}</span>{% endif %}
+            </div>
+        </div>
+        <div class="ac-pview-progress">
+            <div class="ac-pview-pct">{{ percent }}%</div>
+            <div class="ac-pview-bar"><span style="width: {{ percent }}%"></span></div>
+            <div class="ac-pview-pct-sub">concluído · calculado pelas tarefas</div>
+        </div>
+    </div>
+
+    <div class="ac-pview-layout">
+        <nav class="ac-panel ac-pview-nav">
+            {% for t in tabs %}
+                <a href="{{ t.url }}" class="ac-pview-nav-item {{ t.active ? 'is-active' : '' }}">
+                    <i class="ti {{ t.icon }}"></i>
+                    <span>{{ t.label }}</span>
+                    {% if t.count > 0 %}<b>{{ t.count }}</b>{% endif %}
+                </a>
+            {% endfor %}
+            <a href="{{ classic }}" class="ac-pview-nav-classic" title="Abrir a tela completa do GLPI">
+                <i class="ti ti-external-link"></i> Tela completa do GLPI
+            </a>
+        </nav>
+
+        <div class="ac-pview-content">
+            {% if tab_url is defined %}
+                <div class="ac-panel ac-pview-glpi" id="ac-pview-tab" data-url="{{ tab_url }}">
+                    <div class="ac-pview-loading"><span class="spinner-border spinner-border-sm"></span> Carregando…</div>
+                </div>
+                <script>
+                    (function () {
+                        var box = document.getElementById('ac-pview-tab');
+                        // jQuery executa os scripts que vem no conteudo da aba (como na tela do GLPI).
+                        $(box).load(box.getAttribute('data-url'), function (response, status) {
+                            if (status === 'error') {
+                                box.innerHTML = '<div class="ac-pnew-error"><i class="ti ti-alert-circle"></i> Não foi possível carregar esta aba. Atualize a página.</div>';
+                            }
+                        });
+                    })();
+                </script>
+            {% else %}
+                {% if error %}
+                    <div class="ac-pnew-error"><i class="ti ti-alert-circle"></i> {{ error }}</div>
+                {% endif %}
+                <form method="post" action="{{ action }}" class="ac-pnew-form" autocomplete="off">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                    <input type="hidden" name="id" value="{{ id }}">
+                    {% set ro = not can_update %}
+
+                    <section class="ac-panel ac-pnew-card">
+                        <h2 class="ac-pnew-title"><i class="ti ti-clipboard-text"></i> Sobre o projeto</h2>
+                        <label class="ac-pnew-field">
+                            <span class="ac-pnew-label">Nome do projeto <b>*</b></span>
+                            <input type="text" name="name" value="{{ f_name }}" class="ac-pnew-input" required maxlength="255" {{ ro ? 'readonly' : '' }}>
+                        </label>
+                        <div class="ac-pnew-field">
+                            <span class="ac-pnew-label">Prioridade</span>
+                            <div class="ac-pnew-prio">
+                                {% for value, label in priorities %}
+                                    <label class="ac-pnew-prio-opt is-p{{ value }}">
+                                        <input type="radio" name="priority" value="{{ value }}" {{ value == f_priority ? 'checked' : '' }} {{ ro ? 'disabled' : '' }}>
+                                        <span><i class="ti ti-flag-filled"></i> {{ label }}</span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="ac-pnew-dates">
+                            <div class="ac-pnew-field">
+                                <span class="ac-pnew-label">Estado</span>
+                                <div class="ac-pnew-glpi">{{ state_html|raw }}</div>
+                            </div>
+                            <div class="ac-pnew-field">
+                                <span class="ac-pnew-label">Tipo</span>
+                                <div class="ac-pnew-glpi">{{ type_html|raw }}</div>
+                            </div>
+                        </div>
+                        <div class="ac-pnew-field">
+                            <span class="ac-pnew-label">Descrição</span>
+                            <div class="ac-pnew-glpi ac-pnew-editor">{{ content_html|raw }}</div>
+                        </div>
+                    </section>
+
+                    <div class="ac-pnew-side">
+                        <section class="ac-panel ac-pnew-card">
+                            <h2 class="ac-pnew-title"><i class="ti ti-calendar"></i> Prazo planejado</h2>
+                            <div class="ac-pnew-dates">
+                                <label class="ac-pnew-field">
+                                    <span class="ac-pnew-label">Início</span>
+                                    <input type="date" name="plan_start_date" value="{{ f_start }}" class="ac-pnew-input" {{ ro ? 'readonly' : '' }}>
+                                </label>
+                                <label class="ac-pnew-field">
+                                    <span class="ac-pnew-label">Fim</span>
+                                    <input type="date" name="plan_end_date" value="{{ f_end }}" class="ac-pnew-input" {{ ro ? 'readonly' : '' }}>
+                                </label>
+                            </div>
+                        </section>
+
+                        <section class="ac-panel ac-pnew-card">
+                            <h2 class="ac-pnew-title"><i class="ti ti-user-star"></i> Gerente</h2>
+                            <div class="ac-pnew-field">
+                                <span class="ac-pnew-label">Usuário</span>
+                                <div class="ac-pnew-glpi">{{ user_html|raw }}</div>
+                            </div>
+                            <div class="ac-pnew-field">
+                                <span class="ac-pnew-label">Grupo</span>
+                                <div class="ac-pnew-glpi">{{ group_html|raw }}</div>
+                            </div>
+                        </section>
+
+                        {% if can_update %}
+                            <div class="ac-pnew-submit">
+                                {% if can_delete %}
+                                    <button type="submit" name="delete" value="1" class="ac-btn ac-btn-danger" formnovalidate
+                                            onclick="return confirm('Mover este projeto para a lixeira?');">
+                                        <i class="ti ti-trash"></i> Excluir
+                                    </button>
+                                {% endif %}
+                                <button type="submit" name="save" value="1" class="ac-btn is-primary"><i class="ti ti-check"></i> Salvar alterações</button>
+                            </div>
+                        {% endif %}
+                    </div>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+</div>

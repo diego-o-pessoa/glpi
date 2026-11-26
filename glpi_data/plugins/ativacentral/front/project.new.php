@@ -21,7 +21,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $old = $_POST;
     try {
         $id = ProjectForm::create($_POST);
-        Html::redirect(Shell::glpiUrl('/front/project.form.php?id=' . $id));
+        Html::redirect(GlpiPlugin\Ativacentral\ProjectPage::url($id));
     } catch (InvalidArgumentException $exception) {
         $error = $exception->getMessage();
     }

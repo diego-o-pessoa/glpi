@@ -76,6 +76,10 @@ final class Shell
             // pagina manda o navegador para la antes de desenhar qualquer coisa.
             $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::url('/front/home.php')]];
             $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
+        } elseif (self::nativeProjectId() > 0) {
+            // Formulario nativo do projeto: vai para a tela nova (classic=1 mantem o GLPI).
+            $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . ProjectPage::url(self::nativeProjectId())]];
+            $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
         } elseif (self::isNativeProjects()) {
             $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::url('/front/projects.php')]];
             $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
@@ -238,6 +242,16 @@ final class Shell
             return false;
         }
         return !isset($_GET['embed']);
+    }
+
+    /** id do projeto quando a pagina e o formulario nativo (project.form.php?id=N). */
+    private static function nativeProjectId(): int
+    {
+        $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+        if (preg_match('#/front/project\.form\.php$#i', $path) !== 1 || isset($_GET['classic']) || isset($_GET['embed'])) {
+            return 0;
+        }
+        return max(0, (int) ($_GET['id'] ?? 0));
     }
 
     private static function forceVerticalLayout(): void
