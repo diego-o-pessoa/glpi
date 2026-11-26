@@ -1,0 +1,90 @@
+{# Aba Fornecedores do contrato: cartoes vinculados + vincular existente. #}
+<div class="ac-panel ac-ptasks">
+    <div class="ac-ptasks-head">
+        <div>
+            <h2 class="ac-pnew-title"><i class="ti ti-building-store"></i> Fornecedores</h2>
+            <div class="ac-pnew-hint">{{ suppliers|length }} {{ suppliers|length == 1 ? 'fornecedor vinculado' : 'fornecedores vinculados' }} · clique para abrir a ficha do fornecedor</div>
+        </div>
+        {% if can_update %}
+            <div class="ac-actions">
+                {% if available_suppliers is not empty %}
+                    <button type="button" class="ac-btn is-primary" id="ac-cs-link-open"><i class="ti ti-link"></i> Vincular fornecedor</button>
+                {% endif %}
+                {% if new_supplier_url %}
+                    <a class="ac-btn" href="{{ new_supplier_url }}"><i class="ti ti-plus"></i> Novo fornecedor</a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    {% if can_update and available_suppliers is not empty %}
+        <form method="post" action="{{ action }}" class="ac-ct-link" id="ac-cs-link" hidden>
+            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+            <input type="hidden" name="supplier_action" value="link">
+            <select name="suppliers_id" class="ac-pnew-input" required>
+                <option value="">Escolha um fornecedor já cadastrado…</option>
+                {% for s in available_suppliers %}<option value="{{ s.id }}">{{ s.label }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="ac-btn is-primary"><i class="ti ti-link"></i> Vincular</button>
+        </form>
+    {% endif %}
+
+    {% if suppliers is empty %}
+        <div class="ac-ptasks-empty">
+            <i class="ti ti-building-store"></i>
+            <b>Nenhum fornecedor vinculado</b>
+            <span>Vincule uma ou mais empresas responsáveis por este contrato.</span>
+        </div>
+    {% else %}
+        <div class="ac-sup-rows">
+            {% for s in suppliers %}
+                <div class="ac-sup-row ac-cs-row {{ s.active ? '' : 'is-inactive' }}">
+                    <a class="ac-cs-link" href="{{ s.url }}">
+                        <span class="ac-sup-avatar">{{ s.initials }}</span>
+                        <div class="ac-sup-main">
+                            <b>{{ s.name }}</b>
+                            <small>
+                                {% if s.category %}<span class="ac-ptask-type">{{ s.category }}</span>{% endif %}
+                                {% if s.cnpj %}<span>CNPJ {{ s.cnpj }}</span>{% endif %}
+                                {% if s.city %}<span>{{ s.city }}</span>{% endif %}
+                                {% if not s.active %}<span class="ac-sup-off">Inativo</span>{% endif %}
+                            </small>
+                        </div>
+                        <div class="ac-sup-contact">
+                            {% if s.phone %}<span><i class="ti ti-phone"></i> {{ s.phone }}</span>{% endif %}
+                            {% if s.email %}<span><i class="ti ti-mail"></i> {{ s.email }}</span>{% endif %}
+                            {% if not s.phone and not s.email %}<span class="ac-ptask-none">Sem telefone/e-mail</span>{% endif %}
+                        </div>
+                    </a>
+                    {% if can_update %}
+                        <form method="post" action="{{ action }}" onsubmit="return confirm('Desvincular este fornecedor do contrato? O fornecedor continua cadastrado.');">
+                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                            <input type="hidden" name="supplier_action" value="unlink">
+                            <input type="hidden" name="link_id" value="{{ s.link_id }}">
+                            <button type="submit" class="ac-docs-btn is-danger" title="Desvincular fornecedor"><i class="ti ti-unlink"></i></button>
+                        </form>
+                    {% else %}
+                        <a class="ac-sup-go" href="{{ s.url }}" aria-label="Abrir fornecedor"><i class="ti ti-chevron-right"></i></a>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+{% if can_update and available_suppliers is not empty %}
+<script>
+    (function () {
+        var btn = document.getElementById('ac-cs-link-open');
+        var form = document.getElementById('ac-cs-link');
+        if (btn && form) {
+            btn.addEventListener('click', function () {
+                form.hidden = !form.hidden;
+                if (!form.hidden) {
+                    var sel = form.querySelector('select');
+                    if (sel) { sel.focus(); }
+                }
+            });
+        }
+    })();
+</script>
+{% endif %}

@@ -1,0 +1,217 @@
+{# Contrato: novo / tela com abas no estilo de Fornecedores. #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div class="ac-app ac-pnew ac-pview ac-sup">
+    <a class="ac-pview-back" href="{{ back }}"><i class="ti ti-arrow-left"></i> Voltar para Contratos</a>
+
+    {% if is_new %}
+        <div class="ac-head">
+            <div>
+                <div class="ac-eyebrow">Ativa Central · Contratos</div>
+                <h1 class="ac-title">Novo contrato</h1>
+                <div class="ac-subtitle">Cadastre o contrato. Documentos, links, custos e itens você adiciona depois, dentro dele.</div>
+            </div>
+        </div>
+    {% else %}
+        <div class="ac-panel ac-pview-hero">
+            <div class="ac-pview-hero-main">
+                <div class="ac-pview-badges">
+                    {% if situation.label %}<span class="ac-pview-tag is-{{ situation.tone }}">{{ situation.label }}</span>{% endif %}
+                    {% if type_label %}<span class="ac-pview-tag is-state">{{ type_label }}</span>{% endif %}
+                    {% if state_label %}<span class="ac-pview-tag is-blue">{{ state_label }}</span>{% endif %}
+                </div>
+                <h1 class="ac-title">{{ title }}</h1>
+                <div class="ac-pview-meta">
+                    {% if header_num %}<span><i class="ti ti-hash"></i> Nº {{ header_num }}</span>{% endif %}
+                    {% if begin_text or end_text %}<span><i class="ti ti-calendar"></i> {{ begin_text ?: '—' }} → {{ end_text ?: '—' }}</span>{% endif %}
+                    {% for s in suppliers %}
+                        <a href="{{ s.url }}"><i class="ti ti-building-store"></i> {{ s.name }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    {% if error %}
+        <div class="ac-pnew-error"><i class="ti ti-alert-circle"></i> {{ error }}</div>
+    {% endif %}
+
+    <div class="{{ is_new ? '' : 'ac-pview-layout' }}">
+        {% if not is_new %}
+            <nav class="ac-panel ac-pview-nav">
+                {% for t in tabs %}
+                    <a href="{{ t.url }}" class="ac-pview-nav-item {{ t.active ? 'is-active' : '' }}">
+                        <i class="ti {{ t.icon }}"></i><span>{{ t.label }}</span>
+                        {% if t.count > 0 %}<b>{{ t.count }}</b>{% endif %}
+                    </a>
+                {% endfor %}
+            </nav>
+        {% endif %}
+
+        <div class="ac-pview-content">
+            {% if tab_url is defined %}
+                <div class="ac-panel ac-pview-glpi" id="ac-pview-tab" data-url="{{ tab_url }}">
+                    <div class="ac-pview-loading"><span class="spinner-border spinner-border-sm"></span> Carregando…</div>
+                </div>
+                <script>
+                    (function () {
+                        var box = document.getElementById('ac-pview-tab');
+                        $(box).load(box.getAttribute('data-url'), function (response, status) {
+                            if (status === 'error') {
+                                box.innerHTML = '<div class="ac-pnew-error"><i class="ti ti-alert-circle"></i> Não foi possível carregar esta aba. Atualize a página.</div>';
+                            }
+                        });
+                    })();
+                </script>
+            {% elseif tab == 'suppliers' %}
+                {% include '@ativacentral/contract_suppliers.html.twig' %}
+            {% else %}
+                <form method="post" action="{{ action }}" class="ac-pnew-form" autocomplete="off" id="ac-cr-main-form">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                    <input type="hidden" name="id" value="{{ id }}">
+                    <button type="submit" name="save" value="1" tabindex="-1" aria-hidden="true" style="position: absolute; left: -9999px; width: 1px; height: 1px;"></button>
+                    {% set ro = not can_update %}
+
+                    <section class="ac-panel ac-pnew-card">
+                        <h2 class="ac-pnew-title"><i class="ti ti-file-certificate"></i> Dados do contrato</h2>
+                        <label class="ac-pnew-field">
+                            <span class="ac-pnew-label">Nome <b>*</b></span>
+                            <input type="text" name="name" value="{{ f_name }}" class="ac-pnew-input" required maxlength="255" placeholder="Ex.: Suporte anual ERP" {{ ro ? 'readonly' : '' }}>
+                        </label>
+                        <div class="ac-pnew-dates">
+                            <label class="ac-pnew-field">
+                                <span class="ac-pnew-label">Número</span>
+                                <input type="text" name="num" value="{{ f_num }}" class="ac-pnew-input" maxlength="255" placeholder="Ex.: CT-2026-014" {{ ro ? 'readonly' : '' }}>
+                            </label>
+                            <label class="ac-pnew-field">
+                                <span class="ac-pnew-label">Número contábil</span>
+                                <input type="text" name="accounting_number" value="{{ f_accounting_number }}" class="ac-pnew-input" maxlength="255" placeholder="Opcional" {{ ro ? 'readonly' : '' }}>
+                            </label>
+                        </div>
+                        <div class="ac-pnew-dates">
+                            <div class="ac-pnew-field">
+                                <span class="ac-pnew-label">Tipo</span>
+                                <div class="ac-pnew-glpi">{{ types_html|raw }}</div>
+                            </div>
+                            <div class="ac-pnew-field">
+                                <span class="ac-pnew-label">Status</span>
+                                <div class="ac-pnew-glpi">{{ states_html|raw }}</div>
+                            </div>
+                        </div>
+                        <div class="ac-pnew-dates">
+                            <div class="ac-pnew-field">
+                                <span class="ac-pnew-label">Localização</span>
+                                <div class="ac-pnew-glpi">{{ locations_html|raw }}</div>
+                            </div>
+                            <div class="ac-pnew-field">
+                                <span class="ac-pnew-label">Fornecedor</span>
+                                {% if multi_suppliers %}
+                                    <div class="ac-cr-sup-summary">
+                                        {% for s in suppliers %}
+                                            <a href="{{ s.url }}" class="ac-ptask-type"><i class="ti ti-building-store"></i> {{ s.name }}</a>
+                                        {% endfor %}
+                                        <a href="{{ suppliers_tab_url }}" class="ac-cr-sup-manage">Gerenciar…</a>
+                                    </div>
+                                {% else %}
+                                    <div class="ac-pnew-glpi">{{ supplier_html|raw }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <h2 class="ac-pnew-title" style="margin-top: 6px;"><i class="ti ti-notes"></i> Observações</h2>
+                        <label class="ac-pnew-field">
+                            <span class="ac-pnew-label">Comentários</span>
+                            <textarea name="comment" rows="4" class="ac-pnew-input" placeholder="Escopo, SLA, condições de reajuste ou observações internas…" {{ ro ? 'readonly' : '' }}>{{ f_comment }}</textarea>
+                        </label>
+                    </section>
+
+                    <div class="ac-pnew-side">
+                        <section class="ac-panel ac-pnew-card">
+                            <h2 class="ac-pnew-title"><i class="ti ti-calendar-event"></i> Vigência e renovação</h2>
+                            <div class="ac-pnew-dates">
+                                <label class="ac-pnew-field">
+                                    <span class="ac-pnew-label">Data inicial</span>
+                                    <input type="date" name="begin_date" value="{{ f_begin_date }}" class="ac-pnew-input" {{ ro ? 'readonly' : '' }}>
+                                </label>
+                                <label class="ac-pnew-field">
+                                    <span class="ac-pnew-label">Duração (meses)</span>
+                                    <input type="number" name="duration" min="0" max="120" value="{{ f_duration }}" class="ac-pnew-input" {{ ro ? 'readonly' : '' }}>
+                                </label>
+                            </div>
+                            <div class="ac-pnew-hint" id="ac-cr-end"></div>
+                            <div class="ac-pnew-dates">
+                                <label class="ac-pnew-field">
+                                    <span class="ac-pnew-label">Periodicidade (meses)</span>
+                                    <input type="number" name="periodicity" min="0" max="60" value="{{ f_periodicity }}" class="ac-pnew-input" {{ ro ? 'readonly' : '' }}>
+                                </label>
+                                <label class="ac-pnew-field">
+                                    <span class="ac-pnew-label">Faturamento (meses)</span>
+                                    <input type="number" name="billing" min="0" max="60" value="{{ f_billing }}" class="ac-pnew-input" {{ ro ? 'readonly' : '' }}>
+                                </label>
+                            </div>
+                            <label class="ac-pnew-field">
+                                <span class="ac-pnew-label">Renovação</span>
+                                <select name="renewal" class="ac-pnew-input" {{ ro ? 'disabled' : '' }}>
+                                    {% for k, v in contract_renewals %}<option value="{{ k }}" {{ f_renewal == k ? 'selected' : '' }}>{{ v }}</option>{% endfor %}
+                                </select>
+                            </label>
+                        </section>
+
+                        <section class="ac-panel ac-pnew-card">
+                            <h2 class="ac-pnew-title"><i class="ti ti-bell"></i> Avisos e limites</h2>
+                            <div class="ac-pnew-dates">
+                                <label class="ac-pnew-field">
+                                    <span class="ac-pnew-label">Aviso prévio (meses)</span>
+                                    <input type="number" name="notice" min="0" max="120" value="{{ f_notice }}" class="ac-pnew-input" {{ ro ? 'readonly' : '' }}>
+                                </label>
+                                <label class="ac-pnew-field">
+                                    <span class="ac-pnew-label">Máx. de itens</span>
+                                    <input type="number" name="max_links_allowed" min="0" max="200000" value="{{ f_max_links_allowed }}" class="ac-pnew-input" title="0 = ilimitado" {{ ro ? 'readonly' : '' }}>
+                                </label>
+                            </div>
+                            <div class="ac-pnew-hint">Deixe "Máx. de itens" em 0 para não limitar.</div>
+                            <label class="ac-pnew-field">
+                                <span class="ac-pnew-label">Avisos por e-mail</span>
+                                <select name="alert" class="ac-pnew-input" {{ ro ? 'disabled' : '' }}>
+                                    {% for k, v in contract_alerts %}<option value="{{ k }}" {{ f_alert == k ? 'selected' : '' }}>{{ v }}</option>{% endfor %}
+                                </select>
+                            </label>
+                        </section>
+
+                        {% if can_update %}
+                            <div class="ac-pnew-submit">
+                                {% if can_delete %}
+                                    <button type="submit" name="delete" value="1" class="ac-btn ac-btn-danger" formnovalidate
+                                            onclick="return confirm('Mover este contrato para a lixeira?');">
+                                        <i class="ti ti-trash"></i> Excluir
+                                    </button>
+                                {% endif %}
+                                <a class="ac-btn" href="{{ back }}">Cancelar</a>
+                                <button type="submit" name="save" value="1" class="ac-btn is-primary">
+                                    <i class="ti ti-check"></i> {{ is_new ? 'Criar contrato' : 'Salvar alterações' }}
+                                </button>
+                            </div>
+                        {% endif %}
+                    </div>
+                </form>
+                <script>
+                    (function () {
+                        var form = document.getElementById('ac-cr-main-form');
+                        var endHint = document.getElementById('ac-cr-end');
+                        if (!form || !endHint) { return; }
+                        function updateEnd() {
+                            var begin = form.elements.begin_date ? form.elements.begin_date.value : '';
+                            var months = parseInt(form.elements.duration ? form.elements.duration.value : '0', 10) || 0;
+                            if (!begin || months <= 0) { endHint.textContent = ''; return; }
+                            var d = new Date(begin + 'T00:00:00');
+                            d.setMonth(d.getMonth() + months);
+                            endHint.textContent = 'Vigente até ' + d.toLocaleDateString('pt-BR') + '.';
+                        }
+                        if (form.elements.begin_date) { form.elements.begin_date.addEventListener('change', updateEnd); }
+                        if (form.elements.duration) { form.elements.duration.addEventListener('input', updateEnd); }
+                        updateEnd();
+                    })();
+                </script>
+            {% endif %}
+        </div>
+    </div>
+</div>

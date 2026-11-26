@@ -423,7 +423,10 @@ final class SupplierPage
             'WHERE'      => ['glpi_contracts_suppliers.suppliers_id' => (int) $supplier->getID(), 'glpi_contracts.is_deleted' => 0],
             'ORDER'      => 'glpi_contracts.begin_date DESC',
         ]) as $row) {
-            $item = self::contractRow($row, $types, $states, $locations, $renewals) + ['link_id' => (int) $row['link_id']];
+            $item = self::contractRow($row, $types, $states, $locations, $renewals) + [
+                'link_id' => (int) $row['link_id'],
+                'url'     => ContractPage::url((int) $row['id']),
+            ];
             $contracts[] = $item;
         }
 
@@ -439,14 +442,15 @@ final class SupplierPage
         }
 
         return [
-            'contracts'         => $contracts,
-            'existing'          => $existing,
-            'contract_types'    => $types,
-            'contract_states'   => $states,
+            'contracts'          => $contracts,
+            'existing'           => $existing,
+            'contract_types'     => $types,
+            'contract_states'    => $states,
             'contract_locations' => $locations,
-            'contract_renewals' => $renewals,
-            'contract_alerts'   => $alerts,
-            'can_contracts'     => \Contract::canCreate(),
+            'contract_renewals'  => $renewals,
+            'contract_alerts'    => $alerts,
+            'can_contracts'      => \Contract::canCreate(),
+            'new_contract_url'   => \Contract::canCreate() ? ContractPage::newUrl((int) $supplier->getID()) : '',
         ];
     }
 

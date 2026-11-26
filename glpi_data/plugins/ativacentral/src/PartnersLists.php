@@ -161,7 +161,10 @@ final class PartnersLists
         $contracts = [];
         foreach ($rows as $id => $row) {
             $contracts[] = SupplierPage::contractRow($row, $opt['types'], $opt['states'], $opt['locations'], $opt['renewals'])
-                + ['suppliers' => $suppliers[$id] ?? []];
+                + [
+                    'suppliers' => $suppliers[$id] ?? [],
+                    'url'       => ContractPage::url($id),
+                ];
         }
         // Vencidos e vencendo primeiro; depois por nome.
         $weight = ['red' => 0, 'orange' => 1, 'green' => 2, 'muted' => 3];
@@ -183,6 +186,7 @@ final class PartnersLists
                 'expired'  => $tones['red'] ?? 0,
             ],
             'can_create'         => Contract::canCreate(),
+            'new_url'            => Contract::canCreate() ? ContractPage::newUrl() : '',
             'action'             => self::contractsUrl(),
             'csrf'               => Session::getNewCSRFToken(),
             'edit_id'            => $editId,

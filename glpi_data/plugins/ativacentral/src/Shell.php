@@ -279,17 +279,24 @@ final class Shell
             $id = (int) ($_GET['id'] ?? 0);
             return DocumentsLibrary::url() . ($id > 0 ? '?edit=' . $id : '?new=1');
         }
-        // Contatos e contratos: listas novas (formulario abre a gaveta).
-        foreach (['contact' => [\Contact::class, PartnersLists::contactsUrl()], 'contract' => [\Contract::class, PartnersLists::contractsUrl()]] as $name => [$class, $list]) {
-            if (!$class::canView()) {
-                continue;
+        // Contatos: lista nova (formulario abre a gaveta).
+        if (\Contact::canView()) {
+            if (preg_match('#/front/contact\.php$#i', $path) === 1) {
+                return PartnersLists::contactsUrl();
             }
-            if (preg_match('#/front/' . $name . '\.php$#i', $path) === 1) {
-                return $list;
-            }
-            if (preg_match('#/front/' . $name . '\.form\.php$#i', $path) === 1) {
+            if (preg_match('#/front/contact\.form\.php$#i', $path) === 1) {
                 $id = (int) ($_GET['id'] ?? 0);
-                return $list . ($id > 0 ? '?edit=' . $id : '?new=1');
+                return PartnersLists::contactsUrl() . ($id > 0 ? '?edit=' . $id : '?new=1');
+            }
+        }
+        // Contratos: lista e ficha completa com abas (como Fornecedores).
+        if (\Contract::canView()) {
+            if (preg_match('#/front/contract\.php$#i', $path) === 1) {
+                return ContractPage::listUrl();
+            }
+            if (preg_match('#/front/contract\.form\.php$#i', $path) === 1) {
+                $id = (int) ($_GET['id'] ?? 0);
+                return $id > 0 ? ContractPage::url($id) : ContractPage::newUrl();
             }
         }
         if (!\Supplier::canView()) {
