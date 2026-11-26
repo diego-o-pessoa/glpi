@@ -996,14 +996,29 @@
 
         if (project.team && project.team.length) {
             var avatars = el('div', 'ac-avatars');
+            // Pessoa: iniciais que se abrem com o nome no hover. Grupo: nome inteiro.
             project.team.slice(0, 4).forEach(function (member, idx) {
-                var chip = el('span', 'ac-avatar-mini ' + TONES[idx % TONES.length], initials(member.name));
-                chip.title = member.name;
+                var tone = TONES[idx % TONES.length];
+                if (member.kind === 'group') {
+                    avatars.appendChild(el('span', 'ac-avatar-mini is-group ' + tone, member.name));
+                    return;
+                }
+                var chip = el('span', 'ac-avatar-mini is-person ' + tone);
+                chip.appendChild(el('span', 'ac-av-short', initials(member.name)));
+                chip.appendChild(el('span', 'ac-av-full', member.name));
                 avatars.appendChild(chip);
             });
             if (project.team.length > 4) {
+                // "+N": balao com as demais pessoas/grupos.
                 var more = el('span', 'ac-avatar-mini is-more', '+' + (project.team.length - 4));
-                more.title = project.team.slice(4).map(function (m) { return m.name; }).join(', ');
+                var pop = el('span', 'ac-av-pop');
+                project.team.slice(4).forEach(function (m) {
+                    var row = el('span', 'ac-av-pop-row');
+                    row.appendChild(el('span', 'ac-av-pop-ini', m.kind === 'group' ? 'G' : initials(m.name)));
+                    row.appendChild(document.createTextNode(m.name));
+                    pop.appendChild(row);
+                });
+                more.appendChild(pop);
                 avatars.appendChild(more);
             }
             meta.appendChild(avatars);

@@ -2038,3 +2038,110 @@ html[data-glpi-theme-dark="1"] .ac-tag.is-green { color: #67dfa9; }
         display: none;
     }
 }
+
+/* Equipe nos cartoes: nome ao passar o mouse e balao do "+N" */
+.ac-proj-card .ac-avatars {
+    position: relative;
+    z-index: 2; /* acima do link do cartao, para o hover funcionar */
+}
+
+.ac-avatar-mini.is-group {
+    display: inline-flex;
+    width: auto;
+    padding: 0 10px;
+    white-space: nowrap;
+}
+
+/* O nome abre por cima das outras bolinhas (sem empurrar o layout). */
+.ac-avatar-mini.is-person {
+    position: relative;
+}
+
+.ac-av-full {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    height: 100%;
+    max-width: 28px;
+    padding: 0 12px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: linear-gradient(rgba(var(--ac-tone-rgb), 0.14), rgba(var(--ac-tone-rgb), 0.14)), var(--ac-surface);
+    box-shadow: 0 8px 18px -10px rgba(16, 24, 40, 0.4);
+    color: var(--ac-tone);
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+    transition: max-width 0.3s var(--ac-ease, ease), opacity 0.15s;
+}
+
+.ac-avatar-mini.is-person:hover .ac-av-full {
+    max-width: 260px;
+    opacity: 1;
+}
+
+.ac-avatar-mini.is-more {
+    position: relative;
+    cursor: default;
+}
+
+.ac-av-pop {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 180px;
+    padding: 10px 12px;
+    border: 1px solid var(--ac-line);
+    border-radius: 12px;
+    background: var(--ac-surface);
+    box-shadow: 0 16px 34px -14px rgba(16, 24, 40, 0.35);
+    color: var(--ac-ink);
+    font-size: 12.5px;
+    font-weight: 600;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 4px);
+    transition: opacity 0.18s, transform 0.18s;
+    white-space: nowrap;
+}
+
+.ac-av-pop::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    border: 6px solid transparent;
+    border-top-color: var(--ac-surface);
+    transform: translateX(-50%);
+}
+
+.ac-avatar-mini.is-more:hover .ac-av-pop {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.ac-av-pop-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ac-av-pop-ini {
+    display: grid;
+    flex: 0 0 24px;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(74, 108, 247, 0.14);
+    color: #3c5ce8;
+    font-size: 10px;
+    font-weight: 800;
+}

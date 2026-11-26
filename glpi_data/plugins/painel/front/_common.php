@@ -661,7 +661,7 @@ if (!function_exists('painel_user_projects_data')) {
                 foreach ($entries as $e) {
                     $name = $e['type'] === 'User' ? ($uNames[$e['id']] ?? '') : ($gNames[$e['id']] ?? '');
                     if ($name !== '') {
-                        $teams[$pid][] = ['name' => $name];
+                        $teams[$pid][] = ['name' => $name, 'kind' => $e['type'] === 'Group' ? 'group' : 'user'];
                     }
                 }
             }
