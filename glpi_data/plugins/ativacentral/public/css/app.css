@@ -2467,3 +2467,7 @@ html[data-glpi-theme-dark="1"] .ac-tag.is-green { color: #67dfa9; }
 .ac-preal > div {
     min-width: 0;
 }
+
+.ac-ptask-duration .is-finished {
+    color: #167a4d;
+}

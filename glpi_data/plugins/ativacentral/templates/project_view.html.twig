@@ -35,8 +35,8 @@
                     <span>{{ t.start ?: '—' }} → {{ t.end ?: '—' }}</span>
                     {% if t.due == 'late' %}<small class="is-late">Atrasada</small>{% elseif t.due == 'soon' %}<small class="is-soon">Vence em breve</small>{% endif %}
                 </div>
-                <div class="ac-ptask-col ac-ptask-duration" title="Tempo que a tarefa levou até ser concluída">
-                    <span>{{ t.duration }}</span>
+                <div class="ac-ptask-col ac-ptask-duration" title="Data em que a tarefa foi concluída">
+                    <span class="{{ t.finished ? 'is-finished' : '' }}">{{ t.finished ?: '—' }}</span>
                 </div>
                 <div class="ac-ptask-col ac-ptask-team">
                     {% for mbr in t.members|slice(0, 3) %}
@@ -115,7 +115,7 @@
                         </div>
                     {% else %}
                         <div class="ac-ptask-headrow">
-                            <span>Tarefa</span><span>Status</span><span>Andamento</span><span>Prazo planejado</span><span>Duração</span><span>Equipe</span>
+                            <span>Tarefa</span><span>Status</span><span>Andamento</span><span>Prazo planejado</span><span>Concluída em</span><span>Equipe</span>
                         </div>
                         <div class="ac-ptask-list">{{ macros.task_rows(tasks, 0) }}</div>
                     {% endif %}

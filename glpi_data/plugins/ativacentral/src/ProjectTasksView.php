@@ -41,7 +41,7 @@ final class ProjectTasksView
         foreach ($DB->request([
             'SELECT' => [
                 'id', 'name', 'projecttasks_id', 'projecttasktypes_id', 'projectstates_id', 'percent_done',
-                'plan_start_date', 'plan_end_date', 'real_start_date', 'real_end_date', 'effective_duration', 'users_id',
+                'plan_start_date', 'plan_end_date', 'real_start_date', 'real_end_date', 'users_id',
             ],
             'FROM'   => 'glpi_projecttasks',
             'WHERE'  => ['projects_id' => $projectId, 'is_deleted' => 0, 'is_template' => 0],
@@ -90,7 +90,9 @@ final class ProjectTasksView
                 'start'     => self::date((string) ($row['plan_start_date'] ?? '')),
                 'end'       => self::date((string) ($row['plan_end_date'] ?? '')),
                 'due'       => ($end !== '' && !$done && $kind !== 'cancelled') ? ($end < $today ? 'late' : ($end <= $soon ? 'soon' : '')) : '',
-                'duration'  => $done ? self::duration($row) : '—',
+                // Data em que terminou (fim real); principal: a ultima tarefa dela.
+                'done_raw'  => $done && !empty($row['real_end_date']) ? (string) $row['real_end_date'] : '',
+                'finished'  => $done && !empty($row['real_end_date']) ? date('d/m/Y', strtotime((string) $row['real_end_date'])) : '',
                 'members'   => array_map(static fn (string $n): array => ['name' => $n, 'initials' => self::initials($n)], $members),
                 'children'  => [],
                 'leaf_total' => 0,
@@ -139,14 +141,26 @@ final class ProjectTasksView
             $node['leaf_done'] = $node['kind'] === 'done' ? 1 : 0;
             return;
         }
+        $last = '';
         foreach ($node['children'] as &$child) {
             self::countLeaves($child);
             if ($node['kind'] !== 'cancelled') {
                 $node['leaf_total'] += $child['leaf_total'];
                 $node['leaf_done'] += $child['leaf_done'];
             }
+            if ($child['done_raw'] > $last) {
+                $last = $child['done_raw'];
+            }
         }
         unset($child);
+        // Principal com tudo concluido: sem aviso de prazo e com a data da ultima.
+        if ($node['leaf_total'] > 0 && $node['leaf_done'] === $node['leaf_total']) {
+            $node['due'] = '';
+            if ($node['finished'] === '' && $last !== '') {
+                $node['done_raw'] = $last;
+                $node['finished'] = date('d/m/Y', strtotime($last));
+            }
+        }
     }
 
     private static function kind(?array $state): string
@@ -207,19 +221,6 @@ final class ProjectTasksView
         $first = mb_substr($parts[0] ?? '', 0, 1);
         $last = count($parts) > 1 ? mb_substr((string) end($parts), 0, 1) : '';
         return mb_strtoupper($first . $last) ?: '?';
-    }
-
-    /**
-     * Quanto a tarefa levou: o tempo efetivo registrado no GLPI; sem ele,
-     * do inicio real ao fim real.
-     */
-    private static function duration(array $row): string
-    {
-        $seconds = (int) $row['effective_duration'];
-        if ($seconds <= 0 && !empty($row['real_start_date']) && !empty($row['real_end_date'])) {
-            $seconds = max(0, strtotime((string) $row['real_end_date']) - strtotime((string) $row['real_start_date']));
-        }
-        return $seconds > 0 ? Html::timestampToString($seconds, false) : '—';
     }
 
     private static function date(string $value): string
