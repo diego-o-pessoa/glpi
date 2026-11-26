@@ -757,6 +757,13 @@
         var urls = data.urls || {};
 
         var actions = el('div', 'ac-actions');
+        if (urls.templates) {
+            // So o T.I. ve: atalho para os modelos de tarefa.
+            var templates = anchor(urls.templates, 'ac-btn');
+            templates.appendChild(icon('ti-template'));
+            templates.appendChild(document.createTextNode('Modelos de tarefa'));
+            actions.appendChild(templates);
+        }
         if (data.can && data.can.tasks && urls.my_tasks) {
             var myTasks = anchor(urls.my_tasks, 'ac-btn');
             myTasks.appendChild(icon('ti-checklist'));

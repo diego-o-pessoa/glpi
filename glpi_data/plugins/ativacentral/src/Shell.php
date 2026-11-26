@@ -76,6 +76,10 @@ final class Shell
             // pagina manda o navegador para la antes de desenhar qualquer coisa.
             $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::url('/front/home.php')]];
             $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
+        } elseif (self::nativeTaskUrl() !== '') {
+            // Formulario nativo da tarefa: vai para a tela simplificada.
+            $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::nativeTaskUrl()]];
+            $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
         } elseif (self::nativeProjectId() > 0) {
             // Formulario nativo do projeto: vai para a tela nova (classic=1 mantem o GLPI).
             $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . ProjectPage::url(self::nativeProjectId())]];
@@ -252,6 +256,22 @@ final class Shell
             return 0;
         }
         return max(0, (int) ($_GET['id'] ?? 0));
+    }
+
+    /** Tela nova para project task.form.php?id=N ou ?projects_id=N (classic=1 mantem o GLPI). */
+    private static function nativeTaskUrl(): string
+    {
+        $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+        if (preg_match('#/front/projecttask\.form\.php$#i', $path) !== 1 || isset($_GET['classic']) || isset($_GET['embed'])) {
+            return '';
+        }
+        if ((int) ($_GET['id'] ?? 0) > 0) {
+            return TaskForm::editUrl((int) $_GET['id']);
+        }
+        if ((int) ($_GET['projects_id'] ?? 0) > 0) {
+            return TaskForm::newUrl((int) $_GET['projects_id']);
+        }
+        return '';
     }
 
     private static function forceVerticalLayout(): void

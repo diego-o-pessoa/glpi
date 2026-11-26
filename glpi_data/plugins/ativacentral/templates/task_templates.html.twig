@@ -1,0 +1,96 @@
+{# "Modelos de tarefa": lista e edicao (so T.I.). #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div class="ac-app ac-pnew ac-tpls">
+    <div class="ac-head">
+        <div>
+            <div class="ac-eyebrow">Ativa Central · Projetos</div>
+            <h1 class="ac-title">Modelos de tarefa</h1>
+            <div class="ac-subtitle">Modelos prontos que o gestor escolhe ao criar uma tarefa e só ajusta o necessário.</div>
+        </div>
+        <div class="ac-actions">
+            <a class="ac-btn" href="{{ back }}"><i class="ti ti-arrow-left"></i> Projetos</a>
+            {% if not editing %}
+                <a class="ac-btn is-primary" href="{{ url }}?new=1"><i class="ti ti-plus"></i> Novo modelo</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="ac-pnew-error"><i class="ti ti-alert-circle"></i> {{ error }}</div>
+    {% endif %}
+
+    {% if editing %}
+        <form method="post" action="{{ url }}" class="ac-pnew-form" autocomplete="off">
+            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+            <input type="hidden" name="id" value="{{ tpl.id }}">
+            <section class="ac-panel ac-pnew-card">
+                <h2 class="ac-pnew-title"><i class="ti ti-template"></i> {{ tpl.id ? 'Editar modelo' : 'Novo modelo' }}</h2>
+                <label class="ac-pnew-field">
+                    <span class="ac-pnew-label">Nome <b>*</b></span>
+                    <input type="text" name="name" value="{{ tpl.name }}" class="ac-pnew-input" required maxlength="255" placeholder="Ex.: Planejamento" autofocus>
+                </label>
+                <div class="ac-pnew-field">
+                    <span class="ac-pnew-label">Este modelo é</span>
+                    <div class="ac-tkind">
+                        <label class="ac-tkind-opt">
+                            <input type="radio" name="tpl_kind" value="phase" {{ tpl.is_phase ? 'checked' : '' }}>
+                            <span><i class="ti ti-folder"></i> <b>Uma fase</b><small>Agrupa tarefas</small></span>
+                        </label>
+                        <label class="ac-tkind-opt">
+                            <input type="radio" name="tpl_kind" value="task" {{ tpl.is_phase ? '' : 'checked' }}>
+                            <span><i class="ti ti-checkbox"></i> <b>Uma tarefa</b><small>Fica dentro de uma fase</small></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="ac-pnew-field" id="ac-tpl-type" {{ tpl.is_phase ? 'hidden' : '' }}>
+                    <span class="ac-pnew-label">Tipo da tarefa</span>
+                    <div class="ac-pnew-glpi">{{ type_html|raw }}</div>
+                </div>
+                <div class="ac-pnew-field">
+                    <span class="ac-pnew-label">Descrição padrão</span>
+                    <div class="ac-pnew-glpi ac-pnew-editor">{{ desc_html|raw }}</div>
+                    <div class="ac-pnew-hint">Dica: use uma lista com os passos (vira um checklist na tarefa).</div>
+                </div>
+            </section>
+            <div class="ac-pnew-side">
+                <div class="ac-pnew-submit">
+                    {% if tpl.id %}
+                        <button type="submit" name="delete" value="1" class="ac-btn ac-btn-danger" formnovalidate
+                                onclick="return confirm('Excluir este modelo? As tarefas já criadas com ele não mudam.');">
+                            <i class="ti ti-trash"></i> Excluir
+                        </button>
+                    {% endif %}
+                    <a class="ac-btn" href="{{ url }}">Cancelar</a>
+                    <button type="submit" name="save" value="1" class="ac-btn is-primary"><i class="ti ti-check"></i> Salvar modelo</button>
+                </div>
+            </div>
+        </form>
+        <script>
+            document.querySelectorAll('input[name="tpl_kind"]').forEach(function (r) {
+                r.addEventListener('change', function () {
+                    document.getElementById('ac-tpl-type').hidden = r.value === 'phase' && r.checked;
+                });
+            });
+        </script>
+    {% else %}
+        {% if templates is empty %}
+            <div class="ac-panel ac-ptasks-empty">
+                <i class="ti ti-template"></i>
+                <b>Nenhum modelo ainda</b>
+                <span>Crie o primeiro em "Novo modelo".</span>
+            </div>
+        {% else %}
+            <div class="ac-tpl-grid is-page">
+                {% for t in templates %}
+                    <a class="ac-tpl-card" href="{{ url }}?edit={{ t.id }}">
+                        <span class="ac-tpl-icon {{ t.is_phase ? 'is-phase' : '' }}"><i class="ti {{ t.is_phase ? 'ti-folder' : 'ti-checkbox' }}"></i></span>
+                        <b>{{ t.name }}</b>
+                        <small>{{ t.is_phase ? 'Fase' : (t.type ?: 'Tarefa') }}</small>
+                        {% if t.summary %}<small class="ac-tpl-summary">{{ t.summary }}</small>{% endif %}
+                        <span class="ac-tpl-edit"><i class="ti ti-pencil"></i> Editar</span>
+                    </a>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endif %}
+</div>

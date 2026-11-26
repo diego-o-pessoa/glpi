@@ -20,6 +20,7 @@ $data = Projects::dashboard();
 $data['urls'] = [
     'data'     => Shell::url('/front/projects.data.php'),
     'new'      => Session::haveRight(Project::$rightname, CREATE) ? Shell::url('/front/project.new.php') : '',
+    'templates' => GlpiPlugin\Ativacentral\TaskTemplates::canManage() ? GlpiPlugin\Ativacentral\TaskTemplates::url() : '',
     'my_tasks' => ProjectTask::canView() ? Shell::glpiUrl(ProjectTask::getMyTasksURL(false)) : '',
 ];
 

@@ -1,0 +1,214 @@
+{# Tela simplificada de tarefa do projeto (criar e editar). #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div class="ac-app ac-pnew ac-tform">
+    <div class="ac-head">
+        <div>
+            <div class="ac-eyebrow">Projeto · {{ project_name }}</div>
+            <h1 class="ac-title">{{ is_new ? 'Nova tarefa' : name }}</h1>
+            <div class="ac-subtitle">
+                {{ is_new ? 'Escolha um modelo ou comece em branco. O andamento é calculado sozinho.' : 'Edite a tarefa e marque o status. O andamento do projeto é calculado sozinho.' }}
+            </div>
+        </div>
+        <div class="ac-actions">
+            {% if templates_url %}
+                <a class="ac-btn" href="{{ templates_url }}"><i class="ti ti-template"></i> Modelos de tarefa</a>
+            {% endif %}
+            <a class="ac-btn" href="{{ back }}"><i class="ti ti-arrow-left"></i> Voltar</a>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="ac-pnew-error"><i class="ti ti-alert-circle"></i> {{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="{{ action }}" class="ac-tform-form" autocomplete="off" id="ac-tform">
+        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+        <input type="hidden" name="projecttasktemplates_id" value="{{ template_id }}" id="ac-tpl-id">
+
+        {% if is_new %}
+            <section class="ac-panel ac-pnew-card">
+                <h2 class="ac-pnew-title"><i class="ti ti-template"></i> Começar a partir de um modelo</h2>
+                <div class="ac-tpl-grid">
+                    <button type="button" class="ac-tpl-card {{ template_id == 0 ? 'is-active' : '' }}" data-tpl="0">
+                        <span class="ac-tpl-icon"><i class="ti ti-file-plus"></i></span>
+                        <b>Em branco</b>
+                        <small>Preencha tudo do zero.</small>
+                    </button>
+                    {% for tpl in templates %}
+                        <button type="button" class="ac-tpl-card {{ template_id == tpl.id ? 'is-active' : '' }}" data-tpl="{{ tpl.id }}">
+                            <span class="ac-tpl-icon {{ tpl.is_phase ? 'is-phase' : '' }}"><i class="ti {{ tpl.is_phase ? 'ti-folder' : 'ti-checkbox' }}"></i></span>
+                            <b>{{ tpl.name }}</b>
+                            <small>{{ tpl.is_phase ? 'Fase' : (tpl.type ?: 'Tarefa') }}{{ tpl.summary ? ' · ' ~ tpl.summary : '' }}</small>
+                        </button>
+                    {% endfor %}
+                </div>
+                <script type="application/json" id="ac-tpl-data">{{ templates|json_encode|raw }}</script>
+            </section>
+        {% endif %}
+
+        <div class="ac-pnew-form">
+            <section class="ac-panel ac-pnew-card">
+                <h2 class="ac-pnew-title"><i class="ti ti-clipboard-text"></i> Sobre a tarefa</h2>
+
+                <div class="ac-pnew-field">
+                    <span class="ac-pnew-label">Esta tarefa é</span>
+                    <div class="ac-tkind">
+                        <label class="ac-tkind-opt">
+                            <input type="radio" name="task_kind" value="phase" {{ kind == 'phase' ? 'checked' : '' }}>
+                            <span><i class="ti ti-folder"></i> <b>Uma fase</b><small>Agrupa tarefas (ex.: Planejamento)</small></span>
+                        </label>
+                        <label class="ac-tkind-opt {{ phases is empty ? 'is-disabled' : '' }}">
+                            <input type="radio" name="task_kind" value="task" {{ kind == 'task' ? 'checked' : '' }} {{ phases is empty ? 'disabled' : '' }}>
+                            <span><i class="ti ti-checkbox"></i> <b>Tarefa de uma fase</b><small>{{ phases is empty ? 'Crie uma fase primeiro' : 'Fica dentro de uma fase' }}</small></span>
+                        </label>
+                    </div>
+                </div>
+
+                <label class="ac-pnew-field" id="ac-phase-field" {{ kind != 'task' ? 'hidden' : '' }}>
+                    <span class="ac-pnew-label">Fase <b>*</b></span>
+                    <select name="projecttasks_id" class="ac-pnew-input">
+                        <option value="0">Escolha a fase…</option>
+                        {% for pid, pname in phases %}
+                            <option value="{{ pid }}" {{ pid == parent ? 'selected' : '' }}>{{ pname }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label class="ac-pnew-field">
+                    <span class="ac-pnew-label">Nome <b>*</b></span>
+                    <input type="text" name="name" id="ac-task-name" value="{{ name }}" class="ac-pnew-input" required maxlength="255" placeholder="Ex.: Liberar acesso ao banco de dados">
+                </label>
+
+                <div class="ac-pnew-field">
+                    <span class="ac-pnew-label">Tipo</span>
+                    <div class="ac-pnew-glpi">{{ type_html|raw }}</div>
+                </div>
+
+                <div class="ac-pnew-field">
+                    <span class="ac-pnew-label">Descrição</span>
+                    <div class="ac-pnew-glpi ac-pnew-editor">{{ content_html|raw }}</div>
+                </div>
+            </section>
+
+            <div class="ac-pnew-side">
+                {% if not is_new %}
+                    <section class="ac-panel ac-pnew-card">
+                        <h2 class="ac-pnew-title"><i class="ti ti-progress-check"></i> Status</h2>
+                        <div class="ac-tstatus">
+                            {% for key, st in statuses %}
+                                <label class="ac-tstatus-opt is-{{ key }}">
+                                    <input type="radio" name="status" value="{{ key }}" {{ key == status ? 'checked' : '' }}>
+                                    <span><i class="ti {{ st[1] }}"></i> {{ st[0] }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                    </section>
+                {% endif %}
+
+                <section class="ac-panel ac-pnew-card">
+                    <h2 class="ac-pnew-title"><i class="ti ti-calendar"></i> Prazo planejado</h2>
+                    <div class="ac-pnew-dates">
+                        <label class="ac-pnew-field">
+                            <span class="ac-pnew-label">Início</span>
+                            <input type="date" name="plan_start_date" value="{{ start }}" class="ac-pnew-input">
+                        </label>
+                        <label class="ac-pnew-field">
+                            <span class="ac-pnew-label">Fim</span>
+                            <input type="date" name="plan_end_date" value="{{ end }}" class="ac-pnew-input">
+                        </label>
+                    </div>
+                </section>
+
+                <section class="ac-panel ac-pnew-card">
+                    <h2 class="ac-pnew-title"><i class="ti ti-users"></i> Equipe da tarefa</h2>
+                    {% if team is not empty %}
+                        <div class="ac-pnew-hint">Equipe do projeto: marque quem participa desta tarefa.</div>
+                        <div class="ac-tteam">
+                            {% for m in team %}
+                                <label class="ac-tteam-chip">
+                                    <input type="checkbox" name="team[]" value="{{ m.key }}" {{ m.checked ? 'checked' : '' }}>
+                                    <span>
+                                        <i class="ac-tteam-av {{ m.type == 'Group' ? 'is-group' : '' }}">{% if m.type == 'Group' %}<i class="ti ti-users-group"></i>{% else %}{{ m.initials }}{% endif %}</i>
+                                        {{ m.name }}
+                                        <i class="ti ti-check ac-tteam-check"></i>
+                                    </span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="ac-pnew-hint">O projeto ainda não tem equipe. Adicione pessoas ou grupos abaixo.</div>
+                    {% endif %}
+                    <details class="ac-tteam-more">
+                        <summary><i class="ti ti-user-plus"></i> Adicionar outras pessoas ou grupos</summary>
+                        <div class="ac-pnew-field">
+                            <span class="ac-pnew-label">Pessoas</span>
+                            <div class="ac-pnew-glpi">{{ users_html|raw }}</div>
+                        </div>
+                        <div class="ac-pnew-field">
+                            <span class="ac-pnew-label">Grupos</span>
+                            <div class="ac-pnew-glpi">{{ groups_html|raw }}</div>
+                        </div>
+                    </details>
+                </section>
+
+                {% if can_save %}
+                    <div class="ac-pnew-submit">
+                        {% if can_delete %}
+                            <button type="submit" name="delete" value="1" class="ac-btn ac-btn-danger" formnovalidate
+                                    onclick="return confirm('Mover esta tarefa para a lixeira?');">
+                                <i class="ti ti-trash"></i> Excluir
+                            </button>
+                        {% endif %}
+                        <a class="ac-btn" href="{{ back }}">Cancelar</a>
+                        <button type="submit" name="save" value="1" class="ac-btn is-primary">
+                            <i class="ti ti-check"></i> {{ is_new ? 'Criar tarefa' : 'Salvar alterações' }}
+                        </button>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </form>
+</div>
+<script>
+    (function () {
+        var form = document.getElementById('ac-tform');
+        var phaseField = document.getElementById('ac-phase-field');
+        function syncKind() {
+            var checked = form.querySelector('input[name="task_kind"]:checked');
+            phaseField.hidden = !checked || checked.value !== 'task';
+        }
+        form.querySelectorAll('input[name="task_kind"]').forEach(function (r) { r.addEventListener('change', syncKind); });
+        syncKind();
+
+        // Modelos: preenche o formulario com o modelo escolhido.
+        var dataEl = document.getElementById('ac-tpl-data');
+        if (!dataEl) { return; }
+        var templates = {};
+        JSON.parse(dataEl.textContent || '[]').forEach(function (t) { templates[t.id] = t; });
+        var nameInput = document.getElementById('ac-task-name');
+        form.querySelectorAll('.ac-tpl-card').forEach(function (card) {
+            card.addEventListener('click', function () {
+                var tpl = templates[card.getAttribute('data-tpl')] || null;
+                form.querySelectorAll('.ac-tpl-card').forEach(function (c) { c.classList.toggle('is-active', c === card); });
+                document.getElementById('ac-tpl-id').value = tpl ? tpl.id : 0;
+                nameInput.value = tpl ? tpl.name : '';
+                var kind = form.querySelector('input[name="task_kind"][value="' + (tpl && !tpl.is_phase ? 'task' : 'phase') + '"]');
+                if (kind && !kind.disabled) { kind.checked = true; }
+                syncKind();
+                var type = $('select[name="projecttasktypes_id"]');
+                if (tpl && tpl.type_id > 0) {
+                    if (!type.find('option[value="' + tpl.type_id + '"]').length) {
+                        type.append(new Option(tpl.type, tpl.type_id, true, true));
+                    }
+                    type.val(String(tpl.type_id)).trigger('change');
+                } else {
+                    type.val('0').trigger('change');
+                }
+                if (window.tinymce && tinymce.get('ac_task_content')) {
+                    tinymce.get('ac_task_content').setContent(tpl ? tpl.description : '');
+                }
+                nameInput.focus();
+            });
+        });
+    })();
+</script>

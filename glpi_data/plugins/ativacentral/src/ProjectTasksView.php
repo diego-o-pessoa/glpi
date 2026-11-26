@@ -82,7 +82,7 @@ final class ProjectTasksView
                 'id'        => $id,
                 'parent'    => (int) $row['projecttasks_id'],
                 'name'      => (string) ($row['name'] ?: 'Tarefa #' . $id),
-                'url'       => ProjectTask::getFormURLWithID($id),
+                'url'       => TaskForm::editUrl($id),
                 'type'      => $types[(int) $row['projecttasktypes_id']] ?? '',
                 'kind'      => $kind,
                 'state'     => $state !== null ? (self::KIND_LABELS[$kind] ?? $state['name']) : 'Não iniciada',
@@ -127,7 +127,7 @@ final class ProjectTasksView
             'tasks'          => $roots,
             'tasks_total'    => $total,
             'tasks_done'     => $doneCount,
-            'add_task_url'   => $canAdd ? ProjectTask::getFormURL() . '?projects_id=' . $projectId : '',
+            'add_task_url'   => $canAdd ? TaskForm::newUrl($projectId) : '',
         ];
     }
 

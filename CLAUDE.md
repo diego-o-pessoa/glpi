@@ -25,7 +25,7 @@ GLPI 11 (PHP 8.2+, Symfony, Twig) da Ativa Locação com plugins próprios
 
 | Plugin | Papel |
 |---|---|
-| ativacentral | Visual novo do GLPI (shell, menu, home); CSS/JS em todas as páginas |
+| ativacentral | Visual novo do GLPI (shell, menu, home); CSS/JS em todas as páginas. Projetos no Super-Admin: lista (`front/projects.php`), novo projeto (`project.new.php`), tela do projeto (`project.view.php`), tarefa (`task.form.php`) e modelos de tarefa (`task.templates.php`, só T.I.); `src/Shell.php` redireciona os formulários nativos para essas telas (`?classic=1` mantém o GLPI) |
 | ativaupdater | Distribui o instalador unificado; serviço Windows `client/unified_updater_service.py` (versão em `UPDATER_VERSION`); limite de downloads em `src/DownloadSlots.php` |
 | ativaremote | Acesso remoto (RustDesk): painel, API dos computadores (`/api/v1/report`), celulares (`/api/v1/mobile/*`) e app do T.I. (`/api/v1/tech/*`, `src/Controller/TechController.php`, `src/TechSessions.php`); servidor próprio em `src/RendezvousConfig.php` |
 | ativawallpaper | Papel de parede + **instalador unificado** em `deployment/unified-installer/` (Inno Setup `.iss`, `build-unified-installer.ps1`, `unified-version.txt`) e cliente em `client/` |
@@ -36,7 +36,7 @@ GLPI 11 (PHP 8.2+, Symfony, Twig) da Ativa Locação com plugins próprios
 | ativaprint | Impressoras, insumos e volumetria |
 | ativasplash | Tela de login |
 
-`glpisaml*`, `painel`, `primeiroacesso` não são plugins Ativa: não mexer sem pedido.
+`glpisaml*`, `primeiroacesso` não são plugins Ativa: não mexer sem pedido. `painel` = portal Self-Service (chamados e projetos); o andamento automático dos projetos fica em `painel/inc/progress.php` (hooks de ProjectTask).
 
 Padrões dos plugins: `setup.php` (versão, hooks, rotas stateless em
 `plugin_<nome>_boot`), `hook.php` (install), `src/` (namespace
