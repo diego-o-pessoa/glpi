@@ -37,15 +37,17 @@ function open(item) {
         if (item) { el.value = item[f] == null ? '' : item[f]; }
         else { el.value = (cfg.defaults && f in cfg.defaults) ? cfg.defaults[f] : (el.tagName === 'SELECT' ? (el.options[0] ? el.options[0].value : '') : ''); }
     });
-    if (form.elements.suppliers_id) { form.elements.suppliers_id.value = '0'; }
+    // Fornecedor: ja vem marcado o que esta ligado; outros (se houver mais de um) aparecem abaixo.
+    var sups = item ? item.suppliers : [];
+    if (form.elements.suppliers_id) { form.elements.suppliers_id.value = sups.length ? String(sups[0].id) : '0'; }
     var linked = document.getElementById(p + '-suppliers');
     if (linked) {
         linked.innerHTML = '';
-        (item ? item.suppliers : []).forEach(function (s) {
+        sups.slice(1).forEach(function (s) {
             var a = document.createElement('a');
             a.className = 'ac-dl-link';
             a.href = s.url;
-            a.textContent = 'Fornecedor: ' + s.name;
+            a.textContent = 'Também em: ' + s.name;
             linked.appendChild(a);
         });
     }

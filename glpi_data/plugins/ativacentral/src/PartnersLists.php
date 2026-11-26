@@ -39,7 +39,7 @@ final class PartnersLists
             'INNER JOIN' => ['glpi_suppliers' => ['ON' => [$table => 'suppliers_id', 'glpi_suppliers' => 'id']]],
             'WHERE'      => ["$table.$field" => $ids, 'glpi_suppliers.is_deleted' => 0],
         ]) as $row) {
-            $out[(int) $row[$field]][] = ['name' => (string) $row['name'], 'url' => SupplierPage::url((int) $row['id'])];
+            $out[(int) $row[$field]][] = ['id' => (int) $row['id'], 'name' => (string) $row['name'], 'url' => SupplierPage::url((int) $row['id'])];
         }
         return $out;
     }
@@ -137,10 +137,7 @@ final class PartnersLists
             throw new \InvalidArgumentException('Ação inválida.');
         }
         [$id, $created] = SupplierPage::saveContact($post, (int) ($_SESSION['glpiactive_entity'] ?? 0));
-        $supplierId = (int) ($post['suppliers_id'] ?? 0);
-        if ($supplierId > 0 && countElementsInTable('glpi_contacts_suppliers', ['suppliers_id' => $supplierId, 'contacts_id' => $id]) === 0) {
-            (new \Contact_Supplier())->add(['suppliers_id' => $supplierId, 'contacts_id' => $id]);
-        }
+        self::syncSupplier('glpi_contacts_suppliers', 'contacts_id', \Contact_Supplier::class, $id, (int) ($post['suppliers_id'] ?? 0));
         return $created ? 'Contato criado.' : 'Contato salvo.';
     }
 
@@ -211,11 +208,28 @@ final class PartnersLists
             throw new \InvalidArgumentException('Ação inválida.');
         }
         [$id, $created] = SupplierPage::saveContract($post, (int) ($_SESSION['glpiactive_entity'] ?? 0));
-        $supplierId = (int) ($post['suppliers_id'] ?? 0);
-        if ($supplierId > 0 && countElementsInTable('glpi_contracts_suppliers', ['suppliers_id' => $supplierId, 'contracts_id' => $id]) === 0) {
-            (new \Contract_Supplier())->add(['suppliers_id' => $supplierId, 'contracts_id' => $id]);
-        }
+        self::syncSupplier('glpi_contracts_suppliers', 'contracts_id', \Contract_Supplier::class, $id, (int) ($post['suppliers_id'] ?? 0));
         return $created ? 'Contrato criado.' : 'Contrato salvo.';
+    }
+
+    /**
+     * Campo "Fornecedor" (um so): com um unico fornecedor ligado, trocar ou
+     * escolher "Nenhum" substitui o vinculo; com varios, so acrescenta.
+     */
+    private static function syncSupplier(string $table, string $field, string $linkClass, int $id, int $supplierId): void
+    {
+        global $DB;
+        $links = [];
+        foreach ($DB->request(['SELECT' => ['id', 'suppliers_id'], 'FROM' => $table, 'WHERE' => [$field => $id]]) as $row) {
+            $links[(int) $row['suppliers_id']] = (int) $row['id'];
+        }
+        $link = new $linkClass();
+        if (count($links) === 1 && !isset($links[$supplierId])) {
+            $link->delete(['id' => reset($links)], true);
+        }
+        if ($supplierId > 0 && !isset($links[$supplierId])) {
+            $link->add(['suppliers_id' => $supplierId, $field => $id]);
+        }
     }
 
     private static function initials(string $name): string

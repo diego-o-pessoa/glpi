@@ -83,7 +83,7 @@
                 {% include '@ativacentral/_contract_fields.html.twig' %}
                 <h3 class="ac-cr-sub"><i class="ti ti-building-store"></i> Fornecedor</h3>
                 <select name="suppliers_id" class="ac-pnew-input">
-                    <option value="0">— nenhum / manter como está —</option>
+                    <option value="0">Nenhum</option>
                     {% for k, v in suppliers %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
                 </select>
                 <div class="ac-dl-linked" id="ac-cr-suppliers"></div>
