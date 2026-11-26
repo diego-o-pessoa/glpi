@@ -97,6 +97,9 @@ final class DocumentsLibrary
             ],
             'can_create'  => Document::canCreate(),
             'can_new_category' => \DocumentCategory::canCreate(),
+            'category_list'    => self::categoryList(),
+            'can_manage_categories' => \DocumentCategory::canCreate() || \DocumentCategory::canUpdate(),
+            'open_categories'  => isset($_GET['categories']),
             'action'      => self::url(),
             'csrf'        => Session::getNewCSRFToken(),
             'max_mb'      => (int) ($CFG_GLPI['document_max_size'] ?? 2),
@@ -114,6 +117,9 @@ final class DocumentsLibrary
     public static function handle(array $post, array $files): string
     {
         $action = (string) ($post['doc_action'] ?? '');
+        if (str_starts_with($action, 'cat_')) {
+            return self::categoryAction($action, $post);
+        }
         $doc = new Document();
         $id = (int) ($post['documents_id'] ?? 0);
 
@@ -167,6 +173,86 @@ final class DocumentsLibrary
             throw new \InvalidArgumentException('Nenhum arquivo foi aceito (confira o tipo do arquivo).');
         }
         return $added === 1 ? 'Documento adicionado.' : $added . ' documentos adicionados.';
+    }
+
+    /**
+     * Categorias: adicionar, editar (nome e "pertence a") e remover.
+     *
+     * @throws \InvalidArgumentException
+     */
+    private static function categoryAction(string $action, array $post): string
+    {
+        global $DB;
+        $category = new \DocumentCategory();
+        $id = (int) ($post['category_id'] ?? 0);
+        $name = trim((string) ($post['category_name'] ?? ''));
+        $parent = max(0, (int) ($post['category_parent'] ?? 0));
+
+        if ($action === 'cat_delete') {
+            if (!$category->can($id, PURGE)) {
+                throw new \InvalidArgumentException('Sem permissão para remover esta categoria.');
+            }
+            $parentOfDeleted = (int) $category->fields['documentcategories_id'];
+            // Documentos ficam sem categoria; subcategorias sobem um nivel.
+            $DB->update('glpi_documents', ['documentcategories_id' => 0], ['documentcategories_id' => $id]);
+            foreach ($DB->request(['SELECT' => ['id'], 'FROM' => 'glpi_documentcategories', 'WHERE' => ['documentcategories_id' => $id]]) as $child) {
+                (new \DocumentCategory())->update(['id' => (int) $child['id'], 'documentcategories_id' => $parentOfDeleted]);
+            }
+            $category->delete(['id' => $id], true);
+            return 'Categoria removida.';
+        }
+
+        if ($name === '') {
+            throw new \InvalidArgumentException('Dê um nome à categoria.');
+        }
+        if ($action === 'cat_add') {
+            if (!\DocumentCategory::canCreate()) {
+                throw new \InvalidArgumentException('Sem permissão para criar categorias.');
+            }
+            if ((int) $category->add(['name' => $name, 'documentcategories_id' => $parent]) <= 0) {
+                throw new \InvalidArgumentException('Não foi possível criar a categoria.');
+            }
+            return 'Categoria criada.';
+        }
+        if ($action === 'cat_save') {
+            if (!$category->can($id, UPDATE)) {
+                throw new \InvalidArgumentException('Sem permissão para editar esta categoria.');
+            }
+            // Nao pode pertencer a ela mesma nem a uma filha dela.
+            if ($parent === $id || in_array($parent, array_map('intval', array_keys(getSonsOf('glpi_documentcategories', $id))), true)) {
+                throw new \InvalidArgumentException('Uma categoria não pode pertencer a ela mesma nem a uma subcategoria dela.');
+            }
+            $category->update(['id' => $id, 'name' => $name, 'documentcategories_id' => $parent]);
+            return 'Categoria salva.';
+        }
+        throw new \InvalidArgumentException('Ação inválida.');
+    }
+
+    /** @return list<array{id: int, name: string, full: string, parent: int, docs: int, depth: int}> */
+    private static function categoryList(): array
+    {
+        global $DB;
+        $counts = [];
+        foreach ($DB->request([
+            'SELECT' => ['documentcategories_id', new \Glpi\DBAL\QueryExpression('COUNT(*) AS total')],
+            'FROM'   => 'glpi_documents',
+            'WHERE'  => ['is_deleted' => 0],
+            'GROUPBY' => 'documentcategories_id',
+        ]) as $row) {
+            $counts[(int) $row['documentcategories_id']] = (int) $row['total'];
+        }
+        $list = [];
+        foreach ($DB->request(['SELECT' => ['id', 'name', 'completename', 'documentcategories_id', 'level'], 'FROM' => 'glpi_documentcategories', 'ORDER' => 'completename ASC']) as $row) {
+            $list[] = [
+                'id'     => (int) $row['id'],
+                'name'   => (string) $row['name'],
+                'full'   => (string) $row['completename'],
+                'parent' => (int) $row['documentcategories_id'],
+                'docs'   => $counts[(int) $row['id']] ?? 0,
+                'depth'  => max(0, (int) $row['level'] - 1),
+            ];
+        }
+        return $list;
     }
 
     /** @return array{label: string, type: string, url: string}|null */

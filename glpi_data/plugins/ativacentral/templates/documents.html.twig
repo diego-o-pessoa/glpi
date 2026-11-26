@@ -8,6 +8,9 @@
             <div class="ac-subtitle">Arquivos do GLPI: contratos, propostas, notas, assinaturas e anexos.</div>
         </div>
         <div class="ac-actions">
+            {% if can_manage_categories %}
+                <button type="button" class="ac-btn" id="ac-cat-open"><i class="ti ti-tags"></i> Categorias</button>
+            {% endif %}
             {% if can_create %}
                 <button type="button" class="ac-btn is-primary" id="ac-dl-new"><i class="ti ti-plus"></i> Adicionar documento</button>
             {% endif %}
@@ -125,10 +128,19 @@
                     </select>
                 </label>
                 {% if can_new_category %}
-                    <label class="ac-pnew-field" id="ac-dl-newcat" hidden>
-                        <span class="ac-pnew-label">Nome da nova categoria</span>
-                        <input type="text" name="new_category" class="ac-pnew-input" maxlength="255" placeholder="Ex.: Contratos assinados">
-                    </label>
+                    <div class="ac-pnew-dates" id="ac-dl-newcat" hidden>
+                        <label class="ac-pnew-field">
+                            <span class="ac-pnew-label">Nome da nova categoria</span>
+                            <input type="text" name="new_category" class="ac-pnew-input" maxlength="255" placeholder="Ex.: Contratos assinados">
+                        </label>
+                        <label class="ac-pnew-field">
+                            <span class="ac-pnew-label">Pertence a</span>
+                        <select name="new_category_parent" class="ac-pnew-input">
+                            <option value="0">Nenhuma (categoria principal)</option>
+                            {% for k, v in categories %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+                        </select>
+                        </label>
+                    </div>
                 {% endif %}
                 <div class="ac-pnew-field" id="ac-dl-linked-wrap" hidden>
                     <span class="ac-pnew-label">Anexado em</span>
@@ -143,6 +155,74 @@
         </form>
     </div>
 </div>
+{% if can_manage_categories %}
+<div class="ac-drawer" id="ac-cat-drawer" hidden>
+    <div class="ac-drawer-panel" role="dialog" aria-modal="true" aria-label="Categorias">
+        <div class="ac-cat-wrap">
+            <div class="ac-drawer-head">
+                <div>
+                    <div class="ac-eyebrow">Documentos</div>
+                    <h2 class="ac-pnew-title">Categorias</h2>
+                </div>
+                <button type="button" class="ac-btn is-small" id="ac-cat-close" aria-label="Fechar"><i class="ti ti-x"></i></button>
+            </div>
+            <div class="ac-drawer-body">
+                <form method="post" action="{{ action }}" class="ac-cat-add" autocomplete="off">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                    <input type="hidden" name="doc_action" value="cat_add">
+                    <span class="ac-pnew-label">Nova categoria</span>
+                    <div class="ac-pnew-dates">
+                        <input type="text" name="category_name" class="ac-pnew-input" required maxlength="255" placeholder="Nome">
+                        <select name="category_parent" class="ac-pnew-input">
+                            <option value="0">Principal</option>
+                            {% for c in category_list %}<option value="{{ c.id }}">Dentro de: {{ c.full }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="ac-btn is-primary"><i class="ti ti-plus"></i> Adicionar categoria</button>
+                </form>
+
+                {% if category_list is empty %}
+                    <div class="ac-ptasks-empty"><i class="ti ti-tags"></i><b>Nenhuma categoria ainda</b></div>
+                {% else %}
+                    <div class="ac-cat-list">
+                        {% for c in category_list %}
+                            <div class="ac-cat-row" style="--depth: {{ c.depth }}">
+                                <div class="ac-cat-view">
+                                    <i class="ti {{ c.depth > 0 ? 'ti-corner-down-right' : 'ti-tag' }}"></i>
+                                    <div class="ac-cat-name"><b>{{ c.name }}</b><small>{{ c.docs }} {{ c.docs == 1 ? 'documento' : 'documentos' }}</small></div>
+                                    <button type="button" class="ac-docs-btn" data-cat-edit title="Editar"><i class="ti ti-pencil"></i></button>
+                                    <form method="post" action="{{ action }}" onsubmit="return confirm('Remover a categoria &quot;{{ c.name|e('html_attr') }}&quot;? Os documentos dela ficam sem categoria e as subcategorias sobem um nível.');">
+                                        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                                        <input type="hidden" name="doc_action" value="cat_delete">
+                                        <input type="hidden" name="category_id" value="{{ c.id }}">
+                                        <button type="submit" class="ac-docs-btn is-danger" title="Remover"><i class="ti ti-trash"></i></button>
+                                    </form>
+                                </div>
+                                <form method="post" action="{{ action }}" class="ac-cat-edit" hidden autocomplete="off">
+                                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                                    <input type="hidden" name="doc_action" value="cat_save">
+                                    <input type="hidden" name="category_id" value="{{ c.id }}">
+                                    <div class="ac-pnew-dates">
+                                        <input type="text" name="category_name" class="ac-pnew-input" required maxlength="255" value="{{ c.name }}">
+                                        <select name="category_parent" class="ac-pnew-input">
+                                            <option value="0" {{ c.parent == 0 ? 'selected' : '' }}>Principal</option>
+                                            {% for o in category_list %}{% if o.id != c.id %}<option value="{{ o.id }}" {{ o.id == c.parent ? 'selected' : '' }}>Dentro de: {{ o.full }}</option>{% endif %}{% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="ac-cat-edit-actions">
+                                        <button type="button" class="ac-btn is-small" data-cat-cancel>Cancelar</button>
+                                        <button type="submit" class="ac-btn is-small is-primary"><i class="ti ti-check"></i> Salvar</button>
+                                    </div>
+                                </form>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 <script type="application/json" id="ac-dl-data">{{ docs|json_encode|raw }}</script>
 <script>
     (function () {
@@ -265,6 +345,25 @@
             });
         });
         if (search) { search.addEventListener('input', apply); }
+
+        // Gaveta de categorias.
+        var catDrawer = document.getElementById('ac-cat-drawer');
+        if (catDrawer) {
+            app.appendChild(catDrawer);
+            var openCat = function () { catDrawer.hidden = false; };
+            var closeCat = function () { catDrawer.hidden = true; };
+            document.getElementById('ac-cat-open').addEventListener('click', openCat);
+            document.getElementById('ac-cat-close').addEventListener('click', closeCat);
+            catDrawer.addEventListener('click', function (e) { if (e.target === catDrawer) { closeCat(); } });
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeCat(); } });
+            catDrawer.querySelectorAll('.ac-cat-row').forEach(function (row) {
+                var view = row.querySelector('.ac-cat-view');
+                var editForm = row.querySelector('.ac-cat-edit');
+                row.querySelector('[data-cat-edit]').addEventListener('click', function () { view.hidden = true; editForm.hidden = false; editForm.querySelector('input[name=category_name]').focus(); });
+                row.querySelector('[data-cat-cancel]').addEventListener('click', function () { view.hidden = false; editForm.hidden = true; });
+            });
+            {% if open_categories %}openCat();{% endif %}
+        }
 
         {% if open_new and can_create %}open(null);{% endif %}
         {% if edit_id %}if (docs[{{ edit_id }}]) { open(docs[{{ edit_id }}]); }{% endif %}

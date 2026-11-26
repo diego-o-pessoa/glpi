@@ -2834,7 +2834,7 @@ html[data-glpi-theme-dark="1"] .ac-tag.is-green { color: #67dfa9; }
     animation: ac-drawer-in 0.22s ease;
 }
 
-.ac-drawer-panel form {
+.ac-drawer-panel > form {
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -3296,4 +3296,91 @@ html[data-glpi-theme-dark="1"] .ac-tag.is-green { color: #67dfa9; }
     .ac-dl-row .ac-sup-counts {
         display: none;
     }
+}
+
+/* Categorias de documentos */
+.ac-dl-newcat-grid[hidden],
+#ac-dl-newcat[hidden] {
+    display: none;
+}
+
+.ac-cat-wrap {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.ac-cat-add {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--ac-line);
+    border-radius: 14px;
+    background: rgba(var(--ac-blue-rgb), 0.03);
+}
+
+.ac-cat-add .ac-btn {
+    align-self: flex-end;
+}
+
+.ac-cat-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.ac-cat-row {
+    padding: 10px 0 10px calc(var(--depth, 0) * 24px);
+    border-bottom: 1px solid var(--ac-line);
+}
+
+.ac-cat-view {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ac-cat-view[hidden] {
+    display: none;
+}
+
+.ac-cat-view > i {
+    color: var(--ac-blue);
+    font-size: 17px;
+}
+
+.ac-cat-view form {
+    margin: 0;
+}
+
+.ac-cat-name {
+    flex: 1;
+    min-width: 0;
+}
+
+.ac-cat-name b {
+    display: block;
+    color: var(--ac-ink);
+    font-size: 13.5px;
+}
+
+.ac-cat-name small {
+    color: var(--ac-muted);
+    font-size: 12px;
+}
+
+.ac-cat-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ac-cat-edit[hidden] {
+    display: none;
+}
+
+.ac-cat-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
 }

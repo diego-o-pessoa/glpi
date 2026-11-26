@@ -257,14 +257,16 @@ final class DocumentsPanel
         if ($name === '') {
             throw new \InvalidArgumentException('Digite o nome da nova categoria.');
         }
-        $row = $DB->request(['SELECT' => ['id'], 'FROM' => 'glpi_documentcategories', 'WHERE' => ['name' => $name, 'documentcategories_id' => 0], 'LIMIT' => 1])->current();
+        // "Pertence a": categoria principal (fica como filha dela).
+        $parent = max(0, (int) ($post['new_category_parent'] ?? 0));
+        $row = $DB->request(['SELECT' => ['id'], 'FROM' => 'glpi_documentcategories', 'WHERE' => ['name' => $name, 'documentcategories_id' => $parent], 'LIMIT' => 1])->current();
         if ($row !== null) {
             return (int) $row['id'];
         }
         if (!\DocumentCategory::canCreate()) {
             throw new \InvalidArgumentException('Sem permissão para criar categorias.');
         }
-        $id = (int) (new \DocumentCategory())->add(['name' => $name, 'documentcategories_id' => 0]);
+        $id = (int) (new \DocumentCategory())->add(['name' => $name, 'documentcategories_id' => $parent]);
         if ($id <= 0) {
             throw new \InvalidArgumentException('Não foi possível criar a categoria.');
         }

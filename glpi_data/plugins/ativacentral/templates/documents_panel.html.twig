@@ -42,6 +42,13 @@
                             <span class="ac-pnew-label">Nome da nova categoria</span>
                             <input type="text" name="new_category" class="ac-pnew-input" maxlength="255" placeholder="Ex.: Contratos assinados">
                         </label>
+                        <label class="ac-pnew-field" data-docs-newcat-parent hidden>
+                            <span class="ac-pnew-label">Pertence a</span>
+                        <select name="new_category_parent" class="ac-pnew-input">
+                            <option value="0">Nenhuma (categoria principal)</option>
+                            {% for k, v in categories %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+                        </select>
+                        </label>
                     {% endif %}
                     <div class="ac-docs-queue-actions">
                         <button type="button" class="ac-btn" data-docs-cancel>Cancelar</button>
@@ -153,6 +160,8 @@
         if (cat && newCat) {
             cat.addEventListener('change', function () {
                 newCat.hidden = cat.value !== 'new';
+                var parentField = root.querySelector('[data-docs-newcat-parent]');
+                if (parentField) { parentField.hidden = newCat.hidden; }
                 if (!newCat.hidden) { newCat.querySelector('input').focus(); }
             });
         }

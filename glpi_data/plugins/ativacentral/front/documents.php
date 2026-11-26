@@ -20,7 +20,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     } catch (InvalidArgumentException $exception) {
         Session::addMessageAfterRedirect(htmlescape($exception->getMessage()), false, ERROR);
     }
-    Html::redirect(DocumentsLibrary::url());
+    // Acoes de categoria voltam com a gaveta de categorias aberta.
+    Html::redirect(DocumentsLibrary::url() . (str_starts_with((string) ($_POST['doc_action'] ?? ''), 'cat_') ? '?categories=1' : ''));
 }
 
 $GLOBALS['ATIVACENTRAL_SECTION'] = 'documents';
