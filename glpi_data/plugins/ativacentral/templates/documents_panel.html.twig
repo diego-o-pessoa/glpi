@@ -31,11 +31,18 @@
                 <div class="ac-docs-queue-foot">
                     <label class="ac-pnew-field">
                         <span class="ac-pnew-label">Categoria</span>
-                        <select name="documentcategories_id" class="ac-pnew-input">
+                        <select name="documentcategories_id" class="ac-pnew-input" data-docs-cat>
                             <option value="0">Sem categoria</option>
                             {% for k, v in categories %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+                            {% if can_new_category %}<option value="new">+ Nova categoria…</option>{% endif %}
                         </select>
                     </label>
+                    {% if can_new_category %}
+                        <label class="ac-pnew-field" data-docs-newcat hidden>
+                            <span class="ac-pnew-label">Nome da nova categoria</span>
+                            <input type="text" name="new_category" class="ac-pnew-input" maxlength="255" placeholder="Ex.: Contratos assinados">
+                        </label>
+                    {% endif %}
                     <div class="ac-docs-queue-actions">
                         <button type="button" class="ac-btn" data-docs-cancel>Cancelar</button>
                         <button type="submit" class="ac-btn is-primary"><i class="ti ti-upload"></i> Enviar</button>
@@ -140,6 +147,15 @@
                 alert('Algum arquivo passa do limite de {{ max_mb }} MB.');
             }
         });
+        // "+ Nova categoria": mostra o campo do nome (criada ao enviar).
+        var cat = root.querySelector('[data-docs-cat]');
+        var newCat = root.querySelector('[data-docs-newcat]');
+        if (cat && newCat) {
+            cat.addEventListener('change', function () {
+                newCat.hidden = cat.value !== 'new';
+                if (!newCat.hidden) { newCat.querySelector('input').focus(); }
+            });
+        }
         var linkBtn = root.querySelector('[data-docs-link]');
         var linkForm = root.querySelector('[data-docs-linkform]');
         linkBtn.addEventListener('click', function () { linkForm.hidden = !linkForm.hidden; });

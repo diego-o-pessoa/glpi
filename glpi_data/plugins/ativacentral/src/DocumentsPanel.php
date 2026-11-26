@@ -122,6 +122,7 @@ final class DocumentsPanel
             ]) : '',
             'uid'        => mt_rand(),
             'css_url'    => Shell::assetUrl('css/app.css'),
+            'can_new_category' => \DocumentCategory::canCreate(),
         ];
     }
 
@@ -174,7 +175,7 @@ final class DocumentsPanel
             throw new \InvalidArgumentException('Escolha pelo menos um arquivo.');
         }
         $maxBytes = (int) ($CFG_GLPI['document_max_size'] ?? 2) * 1024 * 1024;
-        $category = max(0, (int) ($post['documentcategories_id'] ?? 0));
+        $category = self::category($post);
         $added = 0;
         // O GLPI avisa "Criar uma pasta PDF/xx", "Documento copiado..." a cada
         // arquivo: guarda o que ja havia e tira esses avisos tecnicos no fim.
@@ -217,6 +218,36 @@ final class DocumentsPanel
             throw new \InvalidArgumentException('Nenhum arquivo foi aceito (confira o tipo do arquivo).');
         }
         return $added === 1 ? 'Documento adicionado.' : $added . ' documentos adicionados.';
+    }
+
+    /**
+     * Categoria escolhida ou criada na hora ("+ Nova categoria"); se ja
+     * existir uma com o mesmo nome, usa ela.
+     *
+     * @throws \InvalidArgumentException
+     */
+    private static function category(array $post): int
+    {
+        global $DB;
+        if ((string) ($post['documentcategories_id'] ?? '') !== 'new') {
+            return max(0, (int) ($post['documentcategories_id'] ?? 0));
+        }
+        $name = trim((string) ($post['new_category'] ?? ''));
+        if ($name === '') {
+            throw new \InvalidArgumentException('Digite o nome da nova categoria.');
+        }
+        $row = $DB->request(['SELECT' => ['id'], 'FROM' => 'glpi_documentcategories', 'WHERE' => ['name' => $name, 'documentcategories_id' => 0], 'LIMIT' => 1])->current();
+        if ($row !== null) {
+            return (int) $row['id'];
+        }
+        if (!\DocumentCategory::canCreate()) {
+            throw new \InvalidArgumentException('Sem permissão para criar categorias.');
+        }
+        $id = (int) (new \DocumentCategory())->add(['name' => $name, 'documentcategories_id' => 0]);
+        if ($id <= 0) {
+            throw new \InvalidArgumentException('Não foi possível criar a categoria.');
+        }
+        return $id;
     }
 
     /** @return list<array{name: string, tmp_name: string, error: int, size: int}> */
