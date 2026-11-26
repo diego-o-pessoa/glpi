@@ -34,6 +34,13 @@ if ($detail === null || !isset($detail['tasks_map'][$taskId])) {
     return;
 }
 
+// Cada um so altera as tarefas em que e responsavel ou esta na equipe
+// (usuario ou grupo); as dos outros ficam so para leitura.
+if (empty($detail['tasks_map'][$taskId]['mine'])) {
+    $respond(['ok' => false, 'message' => 'Você só pode atualizar as tarefas atribuídas a você.', 'csrf' => Session::getNewCSRFToken()], 403);
+    return;
+}
+
 $task = new ProjectTask();
 if (
     !$task->getFromDB($taskId)

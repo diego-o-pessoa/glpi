@@ -470,7 +470,11 @@ $client_payload = painel_project_client_payload($project);
                     <div class="subtasks-mini" id="drawer-subtasks"></div>
                 </div>
 
-                <div>
+                <div class="drawer-readonly-hint" id="drawer-readonly-hint" style="display: none; font-size: 13px; color: #7a85a3; background: #f4f6fb; border-radius: 10px; padding: 10px 12px;">
+                    <i class="fa-solid fa-lock"></i> Esta tarefa é de outra pessoa: você pode acompanhar, mas só quem está atribuído a ela atualiza o andamento.
+                </div>
+
+                <div id="drawer-progress-wrap">
                     <div class="drawer-sec-title">Andamento desta etapa</div>
                     <div class="status-pills" id="drawer-status-pills"></div>
                     <div class="pct-row">
@@ -753,6 +757,12 @@ $client_payload = painel_project_client_payload($project);
                 mn.textContent = 'Minha tarefa';
                 badgesEl.appendChild(mn);
             }
+
+            // Tarefa de outra pessoa: so leitura (o servidor tambem bloqueia).
+            const canEdit = !!task.mine;
+            document.getElementById('drawer-progress-wrap').style.display = canEdit ? '' : 'none';
+            noteForm.style.display = canEdit ? '' : 'none';
+            document.getElementById('drawer-readonly-hint').style.display = canEdit ? 'none' : '';
 
             descEl.textContent = task.full_desc || 'O dono do projeto não adicionou descrição detalhada nesta tarefa.';
             if (task.comment) {
