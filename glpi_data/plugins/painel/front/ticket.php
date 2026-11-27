@@ -4,7 +4,7 @@ if (!defined('GLPI_ROOT')) {
 }
 
 Session::checkLoginUser();
-global $DB;
+global $DB, $CFG_GLPI;
 $uid = Session::getLoginUserID();
 $ticket_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
@@ -70,7 +70,7 @@ if (isset($_POST['close_ticket'])) {
 $ticket_data = [];
 $t_iterator = $DB->request([
     'SELECT' => [
-        't.id', 't.name', 't.status', 't.date', 't.content', 't.is_deleted',
+        't.id', 't.name', 't.status', 't.date', 't.content', 't.is_deleted', 't.type', 't.priority',
         'c.completename AS category_name'
     ],
     'FROM' => 'glpi_tickets AS t',
@@ -221,7 +221,7 @@ foreach ($timeline as &$item) {
             }
             
             $users_cache[$author_id] = [
-                'name' => strtoupper($name),
+                'name' => mb_convert_case(mb_strtolower($name), MB_CASE_TITLE, 'UTF-8'),
                 'cargo' => $cargo,
                 'setor' => $setor,
                 'filial' => $filial
@@ -237,6 +237,8 @@ foreach ($timeline as &$item) {
     }
     
     $item['author'] = $users_cache[$author_id]['name'];
+    $ini = preg_split('/\s+/u', trim($item['author'])) ?: ['?'];
+    $item['initials'] = mb_strtoupper(mb_substr($ini[0], 0, 1) . (count($ini) > 1 ? mb_substr((string) end($ini), 0, 1) : ''));
     $item['cargo'] = $users_cache[$author_id]['cargo'];
     $item['setor'] = $users_cache[$author_id]['setor'];
     $item['filial'] = $users_cache[$author_id]['filial'];
@@ -277,6 +279,28 @@ foreach ($timeline as &$item) {
 }
 unset($item);
 
+$is_open = $ticket_data['status'] != 5 && $ticket_data['status'] != 6 && $ticket_data['is_deleted'] == 0;
+
+// Departamento: grupo de quem abriu o chamado
+$dept = '';
+$dept_row = $DB->request([
+    'SELECT' => ['g.name'],
+    'FROM' => 'glpi_groups_users AS gu',
+    'INNER JOIN' => ['glpi_groups AS g' => ['ON' => ['gu' => 'groups_id', 'g' => 'id']]],
+    'WHERE' => ['gu.users_id' => $requester_id],
+    'LIMIT' => 1
+])->current();
+if ($dept_row) {
+    $dept = $dept_row['name'];
+}
+
+// Atendentes atribuidos
+$techs = [];
+foreach ($DB->request(['SELECT' => ['users_id'], 'FROM' => 'glpi_tickets_users', 'WHERE' => ['tickets_id' => $ticket_id, 'type' => 2]]) as $tr) {
+    $tn = getUserName((int) $tr['users_id']);
+    $techs[] = trim(str_replace(' - Ativa Locação', '', $tn));
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -288,9 +312,9 @@ unset($item);
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
-        html, body { height: 100vh; overflow: hidden; background-color: #F7F8FA; color: #333; }
+        html, body { min-height: 100vh; background-color: #F5F6F8; color: #1F2937; }
         a { text-decoration: none; color: inherit; }
-        
+
         /* Topbar reutilizada */
         .topbar { display: flex; justify-content: space-between; align-items: center; background-color: #FFFFFF; padding: 0 40px; height: 70px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
         .topbar-left { display: flex; align-items: center; }
@@ -310,105 +334,119 @@ unset($item);
         .dropdown-menu a { display: block; padding: 12px 20px; font-size: 14px; color: #444; font-weight: 500; }
         .dropdown-menu a:hover { background-color: #F7F8FA; color: #0b457e; }
         .dropdown-menu i { margin-right: 12px; width: 16px; text-align: center; color: #888; }
-        
-        /* Container principal */
-        .container { display: flex; flex-direction: column; max-width: 1400px; margin: 0 auto; padding: 0 30px; height: calc(100vh - 70px); }
-        
-        /* Cabeçalho do Chamado */
-        .ticket-header-card { flex-shrink: 0; margin-bottom: 0; padding: 25px 0; border-bottom: 1px solid #E5E7EB; display: flex; justify-content: space-between; align-items: flex-end; }
-        .breadcrumb { font-size: 12px; font-weight: 700; color: #888; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.5px; }
-        .ticket-title { font-size: 26px; font-weight: 800; color: #333; }
-        .ticket-title span { color: #555A6B; }
-        
-        .ticket-meta { display: flex; align-items: center; gap: 15px; }
-        .ticket-date { font-size: 14px; font-weight: 600; color: #111; }
-        .status-badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-weight: 700; font-size: 12px; background: #F3F4F6; color: #4B5563; }
-        .status-1, .status-2 { background: #FEF3C7; color: #D97706; }
-        .status-3, .status-4 { background: #DBEAFE; color: #2563EB; }
-        .status-5 { background: #D1FAE5; color: #059669; }
-        .status-6 { background: #FEF3C7; color: #D97706; } /* Finalizado em Amarelo */
-        .status-deleted { background: #FEE2E2; color: #DC2626; }
-        
-        .btn-close-ticket { background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; padding: 8px 16px; border-radius: 20px; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
-        .btn-close-ticket:hover { background: #FECACA; }
 
-        /* Modal Overlay */
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; }
-        .modal-overlay.active { display: flex; }
-        
-        /* Modal Content */
-        .modal-content { background: #FFF; padding: 30px; border-radius: 12px; width: 400px; max-width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
-        .modal-content h3 { margin-top: 0; margin-bottom: 15px; color: #1A1F36; font-size: 20px; font-weight: 700; }
-        .modal-content p { color: #4B5563; font-size: 14px; margin-bottom: 25px; line-height: 1.5; }
-        .modal-actions { display: flex; justify-content: center; gap: 15px; }
-        .modal-btn { padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; border: none; transition: all 0.2s; }
-        .modal-btn-cancel { background: #F3F4F6; color: #4B5563; }
-        .modal-btn-cancel:hover { background: #E5E7EB; }
-        .modal-btn-confirm { background: #DC2626; color: #FFF; }
-        .modal-btn-confirm:hover { background: #B91C1C; }
-        
-        /* Linha do Tempo (Chat) */
-        .timeline-box { flex: 1; overflow-y: auto; padding: 25px 15px 25px 0; margin-right: -15px; }
-        .timeline-box::-webkit-scrollbar { width: 8px; }
-        .timeline-box::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
-        .timeline-item { display: flex; margin-bottom: 25px; width: 100%; align-items: flex-end; }
-        .timeline-item.right { flex-direction: row-reverse; }
-        
-        .tl-avatar { width: 45px; height: 45px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #FFF; font-size: 20px; }
-        .timeline-item.left .tl-avatar { background-color: #0b457e; margin-right: 15px; }
-        .timeline-item.right .tl-avatar { background-color: #9CA3AF; margin-left: 15px; }
-        
-        .tl-content-wrap { flex: 1; min-width: 0; max-width: 80%; padding: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
-        .timeline-item.left .tl-content-wrap { background: #FFFFFF; border-radius: 20px 20px 20px 0; }
-        .timeline-item.right .tl-content-wrap { background: #E8F0FE; border-radius: 20px 20px 0 20px; }
-        
-        .tl-header { display: flex; justify-content: space-between; margin-bottom: 12px; align-items: center; }
-        .timeline-item.right .tl-header { flex-direction: row-reverse; }
-        
-        .tl-author { font-size: 14px; font-weight: 700; color: #444; }
-        .timeline-item.right .tl-author { color: #0b457e; }
-        .tl-role { font-size: 10px; font-weight: 800; background-color: #059669; color: #FFF; padding: 2px 6px; border-radius: 4px; margin-left: 10px; position: relative; cursor: help; }
-        
-        .tl-role .tooltip-card { display: none; position: absolute; top: 100%; left: 0; margin-top: 8px; background: #1e293b; color: #fff; padding: 12px; border-radius: 8px; width: 250px; z-index: 100; box-shadow: 0 4px 15px rgba(0,0,0,0.1); font-size: 12px; text-transform: none; font-weight: 500; text-align: left; line-height: 1.4; }
+        /* Pagina do chamado */
+        .container { max-width: 1320px; margin: 0 auto; padding: 24px 40px 40px; }
+        .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #6B7280; margin-bottom: 26px; }
+        .breadcrumb a { color: #111827; font-weight: 500; }
+        .breadcrumb a:hover { color: #0b457e; }
+        .breadcrumb i { font-size: 10px; color: #9CA3AF; }
+
+        .ticket-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; margin-bottom: 24px; }
+        .ticket-meta { display: flex; align-items: center; gap: 14px; font-size: 12px; color: #6B7280; margin-bottom: 8px; }
+        .ticket-meta b { color: #111827; font-weight: 700; }
+        .status-pill { display: inline-flex; align-items: center; gap: 6px; }
+        .status-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #9CA3AF; }
+        .status-1::before, .status-2::before { background: #F59E0B; }
+        .status-3::before, .status-4::before { background: #3B82F6; }
+        .status-5::before, .status-6::before { background: #10B981; }
+        .status-deleted::before { background: #EF4444; }
+        .ticket-title { font-size: 24px; font-weight: 700; color: #111827; line-height: 1.3; }
+        .head-actions { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+        .btn-icon { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; color: #4B5563; font-size: 16px; transition: background 0.2s; }
+        .btn-icon:hover { background: #E5E7EB; }
+        .btn-close-ticket { background: #FFF; color: #059669; border: 1px solid #10B981; padding: 11px 18px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+        .btn-close-ticket:hover { background: #ECFDF5; }
+
+        .ticket-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; }
+        .card { background: #FFF; border-radius: 12px; border: 1px solid #EEF0F3; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+        .card-title { font-size: 15px; font-weight: 700; color: #111827; padding: 20px 22px; border-bottom: 1px solid #EEF0F3; }
+
+        /* Conversa */
+        .conversation { padding: 0 22px; }
+        .msg { display: flex; gap: 14px; padding: 22px 0; border-bottom: 1px solid #F1F2F4; }
+        .msg-avatar { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #FFF; font-size: 12px; font-weight: 700; background: #9333EA; }
+        .msg.is-staff .msg-avatar { background: #0b457e; }
+        .msg-main { flex: 1; min-width: 0; }
+        .msg-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .msg-author { font-size: 14px; font-weight: 600; color: #4B5563; display: flex; align-items: center; gap: 8px; }
+        .msg-date { font-size: 12px; color: #6B7280; white-space: nowrap; }
+        .tl-role { font-size: 10px; font-weight: 700; background: #E0ECF8; color: #0b457e; padding: 2px 7px; border-radius: 10px; position: relative; cursor: help; }
+        .tl-role.is-solution { background: #D1FAE5; color: #047857; }
+        .tl-role .tooltip-card { display: none; position: absolute; top: 100%; left: 0; margin-top: 8px; background: #1e293b; color: #fff; padding: 12px; border-radius: 8px; width: 250px; z-index: 100; box-shadow: 0 4px 15px rgba(0,0,0,0.1); font-size: 12px; font-weight: 500; line-height: 1.4; }
         .tl-role:hover .tooltip-card { display: block; }
         .tooltip-card strong { color: #94a3b8; font-size: 10px; text-transform: uppercase; display: block; margin-top: 8px; }
         .tooltip-card strong:first-child { margin-top: 0; }
         .tooltip-card span { display: block; margin-bottom: 2px; }
-        
-        .tl-date { font-size: 12px; color: #888; font-weight: 500; }
-        
-        .tl-body { font-size: 14px; color: #4B5563; line-height: 1.6; }
-        .tl-body p { margin-bottom: 10px; }
+        .tl-body { font-size: 14px; color: #111827; line-height: 1.6; overflow-wrap: anywhere; }
+        .tl-body p { margin-bottom: 8px; }
         .tl-body p:last-child { margin-bottom: 0; }
         .tl-body img { max-width: 100%; height: auto !important; border-radius: 6px; display: block; margin: 10px 0; }
-        
+
         /* Anexos */
-        .attachments { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
-        .attachment-btn { display: inline-flex; align-items: center; border: 1px solid #D1D5DB; border-radius: 6px; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #4B5563; background: #FFF; transition: all 0.2s; }
-        .attachment-btn:hover { background: #F3F4F6; border-color: #9CA3AF; color: #111; }
-        .attachment-btn i.fa-image, .attachment-btn i.fa-file { font-size: 14px; color: #6B7280; margin-right: 8px; }
-        .attachment-btn i.fa-download { font-size: 12px; color: #9CA3AF; margin-left: 10px; }
-        
-        /* Formulário de Resposta */
-        .reply-container { flex-shrink: 0; background: #FFFFFF; border-radius: 12px; padding: 15px 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.03); margin-top: 10px; margin-bottom: 15px; border: 1px solid #F3F4F6; }
-        .reply-textarea { width: 100%; min-height: 120px; border: 1px solid #E5E7EB; border-radius: 8px; padding: 15px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 15px; outline: none; transition: border-color 0.3s; background: #F9FAFB; }
-        .reply-textarea:focus { border-color: #0b457e; background: #FFFFFF; }
-        .reply-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 15px; }
-        .left-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-        .btn-attach { background: #F3F4F6; color: #4B5563; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.3s; display: inline-flex; align-items: center; gap: 8px; margin: 0; }
-        .btn-attach:hover { background: #E5E7EB; }
-        .btn-send { background: #0b457e; color: #FFF; border: none; padding: 10px 30px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.3s; display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+        .attachments { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .attachment-btn { display: inline-flex; align-items: center; border: 1px solid #E5E7EB; border-radius: 8px; padding: 7px 12px; font-size: 12px; font-weight: 500; color: #374151; background: #FFF; transition: all 0.2s; }
+        .attachment-btn:hover { background: #F9FAFB; border-color: #D1D5DB; }
+        .attachment-btn i.fa-file { font-size: 13px; color: #6B7280; margin-right: 8px; }
+        .attachment-btn i.fa-download { font-size: 11px; color: #9CA3AF; margin-left: 10px; }
+
+        /* Resposta */
+        .reply-container { padding: 22px; }
+        .reply-label { font-size: 14px; font-weight: 600; color: #111827; margin-bottom: 10px; }
+        .reply-textarea { width: 100%; min-height: 150px; border: 1px solid #D1D5DB; border-radius: 10px; padding: 14px; font-size: 14px; font-family: inherit; resize: vertical; outline: none; background: #FFF; }
+        .reply-textarea:focus { border-color: #0b457e; }
+        .reply-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 22px; padding-top: 22px; border-top: 1px solid #F1F2F4; }
+        .right-actions { display: flex; gap: 10px; }
+        .btn-attach, .btn-cancel { background: #FFF; color: #111827; border: 1px solid #D1D5DB; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; transition: background 0.2s; }
+        .btn-attach:hover, .btn-cancel:hover { background: #F9FAFB; }
+        .btn-send { background: #0b457e; color: #FFF; border: none; padding: 10px 22px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.2s; }
         .btn-send:hover { background: #08335e; }
-        .file-list { display: flex; flex-direction: column; gap: 5px; width: 100%; margin-top: 10px; }
-        .file-item { display: flex; align-items: center; justify-content: space-between; background: #F9FAFB; padding: 8px 12px; border-radius: 6px; font-size: 13px; color: #374151; border: 1px solid #E5E7EB; }
+        .file-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+        .file-list:empty { display: none; }
+        .file-item { display: flex; align-items: center; justify-content: space-between; background: #F9FAFB; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: #374151; border: 1px solid #E5E7EB; }
         .file-item i.remove-file { color: #EF4444; cursor: pointer; margin-left: 10px; }
-        
+        .closed-box { margin: 22px; text-align: center; padding: 30px 20px; background: #F9FAFB; border: 1px dashed #D1D5DB; border-radius: 10px; color: #6B7280; font-size: 14px; }
+        .closed-box i { font-size: 24px; color: #9CA3AF; margin-bottom: 10px; display: block; }
+        .closed-box b { display: block; color: #374151; font-size: 15px; margin-bottom: 4px; }
+
+        /* Informacoes */
+        .info-card { padding: 20px 22px; }
+        .info-card h3 { font-size: 15px; font-weight: 700; color: #111827; margin-bottom: 18px; }
+        .info-item { margin-bottom: 16px; }
+        .info-item small { display: block; font-size: 12px; color: #111827; font-weight: 500; margin-bottom: 5px; }
+        .info-item span { font-size: 14px; color: #4B5563; }
+        .info-sep { border: 0; border-top: 1px solid #EEF0F3; margin: 18px 0; }
+        .info-toggle { width: 100%; display: flex; justify-content: space-between; align-items: center; background: none; border: 0; cursor: pointer; font-size: 14px; font-weight: 600; color: #374151; padding: 0; }
+        .info-toggle i { font-size: 12px; color: #9CA3AF; transition: transform 0.2s; }
+        .info-more { margin-top: 16px; }
+        .info-more[hidden] { display: none; }
+        .info-toggle[aria-expanded="false"] i { transform: rotate(180deg); }
+
+        /* Modal */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal-content { background: #FFF; padding: 30px; border-radius: 12px; width: 400px; max-width: 90%; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
+        .modal-content h3 { margin-bottom: 15px; color: #1A1F36; font-size: 20px; font-weight: 700; }
+        .modal-content p { color: #4B5563; font-size: 14px; margin-bottom: 25px; line-height: 1.5; }
+        .modal-actions { display: flex; justify-content: center; gap: 15px; }
+        .modal-btn { padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; border: none; }
+        .modal-btn-cancel { background: #F3F4F6; color: #4B5563; }
+        .modal-btn-confirm { background: #059669; color: #FFF; }
+
         /* Drag and Drop Global */
         .drag-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 69, 126, 0.9); color: #FFF; z-index: 99999; justify-content: center; align-items: center; font-size: 28px; font-weight: bold; flex-direction: column; pointer-events: none; }
         .drag-overlay.active { display: flex; }
-        
-        /* Ajustes do TinyMCE */
-        .tox-tinymce { border-radius: 8px !important; border-color: #E5E7EB !important; }
+        .tox-tinymce { border-radius: 10px !important; border-color: #D1D5DB !important; }
+
+        @media (max-width: 900px) {
+            .container { padding: 20px 16px; }
+            .ticket-grid { grid-template-columns: 1fr; }
+            .ticket-head { flex-direction: column; align-items: flex-start; }
+            .topbar { padding: 0 16px; }
+            .logo { margin-right: 16px; }
+            .nav-links { gap: 16px; }
+            .user-name, .search-icon { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -447,43 +485,48 @@ unset($item);
     </div>
 
     <div class="container">
-        <div class="ticket-header-card">
+        <div class="breadcrumb">
+            <a href="<?=$CFG_GLPI['root_doc']?>/">Chamados</a>
+            <i class="fa-solid fa-chevron-right"></i>
+            <span><?=htmlspecialchars(str_replace('>', '-', $ticket_data['category_name'] ?? 'Sem categoria'))?></span>
+        </div>
+
+        <div class="ticket-head">
             <div>
-                <div class="breadcrumb">
-                    CHAMADOS / <?=htmlspecialchars(str_replace('>', '-', $ticket_data['category_name'] ?? 'SEMCATEGORIA'))?>
+                <div class="ticket-meta">
+                    <b>#<?=$ticket_data['id']?></b>
+                    <span class="status-pill <?=$status_class?>"><?=$status_str?></span>
+                    <span><?=date('d/m/Y H:i', strtotime($ticket_data['date']))?></span>
                 </div>
-                <div class="ticket-title">
-                    <span>#<?=$ticket_data['id']?> -</span> <?=htmlspecialchars($ticket_data['name'])?>
-                </div>
+                <h1 class="ticket-title"><?=htmlspecialchars($ticket_data['name'])?></h1>
             </div>
-            <div class="ticket-meta">
-                <div style="display: flex; align-items: center;">
-                    <div class="status-badge <?=$status_class?>"><?=$status_str?></div>
-                    <?php if ($ticket_data['status'] != 5 && $ticket_data['status'] != 6 && $ticket_data['is_deleted'] == 0): ?>
-                        <button type="button" class="btn-close-ticket" onclick="openCloseModal()">
-                            <i class="fa-solid fa-check-circle"></i> Encerrar Chamado
-                        </button>
-                    <?php endif; ?>
-                </div>
-                <div class="ticket-date"><?=date('d/m/Y H:i', strtotime($ticket_data['date']))?></div>
+            <div class="head-actions">
+                <a class="btn-icon" href="<?=$CFG_GLPI['root_doc']?>/" title="Voltar para os chamados"><i class="fa-solid fa-reply"></i></a>
+                <?php if ($is_open): ?>
+                    <button type="button" class="btn-close-ticket" onclick="openCloseModal()">Encerrar Chamado</button>
+                <?php endif; ?>
             </div>
         </div>
 
-        <div class="timeline-box">
-            <?php foreach($timeline as $item): 
-                $alignment = $item['is_requester'] ? 'right' : 'left';
+        <div class="ticket-grid">
+        <div class="card">
+            <div class="card-title">Conversa</div>
+            <div class="conversation">
+            <?php foreach($timeline as $item):
+                $ts = strtotime($item['date']);
+                $when = date('Y-m-d', $ts) === date('Y-m-d') ? date('H:i', $ts) : date('d/m/Y H:i', $ts);
             ?>
-                <div class="timeline-item <?=$alignment?>">
-                    <div class="tl-avatar">
-                        <i class="fa-solid fa-user"></i>
-                    </div>
-                    <div class="tl-content-wrap">
-                        <div class="tl-header">
-                            <div>
-                                <span class="tl-author"><?=htmlspecialchars($item['author'])?></span>
-                                <?php if(!$item['is_requester']): ?>
+                <div class="msg <?= $item['is_requester'] ? '' : 'is-staff' ?>">
+                    <div class="msg-avatar"><?=htmlspecialchars($item['initials'])?></div>
+                    <div class="msg-main">
+                        <div class="msg-head">
+                            <div class="msg-author">
+                                <?=htmlspecialchars($item['author'])?>
+                                <?php if ($item['type'] === 'ITILSolution'): ?>
+                                    <span class="tl-role is-solution">Solução</span>
+                                <?php elseif(!$item['is_requester']): ?>
                                     <span class="tl-role">
-                                        ATENDENTE
+                                        T.I.
                                         <div class="tooltip-card">
                                             <strong>Cargo</strong>
                                             <span><?=htmlspecialchars($item['cargo'] ?: 'Não informado')?></span>
@@ -495,19 +538,17 @@ unset($item);
                                     </span>
                                 <?php endif; ?>
                             </div>
-                            <div class="tl-date"><?=date('d/m/Y H:i', strtotime($item['date']))?></div>
+                            <div class="msg-date" title="<?=date('d/m/Y H:i', $ts)?>"><?=$when?></div>
                         </div>
                         <div class="tl-body">
-                            <!-- Tratando HTML do GLPI (o GLPI armazena followups e tickets com HTML usando o rich text) -->
                             <?=html_entity_decode($item['content'])?>
                         </div>
-                        
                         <?php if(!empty($item['documents'])): ?>
                             <div class="attachments">
                                 <?php foreach($item['documents'] as $doc): ?>
-                                    <a href="<?=$CFG_GLPI['root_doc']?>/front/document.send.php?docid=<?=$doc['id']?>" target="_blank" class="attachment-btn">
+                                    <a href="<?=$CFG_GLPI['root_doc']?>/front/document.send.php?docid=<?=$doc['id']?>" target="_blank" class="attachment-btn" title="<?=htmlspecialchars($doc['filename'])?>">
                                         <i class="fa-solid fa-file"></i>
-                                        <?=htmlspecialchars(strlen($doc['filename']) > 20 ? substr($doc['filename'], 0, 17).'...' : $doc['filename'])?>
+                                        <?=htmlspecialchars(mb_strlen($doc['filename']) > 28 ? mb_substr($doc['filename'], 0, 25).'...' : $doc['filename'])?>
                                         <i class="fa-solid fa-download"></i>
                                     </a>
                                 <?php endforeach; ?>
@@ -516,31 +557,30 @@ unset($item);
                     </div>
                 </div>
             <?php endforeach; ?>
-        </div>
+            </div>
 
         <!-- Formulário de Resposta -->
-        <?php if ($ticket_data['status'] != 5 && $ticket_data['status'] != 6 && $ticket_data['is_deleted'] == 0): ?>
+        <?php if ($is_open): ?>
         <div class="reply-container">
             <form action="" method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="tickets_id" value="<?=$ticket_id?>">
                 <input type="hidden" name="_glpi_csrf_token" value="<?=Session::getNewCSRFToken()?>">
-                
-                <textarea id="reply-textarea" name="content" class="reply-textarea" placeholder="Digite sua resposta aqui..." required></textarea>
-                
+
+                <div class="reply-label">Sua resposta</div>
+                <textarea id="reply-textarea" name="content" class="reply-textarea" placeholder="Responder..." required></textarea>
+
                 <div class="file-list" id="file-list"></div>
-                
+
                 <div class="reply-actions">
-                    <div class="left-actions">
-                        <label class="btn-attach" onclick="addFileInput()">
-                            <i class="fa-solid fa-paperclip"></i> Adicionar Anexo
-                        </label>
+                    <label class="btn-attach" onclick="addFileInput()">
+                        <i class="fa-regular fa-file-lines"></i> Anexar arquivos
+                    </label>
+                    <div class="right-actions">
+                        <button type="button" class="btn-cancel" onclick="clearReply()">Cancelar</button>
+                        <button type="submit" name="add_reply" class="btn-send">Enviar</button>
                     </div>
-                    
-                    <button type="submit" name="add_reply" class="btn-send">
-                        <i class="fa-solid fa-paper-plane"></i> Enviar
-                    </button>
                 </div>
-                
+
                 <div id="file-inputs-container" style="display:none;"></div>
             </form>
         </div>
@@ -670,12 +710,12 @@ unset($item);
                     tinymce.init({
                         selector: '#reply-textarea',
                         plugins: 'image link lists table autolink paste',
-                        toolbar: 'bold italic underline forecolor | alignleft aligncenter alignright alignjustify | numlist bullist | blocks | link image table | removeformat',
+                        toolbar: 'undo redo | bold italic underline | bullist numlist | link',
                         toolbar_location: 'bottom',
                         menubar: false,
                         statusbar: false,
                         paste_data_images: false, // Desativa imagens inline nativas
-                        height: 140,
+                        height: 170,
                         branding: false,
                         content_style: "html { cursor: text; } body { font-family: Inter, sans-serif; font-size: 14px; } img { max-width: 100%; max-height: 180px; object-fit: contain; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin: 5px 0; cursor: pointer; }",
                         setup: function (editor) {
@@ -717,12 +757,30 @@ unset($item);
             };
         </script>
         <?php else: ?>
-        <div class="reply-container" style="text-align: center; padding: 40px 20px; background: #F9FAFB; border: 1px dashed #D1D5DB; margin-top: 20px; border-radius: 12px;">
-            <i class="fa-solid fa-lock" style="font-size: 28px; color: #9CA3AF; margin-bottom: 12px;"></i>
-            <h3 style="margin: 0 0 5px 0; color: #4B5563; font-size: 16px;">Chamado Encerrado</h3>
-            <p style="margin: 0; font-size: 14px; color: #6B7280;">Este chamado já foi encerrado e não pode receber novas interações.</p>
+        <div class="closed-box">
+            <i class="fa-solid fa-lock"></i>
+            <b>Chamado encerrado</b>
+            Este chamado já foi encerrado e não pode receber novas interações.
         </div>
         <?php endif; ?>
+        </div>
+
+        <aside class="card info-card">
+            <h3>Informações</h3>
+            <div class="info-item"><small>Departamento</small><span><?=htmlspecialchars($dept ?: 'Não informado')?></span></div>
+            <div class="info-item"><small>Categoria</small><span><?=htmlspecialchars(str_replace('>', '-', $ticket_data['category_name'] ?? '') ?: 'Sem categoria')?></span></div>
+            <div class="info-item"><small>Prioridade</small><span><?=htmlspecialchars(Ticket::getPriorityName((int) $ticket_data['priority']))?></span></div>
+            <hr class="info-sep">
+            <button type="button" class="info-toggle" aria-expanded="true" onclick="var m=document.getElementById('info-more');m.hidden=!m.hidden;this.setAttribute('aria-expanded', String(!m.hidden));">
+                Mais detalhes <i class="fa-solid fa-chevron-up"></i>
+            </button>
+            <div class="info-more" id="info-more">
+                <div class="info-item"><small>Tipo de Chamado:</small><span><?= (int) $ticket_data['type'] === 2 ? 'Requisição' : 'Incidente' ?></span></div>
+                <div class="info-item"><small>Aberto em</small><span><?=date('d/m/Y H:i', strtotime($ticket_data['date']))?></span></div>
+                <?php if ($techs): ?><div class="info-item"><small>Atendente</small><span><?=htmlspecialchars(implode(', ', $techs))?></span></div><?php endif; ?>
+            </div>
+        </aside>
+        </div>
 
     </div>
     <div class="modal-overlay" id="close-modal">
@@ -739,6 +797,17 @@ unset($item);
     </div>
 
     <script>
+        function clearReply() {
+            if (typeof tinymce !== 'undefined' && tinymce.get('reply-textarea')) {
+                tinymce.get('reply-textarea').setContent('');
+            }
+            var ta = document.getElementById('reply-textarea');
+            if (ta) { ta.value = ''; }
+            var fl = document.getElementById('file-list');
+            if (fl) { fl.innerHTML = ''; }
+            var fc = document.getElementById('file-inputs-container');
+            if (fc) { fc.innerHTML = ''; }
+        }
         function openCloseModal() {
             document.getElementById('close-modal').classList.add('active');
         }
