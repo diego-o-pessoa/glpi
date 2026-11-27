@@ -79,7 +79,7 @@
                 </div>
                 {% for t in tickets %}
                     <a class="ac-tk-row ac-list-row" href="{{ t.url }}"
-                       data-sit="{{ t.situation }}" data-prio="{{ t.priority }}" data-open="{{ t.open ? 1 : 0 }}" data-mine="{{ t.mine ? 1 : 0 }}"
+                       data-sit="{{ t.situation }}" data-prio="{{ min(5, max(2, t.priority)) }}" data-open="{{ t.open ? 1 : 0 }}" data-mine="{{ t.mine ? 1 : 0 }}"
                        data-search="{{ ('#' ~ t.id ~ ' ' ~ t.id ~ ' ' ~ t.name ~ ' ' ~ t.requester ~ ' ' ~ t.techs ~ ' ' ~ t.category)|lower }}">
                         <div class="ac-tk-main">
                             <b><span class="ac-tk-id">#{{ t.id }}</span> {{ t.name }}</b>

@@ -125,15 +125,14 @@ final class TicketsList
         $prioCounts = [];
         foreach ($tickets as $t) {
             if ($t['open']) {
-                $prioCounts[$t['priority']] = ($prioCounts[$t['priority']] ?? 0) + 1;
+                // So 4 prioridades na Ativa: Muito alta conta como Urgente e Muito baixa como Baixa.
+                $p = min(5, max(2, (int) $t['priority']));
+                $prioCounts[$p] = ($prioCounts[$p] ?? 0) + 1;
             }
         }
         $priorities = [];
-        foreach ([6, 5, 4, 3, 2, 1] as $p) {
-            if ($p === 6 && empty($prioCounts[6])) {
-                continue;
-            }
-            $priorities[] = ['key' => $p, 'label' => Ticket::getPriorityName($p), 'count' => $prioCounts[$p] ?? 0];
+        foreach ([5, 4, 3, 2] as $p) {
+            $priorities[] = ['key' => $p, 'label' => TicketForm::PRIORITIES[$p], 'count' => $prioCounts[$p] ?? 0];
         }
 
         $situations = [];
