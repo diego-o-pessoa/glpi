@@ -122,8 +122,8 @@ final class MachinesView
 
         $antivirus = trim((string) $machine['antivirus']);
         // Nome da pessoa pela regra de todos os plugins Ativa: o definido no
-        // Ativa Rede > Equipamentos; a conta do Windows, se for de uma pessoa;
-        // senao o nome da VPN ("atv.diego.pessoa" -> Diego Pessoa).
+        // Ativa Rede > Equipamentos; senao o nome da VPN ("atv.diego.pessoa" ->
+        // Diego Pessoa); senao a conta do Windows, se for de uma pessoa.
         $username = trim((string) ($machine['username'] ?? ''));
         $username = class_exists(\GlpiPlugin\Ativarede\PersonName::class)
             ? \GlpiPlugin\Ativarede\PersonName::forComputer((int) ($machine['computers_id'] ?? 0), (string) $machine['hostname'], $username)

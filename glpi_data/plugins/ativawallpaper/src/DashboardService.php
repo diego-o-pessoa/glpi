@@ -453,8 +453,8 @@ final class DashboardService
 
     /**
      * Quem usa o computador, pela regra de todos os plugins Ativa: o nome
-     * definido no Ativa Rede > Equipamentos; a conta do Windows, se for de uma
-     * pessoa; senao o nome da VPN ("atv.diego.pessoa" -> Diego Pessoa).
+     * definido no Ativa Rede > Equipamentos; senao o nome da VPN
+     * ("atv.diego.pessoa" -> Diego Pessoa); senao a conta do Windows.
      */
     public static function personName(array $row): string
     {

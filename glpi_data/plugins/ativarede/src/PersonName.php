@@ -9,11 +9,11 @@ namespace GlpiPlugin\Ativarede;
  *
  * Ordem:
  *  1. o nome definido a mao em Equipamentos;
- *  2. a conta do Windows / usuario do GLPI, se for de uma pessoa;
- *  3. o nome tirado da VPN conectada
+ *  2. o nome tirado da VPN (nome e sobrenome, evita nomes repetidos)
  *     ("SIMP-ATI-VPN-01-UDP4-1195-atv.diego.pessoa" -> "Diego Pessoa";
  *     numeros sao ignorados: "diego.pessoa2" -> "Diego Pessoa"), guardado:
  *     vale mesmo com a VPN desconectada;
+ *  3. a conta do Windows / usuario do GLPI, se for de uma pessoa;
  *  4. senao, o que houver (mesmo generico).
  *
  * Conta generica = de uso comum, nao de uma pessoa: "Ativa", "Ativa
@@ -66,7 +66,8 @@ final class PersonName
         $manual = trim($manual);
         $auto = trim($auto);
         $vpn = trim($vpn);
-        foreach ([$manual, $auto, $vpn] as $candidate) {
+        // VPN antes da conta do Windows: a VPN traz nome e sobrenome.
+        foreach ([$manual, $vpn, $auto] as $candidate) {
             if ($candidate !== '' && !self::isGeneric($candidate)) {
                 return $candidate;
             }
@@ -163,7 +164,7 @@ final class PersonName
 
     /**
      * Nome da pessoa de um computador: o definido em Ativa Rede > Equipamentos;
-     * senao a conta do Windows, se for de uma pessoa; senao o nome da VPN.
+     * senao o nome da VPN; senao a conta do Windows, se for de uma pessoa.
      * Sem nada melhor, a propria conta do Windows (mesmo generica).
      */
     public static function forComputer(int $computersId, string $hostname, string $windowsUser): string

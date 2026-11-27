@@ -98,8 +98,8 @@ final class Inventory
             $user = $users['id'][$computersId] ?? $users['host'][mb_strtolower($hostname)] ?? '';
             $user = $user !== '' ? $user : self::shortUser((string) ($row['contact'] ?? ''));
             // Mesmo nome de todos os plugins Ativa: o definido no Ativa Rede >
-            // Equipamentos; a conta do Windows, se for de uma pessoa; ou o nome
-            // da VPN ("atv.diego.pessoa" -> Diego Pessoa).
+            // Equipamentos; senao o nome da VPN ("atv.diego.pessoa" -> Diego
+            // Pessoa); senao a conta do Windows, se for de uma pessoa.
             if (class_exists(\GlpiPlugin\Ativarede\PersonName::class)) {
                 $user = \GlpiPlugin\Ativarede\PersonName::forComputer($computersId, $hostname, $user);
             }
