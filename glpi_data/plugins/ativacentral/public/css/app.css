@@ -3575,3 +3575,5 @@ a.ac-tk-row:hover { background: rgba(var(--ac-blue-rgb), 0.05); color: inherit; 
     .ac-tk-row { grid-template-columns: minmax(0, 1fr) auto; }
     .ac-tk-row .ac-tk-person, .ac-tk-row .ac-sup-go, .ac-tk-headrow { display: none; }
 }
+.ac-tk-toolbar .ac-sup-search { flex: 1; max-width: 520px; }
+.ac-tk-toolbar .ac-sup-search input { width: 100%; }

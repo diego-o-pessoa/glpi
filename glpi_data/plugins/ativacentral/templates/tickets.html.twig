@@ -35,16 +35,7 @@
     </div>
 
     <div class="ac-panel ac-sup-list">
-        <div class="ac-sup-toolbar">
-            <div class="ac-sup-filters">
-                <button type="button" class="ac-sup-filter is-active" data-filter="open">Abertos</button>
-                <button type="button" class="ac-sup-filter" data-filter="mine">Comigo</button>
-                {% for s in situations %}
-                    <button type="button" class="ac-sup-filter" data-filter="sit:{{ s.key }}">
-                        <span class="ac-tk-dot is-{{ s.tone }}"></span>{{ s.label }}<em>{{ s.count }}</em>
-                    </button>
-                {% endfor %}
-            </div>
+        <div class="ac-sup-toolbar ac-tk-toolbar">
             <label class="ac-sup-search">
                 <i class="ti ti-search"></i>
                 <input type="search" id="ac-list-search" placeholder="Buscar por número, título, usuário, categoria…">
@@ -110,7 +101,12 @@
             try { sessionStorage.setItem('ac-tk-filter', filter); } catch (e) {}
         }
         document.querySelectorAll('[data-filter]').forEach(function (b) {
-            b.addEventListener('click', function () { filter = b.getAttribute('data-filter'); apply(); });
+            b.addEventListener('click', function () {
+                // Clicar de novo no card ativo volta para todos os abertos.
+                var f = b.getAttribute('data-filter');
+                filter = filter === f ? 'open' : f;
+                apply();
+            });
         });
         if (search) { search.addEventListener('input', apply); }
         try { filter = sessionStorage.getItem('ac-tk-filter') || 'open'; } catch (e) {}
