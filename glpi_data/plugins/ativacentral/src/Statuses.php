@@ -17,7 +17,7 @@ use Toolbox;
 final class Statuses
 {
     private const VERSION_KEY = 'statuses_version';
-    private const VERSION = '1';
+    private const VERSION = '2';
 
     public const REASONS = ['Aguardando usuário', 'Aguardando aprovação', 'Aguardando terceiro'];
 
@@ -31,7 +31,31 @@ final class Statuses
             'Pending'                         => 'Aguardando',
             "status\004Solved"                => 'Finalizado',
             "status\004Closed"                => 'Finalizado (fechado)',
+            // Prioridades: so 4 nomes (Baixa, Normal, Alta, Urgente).
+            "priority\004Very low"            => 'Baixa',
+            "priority\004Low"                 => 'Baixa',
+            "priority\004Medium"              => 'Normal',
+            "priority\004High"                => 'Alta',
+            "priority\004Very high"           => 'Urgente',
+            "priority\004Major"               => 'Urgente',
         ];
+    }
+
+    /** Tipos de chamado da Ativa: chave => [nome, tipo do GLPI (1 incidente, 2 requisicao)]. */
+    public const KINDS = [
+        'incident'    => ['Incidente', 1],
+        'service'     => ['Serviço', 2],
+        'improvement' => ['Melhoria', 2],
+        'project'     => ['Projeto', 2],
+    ];
+
+    public static function saveKind(int $ticketId, string $kind): void
+    {
+        global $DB;
+        if ($ticketId <= 0 || !isset(self::KINDS[$kind]) || !$DB->tableExists('glpi_plugin_ativacentral_ticketkinds')) {
+            return;
+        }
+        $DB->updateOrInsert('glpi_plugin_ativacentral_ticketkinds', ['kind' => $kind], ['tickets_id' => $ticketId]);
     }
 
     /** Situacoes da tela de chamados: chave => [nome, cor]. */
@@ -71,6 +95,15 @@ final class Statuses
         if (($config[self::VERSION_KEY] ?? '') === self::VERSION && is_file($file)) {
             return;
         }
+
+        // Tipo do chamado da Ativa (Incidente, Servico, Melhoria, Projeto).
+        $DB->doQuery("CREATE TABLE IF NOT EXISTS `glpi_plugin_ativacentral_ticketkinds` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT,
+            `tickets_id` int unsigned NOT NULL,
+            `kind` varchar(20) NOT NULL DEFAULT 'incident',
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `tickets_id` (`tickets_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
         foreach (self::REASONS as $i => $name) {
             $exists = $DB->request(['SELECT' => 'id', 'FROM' => 'glpi_pendingreasons', 'WHERE' => ['name' => $name]])->current();

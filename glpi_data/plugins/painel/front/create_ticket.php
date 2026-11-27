@@ -192,12 +192,10 @@ sort($departments);
             <div class="form-group">
                 <label>Prioridade</label>
                 <select name="priority" class="form-control" required>
-                    <option value="">- Selecione -</option>
-                    <option value="1">Muito Baixa</option>
                     <option value="2">Baixa</option>
-                    <option value="3" selected>Média</option>
+                    <option value="3" selected>Normal</option>
                     <option value="4">Alta</option>
-                    <option value="5">Muito Alta</option>
+                    <option value="5">Urgente</option>
                 </select>
             </div>
             
@@ -208,10 +206,11 @@ sort($departments);
             
             <div class="form-group">
                 <label>Tipo de Chamado</label>
-                <select name="type" class="form-control" required>
-                    <option value="">- Selecione -</option>
-                    <option value="1">Incidente</option>
-                    <option value="2">Requisição</option>
+                <select name="kind" class="form-control" required>
+                    <option value="incident" selected>Incidente</option>
+                    <option value="service">Serviço</option>
+                    <option value="improvement">Melhoria</option>
+                    <option value="project">Projeto</option>
                 </select>
             </div>
             

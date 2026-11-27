@@ -78,8 +78,10 @@
                 <div class="ac-pnew-field">
                     <span class="ac-pnew-label">Tipo de chamado</span>
                     <div class="ac-tnew-seg">
-                        <label><input type="radio" name="type" value="1" {{ type == 1 ? 'checked' : '' }}><span><i class="ti ti-alert-triangle"></i> Incidente</span></label>
-                        <label><input type="radio" name="type" value="2" {{ type == 2 ? 'checked' : '' }}><span><i class="ti ti-clipboard-list"></i> Requisição</span></label>
+                        {% set icons = {incident: 'ti-alert-triangle', service: 'ti-tool', improvement: 'ti-trending-up', project: 'ti-briefcase'} %}
+                        {% for key, label in kinds %}
+                            <label><input type="radio" name="kind" value="{{ key }}" {{ key == kind ? 'checked' : '' }}><span><i class="ti {{ icons[key] }}"></i> {{ label }}</span></label>
+                        {% endfor %}
                     </div>
                 </div>
             </section>

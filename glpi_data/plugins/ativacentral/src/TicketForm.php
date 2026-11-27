@@ -16,7 +16,7 @@ use User;
  */
 final class TicketForm
 {
-    public const PRIORITIES = [1 => 'Muito baixa', 2 => 'Baixa', 3 => 'Média', 4 => 'Alta', 5 => 'Muito alta'];
+    public const PRIORITIES = [2 => 'Baixa', 3 => 'Normal', 4 => 'Alta', 5 => 'Urgente'];
 
     public static function newUrl(): string
     {
@@ -63,12 +63,14 @@ final class TicketForm
             'name'       => (string) ($old['name'] ?? ''),
             'priority'   => (int) ($old['priority'] ?? 3),
             'priorities' => self::PRIORITIES,
-            'type'       => (int) ($old['type'] ?? Ticket::INCIDENT_TYPE),
+            'kind'       => (string) ($old['kind'] ?? 'incident'),
+            'kinds'      => array_map(static fn (array $k): string => $k[0], Statuses::KINDS),
             'assign_me'  => $old === [] ? false : !empty($old['assign_me']),
             'requester_html' => User::dropdown([
                 'name'    => 'requester',
                 'value'   => (int) ($old['requester'] ?? $me),
-                'right'   => 'all',
+                // So quem pode atender chamados.
+                'right'   => 'own_ticket',
                 'display' => false,
                 'width'   => '100%',
             ]),
@@ -101,12 +103,13 @@ final class TicketForm
             throw new \InvalidArgumentException('Descreva o chamado na mensagem.');
         }
         $requester = (int) ($post['requester'] ?? 0) ?: (int) Session::getLoginUserID();
+        $kind = isset(Statuses::KINDS[(string) ($post['kind'] ?? '')]) ? (string) $post['kind'] : 'incident';
         $input = [
             'name'                => $name,
             'content'             => $content,
             'itilcategories_id'   => $category,
-            'priority'            => max(1, min(5, (int) ($post['priority'] ?? 3))),
-            'type'                => (int) ($post['type'] ?? 1) === Ticket::DEMAND_TYPE ? Ticket::DEMAND_TYPE : Ticket::INCIDENT_TYPE,
+            'priority'            => max(2, min(5, (int) ($post['priority'] ?? 3))),
+            'type'                => Statuses::KINDS[$kind][1],
             'entities_id'         => (int) ($_SESSION['glpiactive_entity'] ?? 0),
             'requesttypes_id'     => 1,
             '_users_id_requester' => $requester,
@@ -125,6 +128,7 @@ final class TicketForm
         if (!$id) {
             throw new \InvalidArgumentException('Não foi possível abrir o chamado. Confira os campos e tente de novo.');
         }
+        Statuses::saveKind((int) $id, $kind);
         return (int) $id;
     }
 }

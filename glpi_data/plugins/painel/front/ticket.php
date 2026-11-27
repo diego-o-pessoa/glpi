@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__) . '/inc/status.php';
 if (!defined('GLPI_ROOT')) {
     include ("../../../inc/includes.php");
 }
@@ -92,7 +93,6 @@ if ($ticket_data['is_deleted'] == 1) {
     $status_str = "Excluído";
     $status_class = "status-deleted";
 } else {
-    require_once dirname(__DIR__) . '/inc/status.php';
     $st = painel_ticket_status((int) $ticket_id, (int) $ticket_data['status']);
     $status_str = $st['label'];
     $status_class = $st['class'];
@@ -781,7 +781,7 @@ foreach ($DB->request(['SELECT' => ['users_id'], 'FROM' => 'glpi_tickets_users',
                 Mais detalhes <i class="fa-solid fa-chevron-up"></i>
             </button>
             <div class="info-more" id="info-more">
-                <div class="info-item"><small>Tipo de Chamado:</small><span><?= (int) $ticket_data['type'] === 2 ? 'Requisição' : 'Incidente' ?></span></div>
+                <div class="info-item"><small>Tipo de Chamado:</small><span><?=htmlspecialchars(painel_ticket_kind_label((int) $ticket_id, (int) $ticket_data['type']))?></span></div>
                 <div class="info-item"><small>Aberto em</small><span><?=date('d/m/Y H:i', strtotime($ticket_data['date']))?></span></div>
                 <?php if ($techs): ?><div class="info-item"><small>Atendente</small><span><?=htmlspecialchars(implode(', ', $techs))?></span></div><?php endif; ?>
             </div>

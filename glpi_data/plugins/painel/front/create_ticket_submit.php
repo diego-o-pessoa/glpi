@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__) . '/inc/status.php';
 if (!defined('GLPI_ROOT')) {
     include ("../../../inc/includes.php");
 }
@@ -22,7 +23,7 @@ if (isset($_POST['add'])) {
         'content'             => $_POST['content'] ?? '',
         'itilcategories_id'   => isset($_POST['itilcategories_id']) ? intval($_POST['itilcategories_id']) : 0,
         'priority'            => isset($_POST['priority']) ? intval($_POST['priority']) : 3,
-        'type'                => isset($_POST['type']) ? intval($_POST['type']) : 1, // Incident defaults to 1
+        'type'                => (painel_ticket_kinds()[$_POST['kind'] ?? ''] ?? painel_ticket_kinds()['incident'])[1],
         'users_id_recipient'  => Session::getLoginUserID(),
         '_users_id_requester' => Session::getLoginUserID(),
         'requesttypes_id'     => 1, // Helpdesk
@@ -31,6 +32,7 @@ if (isset($_POST['add'])) {
     
     // 1. Cria o chamado
     $new_ticket_id = $ticket->add($input);
+    painel_ticket_kind_save((int) $new_ticket_id, (string) ($_POST['kind'] ?? 'incident'));
     debug_log("Ticket created with ID: " . $new_ticket_id);
     
     // 2. Processa os Anexos (se houver)

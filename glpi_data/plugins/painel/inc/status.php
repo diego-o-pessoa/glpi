@@ -40,3 +40,37 @@ if (!function_exists('painel_ticket_status')) {
         }
     }
 }
+
+if (!function_exists('painel_ticket_kinds')) {
+    /** Tipos de chamado da Ativa: chave => [nome, tipo do GLPI]. */
+    function painel_ticket_kinds(): array
+    {
+        return [
+            'incident'    => ['Incidente', 1],
+            'service'     => ['Serviço', 2],
+            'improvement' => ['Melhoria', 2],
+            'project'     => ['Projeto', 2],
+        ];
+    }
+
+    function painel_ticket_kind_save(int $ticketId, string $kind): void
+    {
+        global $DB;
+        if ($ticketId > 0 && isset(painel_ticket_kinds()[$kind]) && $DB->tableExists('glpi_plugin_ativacentral_ticketkinds')) {
+            $DB->updateOrInsert('glpi_plugin_ativacentral_ticketkinds', ['kind' => $kind], ['tickets_id' => $ticketId]);
+        }
+    }
+
+    /** Nome do tipo do chamado (ou Incidente/Requisicao do GLPI, se nao houver). */
+    function painel_ticket_kind_label(int $ticketId, int $glpiType): string
+    {
+        global $DB;
+        if ($DB->tableExists('glpi_plugin_ativacentral_ticketkinds')) {
+            $row = $DB->request(['SELECT' => 'kind', 'FROM' => 'glpi_plugin_ativacentral_ticketkinds', 'WHERE' => ['tickets_id' => $ticketId]])->current();
+            if ($row && isset(painel_ticket_kinds()[$row['kind']])) {
+                return painel_ticket_kinds()[$row['kind']][0];
+            }
+        }
+        return $glpiType === 2 ? 'Requisição' : 'Incidente';
+    }
+}
