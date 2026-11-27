@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__) . '/inc/status.php';
 if (!defined('GLPI_ROOT')) {
     include("../../../inc/includes.php");
 }
@@ -45,8 +46,9 @@ foreach ($iterator as $row) {
     }
 
     $status = (int) $row['status'];
-    $row['status_display'] = Ticket::getStatus($status);
-    $row['status_class'] = 'status-' . $status;
+    $st = painel_ticket_status((int) $row['id'], $status);
+    $row['status_display'] = $st['label'];
+    $row['status_class'] = $st['class'];
 
     if ($status < 5) {
         if ($status === 1) {
@@ -69,8 +71,6 @@ foreach ($iterator as $row) {
         ])->current();
 
         if ($last_followup && (int) $last_followup['users_id'] !== $uid) {
-            $row['status_display'] = 'Respondida';
-            $row['status_class'] = 'status-answered';
             $answered_count++;
         }
 
@@ -160,10 +160,13 @@ $closed_progress = $total_active_tickets > 0 ? (int) round(100 * $solved_closed_
         .t-date { width: 160px; color: #666; font-size: 14px; }
         .t-status { width: 160px; font-size: 13px; font-weight: 700; text-align: right; }
         .status-badge { display: inline-block; padding: 6px 12px; border-radius: 20px; font-weight: 700; font-size: 11px; background: #F3F4F6; color: #4B5563; }
-        .status-1 .status-badge, .status-2 .status-badge { background: #FEF3C7; color: #D97706; }
-        .status-3 .status-badge, .status-4 .status-badge { background: #DBEAFE; color: #2563EB; }
-        .status-5 .status-badge { background: #D1FAE5; color: #059669; }
-        .status-6 .status-badge { background: #FEF3C7; color: #D97706; }
+        .st-gray .status-badge { background: #F3F4F6; color: #4B5563; }
+        .st-blue .status-badge { background: #DBEAFE; color: #1D4ED8; }
+        .st-orange .status-badge { background: #FEF3C7; color: #B45309; }
+        .st-purple .status-badge { background: #EDE9FE; color: #6D28D9; }
+        .st-pink .status-badge { background: #FCE7F3; color: #BE185D; }
+        .st-cyan .status-badge { background: #CFFAFE; color: #0E7490; }
+        .st-green .status-badge { background: #D1FAE5; color: #047857; }
         .status-deleted .status-badge { background: #FEE2E2; color: #DC2626; }
         .status-answered .status-badge { background: #D1FAE5; color: #059669; }
     </style>

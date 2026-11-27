@@ -92,11 +92,10 @@ if ($ticket_data['is_deleted'] == 1) {
     $status_str = "Excluído";
     $status_class = "status-deleted";
 } else {
-    $status_str = Ticket::getStatus($ticket_data['status']);
-    if ($ticket_data['status'] == 6) {
-        $status_str = "Finalizado";
-    }
-    $status_class = 'status-' . intval($ticket_data['status']);
+    require_once dirname(__DIR__) . '/inc/status.php';
+    $st = painel_ticket_status((int) $ticket_id, (int) $ticket_data['status']);
+    $status_str = $st['label'];
+    $status_class = $st['class'];
 }
 
 // Calcula Base URL dinâmica para o Proxy (ex: /Helpdesk)
@@ -347,10 +346,17 @@ foreach ($DB->request(['SELECT' => ['users_id'], 'FROM' => 'glpi_tickets_users',
         .ticket-meta b { color: #111827; font-weight: 700; }
         .status-pill { display: inline-flex; align-items: center; gap: 6px; }
         .status-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #9CA3AF; }
-        .status-1::before, .status-2::before { background: #F59E0B; }
-        .status-3::before, .status-4::before { background: #3B82F6; }
-        .status-5::before, .status-6::before { background: #10B981; }
+        .st-gray::before { background: #6B7280; }
+        .st-blue::before { background: #2563EB; }
+        .st-orange::before { background: #F59E0B; }
+        .st-purple::before { background: #8B5CF6; }
+        .st-pink::before { background: #EC4899; }
+        .st-cyan::before { background: #0891B2; }
+        .st-green::before { background: #10B981; }
         .status-deleted::before { background: #EF4444; }
+        .status-pill { font-weight: 600; }
+        .st-gray { color: #4B5563; } .st-blue { color: #2563EB; } .st-orange { color: #D97706; } .st-purple { color: #7C3AED; }
+        .st-pink { color: #DB2777; } .st-cyan { color: #0E7490; } .st-green { color: #059669; }
         .ticket-title { font-size: 24px; font-weight: 700; color: #111827; line-height: 1.3; }
         .head-actions { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
         .btn-icon { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; color: #4B5563; font-size: 16px; transition: background 0.2s; }

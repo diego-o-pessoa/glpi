@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Glpi\Plugin\Hooks;
 use GlpiPlugin\Ativacentral\Mail;
 use GlpiPlugin\Ativacentral\Shell;
+use GlpiPlugin\Ativacentral\Statuses;
 
 define('PLUGIN_ATIVACENTRAL_VERSION', '1.0.0');
 define('PLUGIN_ATIVACENTRAL_MIN_GLPI', '11.0.0');
@@ -44,6 +45,7 @@ function plugin_init_ativacentral(): void
     if (Session::getLoginUserID() !== false) {
         try {
             Mail::ensureTemplates();
+            Statuses::ensure();
         } catch (Throwable $exception) {
             Toolbox::logInFile('ativacentral', 'Falha nos modelos de e-mail: ' . $exception->getMessage() . "\n");
         }
