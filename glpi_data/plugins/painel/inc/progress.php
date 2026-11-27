@@ -228,7 +228,7 @@ if (!function_exists('painel_task_extend_parents')) {
             $max = $DB->request([
                 'SELECT' => ['MAX' => 'plan_end_date AS e'],
                 'FROM'   => 'glpi_projecttasks',
-                'WHERE'  => ['projecttasks_id' => $parentId, 'NOT' => ['plan_end_date' => null]],
+                'WHERE'  => ['projecttasks_id' => $parentId, 'is_deleted' => 0, 'NOT' => ['plan_end_date' => null]],
             ])->current();
             $parent = $DB->request(['SELECT' => ['plan_end_date', 'projecttasks_id'], 'FROM' => 'glpi_projecttasks', 'WHERE' => ['id' => $parentId]])->current();
             if (!$parent) {
