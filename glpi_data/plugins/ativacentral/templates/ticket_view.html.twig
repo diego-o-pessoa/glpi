@@ -6,21 +6,13 @@
         <div class="ac-tv-headmain">
             <div class="ac-tv-meta">
                 <b>#{{ id }}</b>
-                <span class="ac-tk-sit is-{{ sit_tone }}">{{ sit_label }}</span>
+                <span class="ac-tk-sit is-{{ sit_tone }}" title="Situação">{{ sit_label }}</span>
+                {% if status_key %}<span class="ac-tk-sit is-{{ status_tone }} is-outline" title="Status">{{ status_label }}</span>{% endif %}
                 <span class="ac-tk-prio is-p{{ priority }}">{{ priority_label }}</span>
-                <span>{{ kinds[kind] ?? '' }}</span>
-                {% if category %}<span><i class="ti ti-folder"></i> {{ category }}</span>{% endif %}
-                <span><i class="ti ti-calendar"></i> {{ date }}</span>
             </div>
             <h1 class="ac-tv-title">{{ title }}</h1>
         </div>
         <div class="ac-actions">
-            {% if can_update and is_open and not i_am_assigned %}
-                <form method="post" action="{{ action }}">
-                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
-                    <button class="ac-btn" name="ticket_action" value="assign_me"><i class="ti ti-user-check"></i> Atribuir a mim</button>
-                </form>
-            {% endif %}
             {% if is_open %}
                 <button type="button" class="ac-btn ac-tv-finish" id="ac-tv-finish-open"><i class="ti ti-circle-check"></i> Finalizar chamado</button>
             {% elseif can_update %}
@@ -56,7 +48,9 @@
         <section class="ac-panel ac-tv-chat">
             <div class="ac-tv-thread" id="ac-tv-thread">
                 {% for m in timeline %}
-                    {% if m.type == 'ValidationAsk' or m.type == 'ValidationAnswer' %}
+                    {% if m.type == 'Event' %}
+                        <div class="ac-tv-note"><i class="ti ti-info-circle"></i> <span><b>{{ m.author }}</b> · {{ m.html|raw }}</span><small>{{ m.date }}</small></div>
+                    {% elseif m.type == 'ValidationAsk' or m.type == 'ValidationAnswer' %}
                         <div class="ac-tv-event">
                             <i class="ti {{ m.type == 'ValidationAsk' ? 'ti-user-question' : (m.approved ? 'ti-thumb-up' : 'ti-thumb-down') }}"></i>
                             <div>
@@ -81,7 +75,6 @@
                                     {% if m.private|default(false) %}<span class="ac-tv-tag is-amber"><i class="ti ti-lock"></i> Nota interna</span>{% endif %}
                                     <small>{{ m.date }}</small>
                                 </div>
-                                {% if m.type == 'Ticket' and m.title %}<div class="ac-tv-bubble-title">{{ m.title }}</div>{% endif %}
                                 <div class="ac-tv-bubble-body">{{ m.html|raw }}</div>
                                 {% if m.docs is not empty %}
                                     <div class="ac-tv-docs">
@@ -114,40 +107,12 @@
         </section>
 
         <aside class="ac-tv-side">
-            {% if can_update and is_open %}
-                <section class="ac-panel ac-tv-card">
-                    <h3><i class="ti ti-progress"></i> Situação</h3>
-                    <form method="post" action="{{ action }}" class="ac-tv-sits">
-                        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
-                        <input type="hidden" name="ticket_action" value="situation">
-                        {% for s in situations %}
-                            <button type="submit" name="situation" value="{{ s.key }}" class="{{ s.key == situation ? 'is-active' : '' }}">
-                                <i class="ac-tk-dot is-{{ s.tone }}"></i> {{ s.label }}
-                                {% if s.key == situation %}<i class="ti ti-check"></i>{% endif %}
-                            </button>
-                        {% endfor %}
-                    </form>
-                    {% if situation == 'waiting_tech' %}<small class="ac-tv-hint">Hoje: Aguardando atendente. Escolha uma situação ou atribua o chamado.</small>{% endif %}
-                </section>
-            {% endif %}
-
-            {% if requester %}
-                <section class="ac-panel ac-tv-card">
-                    <h3><i class="ti ti-user"></i> Requerente</h3>
-                    <div class="ac-tv-person">
-                        <span class="ac-tv-avatar is-user">{{ requester.initials }}</span>
-                        <div><b>{{ requester.name }}</b>{% if requester.dept %}<small>{{ requester.dept }}</small>{% endif %}</div>
-                    </div>
-                    <ul class="ac-tv-facts">
-                        {% if requester.email %}<li><i class="ti ti-mail"></i> <a href="mailto:{{ requester.email }}">{{ requester.email }}</a></li>{% endif %}
-                        {% if requester.phone %}<li><i class="ti ti-phone"></i> {{ requester.phone }}</li>{% endif %}
-                        {% if requester.location %}<li><i class="ti ti-map-pin"></i> {{ requester.location }}</li>{% endif %}
-                    </ul>
-                </section>
-            {% endif %}
-
             <section class="ac-panel ac-tv-card">
-                <h3><i class="ti ti-headset"></i> Atendentes</h3>
+                <h3><i class="ti ti-headset"></i> Atendimento</h3>
+                <div class="ac-tv-sitbox is-{{ sit_tone }}">
+                    <small>Situação</small>
+                    <b><i class="ac-tk-dot is-{{ sit_tone }}"></i> {{ sit_label }}</b>
+                </div>
                 {% for a in assigned %}
                     <div class="ac-tv-chip">
                         <span class="ac-tv-avatar">{{ a.name|slice(0, 1)|upper }}</span><b>{{ a.name }}</b>
@@ -159,21 +124,91 @@
                             </form>
                         {% endif %}
                     </div>
-                {% else %}
-                    <small class="ac-tv-hint">Ninguém atendendo ainda.</small>
                 {% endfor %}
                 {% for g in groups %}<div class="ac-tv-chip"><span class="ac-tv-avatar"><i class="ti ti-users"></i></span><b>{{ g }}</b></div>{% endfor %}
-                {% if can_update and techs is not empty %}
-                    <form method="post" action="{{ action }}" class="ac-tv-inline">
-                        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
-                        <select name="users_id" class="ac-pnew-input" required>
-                            <option value="">Adicionar atendente…</option>
-                            {% for uid, name in techs %}<option value="{{ uid }}">{{ name }}</option>{% endfor %}
-                        </select>
-                        <button class="ac-btn" name="ticket_action" value="assign"><i class="ti ti-plus"></i></button>
-                    </form>
+                {% if can_update and is_open %}
+                    {% if not i_am_assigned %}
+                        <form method="post" action="{{ action }}">
+                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                            <button class="ac-btn is-primary ac-tv-full" name="ticket_action" value="assign_me"><i class="ti ti-user-check"></i> Assumir atendimento</button>
+                        </form>
+                    {% endif %}
+                    {% if techs is not empty %}
+                        <form method="post" action="{{ action }}" class="ac-tv-inline">
+                            <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                            <select name="users_id" class="ac-pnew-input" required>
+                                <option value="">Adicionar atendente…</option>
+                                {% for uid, name in techs %}<option value="{{ uid }}">{{ name }}</option>{% endfor %}
+                            </select>
+                            <button class="ac-btn" name="ticket_action" value="assign" title="Adicionar"><i class="ti ti-plus"></i></button>
+                        </form>
+                    {% endif %}
                 {% endif %}
             </section>
+
+            {% if can_update and is_open %}
+                <section class="ac-panel ac-tv-card">
+                    <h3><i class="ti ti-progress"></i> Status</h3>
+                    <form method="post" action="{{ action }}" class="ac-tv-stats">
+                        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                        <input type="hidden" name="ticket_action" value="status">
+                        {% for s in statuses %}
+                            <button type="submit" name="status" value="{{ s.key == status_key ? '' : s.key }}" class="is-{{ s.tone }} {{ s.key == status_key ? 'is-active' : '' }}" title="{{ s.key == status_key ? 'Clique para remover o status' : 'Definir como ' ~ s.label }}">
+                                <i class="ac-tk-dot is-{{ s.tone }}"></i><span>{{ s.label }}</span>
+                            </button>
+                        {% endfor %}
+                    </form>
+                    <small class="ac-tv-hint">O usuário vê o status no portal e um aviso na conversa.</small>
+                </section>
+            {% endif %}
+
+            <section class="ac-panel ac-tv-card">
+                <h3><i class="ti ti-file-description"></i> Informações do chamado</h3>
+                <form method="post" action="{{ action }}" class="ac-tv-details">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                    <div class="ac-tv-info"><small>Assunto</small><b>{{ title }}</b></div>
+                    <div class="ac-tv-info"><small>Aberto em</small><span>{{ date }}</span></div>
+                    <div class="ac-tv-2col">
+                        <label class="ac-pnew-field"><span class="ac-pnew-label">Tipo</span>
+                            <select name="kind" class="ac-pnew-input" {{ can_update ? '' : 'disabled' }}>
+                                {% for key, label in kinds %}<option value="{{ key }}" {{ key == kind ? 'selected' : '' }}>{{ label }}</option>{% endfor %}
+                            </select>
+                        </label>
+                        <label class="ac-pnew-field"><span class="ac-pnew-label">Prioridade</span>
+                            <select name="priority" class="ac-pnew-input" {{ can_update ? '' : 'disabled' }}>
+                                {% for value, label in priorities %}<option value="{{ value }}" {{ value == priority or (priority > 5 and value == 5) or (priority < 2 and value == 2) ? 'selected' : '' }}>{{ label }}</option>{% endfor %}
+                            </select>
+                        </label>
+                    </div>
+                    <label class="ac-pnew-field"><span class="ac-pnew-label">Categoria</span>
+                        <select name="itilcategories_id" class="ac-pnew-input" {{ can_update ? '' : 'disabled' }}>
+                            <option value="0">—</option>
+                            {% for dept, items in category_tree %}
+                                <optgroup label="{{ dept }}">
+                                    {% for c in items %}<option value="{{ c.id }}" {{ c.id == categories_id ? 'selected' : '' }}>{{ c.name }}</option>{% endfor %}
+                                </optgroup>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    {% if can_update %}<button class="ac-btn" name="ticket_action" value="details"><i class="ti ti-device-floppy"></i> Salvar</button>{% endif %}
+                </form>
+            </section>
+
+            {% if requester %}
+                <section class="ac-panel ac-tv-card">
+                    <h3><i class="ti ti-user"></i> Requerente</h3>
+                    <div class="ac-tv-person">
+                        <span class="ac-tv-avatar is-user">{{ requester.initials }}</span>
+                        <div><b>{{ requester.name }}</b></div>
+                    </div>
+                    <ul class="ac-tv-facts">
+                        <li><i class="ti ti-building"></i> <span class="ac-tv-fact-label">Setor</span> {{ requester.dept ?: 'Não informado' }}</li>
+                        {% if requester.location %}<li><i class="ti ti-map-pin"></i> <span class="ac-tv-fact-label">Filial</span> {{ requester.location }}</li>{% endif %}
+                        {% if requester.email %}<li><i class="ti ti-mail"></i> <a href="mailto:{{ requester.email }}">{{ requester.email }}</a></li>{% endif %}
+                        {% if requester.phone %}<li><i class="ti ti-phone"></i> {{ requester.phone }}</li>{% endif %}
+                    </ul>
+                </section>
+            {% endif %}
 
             <section class="ac-panel ac-tv-card">
                 <h3><i class="ti ti-thumb-up"></i> Aprovação</h3>
@@ -205,33 +240,6 @@
                 {% endif %}
             </section>
 
-            <section class="ac-panel ac-tv-card">
-                <h3><i class="ti ti-adjustments"></i> Detalhes</h3>
-                <form method="post" action="{{ action }}" class="ac-tv-details">
-                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
-                    <label class="ac-pnew-field"><span class="ac-pnew-label">Prioridade</span>
-                        <select name="priority" class="ac-pnew-input" {{ can_update ? '' : 'disabled' }}>
-                            {% for value, label in priorities %}<option value="{{ value }}" {{ value == priority or (priority > 5 and value == 5) or (priority < 2 and value == 2) ? 'selected' : '' }}>{{ label }}</option>{% endfor %}
-                        </select>
-                    </label>
-                    <label class="ac-pnew-field"><span class="ac-pnew-label">Tipo</span>
-                        <select name="kind" class="ac-pnew-input" {{ can_update ? '' : 'disabled' }}>
-                            {% for key, label in kinds %}<option value="{{ key }}" {{ key == kind ? 'selected' : '' }}>{{ label }}</option>{% endfor %}
-                        </select>
-                    </label>
-                    <label class="ac-pnew-field"><span class="ac-pnew-label">Categoria</span>
-                        <select name="itilcategories_id" class="ac-pnew-input" {{ can_update ? '' : 'disabled' }}>
-                            <option value="0">—</option>
-                            {% for dept, items in category_tree %}
-                                <optgroup label="{{ dept }}">
-                                    {% for c in items %}<option value="{{ c.id }}" {{ c.id == categories_id ? 'selected' : '' }}>{{ c.name }}</option>{% endfor %}
-                                </optgroup>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    {% if can_update %}<button class="ac-btn" name="ticket_action" value="details"><i class="ti ti-device-floppy"></i> Salvar</button>{% endif %}
-                </form>
-            </section>
         </aside>
     </div>
     {% endif %}

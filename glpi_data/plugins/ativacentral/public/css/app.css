@@ -3722,3 +3722,28 @@ a.ac-tk-row:hover { background: rgba(var(--ac-blue-rgb), 0.05); color: inherit; 
     .ac-tv-msg { max-width: 100%; }
     .ac-tv-head { flex-wrap: wrap; }
 }
+
+/* Tela do chamado: situacao (automatica) x status (escolhido) */
+.ac-tk-sit.is-outline { background: transparent; box-shadow: inset 0 0 0 1px currentColor; }
+.ac-tv-sitbox { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--ac-track); }
+.ac-tv-sitbox small { color: var(--ac-muted); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.ac-tv-sitbox b { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ac-ink); }
+.ac-tv-sitbox.is-blue { background: rgba(var(--ac-blue-rgb), 0.08); }
+.ac-tv-sitbox.is-blue b { color: var(--ac-blue); }
+.ac-tv-sitbox.is-green { background: #ecfdf5; }
+.ac-tv-sitbox.is-green b { color: #047857; }
+.ac-btn.ac-tv-full { width: 100%; justify-content: center; }
+.ac-tv-card > form { margin: 0; }
+.ac-tv-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0; }
+.ac-tv-stats button { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--ac-line); border-radius: 10px; background: #fff; font: inherit; font-size: 12.5px; font-weight: 700; line-height: 1.25; color: var(--ac-ink); text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+.ac-tv-stats button:hover { border-color: var(--ac-blue); }
+.ac-tv-stats button.is-active { border-color: var(--ac-blue); background: rgba(var(--ac-blue-rgb), 0.08); color: var(--ac-blue); box-shadow: inset 0 0 0 1px var(--ac-blue); }
+.ac-tv-info { display: flex; flex-direction: column; gap: 2px; }
+.ac-tv-info small, .ac-tv-fact-label { color: var(--ac-muted); font-size: 11.5px; font-weight: 700; }
+.ac-tv-info b { color: var(--ac-ink); font-size: 14px; line-height: 1.35; }
+.ac-tv-info span { color: var(--ac-ink); font-size: 13px; }
+.ac-tv-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ac-tv-fact-label { margin-right: 4px; }
+.ac-tv-note { align-self: center; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; max-width: 90%; padding: 5px 12px; border-radius: 999px; background: var(--ac-track); color: var(--ac-muted); font-size: 12.5px; }
+.ac-tv-note b { color: var(--ac-ink); }
+.ac-tv-note small { font-size: 11px; opacity: .8; }

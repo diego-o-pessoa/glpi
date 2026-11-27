@@ -35,7 +35,8 @@ final class TicketView
     ];
 
     /** Situacoes que o atendente escolhe (Finalizado e pelo botao Finalizar). */
-    private const SETTABLE = ['in_progress', 'running', 'waiting_user', 'waiting_approval', 'waiting_third'];
+    /** Status que o atendente escolhe (a situacao vem dos atendentes vinculados). */
+    private const STATUSES = ['running', 'waiting_user', 'waiting_approval', 'waiting_third'];
 
     public static function url(int $id, string $tab = 'chat'): string
     {
@@ -107,10 +108,17 @@ final class TicketView
 
         // Situacao
         $reasonRow = $DB->request(['SELECT' => ['r.name'], 'FROM' => 'glpi_pendingreasons_items AS pi', 'INNER JOIN' => ['glpi_pendingreasons AS r' => ['ON' => ['pi' => 'pendingreasons_id', 'r' => 'id']]], 'WHERE' => ['pi.itemtype' => 'Ticket', 'pi.items_id' => $id]])->current();
-        $situation = Statuses::situation((int) $f['status'], (string) ($reasonRow['name'] ?? ''));
-        $situations = [];
-        foreach (self::SETTABLE as $key) {
-            $situations[] = ['key' => $key, 'label' => Statuses::SITUATIONS[$key][0], 'tone' => Statuses::SITUATIONS[$key][1]];
+        // Situacao = quem esta com o chamado; Status = em que pe esta o trabalho.
+        $current = Statuses::situation((int) $f['status'], (string) ($reasonRow['name'] ?? ''));
+        $statusKey = in_array($current, self::STATUSES, true) ? $current : '';
+        if ((int) $f['status'] >= 5) {
+            $situation = 'finished';
+        } else {
+            $situation = ($actors[2] !== [] || $groupsAssigned !== []) ? 'in_progress' : 'waiting_tech';
+        }
+        $statuses = [];
+        foreach (self::STATUSES as $key) {
+            $statuses[] = ['key' => $key, 'label' => Statuses::SITUATIONS[$key][0], 'tone' => Statuses::SITUATIONS[$key][1]];
         }
 
         // Requerente (primeiro)
@@ -158,7 +166,10 @@ final class TicketView
             'situation'     => $situation,
             'sit_label'     => Statuses::SITUATIONS[$situation][0],
             'sit_tone'      => Statuses::SITUATIONS[$situation][1],
-            'situations'    => $situations,
+            'statuses'      => $statuses,
+            'status_key'    => $statusKey,
+            'status_label'  => $statusKey !== '' ? Statuses::SITUATIONS[$statusKey][0] : '',
+            'status_tone'   => $statusKey !== '' ? Statuses::SITUATIONS[$statusKey][1] : '',
             'is_open'       => (int) $f['status'] < 5,
             'is_solved'     => (int) $f['status'] === 5,
             'can_update'    => $canUpdate,
@@ -277,7 +288,7 @@ final class TicketView
         };
 
         $opener = (int) ($ticket->fields['users_id_recipient'] ?: ($requesterIds[0] ?? 0));
-        $add('Ticket', $id, (string) $ticket->fields['date'], $opener, (string) $ticket->fields['content'], ['title' => (string) $ticket->fields['name']]);
+        $add('Ticket', $id, (string) $ticket->fields['date'], $opener, (string) $ticket->fields['content']);
         foreach ($DB->request(['FROM' => 'glpi_itilfollowups', 'WHERE' => ['itemtype' => 'Ticket', 'items_id' => $id]]) as $r) {
             $add('ITILFollowup', (int) $r['id'], (string) $r['date'], (int) $r['users_id'], (string) $r['content'], ['private' => (bool) $r['is_private']]);
         }
@@ -294,6 +305,9 @@ final class TicketView
             if ((int) $r['status'] !== 2 && $r['validation_date']) {
                 $add('ValidationAnswer', (int) $r['id'], (string) $r['validation_date'], $target, (string) $r['comment_validation'], ['approved' => (int) $r['status'] === 3]);
             }
+        }
+        foreach (Statuses::events($id) as $e) {
+            $add('Event', (int) $e['id'], (string) $e['date'], (int) $e['users_id'], (string) $e['text']);
         }
         usort($items, static fn (array $a, array $b): int => [strtotime($a['date_raw']), $a['type'] === 'Ticket' ? 0 : 1] <=> [strtotime($b['date_raw']), $b['type'] === 'Ticket' ? 0 : 1]);
 
@@ -332,7 +346,7 @@ final class TicketView
                 'author'    => $names[$uid],
                 'initials'  => self::initials($names[$uid]),
                 'side'      => $isRequester ? 'user' : 'staff',
-                'html'      => $content !== '' ? RichText::getEnhancedHtml($content) : '',
+                'html'      => $it['type'] === 'Event' ? htmlspecialchars($content) : ($content !== '' ? RichText::getEnhancedHtml($content) : ''),
                 'date'      => Html::convDateTime($it['date_raw']),
                 'docs'      => $it['type'] === 'Ticket' ? ($docs['Ticket#' . $id] ?? []) : ($docs[$it['type'] . '#' . $it['item_id']] ?? []),
             ];
@@ -371,9 +385,11 @@ final class TicketView
                 self::assignIfNobody($ticket, $me);
                 return !empty($post['is_private']) ? 'Nota interna adicionada.' : 'Resposta enviada ao usuário.';
 
-            case 'situation':
+            case 'status':
                 self::requireUpdate($ticket);
-                return self::setSituation($ticket, (string) ($post['situation'] ?? ''));
+                self::assignIfNobody($ticket, $me);
+                $ticket->getFromDB($id);
+                return self::setStatus($ticket, (string) ($post['status'] ?? ''));
 
             case 'assign_me':
             case 'assign':
@@ -382,7 +398,9 @@ final class TicketView
                 if ($uid <= 0) {
                     throw new \InvalidArgumentException('Escolha o atendente.');
                 }
-                (new Ticket_User())->add(['tickets_id' => $id, 'users_id' => $uid, 'type' => 2]);
+                if ((new Ticket_User())->add(['tickets_id' => $id, 'users_id' => $uid, 'type' => 2])) {
+                    Statuses::logEvent($id, self::cleanName((string) getUserName($uid)) . ' está atendendo o chamado');
+                }
                 return $action === 'assign_me' ? 'Chamado atribuído a você.' : 'Atendente adicionado.';
 
             case 'unassign':
@@ -423,7 +441,7 @@ final class TicketView
                 }
                 // Enquanto espera, o chamado fica "Aguardando aprovacao".
                 $ticket->getFromDB($id);
-                self::setSituation($ticket, 'waiting_approval');
+                self::setStatus($ticket, 'waiting_approval');
                 return 'Aprovação pedida para ' . self::cleanName((string) getUserName($uid)) . '.';
 
             case 'solve':
@@ -460,29 +478,38 @@ final class TicketView
         $count = countElementsInTable('glpi_tickets_users', ['tickets_id' => $ticket->getID(), 'type' => 2])
             + countElementsInTable('glpi_groups_tickets', ['tickets_id' => $ticket->getID(), 'type' => 2]);
         if ($count === 0 && $ticket->canUpdateItem()) {
-            (new Ticket_User())->add(['tickets_id' => $ticket->getID(), 'users_id' => $me, 'type' => 2]);
+            if ((new Ticket_User())->add(['tickets_id' => $ticket->getID(), 'users_id' => $me, 'type' => 2])) {
+                Statuses::logEvent((int) $ticket->getID(), self::cleanName((string) getUserName($me)) . ' está atendendo o chamado');
+            }
         }
     }
 
-    /** Troca a situacao: status do GLPI + motivo de pendencia. */
-    private static function setSituation(Ticket $ticket, string $situation): string
+    /** Define o status (status do GLPI + motivo de pendencia); vazio volta para so "Em atendimento". */
+    private static function setStatus(Ticket $ticket, string $status): string
     {
         global $DB;
-        if (!in_array($situation, self::SETTABLE, true)) {
-            throw new \InvalidArgumentException('Situação inválida.');
+        if ($status !== '' && !in_array($status, self::STATUSES, true)) {
+            throw new \InvalidArgumentException('Status inválido.');
         }
         $id = (int) $ticket->getID();
         $reasonNames = ['waiting_user' => 'Aguardando usuário', 'waiting_approval' => 'Aguardando aprovação', 'waiting_third' => 'Aguardando terceiro'];
-        if (isset($reasonNames[$situation])) {
-            $reason = $DB->request(['SELECT' => 'id', 'FROM' => 'glpi_pendingreasons', 'WHERE' => ['name' => $reasonNames[$situation]]])->current();
+        if (isset($reasonNames[$status])) {
+            $reason = $DB->request(['SELECT' => 'id', 'FROM' => 'glpi_pendingreasons', 'WHERE' => ['name' => $reasonNames[$status]]])->current();
+            PendingReason_Item::deleteForItem($ticket);
             $ticket->update(['id' => $id, 'status' => Ticket::WAITING]);
             if ($reason) {
                 PendingReason_Item::createForItem($ticket, ['pendingreasons_id' => (int) $reason['id'], 'followup_frequency' => 0, 'followups_before_resolution' => 0]);
             }
         } else {
             PendingReason_Item::deleteForItem($ticket);
-            $ticket->update(['id' => $id, 'status' => $situation === 'running' ? Ticket::PLANNED : Ticket::ASSIGNED]);
+            $ticket->update(['id' => $id, 'status' => $status === 'running' ? Ticket::PLANNED : Ticket::ASSIGNED]);
         }
-        return 'Situação: ' . Statuses::SITUATIONS[$situation][0] . '.';
+        if ($status === '') {
+            Statuses::logEvent($id, 'Status removido: chamado em atendimento');
+            return 'Status removido.';
+        }
+        $label = Statuses::SITUATIONS[$status][0];
+        Statuses::logEvent($id, 'Status definido como "' . $label . '"');
+        return 'Status: ' . $label . '.';
     }
 }

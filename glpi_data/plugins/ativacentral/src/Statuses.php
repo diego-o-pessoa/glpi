@@ -7,6 +7,7 @@ namespace GlpiPlugin\Ativacentral;
 use Config;
 use Glpi\Cache\CacheManager;
 use Toolbox;
+use Session;
 
 /**
  * Status dos chamados da Ativa:
@@ -17,7 +18,7 @@ use Toolbox;
 final class Statuses
 {
     private const VERSION_KEY = 'statuses_version';
-    private const VERSION = '2';
+    private const VERSION = '3';
 
     public const REASONS = ['Aguardando usuário', 'Aguardando aprovação', 'Aguardando terceiro'];
 
@@ -56,6 +57,31 @@ final class Statuses
             return;
         }
         $DB->updateOrInsert('glpi_plugin_ativacentral_ticketkinds', ['kind' => $kind], ['tickets_id' => $ticketId]);
+    }
+
+    /** Grava um evento do chamado (aparece na conversa do atendente e do usuario). */
+    public static function logEvent(int $ticketId, string $text): void
+    {
+        global $DB;
+        if ($ticketId <= 0 || !$DB->tableExists('glpi_plugin_ativacentral_ticketevents')) {
+            return;
+        }
+        $DB->insert('glpi_plugin_ativacentral_ticketevents', [
+            'tickets_id' => $ticketId,
+            'users_id'   => (int) Session::getLoginUserID(),
+            'text'       => mb_substr($text, 0, 255),
+            'date'       => $_SESSION['glpi_currenttime'] ?? date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    /** @return list<array{id:int,users_id:int,text:string,date:string}> */
+    public static function events(int $ticketId): array
+    {
+        global $DB;
+        if (!$DB->tableExists('glpi_plugin_ativacentral_ticketevents')) {
+            return [];
+        }
+        return iterator_to_array($DB->request(['FROM' => 'glpi_plugin_ativacentral_ticketevents', 'WHERE' => ['tickets_id' => $ticketId], 'ORDER' => 'id']), false);
     }
 
     /** Situacoes da tela de chamados: chave => [nome, cor]. */
@@ -103,6 +129,17 @@ final class Statuses
             `kind` varchar(20) NOT NULL DEFAULT 'incident',
             PRIMARY KEY (`id`),
             UNIQUE KEY `tickets_id` (`tickets_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Eventos visiveis ao usuario (status definido, atendente entrou).
+        $DB->doQuery("CREATE TABLE IF NOT EXISTS `glpi_plugin_ativacentral_ticketevents` (
+            `id` int unsigned NOT NULL AUTO_INCREMENT,
+            `tickets_id` int unsigned NOT NULL,
+            `users_id` int unsigned NOT NULL DEFAULT 0,
+            `text` varchar(255) NOT NULL DEFAULT '',
+            `date` timestamp NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            KEY `tickets_id` (`tickets_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
         foreach (self::REASONS as $i => $name) {

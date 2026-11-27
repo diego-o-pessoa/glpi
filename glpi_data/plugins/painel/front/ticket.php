@@ -157,6 +157,14 @@ foreach ($s_iterator as $row) {
     $timeline[] = $row;
 }
 
+// 5. Avisos de status/atendente gravados pela tela do T.I. (Ativa Central)
+if ($DB->tableExists('glpi_plugin_ativacentral_ticketevents')) {
+    foreach ($DB->request(['SELECT' => ['id', 'date', 'text AS content', 'users_id'], 'FROM' => 'glpi_plugin_ativacentral_ticketevents', 'WHERE' => ['tickets_id' => $ticket_id]]) as $row) {
+        $row['type'] = 'Event';
+        $timeline[] = $row;
+    }
+}
+
 // Ordena a linha do tempo (mais antigas primeiro)
 usort($timeline, function($a, $b) {
     return strtotime($a['date']) - strtotime($b['date']);
@@ -370,6 +378,10 @@ foreach ($DB->request(['SELECT' => ['users_id'], 'FROM' => 'glpi_tickets_users',
 
         /* Conversa */
         .conversation { padding: 0 22px; }
+        .msg-event { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid #F1F2F4; color: #6B7280; font-size: 13px; }
+        .msg-event i { color: #3B82F6; }
+        .msg-event span { font-weight: 600; color: #374151; }
+        .msg-event small { color: #9CA3AF; }
         .msg { display: flex; gap: 14px; padding: 22px 0; border-bottom: 1px solid #F1F2F4; }
         .msg-avatar { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #FFF; font-size: 12px; font-weight: 700; background: #9333EA; }
         .msg.is-staff .msg-avatar { background: #0b457e; }
@@ -521,7 +533,10 @@ foreach ($DB->request(['SELECT' => ['users_id'], 'FROM' => 'glpi_tickets_users',
             <?php foreach($timeline as $item):
                 $ts = strtotime($item['date']);
                 $when = date('Y-m-d', $ts) === date('Y-m-d') ? date('H:i', $ts) : date('d/m/Y H:i', $ts);
+                if ($item['type'] === 'Event'):
             ?>
+                <div class="msg-event"><i class="fa-solid fa-circle-info"></i> <span><?=htmlspecialchars($item['content'])?></span> <small title="<?=date('d/m/Y H:i', $ts)?>"><?=$when?></small></div>
+            <?php continue; endif; ?>
                 <div class="msg <?= $item['is_requester'] ? '' : 'is-staff' ?>">
                     <div class="msg-avatar"><?=htmlspecialchars($item['initials'])?></div>
                     <div class="msg-main">
