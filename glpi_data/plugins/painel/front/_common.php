@@ -912,9 +912,7 @@ if (!function_exists('painel_project_detail')) {
 
             $assignees = [];
             $isMine = ((int) $t['users_id'] === $uid);
-            if ((int) $t['users_id'] > 0 && isset($uNames[(int) $t['users_id']])) {
-                $assignees[] = $uNames[(int) $t['users_id']];
-            }
+            // Pessoas = so a equipe marcada na tarefa (o responsavel nao entra), como no Super-Admin.
             foreach ($taskTeams[$tid] ?? [] as $m) {
                 if ($m['type'] === 'User') {
                     if ($m['id'] === $uid) {
