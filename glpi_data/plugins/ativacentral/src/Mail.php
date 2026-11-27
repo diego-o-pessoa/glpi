@@ -25,7 +25,7 @@ use UserEmail;
 final class Mail
 {
     private const VERSION_KEY = 'mail_templates_version';
-    private const VERSION = '1';
+    private const VERSION = '2';
 
     private static function layout(string $title, string $subtitle, string $content, string $button, string $url, string $footer): string
     {
@@ -132,6 +132,11 @@ final class Mail
             $ids = array_column(iterator_to_array($DB->request(['SELECT' => 'id', 'FROM' => 'glpi_notifications', 'WHERE' => ['itemtype' => 'Ticket', 'event' => $event]])), 'id');
             if ($ids !== []) {
                 $DB->update('glpi_notifications_notificationtemplates', ['notificationtemplates_id' => $tplId], ['notifications_id' => $ids, 'mode' => 'mailing']);
+                // So quem abriu o chamado (requerente), no e-mail do cadastro dele.
+                $DB->delete('glpi_notificationtargets', ['notifications_id' => $ids]);
+                foreach ($ids as $nid) {
+                    $DB->insert('glpi_notificationtargets', ['notifications_id' => $nid, 'type' => \Notification::USER_TYPE, 'items_id' => \Notification::AUTHOR]);
+                }
             }
         }
         Config::setConfigurationValues(Settings::CONTEXT, [self::VERSION_KEY => self::VERSION]);
