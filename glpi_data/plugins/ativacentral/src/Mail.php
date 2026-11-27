@@ -25,7 +25,7 @@ use UserEmail;
 final class Mail
 {
     private const VERSION_KEY = 'mail_templates_version';
-    private const VERSION = '3';
+    private const VERSION = '4';
 
     private static function layout(string $title, string $subtitle, string $content, string $button, string $url, string $footer): string
     {
@@ -139,6 +139,11 @@ final class Mail
                     $DB->insert('glpi_notificationtargets', ['notifications_id' => $nid, 'type' => \Notification::USER_TYPE, 'items_id' => \Notification::AUTHOR]);
                 }
             }
+        }
+        // Modelos antigos gravados com o HTML escapado (&lt;div&gt;) chegam
+        // com o codigo aparecendo no e-mail: volta para HTML normal.
+        foreach ($DB->request(['SELECT' => ['id', 'content_html'], 'FROM' => 'glpi_notificationtemplatetranslations', 'WHERE' => ['content_html' => ['LIKE', '%&lt;%']]]) as $row) {
+            $DB->update('glpi_notificationtemplatetranslations', ['content_html' => html_entity_decode((string) $row['content_html'], ENT_QUOTES | ENT_HTML5, 'UTF-8')], ['id' => (int) $row['id']]);
         }
         // Usuarios que entram pela Microsoft tem o e-mail so no login: copia
         // para o cadastro de e-mails (sem isso o GLPI nao tem para onde enviar).
