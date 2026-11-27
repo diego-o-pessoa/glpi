@@ -40,8 +40,20 @@ final class TicketForm
     /** @return array<string, mixed> */
     public static function viewData(array $old = [], string $error = ''): array
     {
+        global $DB;
         $me = (int) Session::getLoginUserID();
         $tree = self::tree();
+        // Requerente: so atendentes "Nome - Ativa Locação" (some "glpi", "tech"...).
+        $hidden = [];
+        foreach ($DB->request(['SELECT' => ['id', 'realname', 'firstname'], 'FROM' => 'glpi_users']) as $u) {
+            if (stripos((string) $u['realname'] . ' ' . (string) $u['firstname'], 'Ativa Loca') === false) {
+                $hidden[] = (int) $u['id'];
+            }
+        }
+        $default = (int) ($old['requester'] ?? $me);
+        if (in_array($default, $hidden, true)) {
+            $default = 0;
+        }
         $catId = (int) ($old['itilcategories_id'] ?? 0);
         $dept = '';
         foreach ($tree as $d => $items) {
@@ -68,7 +80,8 @@ final class TicketForm
             'assign_me'  => $old === [] ? false : !empty($old['assign_me']),
             'requester_html' => User::dropdown([
                 'name'    => 'requester',
-                'value'   => (int) ($old['requester'] ?? $me),
+                'value'   => $default,
+                'used'    => $hidden,
                 // So quem pode atender chamados.
                 'right'   => 'own_ticket',
                 'display' => false,
@@ -102,7 +115,10 @@ final class TicketForm
         if (trim(strip_tags($content)) === '' && empty($post['_filename'])) {
             throw new \InvalidArgumentException('Descreva o chamado na mensagem.');
         }
-        $requester = (int) ($post['requester'] ?? 0) ?: (int) Session::getLoginUserID();
+        $requester = (int) ($post['requester'] ?? 0);
+        if ($requester <= 0) {
+            throw new \InvalidArgumentException('Escolha o requerente do chamado.');
+        }
         $kind = isset(Statuses::KINDS[(string) ($post['kind'] ?? '')]) ? (string) $post['kind'] : 'incident';
         $input = [
             'name'                => $name,
