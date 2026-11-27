@@ -25,7 +25,7 @@ use UserEmail;
 final class Mail
 {
     private const VERSION_KEY = 'mail_templates_version';
-    private const VERSION = '5';
+    private const VERSION = '6';
 
     private static function layout(string $title, string $subtitle, string $content, string $button, string $url, string $footer): string
     {
@@ -102,6 +102,21 @@ final class Mail
                 ),
                 'text'    => "Olá, ##ticket.authors##.\n\nO T.I. finalizou seu chamado ###ticket.id## (##ticket.title##):\n##ticket.solution.description##\n\n##ticket.url##",
             ],
+            'closed' => [
+                'name'    => 'Ativa - Chamado encerrado',
+                'subject' => '[Chamado ##ticket.id##] Chamado encerrado',
+                'html'    => self::layout(
+                    'Seu chamado foi encerrado',
+                    '###ticket.id## — ##ticket.title##',
+                    '<p>Olá, ##ticket.authors##.</p><p>Seu chamado foi encerrado.</p>'
+                        . self::table(['Chamado' => '###ticket.id## — ##ticket.title##', 'Aberto em' => '##ticket.creationdate##', 'Encerrado em' => '##ticket.closedate##'])
+                        . '##IFticket.solution.description##' . self::box('##ticket.solution.description##') . '##ENDIFticket.solution.description##',
+                    'Ver chamado',
+                    '##ticket.url##',
+                    'Obrigado! Equipe de T.I. — Ativa Locação.'
+                ),
+                'text'    => "Olá, ##ticket.authors##.\n\nSeu chamado ###ticket.id## (##ticket.title##) foi encerrado em ##ticket.closedate##.\n\n##ticket.url##",
+            ],
         ];
     }
 
@@ -140,6 +155,15 @@ final class Mail
                 }
             }
         }
+        // So os avisos pedidos ficam ligados (chamado aberto, resposta, solucionado,
+        // encerrado); os demais sao desligados. Senha esquecida continua ativa.
+        $DB->update('glpi_notifications', ['is_active' => 0], [
+            'NOT' => ['OR' => [
+                ['itemtype' => 'Ticket', 'event' => array_keys(self::ticketTemplates())],
+                ['itemtype' => 'User', 'event' => ['passwordforget', 'passwordinit', 'passwordexpires']],
+            ]],
+        ]);
+        $DB->update('glpi_notifications', ['is_active' => 1], ['itemtype' => 'Ticket', 'event' => array_keys(self::ticketTemplates())]);
         // Modelos antigos gravados com o HTML escapado (&lt;div&gt;) chegam
         // com o codigo aparecendo no e-mail: volta para HTML normal.
         foreach ($DB->request(['SELECT' => ['id', 'content_html'], 'FROM' => 'glpi_notificationtemplatetranslations', 'WHERE' => ['content_html' => ['LIKE', '%&lt;%']]]) as $row) {
