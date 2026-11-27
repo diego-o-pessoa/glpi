@@ -33,7 +33,11 @@ function plugin_init_ativacentral(): void
     $PLUGIN_HOOKS[Hooks::CONFIG_PAGE]['ativacentral'] = 'front/config.php';
 
     // E-mail "voce foi adicionado ao projeto" (o GLPI nao tem esse aviso).
-    $PLUGIN_HOOKS[Hooks::ITEM_ADD]['ativacentral'] = ['ProjectTeam' => [Mail::class, 'onTeamAdd']];
+    $PLUGIN_HOOKS[Hooks::ITEM_ADD]['ativacentral'] = [
+        'ProjectTeam'        => [Mail::class, 'onTeamAdd'],
+        // Envia os e-mails na hora, sem esperar a acao automatica.
+        'QueuedNotification' => [Mail::class, 'onQueued'],
+    ];
     // Modelos de e-mail dos chamados (instala uma vez por versao).
     if (Session::getLoginUserID() !== false) {
         try {

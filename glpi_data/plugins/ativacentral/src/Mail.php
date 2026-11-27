@@ -149,6 +149,43 @@ final class Mail
         Config::setConfigurationValues(Settings::CONTEXT, [self::VERSION_KEY => self::VERSION]);
     }
 
+    /** @var int[] e-mails colocados na fila nesta requisicao */
+    private static array $pending = [];
+
+    /**
+     * Gancho item_add de QueuedNotification: envia na hora (ao fim da
+     * requisicao, depois de responder ao navegador) em vez de esperar a
+     * acao automatica. Se falhar, o e-mail continua na fila para a acao.
+     */
+    public static function onQueued(QueuedNotification $item): void
+    {
+        if (($item->fields['mode'] ?? '') !== 'mailing') {
+            return;
+        }
+        if (self::$pending === []) {
+            register_shutdown_function([self::class, 'flush']);
+        }
+        self::$pending[] = (int) $item->getID();
+    }
+
+    public static function flush(): void
+    {
+        if (function_exists('fastcgi_finish_request')) {
+            fastcgi_finish_request();
+        }
+        $queue = new QueuedNotification();
+        foreach (array_unique(self::$pending) as $id) {
+            try {
+                if ($queue->getFromDB($id) && strtotime((string) $queue->fields['send_time']) <= time()) {
+                    $queue->sendById($id);
+                }
+            } catch (\Throwable $e) {
+                Toolbox::logInFile('ativacentral', "Falha ao enviar e-mail $id na hora: " . $e->getMessage() . "\n");
+            }
+        }
+        self::$pending = [];
+    }
+
     /** Usuario logado sem e-mail cadastrado: usa o login quando ele e um e-mail. */
     private static function ensureOwnEmail(): void
     {
