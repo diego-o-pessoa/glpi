@@ -3577,3 +3577,31 @@ a.ac-tk-row:hover { background: rgba(var(--ac-blue-rgb), 0.05); color: inherit; 
 }
 .ac-tk-toolbar .ac-sup-search { flex: 1; max-width: 520px; }
 .ac-tk-toolbar .ac-sup-search input { width: 100%; }
+/* Barra de filtros dos chamados */
+.ac-tk-layout { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: 22px; align-items: start; transition: grid-template-columns 0.2s; }
+.ac-tk-layout.is-expanded { grid-template-columns: 230px minmax(0, 1fr); }
+.ac-tk-side { position: sticky; top: 16px; background: #0f1535; border-radius: 14px; padding: 10px 8px; color: #c9cfe6; overflow: hidden; }
+.ac-tk-side small { display: block; padding: 12px 10px 6px; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #7c84a8; white-space: nowrap; }
+.ac-tk-side-sec + .ac-tk-side-sec { border-top: 1px solid rgba(255, 255, 255, 0.08); margin-top: 6px; }
+.ac-tk-side button, .ac-tk-side a { width: 100%; display: flex; align-items: center; gap: 12px; padding: 9px 10px; border: 0; border-radius: 9px; background: none; color: inherit; font: inherit; font-size: 13.5px; font-weight: 600; text-align: left; cursor: pointer; text-decoration: none; white-space: nowrap; }
+.ac-tk-side button:hover, .ac-tk-side a:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
+.ac-tk-side button.is-active { background: var(--ac-blue); color: #fff; }
+.ac-tk-side i.ti { font-size: 18px; flex: none; width: 20px; text-align: center; }
+.ac-tk-side i.ac-tk-dot { width: 10px; height: 10px; margin: 0 5px; }
+.ac-tk-side span { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.ac-tk-side em { font-style: normal; font-size: 11px; font-weight: 700; color: #9aa2c4; }
+.ac-tk-side button.is-active em { color: #fff; }
+.ac-tk-side-toggle { color: #fff !important; }
+.ac-tk-layout:not(.is-expanded) .ac-tk-side span,
+.ac-tk-layout:not(.is-expanded) .ac-tk-side em,
+.ac-tk-layout:not(.is-expanded) .ac-tk-side small { display: none; }
+.ac-tk-layout:not(.is-expanded) .ac-tk-side-sec { padding-top: 6px; }
+.ac-tk-layout:not(.is-expanded) .ac-tk-side-toggle i { transform: scaleX(-1); }
+.ac-tk-flag.is-p6, .ac-tk-flag.is-p5 { color: #f87171; }
+.ac-tk-flag.is-p4 { color: #fbbf24; }
+.ac-tk-flag.is-p3 { color: #60a5fa; }
+.ac-tk-flag.is-p2, .ac-tk-flag.is-p1 { color: #9aa2c4; }
+@media (max-width: 900px) {
+    .ac-tk-layout, .ac-tk-layout.is-expanded { grid-template-columns: 1fr; }
+    .ac-tk-side { position: static; }
+}

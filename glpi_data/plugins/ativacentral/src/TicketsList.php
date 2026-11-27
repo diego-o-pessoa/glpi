@@ -122,6 +122,20 @@ final class TicketsList
             ];
         }
 
+        $prioCounts = [];
+        foreach ($tickets as $t) {
+            if ($t['open']) {
+                $prioCounts[$t['priority']] = ($prioCounts[$t['priority']] ?? 0) + 1;
+            }
+        }
+        $priorities = [];
+        foreach ([6, 5, 4, 3, 2, 1] as $p) {
+            if ($p === 6 && empty($prioCounts[6])) {
+                continue;
+            }
+            $priorities[] = ['key' => $p, 'label' => Ticket::getPriorityName($p), 'count' => $prioCounts[$p] ?? 0];
+        }
+
         $situations = [];
         foreach (Statuses::SITUATIONS as $key => [$label, $tone]) {
             $situations[] = ['key' => $key, 'label' => $label, 'tone' => $tone, 'count' => $counts[$key]];
@@ -131,6 +145,8 @@ final class TicketsList
             'tickets'    => $tickets,
             'kpis'       => $kpis,
             'situations' => $situations,
+            'priorities' => $priorities,
+            'open_count' => count(array_filter($tickets, static fn (array $t): bool => $t['open'])),
             'new_url'    => Session::haveRight('ticket', CREATE) ? Shell::glpiUrl('/front/ticket.form.php') : '',
             'more_url'   => Shell::glpiUrl(Nav::hubUrl('helpdesk')),
             'search_url' => Shell::glpiUrl('/front/ticket.php?classic=1'),
