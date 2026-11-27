@@ -1,0 +1,119 @@
+{# Tela "Chamados" do Super-Admin: cards por situacao e fila com filtro. #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div class="ac-app ac-sup ac-tk">
+    <div class="ac-head">
+        <div>
+            <div class="ac-eyebrow">Ativa Central · Atendimento</div>
+            <h1 class="ac-title">Chamados</h1>
+            <div class="ac-subtitle">Fila de atendimento: o que está aberto, com quem está e o que está aguardando.</div>
+        </div>
+        <div class="ac-actions">
+            <a class="ac-btn" href="{{ more_url }}"><i class="ti ti-layout-grid"></i> Problemas, mudanças…</a>
+            {% if new_url %}
+                <a class="ac-btn is-primary" href="{{ new_url }}"><i class="ti ti-plus"></i> Novo chamado</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="ac-sup-kpis ac-tk-kpis">
+        <button type="button" class="ac-panel ac-sup-kpi ac-tk-kpi" data-filter="sit:waiting_tech">
+            <span class="ac-sup-kpi-icon is-blue"><i class="ti ti-inbox"></i></span>
+            <div><b>{{ kpis.new }}</b><small>novos, sem atendente</small></div>
+        </button>
+        <button type="button" class="ac-panel ac-sup-kpi ac-tk-kpi" data-filter="group:assigned">
+            <span class="ac-sup-kpi-icon is-violet"><i class="ti ti-headset"></i></span>
+            <div><b>{{ kpis.assigned }}</b><small>atribuídos{% if kpis.mine %} · {{ kpis.mine }} com você{% endif %}</small></div>
+        </button>
+        <button type="button" class="ac-panel ac-sup-kpi ac-tk-kpi" data-filter="group:waiting">
+            <span class="ac-sup-kpi-icon is-orange"><i class="ti ti-hourglass"></i></span>
+            <div><b>{{ kpis.waiting }}</b><small>aguardando</small></div>
+        </button>
+        <button type="button" class="ac-panel ac-sup-kpi ac-tk-kpi" data-filter="sit:finished">
+            <span class="ac-sup-kpi-icon is-green"><i class="ti ti-circle-check"></i></span>
+            <div><b>{{ kpis.finished }}</b><small>encerrados recentes</small></div>
+        </button>
+    </div>
+
+    <div class="ac-panel ac-sup-list">
+        <div class="ac-sup-toolbar">
+            <div class="ac-sup-filters">
+                <button type="button" class="ac-sup-filter is-active" data-filter="open">Abertos</button>
+                <button type="button" class="ac-sup-filter" data-filter="mine">Comigo</button>
+                {% for s in situations %}
+                    <button type="button" class="ac-sup-filter" data-filter="sit:{{ s.key }}">
+                        <span class="ac-tk-dot is-{{ s.tone }}"></span>{{ s.label }}<em>{{ s.count }}</em>
+                    </button>
+                {% endfor %}
+            </div>
+            <label class="ac-sup-search">
+                <i class="ti ti-search"></i>
+                <input type="search" id="ac-list-search" placeholder="Buscar por número, título, usuário, categoria…">
+            </label>
+        </div>
+
+        {% if tickets is empty %}
+            <div class="ac-ptasks-empty"><i class="ti ti-ticket"></i><b>Nenhum chamado</b><span>Quando alguém abrir um chamado, ele aparece aqui.</span></div>
+        {% else %}
+            <div class="ac-tk-list">
+                <div class="ac-tk-row ac-tk-headrow">
+                    <span>Chamado</span><span>Requerente</span><span>Atendente</span><span>Situação</span><span></span>
+                </div>
+                {% for t in tickets %}
+                    <a class="ac-tk-row ac-list-row" href="{{ t.url }}"
+                       data-sit="{{ t.situation }}" data-open="{{ t.open ? 1 : 0 }}" data-mine="{{ t.mine ? 1 : 0 }}"
+                       data-search="{{ ('#' ~ t.id ~ ' ' ~ t.id ~ ' ' ~ t.name ~ ' ' ~ t.requester ~ ' ' ~ t.techs ~ ' ' ~ t.category)|lower }}">
+                        <div class="ac-tk-main">
+                            <b><span class="ac-tk-id">#{{ t.id }}</span> {{ t.name }}</b>
+                            <small>
+                                <span class="ac-tk-prio is-p{{ t.priority }}">{{ t.priority_label }}</span>
+                                {% if t.category %}<span>{{ t.category }}</span>{% endif %}
+                                <span title="{{ t.date }}"><i class="ti ti-clock"></i> {{ t.age }}</span>
+                            </small>
+                        </div>
+                        <div class="ac-tk-person">{{ t.requester ?: '—' }}</div>
+                        <div class="ac-tk-person {{ t.techs ? '' : 'is-empty' }}">{{ t.techs ?: 'Sem atendente' }}</div>
+                        <span class="ac-tk-sit is-{{ t.sit_tone }}">{{ t.sit_label }}</span>
+                        <i class="ti ti-chevron-right ac-sup-go"></i>
+                    </a>
+                {% endfor %}
+            </div>
+            <div class="ac-ptasks-empty" id="ac-list-none" hidden><i class="ti ti-search"></i><b>Nada encontrado</b><span>Tente outro termo ou filtro.</span></div>
+            <div class="ac-tk-foot">Finalizados: mostra os {{ finished_limit }} mais recentes. <a href="{{ search_url }}">Pesquisa completa do GLPI</a></div>
+        {% endif %}
+    </div>
+</div>
+<script>
+    (function () {
+        var rows = Array.prototype.slice.call(document.querySelectorAll('.ac-tk-list .ac-list-row'));
+        var search = document.getElementById('ac-list-search');
+        var none = document.getElementById('ac-list-none');
+        var filter = 'open';
+        var groups = { assigned: ['in_progress', 'running'], waiting: ['waiting_user', 'waiting_approval', 'waiting_third'] };
+        function match(r) {
+            var sit = r.getAttribute('data-sit');
+            if (filter === 'open') { return r.getAttribute('data-open') === '1'; }
+            if (filter === 'mine') { return r.getAttribute('data-mine') === '1' && r.getAttribute('data-open') === '1'; }
+            if (filter.indexOf('sit:') === 0) { return sit === filter.slice(4); }
+            if (filter.indexOf('group:') === 0) { return groups[filter.slice(6)].indexOf(sit) !== -1; }
+            return true;
+        }
+        function apply() {
+            var q = (search && search.value || '').trim().toLowerCase();
+            var shown = 0;
+            rows.forEach(function (r) {
+                var ok = match(r) && (!q || r.getAttribute('data-search').indexOf(q) !== -1);
+                r.hidden = !ok;
+                shown += ok ? 1 : 0;
+            });
+            if (none) { none.hidden = shown > 0; }
+            document.querySelectorAll('[data-filter]').forEach(function (x) { x.classList.toggle('is-active', x.getAttribute('data-filter') === filter); });
+            try { sessionStorage.setItem('ac-tk-filter', filter); } catch (e) {}
+        }
+        document.querySelectorAll('[data-filter]').forEach(function (b) {
+            b.addEventListener('click', function () { filter = b.getAttribute('data-filter'); apply(); });
+        });
+        if (search) { search.addEventListener('input', apply); }
+        try { filter = sessionStorage.getItem('ac-tk-filter') || 'open'; } catch (e) {}
+        apply();
+    })();
+</script>

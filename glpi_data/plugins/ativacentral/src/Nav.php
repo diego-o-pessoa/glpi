@@ -67,8 +67,8 @@ final class Nav
             // Mesmo titulo na secao original: e por ele que o GLPI marca o
             // item ativo e monta a trilha de navegacao.
             $menu['helpdesk']['title'] = 'Chamados';
-            $menu['helpdesk']['default'] = self::hubUrl('helpdesk');
-            $workspace['ac_helpdesk'] = self::link('Chamados', 'ti ti-ticket', self::hubUrl('helpdesk'));
+            $menu['helpdesk']['default'] = '/plugins/ativacentral/front/tickets.php';
+            $workspace['ac_helpdesk'] = self::link('Chamados', 'ti ti-ticket', '/plugins/ativacentral/front/tickets.php');
         }
 
         if (self::hasOwnPages($menu['assets'] ?? null)) {

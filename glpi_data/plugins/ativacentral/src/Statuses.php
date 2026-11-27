@@ -34,6 +34,35 @@ final class Statuses
         ];
     }
 
+    /** Situacoes da tela de chamados: chave => [nome, cor]. */
+    public const SITUATIONS = [
+        'waiting_tech'     => ['Aguardando atendente', 'gray'],
+        'in_progress'      => ['Em atendimento', 'blue'],
+        'running'          => ['Em execução', 'cyan'],
+        'waiting_user'     => ['Aguardando usuário', 'orange'],
+        'waiting_approval' => ['Aguardando aprovação', 'purple'],
+        'waiting_third'    => ['Aguardando terceiro', 'pink'],
+        'finished'         => ['Finalizado', 'green'],
+    ];
+
+    /** Situacao a partir do status do GLPI e do motivo de pendencia. */
+    public static function situation(int $status, string $reason = ''): string
+    {
+        switch ($status) {
+            case 1:
+                return 'waiting_tech';
+            case 2:
+                return 'in_progress';
+            case 3:
+                return 'running';
+            case 4:
+                $r = mb_strtolower($reason);
+                return str_contains($r, 'aprova') ? 'waiting_approval' : (str_contains($r, 'terceiro') ? 'waiting_third' : 'waiting_user');
+            default:
+                return 'finished';
+        }
+    }
+
     public static function ensure(): void
     {
         global $DB;
