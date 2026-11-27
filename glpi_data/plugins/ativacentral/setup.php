@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Glpi\Plugin\Hooks;
+use GlpiPlugin\Ativacentral\Mail;
 use GlpiPlugin\Ativacentral\Shell;
 
 define('PLUGIN_ATIVACENTRAL_VERSION', '1.0.0');
@@ -30,6 +31,17 @@ function plugin_init_ativacentral(): void
     }
 
     $PLUGIN_HOOKS[Hooks::CONFIG_PAGE]['ativacentral'] = 'front/config.php';
+
+    // E-mail "voce foi adicionado ao projeto" (o GLPI nao tem esse aviso).
+    $PLUGIN_HOOKS[Hooks::ITEM_ADD]['ativacentral'] = ['ProjectTeam' => [Mail::class, 'onTeamAdd']];
+    // Modelos de e-mail dos chamados (instala uma vez por versao).
+    if (Session::getLoginUserID() !== false) {
+        try {
+            Mail::ensureTemplates();
+        } catch (Throwable $exception) {
+            Toolbox::logInFile('ativacentral', 'Falha nos modelos de e-mail: ' . $exception->getMessage() . "\n");
+        }
+    }
 
     // O visual novo nunca pode derrubar o GLPI: qualquer falha aqui e
     // registrada e a pagina segue com o visual original.
