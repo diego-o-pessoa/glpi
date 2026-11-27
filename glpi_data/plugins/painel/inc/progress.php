@@ -215,33 +215,30 @@ if (!function_exists('painel_project_real_dates')) {
 
 if (!function_exists('painel_task_extend_parents')) {
     /**
-     * Data fim das tarefas principais acompanha as tarefas filho: se uma filha
-     * termina depois da principal, a principal (e as acima dela) passam a
-     * terminar na mesma data. Nunca encurta a principal.
+     * Data fim das tarefas principais = a data fim mais distante entre as
+     * tarefas filho (aumenta e diminui junto), subindo pelos niveis acima.
+     * Recebe o id da principal da tarefa alterada.
      */
-    function painel_task_extend_parents(int $taskId): void
+    function painel_task_extend_parents(int $parentId): void
     {
         global $DB;
         $seen = [];
-        while ($taskId > 0 && !isset($seen[$taskId])) {
-            $seen[$taskId] = true;
-            $row = $DB->request(['SELECT' => ['projecttasks_id'], 'FROM' => 'glpi_projecttasks', 'WHERE' => ['id' => $taskId]])->current();
-            $parentId = (int) ($row['projecttasks_id'] ?? 0);
-            if ($parentId <= 0) {
-                return;
-            }
+        while ($parentId > 0 && !isset($seen[$parentId])) {
+            $seen[$parentId] = true;
             $max = $DB->request([
                 'SELECT' => ['MAX' => 'plan_end_date AS e'],
                 'FROM'   => 'glpi_projecttasks',
                 'WHERE'  => ['projecttasks_id' => $parentId, 'NOT' => ['plan_end_date' => null]],
             ])->current();
-            $parent = $DB->request(['SELECT' => ['plan_end_date'], 'FROM' => 'glpi_projecttasks', 'WHERE' => ['id' => $parentId]])->current();
+            $parent = $DB->request(['SELECT' => ['plan_end_date', 'projecttasks_id'], 'FROM' => 'glpi_projecttasks', 'WHERE' => ['id' => $parentId]])->current();
+            if (!$parent) {
+                return;
+            }
             $childEnd = (string) ($max['e'] ?? '');
-            $parentEnd = (string) ($parent['plan_end_date'] ?? '');
-            if ($childEnd !== '' && ($parentEnd === '' || strtotime($childEnd) > strtotime($parentEnd))) {
+            if ($childEnd !== '' && $childEnd !== (string) $parent['plan_end_date']) {
                 $DB->update('glpi_projecttasks', ['plan_end_date' => $childEnd], ['id' => $parentId]);
             }
-            $taskId = $parentId;
+            $parentId = (int) $parent['projecttasks_id'];
         }
     }
 }
