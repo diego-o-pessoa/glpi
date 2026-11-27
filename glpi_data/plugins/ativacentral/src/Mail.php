@@ -162,6 +162,19 @@ final class Mail
      * requisicao, depois de responder ao navegador) em vez de esperar a
      * acao automatica. Se falhar, o e-mail continua na fila para a acao.
      */
+    /**
+     * Gancho pre_item_add de QueuedNotification: tira o prefixo do GLPI
+     * ("[GLPI #0000012] ") e deixa "[Chamado 0000012]" como "[Chamado #12]".
+     */
+    public static function beforeQueued(QueuedNotification $item): void
+    {
+        if (!is_array($item->input) || !isset($item->input['name'])) {
+            return;
+        }
+        $name = preg_replace('/^\[[^\]]*#\d+\]\s*/u', '', (string) $item->input['name']);
+        $item->input['name'] = preg_replace_callback('/\[Chamado #?0*(\d+)\]/u', static fn (array $m): string => '[Chamado #' . $m[1] . ']', $name);
+    }
+
     public static function onQueued(QueuedNotification $item): void
     {
         if (($item->fields['mode'] ?? '') !== 'mailing') {

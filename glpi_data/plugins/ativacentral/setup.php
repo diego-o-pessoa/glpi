@@ -38,6 +38,8 @@ function plugin_init_ativacentral(): void
         // Envia os e-mails na hora, sem esperar a acao automatica.
         'QueuedNotification' => [Mail::class, 'onQueued'],
     ];
+    // Assunto: sem o prefixo "[GLPI #...]" e com "[Chamado #12]".
+    $PLUGIN_HOOKS[Hooks::PRE_ITEM_ADD]['ativacentral'] = ['QueuedNotification' => [Mail::class, 'beforeQueued']];
     // Modelos de e-mail dos chamados (instala uma vez por versao).
     if (Session::getLoginUserID() !== false) {
         try {
