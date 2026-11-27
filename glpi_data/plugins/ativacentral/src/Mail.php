@@ -25,7 +25,7 @@ use UserEmail;
 final class Mail
 {
     private const VERSION_KEY = 'mail_templates_version';
-    private const VERSION = '2';
+    private const VERSION = '3';
 
     private static function layout(string $title, string $subtitle, string $content, string $button, string $url, string $footer): string
     {
@@ -109,6 +109,7 @@ final class Mail
     public static function ensureTemplates(): void
     {
         global $DB;
+        self::ensureOwnEmail();
         $config = Config::getConfigurationValues(Settings::CONTEXT, [self::VERSION_KEY]);
         if (($config[self::VERSION_KEY] ?? '') === self::VERSION) {
             return;
@@ -139,7 +140,27 @@ final class Mail
                 }
             }
         }
+        // Usuarios que entram pela Microsoft tem o e-mail so no login: copia
+        // para o cadastro de e-mails (sem isso o GLPI nao tem para onde enviar).
+        $DB->doQuery("INSERT INTO glpi_useremails (users_id, is_default, is_dynamic, email)
+            SELECT u.id, 1, 0, u.name FROM glpi_users u
+            WHERE u.name LIKE '%_@_%._%' AND u.is_deleted = 0
+              AND NOT EXISTS (SELECT 1 FROM glpi_useremails e WHERE e.users_id = u.id)");
         Config::setConfigurationValues(Settings::CONTEXT, [self::VERSION_KEY => self::VERSION]);
+    }
+
+    /** Usuario logado sem e-mail cadastrado: usa o login quando ele e um e-mail. */
+    private static function ensureOwnEmail(): void
+    {
+        $userId = (int) Session::getLoginUserID();
+        $login = (string) ($_SESSION['glpiname'] ?? '');
+        if ($userId <= 0 || !empty($_SESSION['ativa_email_ok']) || !filter_var($login, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+        $_SESSION['ativa_email_ok'] = 1;
+        if (UserEmail::getDefaultForUser($userId) === '') {
+            (new UserEmail())->add(['users_id' => $userId, 'is_default' => 1, 'email' => $login]);
+        }
     }
 
     /** Gancho item_add de ProjectTeam: avisa por e-mail quem entrou na equipe. */
