@@ -195,6 +195,13 @@ final class Mail
         if (!is_array($item->input) || !isset($item->input['name'])) {
             return;
         }
+        // "Nova resposta" so quando quem respondeu foi o T.I. (interface de
+        // administracao). Resposta do proprio usuario no Self-Service nao gera e-mail.
+        if (($item->input['itemtype'] ?? '') === 'Ticket' && ($item->input['event'] ?? '') === 'add_followup'
+            && Session::getCurrentInterface() !== 'central') {
+            $item->input = false;
+            return;
+        }
         // Nomes dos usuarios sem o " - Ativa Locação" (ex.: "Diego Pessoa - Ativa Locação").
         foreach (['name', 'body_html', 'body_text', 'recipientname'] as $field) {
             if (isset($item->input[$field]) && is_string($item->input[$field])) {
