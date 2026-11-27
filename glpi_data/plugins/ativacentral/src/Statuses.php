@@ -92,7 +92,7 @@ final class Statuses
         global $DB;
         $config = Config::getConfigurationValues(Settings::CONTEXT, [self::VERSION_KEY]);
         $file = GLPI_LOCAL_I18N_DIR . '/core_ativa/pt_BR.php';
-        if (($config[self::VERSION_KEY] ?? '') === self::VERSION && is_file($file)) {
+        if (($config[self::VERSION_KEY] ?? '') === self::VERSION) {
             return;
         }
 
@@ -118,14 +118,17 @@ final class Statuses
         }
 
         $content = "<?php\n\nreturn " . var_export(self::labels(), true) . ";\n";
-        if (!is_file($file) || file_get_contents($file) !== $content) {
-            if (!is_dir(dirname($file)) && !@mkdir(dirname($file), 0775, true)) {
-                Toolbox::logInFile('ativacentral', "Nao foi possivel criar " . dirname($file) . "\n");
+        if (!is_file($file) || @file_get_contents($file) !== $content) {
+            $ok = (is_dir(dirname($file)) || @mkdir(dirname($file), 0775, true)) && @file_put_contents($file, $content) !== false;
+            if (!$ok) {
+                // Sem permissao de escrita: registra e nao tenta de novo a cada pagina
+                // (antes isso repetia consultas e limpava o cache de traducoes sempre).
+                Toolbox::logInFile('ativacentral', 'Nao foi possivel gravar ' . $file . "\n");
+                Config::setConfigurationValues(Settings::CONTEXT, [self::VERSION_KEY => self::VERSION]);
                 return;
             }
-            file_put_contents($file, $content);
             // As traducoes desta requisicao ja foram carregadas (e voltariam
-            // ao cache): limpa de novo na proxima requisicao.
+            // ao cache): limpa agora e mais uma vez na proxima requisicao.
             (new CacheManager())->getTranslationsCacheInstance()->clear();
             return;
         }
