@@ -187,17 +187,29 @@ final class PersonName
             $table = Settings::TABLE_MACHINES;
             if ($DB->tableExists($table) && $DB->fieldExists($table, 'user_label')) {
                 $hasVpn = $DB->fieldExists($table, 'vpn_user');
-                $fields = array_merge(['computers_id', 'hostname', 'user_label'], $hasVpn ? ['vpn_profile', 'vpn_user'] : []);
+                $fields = array_merge(['computers_id', 'hostname', 'user_label', 'last_report'], $hasVpn ? ['vpn_profile', 'vpn_user'] : []);
                 // Mais antigo primeiro: o relato mais recente sobrescreve.
-                foreach ($DB->request(['SELECT' => $fields, 'FROM' => $table, 'ORDER' => ['last_report ASC']]) as $row) {
+                $rows = iterator_to_array($DB->request(['SELECT' => $fields, 'FROM' => $table, 'ORDER' => ['last_report ASC']]), false);
+                // Nome de computador repetido (varias maquinas "ATIVA"): pelo nome
+                // nao da para saber qual e qual, entao ele nao e usado.
+                // So contam maquinas ativas (reinstalacao antiga nao vira "repetida").
+                $since = date('Y-m-d H:i:s', strtotime('-30 days'));
+                $recent = array_filter($rows, static fn (array $r): bool => (string) $r['last_report'] >= $since);
+                $perHost = array_count_values(array_map(static fn (array $r): string => self::hostKey((string) $r['hostname']), $recent));
+                $perId = array_count_values(array_map(static fn (array $r): int => (int) $r['computers_id'], $recent));
+                foreach ($rows as $row) {
                     $entry = ['manual' => trim((string) $row['user_label']), 'vpn' => self::vpnName($row)];
                     if ($entry['manual'] === '' && $entry['vpn'] === '') {
                         continue;
                     }
-                    if ((int) $row['computers_id'] > 0) {
-                        self::$directory['id'][(int) $row['computers_id']] = $entry;
+                    $cid = (int) $row['computers_id'];
+                    if ($cid > 0 && ($perId[$cid] ?? 0) <= 1) {
+                        self::$directory['id'][$cid] = $entry;
                     }
-                    self::$directory['host'][self::hostKey((string) $row['hostname'])] = $entry;
+                    $key = self::hostKey((string) $row['hostname']);
+                    if (($perHost[$key] ?? 0) <= 1) {
+                        self::$directory['host'][$key] = $entry;
+                    }
                 }
             }
         }
