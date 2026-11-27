@@ -212,3 +212,36 @@ if (!function_exists('painel_project_real_dates')) {
         }
     }
 }
+
+if (!function_exists('painel_task_extend_parents')) {
+    /**
+     * Data fim das tarefas principais acompanha as tarefas filho: se uma filha
+     * termina depois da principal, a principal (e as acima dela) passam a
+     * terminar na mesma data. Nunca encurta a principal.
+     */
+    function painel_task_extend_parents(int $taskId): void
+    {
+        global $DB;
+        $seen = [];
+        while ($taskId > 0 && !isset($seen[$taskId])) {
+            $seen[$taskId] = true;
+            $row = $DB->request(['SELECT' => ['projecttasks_id'], 'FROM' => 'glpi_projecttasks', 'WHERE' => ['id' => $taskId]])->current();
+            $parentId = (int) ($row['projecttasks_id'] ?? 0);
+            if ($parentId <= 0) {
+                return;
+            }
+            $max = $DB->request([
+                'SELECT' => ['MAX' => 'plan_end_date AS e'],
+                'FROM'   => 'glpi_projecttasks',
+                'WHERE'  => ['projecttasks_id' => $parentId, 'NOT' => ['plan_end_date' => null]],
+            ])->current();
+            $parent = $DB->request(['SELECT' => ['plan_end_date'], 'FROM' => 'glpi_projecttasks', 'WHERE' => ['id' => $parentId]])->current();
+            $childEnd = (string) ($max['e'] ?? '');
+            $parentEnd = (string) ($parent['plan_end_date'] ?? '');
+            if ($childEnd !== '' && ($parentEnd === '' || strtotime($childEnd) > strtotime($parentEnd))) {
+                $DB->update('glpi_projecttasks', ['plan_end_date' => $childEnd], ['id' => $parentId]);
+            }
+            $taskId = $parentId;
+        }
+    }
+}

@@ -72,10 +72,7 @@ final class ProjectTasksView
             $state = $states[(int) $row['projectstates_id']] ?? null;
             $kind = self::kind($state);
             $members = $team[$id] ?? [];
-            $owner = (int) $row['users_id'] > 0 ? self::userName((int) $row['users_id']) : '';
-            if ($owner !== '' && !in_array($owner, $members, true)) {
-                array_unshift($members, $owner);
-            }
+            // Equipe = so quem foi marcado na tarefa (o dono do projeto nao entra sozinho).
             $end = substr((string) ($row['plan_end_date'] ?? ''), 0, 10);
             $done = $kind === 'done';
             $nodes[$id] = [

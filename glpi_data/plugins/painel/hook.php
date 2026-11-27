@@ -113,6 +113,7 @@ function plugin_painel_projecttask_changed(CommonDBTM $task) {
         return;
     }
     try {
+        painel_task_extend_parents((int) $task->getID());
         painel_project_recalc($projectId);
     } catch (Throwable $e) {
         Toolbox::logInFile('painel', 'Falha ao recalcular projeto ' . $projectId . ': ' . $e->getMessage() . "\n");
