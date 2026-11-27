@@ -791,6 +791,12 @@ if (!function_exists('painel_project_detail')) {
             'LIMIT'  => 1,
         ])->current();
         $project['full_desc'] = painel_full_text((string) ($projRow['content'] ?? ''));
+        // Descricao com a formatacao original (cor, negrito...), ja limpa pelo GLPI.
+        $raw = trim((string) ($projRow['content'] ?? ''));
+        if (str_contains($raw, '&lt;') && !str_contains($raw, '<')) {
+            $raw = html_entity_decode($raw, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        }
+        $project['full_html'] = $raw !== '' ? \Glpi\RichText\RichText::getEnhancedHtml($raw) : '';
         $project['comment'] = painel_full_text((string) ($projRow['comment'] ?? ''));
         $project['real_start_date'] = painel_format_date((string) ($projRow['real_start_date'] ?? ''));
         $project['real_end_date'] = painel_format_date((string) ($projRow['real_end_date'] ?? ''));

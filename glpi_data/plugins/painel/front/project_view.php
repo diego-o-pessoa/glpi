@@ -184,6 +184,10 @@ $client_payload = painel_project_client_payload($project);
 
         .summary-left h1 { font-size: 26px; font-weight: 800; color: #1a2340; letter-spacing: -0.02em; }
         .summary-desc { margin-top: 10px; color: #52607e; font-size: 14px; line-height: 1.6; white-space: pre-line; }
+        .ac-modal-text.is-rich { white-space: normal; }
+        .ac-modal-text.is-rich p { margin: 0 0 8px; }
+        .ac-modal-text.is-rich ul, .ac-modal-text.is-rich ol { margin: 0 0 8px; padding-left: 22px; }
+        .ac-modal-text.is-rich img { max-width: 100%; height: auto; border-radius: 8px; }
         .summary-desc.is-clamped { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
         .summary-more-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 10px; }
         .btn-read-more { display: inline-flex; align-items: center; gap: 6px; border: 0; background: rgba(74, 108, 247, 0.1); color: #4a6cf7; padding: 6px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: background 0.15s; }
@@ -528,7 +532,11 @@ $client_payload = painel_project_client_payload($project);
 
             <div class="ac-modal-section">
                 <div class="ac-modal-label">Descrição completa do projeto</div>
-                <div class="ac-modal-text"><?= htmlspecialchars($project['full_desc'] !== '' ? $project['full_desc'] : 'Sem descrição cadastrada.') ?></div>
+                <?php if (($project['full_html'] ?? '') !== ''): ?>
+                    <div class="ac-modal-text is-rich"><?= $project['full_html'] ?></div>
+                <?php else: ?>
+                    <div class="ac-modal-text"><?= htmlspecialchars($project['full_desc'] !== '' ? $project['full_desc'] : 'Sem descrição cadastrada.') ?></div>
+                <?php endif; ?>
             </div>
 
             <?php if ($project['comment'] !== ''): ?>
