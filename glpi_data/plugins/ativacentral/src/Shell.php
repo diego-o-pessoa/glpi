@@ -279,6 +279,11 @@ final class Shell
             $id = (int) ($_GET['id'] ?? 0);
             return DocumentsLibrary::url() . ($id > 0 ? '?edit=' . $id : '?new=1');
         }
+        // Novo chamado (sem id, so GET simples): tela no estilo do Self-Service.
+        if (preg_match('#/front/ticket\.form\.php$#i', $path) === 1 && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET'
+            && (int) ($_GET['id'] ?? 0) === 0 && array_diff(array_keys($_GET), ['_glpi_csrf_token']) === [] && \Session::haveRight('ticket', CREATE)) {
+            return TicketForm::newUrl();
+        }
         // Contatos: lista nova (formulario abre a gaveta).
         if (\Contact::canView()) {
             if (preg_match('#/front/contact\.php$#i', $path) === 1) {

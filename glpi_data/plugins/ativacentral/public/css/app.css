@@ -3610,3 +3610,14 @@ a.ac-tk-row:hover { background: rgba(var(--ac-blue-rgb), 0.05); color: inherit; 
 .ac-tk-layout > .ac-app { margin: 0; max-width: none; width: auto; min-width: 0; }
 .ac-tk-side span, .ac-tk-side em, .ac-tk-side small { animation: ac-tk-fade 0.25s ease; }
 @keyframes ac-tk-fade { from { opacity: 0; } to { opacity: 1; } }
+/* Novo chamado */
+.ac-tnew-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ac-tnew-prio { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.ac-tnew-check { display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 600; color: var(--ac-ink); cursor: pointer; }
+.ac-tnew-check input { width: 18px; height: 18px; accent-color: var(--ac-blue); }
+.ac-tnew-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ac-tnew-seg label { cursor: pointer; }
+.ac-tnew-seg input { position: absolute; opacity: 0; pointer-events: none; }
+.ac-tnew-seg span { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border: 1px solid var(--ac-line); border-radius: 10px; font-size: 13px; font-weight: 700; color: var(--ac-muted); transition: all 0.15s; }
+.ac-tnew-seg input:checked + span { border-color: var(--ac-blue); background: rgba(var(--ac-blue-rgb), 0.08); color: var(--ac-blue); }
+@media (max-width: 700px) { .ac-tnew-row { grid-template-columns: 1fr; } }

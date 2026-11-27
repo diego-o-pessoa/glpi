@@ -1,0 +1,114 @@
+{# Tela "Novo chamado" do Super-Admin, no estilo do Self-Service. #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div class="ac-app ac-pnew ac-tnew">
+    <div class="ac-head">
+        <div>
+            <div class="ac-eyebrow">Ativa Central · Atendimento</div>
+            <h1 class="ac-title">Abrir novo chamado</h1>
+            <div class="ac-subtitle">Os mesmos campos que o usuário vê no portal. Você escolhe em nome de quem o chamado é aberto.</div>
+        </div>
+        <div class="ac-actions">
+            <a class="ac-btn" href="{{ back }}"><i class="ti ti-arrow-left"></i> Voltar</a>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="ac-pnew-error"><i class="ti ti-alert-circle"></i> {{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="{{ action }}" class="ac-pnew-form" autocomplete="off" enctype="multipart/form-data">
+        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+
+        <section class="ac-panel ac-pnew-card">
+            <h2 class="ac-pnew-title"><i class="ti ti-ticket"></i> Sobre o chamado</h2>
+
+            <div class="ac-tnew-row">
+                <label class="ac-pnew-field">
+                    <span class="ac-pnew-label">Departamento <b>*</b></span>
+                    <select id="ac-tnew-dept" class="ac-pnew-input" required>
+                        <option value="">— Selecione —</option>
+                        {% for d in departments %}<option value="{{ d }}" {{ d == dept ? 'selected' : '' }}>{{ d }}</option>{% endfor %}
+                    </select>
+                </label>
+                <label class="ac-pnew-field">
+                    <span class="ac-pnew-label">Tipo de mensagem <b>*</b></span>
+                    <select id="ac-tnew-cat" name="itilcategories_id" class="ac-pnew-input" required disabled>
+                        <option value="">— Selecione o departamento —</option>
+                    </select>
+                </label>
+            </div>
+
+            <label class="ac-pnew-field">
+                <span class="ac-pnew-label">Assunto <b>*</b></span>
+                <input type="text" name="name" value="{{ name }}" class="ac-pnew-input" required maxlength="255" placeholder="Resumo do problema ou pedido">
+            </label>
+
+            <div class="ac-pnew-field">
+                <span class="ac-pnew-label">Mensagem <b>*</b></span>
+                <div class="ac-pnew-glpi ac-pnew-editor">{{ content_html|raw }}</div>
+            </div>
+        </section>
+
+        <div class="ac-pnew-side">
+            <section class="ac-panel ac-pnew-card">
+                <h2 class="ac-pnew-title"><i class="ti ti-user"></i> Requerente</h2>
+                <div class="ac-pnew-field">
+                    <span class="ac-pnew-label">Aberto em nome de</span>
+                    <div class="ac-pnew-glpi">{{ requester_html|raw }}</div>
+                </div>
+                <label class="ac-tnew-check">
+                    <input type="checkbox" name="assign_me" value="1" {{ assign_me ? 'checked' : '' }}>
+                    <span>Atribuir a mim (já entra "Em atendimento")</span>
+                </label>
+            </section>
+
+            <section class="ac-panel ac-pnew-card">
+                <h2 class="ac-pnew-title"><i class="ti ti-adjustments"></i> Classificação</h2>
+                <div class="ac-pnew-field">
+                    <span class="ac-pnew-label">Prioridade</span>
+                    <div class="ac-pnew-prio ac-tnew-prio">
+                        {% for value, label in priorities %}
+                            <label class="ac-pnew-prio-opt is-p{{ value }}">
+                                <input type="radio" name="priority" value="{{ value }}" {{ value == priority ? 'checked' : '' }}>
+                                <span><i class="ti ti-flag-filled"></i> {{ label }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="ac-pnew-field">
+                    <span class="ac-pnew-label">Tipo de chamado</span>
+                    <div class="ac-tnew-seg">
+                        <label><input type="radio" name="type" value="1" {{ type == 1 ? 'checked' : '' }}><span><i class="ti ti-alert-triangle"></i> Incidente</span></label>
+                        <label><input type="radio" name="type" value="2" {{ type == 2 ? 'checked' : '' }}><span><i class="ti ti-clipboard-list"></i> Requisição</span></label>
+                    </div>
+                </div>
+            </section>
+
+            <div class="ac-pnew-submit">
+                <a class="ac-btn" href="{{ back }}">Cancelar</a>
+                <button type="submit" class="ac-btn is-primary"><i class="ti ti-send"></i> Abrir chamado</button>
+            </div>
+        </div>
+    </form>
+</div>
+<script>
+    (function () {
+        var tree = {{ tree_json|raw }};
+        var dept = document.getElementById('ac-tnew-dept');
+        var cat = document.getElementById('ac-tnew-cat');
+        var selected = {{ category }};
+        function fill() {
+            var items = tree[dept.value] || [];
+            cat.innerHTML = '<option value="">' + (dept.value ? '— Selecione —' : '— Selecione o departamento —') + '</option>';
+            items.forEach(function (it) {
+                var o = document.createElement('option');
+                o.value = it.id; o.textContent = it.name;
+                if (it.id === selected) { o.selected = true; }
+                cat.appendChild(o);
+            });
+            cat.disabled = items.length === 0;
+        }
+        dept.addEventListener('change', function () { selected = 0; fill(); });
+        fill();
+    })();
+</script>
