@@ -25,7 +25,6 @@
         </div>
         <div class="ac-tk-side-sec">
             <small>Operação</small>
-            <a href="{{ search_url }}" title="Busca avançada"><i class="ti ti-filter-search"></i><span>Busca avançada</span></a>
             <a href="{{ more_url }}" title="Problemas e mudanças"><i class="ti ti-layout-grid"></i><span>Problemas e mudanças</span></a>
         </div>
     </aside>
@@ -97,7 +96,7 @@
                 {% endfor %}
             </div>
             <div class="ac-ptasks-empty" id="ac-list-none" hidden><i class="ti ti-search"></i><b>Nada encontrado</b><span>Tente outro termo ou filtro.</span></div>
-            <div class="ac-tk-foot">Finalizados: mostra os {{ finished_limit }} mais recentes. <a href="{{ search_url }}">Pesquisa completa do GLPI</a></div>
+            <div class="ac-tk-foot">Finalizados: mostra os {{ finished_limit }} mais recentes.</div>
         {% endif %}
     </div>
 </div>

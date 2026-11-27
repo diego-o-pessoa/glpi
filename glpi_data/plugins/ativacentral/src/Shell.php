@@ -45,6 +45,11 @@ final class Shell
                 // Visual classico so nesta sessao: atalho no menu do usuario para voltar.
                 $PLUGIN_HOOKS[Hooks::ADD_JAVASCRIPT]['ativacentral'] = [self::asset('js/classic.js')];
                 $tags = [self::meta(['toggle' => self::url('/front/toggle.php?mode=new')])];
+                if (self::nativeTicketUrl() !== '') {
+                    // Chamados: nem no visual classico abre a tela antiga.
+                    $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::nativeTicketUrl()]];
+                    $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
+                }
                 if (self::isNativeProjects()) {
                     // Mesmo no visual classico, bloqueia acesso direto a lista antiga de projetos.
                     $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::url('/front/projects.php')]];
@@ -78,6 +83,9 @@ final class Shell
             // consegue redirecionar no servidor nesta fase, entao a propria
             // pagina manda o navegador para la antes de desenhar qualquer coisa.
             $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::url('/front/home.php')]];
+            $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
+        } elseif (self::nativeTicketUrl() !== '') {
+            $tags[] = ['tag' => 'meta', 'properties' => ['http-equiv' => 'refresh', 'content' => '0;url=' . self::nativeTicketUrl()]];
             $tags[] = ['tag' => 'link', 'properties' => ['rel' => 'stylesheet', 'href' => self::url('/css/redirect.css')]];
         } elseif (self::nativeSupplierUrl() !== '') {
             // Fornecedores nativos (lista e formulario): telas novas.
@@ -265,6 +273,32 @@ final class Shell
         return max(0, (int) ($_GET['id'] ?? 0));
     }
 
+    /** Chamados: sempre as telas novas, sem volta para a tela antiga do GLPI. */
+    private static function nativeTicketUrl(): string
+    {
+        $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+        if (Session::getCurrentInterface() !== 'central') {
+            return '';
+        }
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && !isset($_GET['embed'])) {
+            if (preg_match('#/front/ticket\.form\.php$#i', $path) === 1) {
+                // Qualquer link de chamado (notificacoes, e-mails, buscas trazem
+                // forcetab, _highlight...): tela nova do atendente.
+                $id = (int) ($_GET['id'] ?? 0);
+                if ($id > 0) {
+                    return TicketView::url($id);
+                }
+                if (\Session::haveRight('ticket', CREATE)) {
+                    return TicketForm::newUrl();
+                }
+            }
+            if (preg_match('#/front/ticket\.php$#i', $path) === 1) {
+                return TicketsList::url();
+            }
+        }
+        return '';
+    }
+
     /** Tela nova para front/supplier.php e supplier.form.php (classic=1 mantem o GLPI). */
     private static function nativeSupplierUrl(): string
     {
@@ -278,16 +312,6 @@ final class Shell
         if (preg_match('#/front/document\.form\.php$#i', $path) === 1 && \Document::canView()) {
             $id = (int) ($_GET['id'] ?? 0);
             return DocumentsLibrary::url() . ($id > 0 ? '?edit=' . $id : '?new=1');
-        }
-        // Chamado existente (GET simples ?id=N): tela nova do atendente.
-        if (preg_match('#/front/ticket\.form\.php$#i', $path) === 1 && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET'
-            && (int) ($_GET['id'] ?? 0) > 0 && array_diff(array_keys($_GET), ['id', '_glpi_csrf_token']) === []) {
-            return TicketView::url((int) $_GET['id']);
-        }
-        // Novo chamado (sem id, so GET simples): tela no estilo do Self-Service.
-        if (preg_match('#/front/ticket\.form\.php$#i', $path) === 1 && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET'
-            && (int) ($_GET['id'] ?? 0) === 0 && array_diff(array_keys($_GET), ['_glpi_csrf_token']) === [] && \Session::haveRight('ticket', CREATE)) {
-            return TicketForm::newUrl();
         }
         // Contatos: lista nova (formulario abre a gaveta).
         if (\Contact::canView()) {

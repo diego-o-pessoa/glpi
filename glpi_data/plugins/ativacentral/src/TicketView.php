@@ -159,7 +159,6 @@ final class TicketView
             'tab'           => $tab,
             'tabs'          => $tabs,
             'back'          => TicketsList::url(),
-            'classic_url'   => Shell::glpiUrl('/front/ticket.form.php?id=' . $id . '&classic=1'),
             'action'        => self::url($id, $tab),
             'csrf'          => Session::getNewCSRFToken(),
             'css_url'       => Shell::assetUrl('css/app.css'),

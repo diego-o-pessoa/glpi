@@ -148,7 +148,6 @@ final class TicketsList
             'open_count' => count(array_filter($tickets, static fn (array $t): bool => $t['open'])),
             'new_url'    => Session::haveRight('ticket', CREATE) ? TicketForm::newUrl() : '',
             'more_url'   => Shell::glpiUrl(Nav::hubUrl('helpdesk')),
-            'search_url' => Shell::glpiUrl('/front/ticket.php?classic=1'),
             'finished_limit' => self::FINISHED_LIMIT,
             'css_url'    => Shell::assetUrl('css/app.css'),
         ];

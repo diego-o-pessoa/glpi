@@ -28,7 +28,6 @@
         {% for t in tabs %}
             <a href="{{ t.url }}" class="{{ t.active ? 'is-active' : '' }}"><i class="ti {{ t.icon }}"></i> {{ t.label }}</a>
         {% endfor %}
-        <a href="{{ classic_url }}" class="ac-tv-classic" title="Abrir na tela original do GLPI"><i class="ti ti-external-link"></i> Tela clássica</a>
     </nav>
 
     {% if tab_url is defined %}
