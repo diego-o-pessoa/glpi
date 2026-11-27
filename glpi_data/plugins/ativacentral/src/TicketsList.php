@@ -118,7 +118,7 @@ final class TicketsList
                 'sit_tone'   => Statuses::SITUATIONS[$sit][1],
                 'date'       => \Html::convDateTime((string) $row['date']),
                 'age'        => self::age((string) ($status < 5 ? $row['date'] : ($row['closedate'] ?: $row['solvedate'] ?: $row['date_mod']))),
-                'url'        => Shell::glpiUrl('/front/ticket.form.php?id=' . $id),
+                'url'        => TicketView::url($id),
             ];
         }
 

@@ -1,0 +1,288 @@
+{# Tela do chamado para os atendentes. #}
+<link rel="stylesheet" type="text/css" href="{{ css_url }}">
+<div class="ac-app ac-tv">
+    <div class="ac-tv-head">
+        <a class="ac-tv-back" href="{{ back }}" title="Voltar para os chamados"><i class="ti ti-arrow-left"></i></a>
+        <div class="ac-tv-headmain">
+            <div class="ac-tv-meta">
+                <b>#{{ id }}</b>
+                <span class="ac-tk-sit is-{{ sit_tone }}">{{ sit_label }}</span>
+                <span class="ac-tk-prio is-p{{ priority }}">{{ priority_label }}</span>
+                <span>{{ kinds[kind] ?? '' }}</span>
+                {% if category %}<span><i class="ti ti-folder"></i> {{ category }}</span>{% endif %}
+                <span><i class="ti ti-calendar"></i> {{ date }}</span>
+            </div>
+            <h1 class="ac-tv-title">{{ title }}</h1>
+        </div>
+        <div class="ac-actions">
+            {% if can_update and is_open and not i_am_assigned %}
+                <form method="post" action="{{ action }}">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                    <button class="ac-btn" name="ticket_action" value="assign_me"><i class="ti ti-user-check"></i> Atribuir a mim</button>
+                </form>
+            {% endif %}
+            {% if is_open %}
+                <button type="button" class="ac-btn ac-tv-finish" id="ac-tv-finish-open"><i class="ti ti-circle-check"></i> Finalizar chamado</button>
+            {% elseif can_update %}
+                <form method="post" action="{{ action }}">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                    <button class="ac-btn" name="ticket_action" value="reopen"><i class="ti ti-rotate"></i> Reabrir</button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <nav class="ac-tv-tabs">
+        {% for t in tabs %}
+            <a href="{{ t.url }}" class="{{ t.active ? 'is-active' : '' }}"><i class="ti {{ t.icon }}"></i> {{ t.label }}</a>
+        {% endfor %}
+        <a href="{{ classic_url }}" class="ac-tv-classic" title="Abrir na tela original do GLPI"><i class="ti ti-external-link"></i> Tela clássica</a>
+    </nav>
+
+    {% if tab_url is defined %}
+        <div class="ac-panel ac-pview-glpi" id="ac-pview-tab" data-url="{{ tab_url }}">
+            <div class="ac-pview-loading"><span class="spinner-border spinner-border-sm"></span> Carregando…</div>
+        </div>
+        <script>
+            (function () {
+                var box = document.getElementById('ac-pview-tab');
+                $(box).load(box.getAttribute('data-url'), function (r, status) {
+                    if (status === 'error') { box.innerHTML = '<div class="ac-pnew-error"><i class="ti ti-alert-circle"></i> Não foi possível carregar esta aba. Atualize a página.</div>'; }
+                });
+            })();
+        </script>
+    {% else %}
+    <div class="ac-tv-grid">
+        <section class="ac-panel ac-tv-chat">
+            <div class="ac-tv-thread" id="ac-tv-thread">
+                {% for m in timeline %}
+                    {% if m.type == 'ValidationAsk' or m.type == 'ValidationAnswer' %}
+                        <div class="ac-tv-event">
+                            <i class="ti {{ m.type == 'ValidationAsk' ? 'ti-user-question' : (m.approved ? 'ti-thumb-up' : 'ti-thumb-down') }}"></i>
+                            <div>
+                                {% if m.type == 'ValidationAsk' %}
+                                    <b>{{ m.author }}</b> pediu aprovação para <b>{{ m.who }}</b>
+                                {% else %}
+                                    <b>{{ m.author }}</b> {{ m.approved ? 'aprovou' : 'recusou' }} o chamado
+                                {% endif %}
+                                <small>{{ m.date }}</small>
+                                {% if m.html %}<div class="ac-tv-event-text">{{ m.html|raw }}</div>{% endif %}
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="ac-tv-msg is-{{ m.side }} {{ m.private|default(false) ? 'is-private' : '' }} {{ m.type == 'ITILSolution' ? 'is-solution' : '' }} {{ m.type == 'TicketTask' ? 'is-task' : '' }}">
+                            <span class="ac-tv-avatar">{{ m.initials }}</span>
+                            <div class="ac-tv-bubble">
+                                <div class="ac-tv-bubble-head">
+                                    <b>{{ m.author }}</b>
+                                    {% if m.type == 'Ticket' %}<span class="ac-tv-tag">Abertura</span>{% endif %}
+                                    {% if m.type == 'ITILSolution' %}<span class="ac-tv-tag is-green">Solução</span>{% endif %}
+                                    {% if m.type == 'TicketTask' %}<span class="ac-tv-tag is-cyan">Tarefa</span>{% endif %}
+                                    {% if m.private|default(false) %}<span class="ac-tv-tag is-amber"><i class="ti ti-lock"></i> Nota interna</span>{% endif %}
+                                    <small>{{ m.date }}</small>
+                                </div>
+                                {% if m.type == 'Ticket' and m.title %}<div class="ac-tv-bubble-title">{{ m.title }}</div>{% endif %}
+                                <div class="ac-tv-bubble-body">{{ m.html|raw }}</div>
+                                {% if m.docs is not empty %}
+                                    <div class="ac-tv-docs">
+                                        {% for d in m.docs %}
+                                            <a href="{{ d.url }}" target="_blank" rel="noopener"><i class="ti {{ d.image ? 'ti-photo' : 'ti-paperclip' }}"></i> {{ d.name }}</a>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+
+            {% if can_reply %}
+                <form method="post" action="{{ action }}" class="ac-tv-composer" id="ac-tv-composer">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                    <input type="hidden" name="ticket_action" value="reply">
+                    <div class="ac-tv-mode">
+                        <label><input type="radio" name="is_private" value="0" checked><span><i class="ti ti-message"></i> Responder ao usuário</span></label>
+                        <label><input type="radio" name="is_private" value="1"><span><i class="ti ti-lock"></i> Nota interna</span></label>
+                    </div>
+                    <div class="ac-pnew-glpi ac-pnew-editor">{{ editor_html|raw }}</div>
+                    <div class="ac-tv-composer-foot">
+                        <small id="ac-tv-mode-hint">O usuário recebe esta resposta por e-mail e no portal.</small>
+                        <button type="submit" class="ac-btn is-primary"><i class="ti ti-send"></i> Enviar</button>
+                    </div>
+                </form>
+            {% endif %}
+        </section>
+
+        <aside class="ac-tv-side">
+            {% if can_update and is_open %}
+                <section class="ac-panel ac-tv-card">
+                    <h3><i class="ti ti-progress"></i> Situação</h3>
+                    <form method="post" action="{{ action }}" class="ac-tv-sits">
+                        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                        <input type="hidden" name="ticket_action" value="situation">
+                        {% for s in situations %}
+                            <button type="submit" name="situation" value="{{ s.key }}" class="{{ s.key == situation ? 'is-active' : '' }}">
+                                <i class="ac-tk-dot is-{{ s.tone }}"></i> {{ s.label }}
+                                {% if s.key == situation %}<i class="ti ti-check"></i>{% endif %}
+                            </button>
+                        {% endfor %}
+                    </form>
+                    {% if situation == 'waiting_tech' %}<small class="ac-tv-hint">Hoje: Aguardando atendente. Escolha uma situação ou atribua o chamado.</small>{% endif %}
+                </section>
+            {% endif %}
+
+            {% if requester %}
+                <section class="ac-panel ac-tv-card">
+                    <h3><i class="ti ti-user"></i> Requerente</h3>
+                    <div class="ac-tv-person">
+                        <span class="ac-tv-avatar is-user">{{ requester.initials }}</span>
+                        <div><b>{{ requester.name }}</b>{% if requester.dept %}<small>{{ requester.dept }}</small>{% endif %}</div>
+                    </div>
+                    <ul class="ac-tv-facts">
+                        {% if requester.email %}<li><i class="ti ti-mail"></i> <a href="mailto:{{ requester.email }}">{{ requester.email }}</a></li>{% endif %}
+                        {% if requester.phone %}<li><i class="ti ti-phone"></i> {{ requester.phone }}</li>{% endif %}
+                        {% if requester.location %}<li><i class="ti ti-map-pin"></i> {{ requester.location }}</li>{% endif %}
+                    </ul>
+                </section>
+            {% endif %}
+
+            <section class="ac-panel ac-tv-card">
+                <h3><i class="ti ti-headset"></i> Atendentes</h3>
+                {% for a in assigned %}
+                    <div class="ac-tv-chip">
+                        <span class="ac-tv-avatar">{{ a.name|slice(0, 1)|upper }}</span><b>{{ a.name }}</b>
+                        {% if can_update %}
+                            <form method="post" action="{{ action }}">
+                                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                                <input type="hidden" name="link_id" value="{{ a.link_id }}">
+                                <button name="ticket_action" value="unassign" title="Remover"><i class="ti ti-x"></i></button>
+                            </form>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <small class="ac-tv-hint">Ninguém atendendo ainda.</small>
+                {% endfor %}
+                {% for g in groups %}<div class="ac-tv-chip"><span class="ac-tv-avatar"><i class="ti ti-users"></i></span><b>{{ g }}</b></div>{% endfor %}
+                {% if can_update and techs is not empty %}
+                    <form method="post" action="{{ action }}" class="ac-tv-inline">
+                        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                        <select name="users_id" class="ac-pnew-input" required>
+                            <option value="">Adicionar atendente…</option>
+                            {% for uid, name in techs %}<option value="{{ uid }}">{{ name }}</option>{% endfor %}
+                        </select>
+                        <button class="ac-btn" name="ticket_action" value="assign"><i class="ti ti-plus"></i></button>
+                    </form>
+                {% endif %}
+            </section>
+
+            <section class="ac-panel ac-tv-card">
+                <h3><i class="ti ti-thumb-up"></i> Aprovação</h3>
+                {% for v in validations %}
+                    <div class="ac-tv-approval">
+                        <div><b>{{ v.who }}</b><small>pedido em {{ v.date }}</small>{% if v.comment %}<small>"{{ v.comment }}"</small>{% endif %}</div>
+                        <span class="ac-tk-sit is-{{ v.tone == 'red' ? 'pink' : v.tone }}">{{ v.label }}</span>
+                    </div>
+                {% endfor %}
+                {% if can_validate and is_open %}
+                    <button type="button" class="ac-btn ac-tv-ask" id="ac-tv-ask-open"><i class="ti ti-user-question"></i> Pedir aprovação</button>
+                    <form method="post" action="{{ action }}" class="ac-tv-askform" id="ac-tv-ask" hidden>
+                        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                        <input type="hidden" name="ticket_action" value="approval">
+                        <label class="ac-pnew-field"><span class="ac-pnew-label">Quem aprova</span>
+                            <select name="validator" class="ac-pnew-input" required>
+                                <option value="">Escolha…</option>
+                                {% for uid, name in validators %}<option value="{{ uid }}">{{ name }}</option>{% endfor %}
+                            </select>
+                        </label>
+                        <label class="ac-pnew-field"><span class="ac-pnew-label">O que precisa ser aprovado</span>
+                            <textarea name="comment" class="ac-pnew-input" rows="3" placeholder="Ex.: compra de um notebook novo para o setor"></textarea>
+                        </label>
+                        <button class="ac-btn is-primary"><i class="ti ti-send"></i> Enviar pedido</button>
+                        <small class="ac-tv-hint">O chamado fica "Aguardando aprovação" até a resposta.</small>
+                    </form>
+                {% elseif validations is empty %}
+                    <small class="ac-tv-hint">Nenhuma aprovação pedida.</small>
+                {% endif %}
+            </section>
+
+            <section class="ac-panel ac-tv-card">
+                <h3><i class="ti ti-adjustments"></i> Detalhes</h3>
+                <form method="post" action="{{ action }}" class="ac-tv-details">
+                    <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                    <label class="ac-pnew-field"><span class="ac-pnew-label">Prioridade</span>
+                        <select name="priority" class="ac-pnew-input" {{ can_update ? '' : 'disabled' }}>
+                            {% for value, label in priorities %}<option value="{{ value }}" {{ value == priority or (priority > 5 and value == 5) or (priority < 2 and value == 2) ? 'selected' : '' }}>{{ label }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label class="ac-pnew-field"><span class="ac-pnew-label">Tipo</span>
+                        <select name="kind" class="ac-pnew-input" {{ can_update ? '' : 'disabled' }}>
+                            {% for key, label in kinds %}<option value="{{ key }}" {{ key == kind ? 'selected' : '' }}>{{ label }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label class="ac-pnew-field"><span class="ac-pnew-label">Categoria</span>
+                        <select name="itilcategories_id" class="ac-pnew-input" {{ can_update ? '' : 'disabled' }}>
+                            <option value="0">—</option>
+                            {% for dept, items in category_tree %}
+                                <optgroup label="{{ dept }}">
+                                    {% for c in items %}<option value="{{ c.id }}" {{ c.id == categories_id ? 'selected' : '' }}>{{ c.name }}</option>{% endfor %}
+                                </optgroup>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    {% if can_update %}<button class="ac-btn" name="ticket_action" value="details"><i class="ti ti-device-floppy"></i> Salvar</button>{% endif %}
+                </form>
+            </section>
+        </aside>
+    </div>
+    {% endif %}
+
+    {% if is_open %}
+        <div class="ac-tv-modal" id="ac-tv-finish" hidden>
+            <form method="post" action="{{ action }}" class="ac-panel ac-tv-modal-card">
+                <input type="hidden" name="_glpi_csrf_token" value="{{ csrf }}">
+                <input type="hidden" name="ticket_action" value="solve">
+                <h3><i class="ti ti-circle-check"></i> Finalizar chamado #{{ id }}</h3>
+                <p>Descreva o que foi feito. O usuário recebe a solução por e-mail.</p>
+                {% if solution_html is defined %}
+                    <div class="ac-pnew-glpi ac-pnew-editor">{{ solution_html|raw }}</div>
+                {% else %}
+                    <textarea name="solution" class="ac-pnew-input" rows="5" required></textarea>
+                {% endif %}
+                <div class="ac-tv-modal-foot">
+                    <button type="button" class="ac-btn" id="ac-tv-finish-cancel">Cancelar</button>
+                    <button class="ac-btn is-primary ac-tv-finish-go"><i class="ti ti-circle-check"></i> Finalizar</button>
+                </div>
+            </form>
+        </div>
+    {% endif %}
+</div>
+<script>
+    (function () {
+        var thread = document.getElementById('ac-tv-thread');
+        if (thread) { thread.scrollTop = thread.scrollHeight; }
+        var hint = document.getElementById('ac-tv-mode-hint');
+        var composer = document.getElementById('ac-tv-composer');
+        document.querySelectorAll('.ac-tv-mode input').forEach(function (r) {
+            r.addEventListener('change', function () {
+                var priv = r.value === '1' && r.checked;
+                if (composer) { composer.classList.toggle('is-private', priv); }
+                if (hint) { hint.textContent = priv ? 'Só a equipe de T.I. vê esta nota. O usuário não é avisado.' : 'O usuário recebe esta resposta por e-mail e no portal.'; }
+            });
+        });
+        var ask = document.getElementById('ac-tv-ask-open');
+        if (ask) {
+            ask.addEventListener('click', function () {
+                var f = document.getElementById('ac-tv-ask');
+                f.hidden = !f.hidden;
+                ask.hidden = !f.hidden;
+            });
+        }
+        var modal = document.getElementById('ac-tv-finish');
+        var open = document.getElementById('ac-tv-finish-open');
+        if (modal && open) {
+            open.addEventListener('click', function () { modal.hidden = false; });
+            document.getElementById('ac-tv-finish-cancel').addEventListener('click', function () { modal.hidden = true; });
+            modal.addEventListener('click', function (e) { if (e.target === modal) { modal.hidden = true; } });
+        }
+    })();
+</script>

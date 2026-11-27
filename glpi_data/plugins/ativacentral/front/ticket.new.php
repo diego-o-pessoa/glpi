@@ -21,7 +21,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     try {
         $id = TicketForm::create($_POST);
         Session::addMessageAfterRedirect(htmlescape('Chamado #' . $id . ' aberto.'));
-        Html::redirect(Ticket::getFormURLWithID($id));
+        Html::redirect(GlpiPlugin\Ativacentral\TicketView::url($id));
     } catch (InvalidArgumentException $exception) {
         $error = $exception->getMessage();
     }

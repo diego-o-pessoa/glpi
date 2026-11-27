@@ -24,7 +24,7 @@ final class TicketForm
     }
 
     /** Categorias "Departamento - Tipo" agrupadas por departamento (igual ao Self-Service). */
-    private static function tree(): array
+    public static function tree(): array
     {
         global $DB;
         $tree = [];
